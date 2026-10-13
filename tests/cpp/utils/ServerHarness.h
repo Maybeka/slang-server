@@ -65,6 +65,14 @@ public:
     DocumentHandle openFile(std::string fileName);
     DocumentHandle openFile(std::string fileName, std::string text);
 
+    // Direct unit-test actions explicitly include the eventual idle diagnostic pass.
+    // Scheduler tests call SlangServer::onDocDidChange to observe the foreground boundary.
+    void onDocDidChange(const lsp::DidChangeTextDocumentParams& params,
+                        lsp::RequestContext ctx = {}) override {
+        SlangServer::onDocDidChange(params, ctx);
+        m_driver->runPendingDiagnostics(ctx);
+    }
+
     void expectError(const std::string& msg) { client.expectError(msg); }
 
     // Helper method for goto definition tests

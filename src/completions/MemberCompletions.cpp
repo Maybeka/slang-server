@@ -231,9 +231,9 @@ public:
             if (member.name.empty() || member.name == previousLabel)
                 continue;
             previousLabel = member.name;
-            results.push_back(getHierarchicalCompletion(*symbol, member, doc->getURI().str(),
-                                                        followedByCall,
-                                                        resolvesCompletionEdits(dispatch)));
+            results.push_back(
+                getHierarchicalCompletion(*symbol, member, doc->getURI().str(), followedByCall,
+                                          resolvesCompletionEdits(dispatch), {}, receiverToken));
         }
 
         auto* targetType = targetScope->asSymbol().as_if<ast::Type>();
@@ -478,8 +478,25 @@ std::string getMemberCompletionDetail(const slang::ast::Symbol& symbol) {
 lsp::CompletionItem MemberCompletionQuery::getHierarchicalCompletion(
     const slang::ast::Symbol& parentSymbol, const slang::ast::Symbol& symbol,
     std::string_view documentUri, bool labelOnly, bool deferCallableEdit,
-    std::string_view completionLabel) {
+    std::string_view completionLabel, const parsing::Token* receiver) {
 
+    auto retainReceiver = [&](lsp::CompletionItem item) {
+        auto* value = parentSymbol.as_if<ast::ValueSymbol>();
+        auto* receiverType = value ? &value->getType() : parentSymbol.as_if<ast::Type>();
+        if (receiver && receiverType && item.data &&
+            unwrapErrorType(*receiverType).kind == ast::SymbolKind::VirtualInterfaceType) {
+            // A bound virtual interface is not necessarily reachable by a root
+            // hierarchy path. Retain the caller's receiver so resolve uses this
+            // exact parameterized instance and modport, not a default instance.
+            auto data = rfl::from_generic<CompletionData, rfl::UnderlyingEnums>(*item.data);
+            if (data) {
+                data->receiverBufferId = receiver->location().buffer().getId();
+                data->receiverOffset = receiver->location().offset();
+                item.data = rfl::to_generic<rfl::UnderlyingEnums>(*data);
+            }
+        }
+        return item;
+    };
     if (ast::FieldSymbol::isKind(symbol.kind)) {
         auto& field = symbol.as<ast::FieldSymbol>();
         auto* resolvedType = getResolvedTypeParameter(symbol);
@@ -513,12 +530,12 @@ lsp::CompletionItem MemberCompletionQuery::getHierarchicalCompletion(
             resolve(symbol, item);
             item.data.reset();
         }
-        return item;
+        return retainReceiver(std::move(item));
     }
     else {
         // hierarchical completions;
-        return getCompletion(symbol, symbol.getParentScope(), documentUri, labelOnly,
-                             deferCallableEdit);
+        return retainReceiver(getCompletion(symbol, symbol.getParentScope(), documentUri, labelOnly,
+                                            deferCallableEdit));
     }
 }
 
@@ -762,7 +779,19 @@ void MemberCompletionQuery::resolve(CompletionDispatch& dispatch, lsp::Completio
 
     auto& root = analysis->getCompilation()->getRoot();
     const ast::Symbol* symbol = nullptr;
-    if (data->bufferId && data->bufferId == doc->getBuffer().getId()) {
+    if (data->receiverBufferId) {
+        // An item from an older edited buffer cannot safely reuse its byte offset.
+        if (*data->receiverBufferId != analysis->getBuffer().getId() || !data->receiverOffset)
+            return;
+        auto* token = analysis->syntaxes.getTokenAt(
+            SourceLocation(analysis->getBuffer(), *data->receiverOffset));
+        auto* receiver = analysis->getSymbolAtToken(token);
+        auto* scope = analysis->getScopeFromSym(receiver);
+        symbol = scope ? scope->find(data->symbolName) : nullptr;
+        if (!symbol || symbol->kind != data->symbolKind)
+            return;
+    }
+    if (!symbol && data->bufferId && data->bufferId == analysis->getBuffer().getId()) {
         CompletionSymbolFinder finder(
             SourceLocation(BufferID(data->bufferId, "completion item resolve"), data->offset),
             data->symbolKind, data->symbolName, data->symbolPath, ctx);

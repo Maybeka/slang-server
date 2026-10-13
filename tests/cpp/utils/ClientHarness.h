@@ -24,6 +24,7 @@ class ClientHarness : public SlangLspClient {
 
 public:
     std::vector<URI> diagnosticPublications;
+    std::unordered_map<URI, std::optional<int>> diagnosticVersions;
 
     ~ClientHarness() {
         for (const auto& error : errors) {
@@ -45,6 +46,7 @@ public:
 
     void onDocPublishDiagnostics(const lsp::PublishDiagnosticsParams& params) override {
         diagnosticPublications.push_back(params.uri);
+        diagnosticVersions.insert_or_assign(params.uri, params.version);
         m_diagnostics.insert_or_assign(params.uri, params.diagnostics);
     }
 

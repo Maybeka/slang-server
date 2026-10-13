@@ -25,8 +25,9 @@
 namespace server {
 using namespace slang::syntax;
 
-SymbolTreeVisitor::SymbolTreeVisitor(const slang::SourceManager& sourceManager) :
-    m_sourceManager(sourceManager) {
+SymbolTreeVisitor::SymbolTreeVisitor(const slang::SourceManager& sourceManager,
+                                     slang::BufferID buffer) :
+    m_sourceManager(sourceManager), m_buffer(buffer) {
 }
 
 std::vector<lsp::DocumentSymbol> SymbolTreeVisitor::getSymbols(
@@ -58,8 +59,8 @@ std::vector<lsp::DocumentSymbol> SymbolTreeVisitor::getSymbols(
                                                    std::optional<std::string> overrideName,
                                                    bool allowMacroLocation) {
 
-    // Don't show syntax-derived symbols from includes or macro expansions.
-    if (m_sourceManager.isIncludedFileLoc(token.range().start()) ||
+    // Emit only the edited file, which may itself be included by a package.
+    if (m_sourceManager.getFullyOriginalLoc(token.range().start()).buffer() != m_buffer ||
         (!allowMacroLocation && m_sourceManager.isMacroLoc(token.range().start()))) {
         return false;
     }
@@ -171,6 +172,9 @@ void SymbolTreeVisitor::handleModule(const auto& node) {
         if (ok) {
             handleRecursive(node, symbol);
         }
+        else if (node.header->name.location().buffer() != m_buffer) {
+            visitDefault(node);
+        }
     }
 }
 
@@ -188,6 +192,9 @@ void SymbolTreeVisitor::handle(const ClassDeclarationSyntax& node) {
     bool ok = extractRange(node.name, symbol);
     if (ok) {
         handleRecursive(node, symbol);
+    }
+    else if (node.name.location().buffer() != m_buffer) {
+        visitDefault(node);
     }
 }
 

@@ -14,9 +14,11 @@
 #include "ast/HierarchicalView.h"
 #include "ast/SlangServerWcp.h"
 #include "ast/WcpClient.h"
+#include "diagnostics/DiagnosticProcess.h"
 #include "document/SlangDoc.h"
 #include "lsp/LspServer.h"
 #include "lsp/LspTypes.h"
+#include <atomic>
 #include <functional>
 #include <memory>
 #include <rfl.hpp>
@@ -40,10 +42,39 @@ class SlangServer : public lsp::LspServer<SlangServer>, public SlangServerWcp {
 
 protected:
     SlangLspClient& m_client;
+    bool m_shutdownRequested = false;
+    void onForegroundComplete() override;
+    void onMessageException(const std::exception& error) override;
+    void reportFastCwdFailure(const slang::SourceManager::FastCwdContextError& error);
+    void onProtocolStopped() override;
+    bool hasBackgroundWork() const override;
+    struct DiagnosticWakeState {
+        std::atomic<bool> ready{false};
+    };
+    std::shared_ptr<DiagnosticWakeState> m_diagnosticWake = std::make_shared<DiagnosticWakeState>();
+    std::unique_ptr<isolated_diagnostics::DiagnosticProcess> m_diagnosticProcess;
+    std::optional<ServerDriver::DiagnosticSnapshot> m_activeDiagnosticSnapshot;
+    uint64_t m_diagnosticJobId = 0;
+    std::string m_diagnosticExecutable;
+    std::string m_diagnosticFallbackReason;
+
+    void runBackgroundWork(const lsp::RequestContext& ctx) override;
 
     /// Manages open docuemnts and a single compilation
     /// Created each time config/flags are changed, including switching between explore/build mode
     std::unique_ptr<ServerDriver> m_driver;
+
+    // Context watches are separate from the broad workspace watches. Recompute
+    // their bounded input set only when the driver or its inputs can have changed.
+    bool m_initialized = false;
+    bool m_contextWatchesDirty = true;
+    const ServerDriver* m_contextWatchDriver = nullptr;
+    uint64_t m_contextWatchRevision = 0;
+    size_t m_contextWatchDocumentCount = 0;
+    uint64_t m_contextWatchRegistrationSerial = 0;
+    std::string m_contextWatchRegistrationId;
+    std::vector<std::filesystem::path> m_contextWatchPaths;
+    void refreshContextFileWatches();
 
     template<typename Params, typename Result>
     void registerDesignCommand(
@@ -80,6 +111,12 @@ protected:
     std::optional<waves::WcpClient> m_wcpClient = std::nullopt;
 
 public:
+    // Called by the executable before run(); embedded/test servers keep the
+    // existing sequential behavior unless an owned helper executable is supplied.
+    void enableIsolatedDiagnostics(std::string executable) {
+        m_diagnosticExecutable = std::move(executable);
+    }
+
     SlangServer(SlangLspClient& client);
 
     ~SlangServer() = default;
@@ -209,7 +246,8 @@ public:
         const lsp::DocumentLinkParams&) override;
 
     /// Hover
-    std::optional<lsp::Hover> getDocHover(const lsp::HoverParams&) override;
+    std::optional<lsp::Hover> getDocHover(const lsp::HoverParams&,
+                                          lsp::RequestContext ctx = {}) override;
 
     /// Code Actions (quick fixes, refactoring)
     std::optional<std::vector<rfl::Variant<lsp::Command, lsp::CodeAction>>> getDocCodeAction(
@@ -217,11 +255,11 @@ public:
 
     /// Goto Definition
     rfl::Variant<lsp::Definition, std::vector<lsp::DefinitionLink>, std::monostate>
-    getDocDefinition(const lsp::DefinitionParams&) override;
+    getDocDefinition(const lsp::DefinitionParams&, lsp::RequestContext ctx = {}) override;
 
     /// Completion (get list of ids and kinds)
     rfl::Variant<std::vector<lsp::CompletionItem>, lsp::CompletionList, std::monostate>
-    getDocCompletion(const lsp::CompletionParams&) override;
+    getDocCompletion(const lsp::CompletionParams&, lsp::RequestContext ctx = {}) override;
 
     // Used to show the selected instance and associated buttons when a design is set
     std::optional<std::vector<lsp::CodeLens>> getDocCodeLens(const lsp::CodeLensParams&) override;

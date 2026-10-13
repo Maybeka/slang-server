@@ -301,15 +301,15 @@ lsp::InitializeResult SlangServer::getInitialize(const lsp::InitializeParams& pa
 void SlangServer::onInitialized(const lsp::InitializedParams&) {
     INFO("Server initialized at {}", m_workspaceFolder ? m_workspaceFolder->uri.getPath() : "none");
     m_client.setConfig(m_config);
+    m_initialized = true;
 
     if (m_workspaceFolder) {
         auto options = lsp::DidChangeWatchedFilesRegistrationOptions{
             .watchers{
                 // SystemVerilog/Verilog source files
-                lsp::FileSystemWatcher{.globPattern =
-                                           lsp::RelativePattern{.baseUri = m_workspaceFolder->uri,
-                                                                .pattern = "**/*.{sv,svh,v,vh}"},
-                                       .kind = lsp::WatchKind::Change},
+                lsp::FileSystemWatcher{
+                    .globPattern = lsp::RelativePattern{.baseUri = m_workspaceFolder->uri,
+                                                        .pattern = "**/*.{sv,svh,v,vh}"}},
                 // Config files
                 lsp::FileSystemWatcher{.globPattern =
                                            lsp::RelativePattern{.baseUri = m_workspaceFolder->uri,
@@ -330,6 +330,95 @@ void SlangServer::onInitialized(const lsp::InitializedParams&) {
                 .registerOptions = rfl::to_generic<rfl::UnderlyingEnums>(options),
             }}});
     }
+    refreshContextFileWatches();
+}
+
+namespace {
+fs::path normalizeWatchedPath(const fs::path& path) {
+    std::error_code error;
+    auto normalized = fs::weakly_canonical(path, error);
+    return error ? path.lexically_normal() : normalized;
+}
+
+std::string escapeWatchPath(std::string_view relativePath) {
+    std::string pattern;
+    for (char c : relativePath) {
+        // LSP glob escaping uses single-character ranges. Backslash escapes are
+        // not portable (VS Code treats backslashes as path separators).
+        if (std::string_view("*?[]{}").find(c) != std::string_view::npos) {
+            pattern += '[';
+            pattern += c;
+            pattern += ']';
+        }
+        else {
+            pattern += c;
+        }
+    }
+    return pattern;
+}
+} // namespace
+
+void SlangServer::refreshContextFileWatches() {
+    if (!m_initialized || !m_driver)
+        return;
+
+    const auto revision = m_driver->getContextInputRevision();
+    const auto documentCount = m_driver->docs.size();
+    const bool sameDriver = !m_contextWatchesDirty && m_contextWatchDriver == m_driver.get();
+    if (sameDriver && m_contextWatchRevision == revision &&
+        m_contextWatchDocumentCount == documentCount)
+        return;
+
+    auto paths = m_driver->getContextWatchPaths();
+    for (auto& path : paths)
+        path = path.lexically_normal();
+    std::sort(paths.begin(), paths.end());
+    paths.erase(std::unique(paths.begin(), paths.end()), paths.end());
+
+    m_contextWatchesDirty = false;
+    m_contextWatchDriver = m_driver.get();
+    m_contextWatchRevision = revision;
+    m_contextWatchDocumentCount = documentCount;
+    // A replacement driver may observe a deleted parent directory even when
+    // the target paths are unchanged. Recompute its registration anchors.
+    if (sameDriver && paths == m_contextWatchPaths)
+        return;
+
+    if (!m_contextWatchRegistrationId.empty()) {
+        m_client.getClientUnregisterCapability(lsp::UnregistrationParams{.unregisterations{
+            {.id = m_contextWatchRegistrationId, .method = "workspace/didChangeWatchedFiles"}}});
+        m_contextWatchRegistrationId.clear();
+    }
+    m_contextWatchPaths = std::move(paths);
+    if (m_contextWatchPaths.empty())
+        return;
+
+    lsp::DidChangeWatchedFilesRegistrationOptions options;
+    options.watchers.reserve(m_contextWatchPaths.size());
+    for (const auto& path : m_contextWatchPaths) {
+        // Watch an existing directory so a client can observe a target whose
+        // intermediate directories have not been created yet.
+        auto base = path.parent_path();
+        std::error_code error;
+        while (!fs::is_directory(base, error)) {
+            auto parent = base.parent_path();
+            if (parent.empty() || parent == base)
+                break;
+            base = std::move(parent);
+        }
+        // The base URI is literal. Escape each relative path segment while
+        // retaining '/' separators. Omitted kind observes create, change, and delete.
+        options.watchers.push_back(lsp::FileSystemWatcher{
+            .globPattern = lsp::RelativePattern{
+                .baseUri = URI::fromFile(base),
+                .pattern = escapeWatchPath(path.lexically_relative(base).generic_string())}});
+    }
+    m_contextWatchRegistrationId = "slang-server-context-file-watcher-" +
+                                   std::to_string(++m_contextWatchRegistrationSerial);
+    m_client.getClientRegisterCapability(lsp::RegistrationParams{
+        .registrations{{.id = m_contextWatchRegistrationId,
+                        .method = "workspace/didChangeWatchedFiles",
+                        .registerOptions = rfl::to_generic<rfl::UnderlyingEnums>(options)}}});
 }
 
 void SlangServer::setExplore() {
@@ -344,6 +433,8 @@ void SlangServer::setExplore() {
     m_driver = ServerDriver::createForExplore(m_indexer, m_client, m_config, workspacePath,
                                               m_driver.get());
     m_driver->diagClient->pushDiags();
+    m_contextWatchesDirty = true;
+    refreshContextFileWatches();
 }
 
 std::monostate SlangServer::setTopLevel(const std::string& path) {
@@ -376,6 +467,8 @@ std::monostate SlangServer::setTopLevel(const std::string& path) {
 
     m_driver = ServerDriver::createFromTop(m_indexer, m_client, m_config, URI::fromFile(topPath),
                                            workspacePath, m_driver.get());
+    m_contextWatchesDirty = true;
+    refreshContextFileWatches();
 
     return std::monostate{};
 }
@@ -393,6 +486,8 @@ std::monostate SlangServer::setBuildFile(const std::string& path) {
     m_driver = ServerDriver::createFromFileLists(m_indexer, m_client, m_config,
                                                  std::vector<std::string>{path}, workspacePath,
                                                  m_driver.get());
+    m_contextWatchesDirty = true;
+    refreshContextFileWatches();
     return std::monostate{};
 }
 
@@ -722,14 +817,6 @@ void SlangServer::loadConfig(const Config& config, bool forceIndexing) {
     auto old_config = m_config;
     m_config = Config(config);
 
-    if (m_config.build.value().has_value()) {
-        m_client.showInfo("Using build file: " + *m_config.build.value());
-        setBuildFile(*m_config.build.value());
-    }
-    else {
-        setExplore();
-    }
-
     if (!m_config.indexGlobs.get().empty() || !m_config.excludeDirs.get().empty()) {
         // Deprecated config globs
         WARN("Using legacy indexGlobs or excludeDirs from config, please migrate to 'index' "
@@ -760,6 +847,24 @@ void SlangServer::loadConfig(const Config& config, bool forceIndexing) {
         m_indexer.setNumThreads(m_config.indexingThreads.value());
         m_indexer.startIndexing(m_config.index.value(), maybePath);
     }
+
+    // Rebuild open documents only after the new index scope is available, so an
+    // old graph cannot briefly supply stale ownership or selection warnings.
+    if (m_config.build.value().has_value()) {
+        m_client.showInfo("Using build file: " + *m_config.build.value());
+        setBuildFile(*m_config.build.value());
+    }
+    else {
+        setExplore();
+    }
+    m_driver->refreshOpenIncludeContexts();
+
+    refreshContextFileWatches();
+
+    // A successful reload starts a fresh CWD context. Report a later failure
+    // again even when synchronous analysis never commits an isolated job.
+    if (m_diagnosticFallbackReason == slang::SourceManager::FastCwdContextError().what())
+        m_diagnosticFallbackReason.clear();
 
     // Send config to editor client if it needs to parse general configs
     m_client.setConfig(m_config);
@@ -838,24 +943,28 @@ std::monostate SlangServer::addDefine(const std::string& macroName) {
 }
 
 rfl::Variant<lsp::Definition, std::vector<lsp::DefinitionLink>, std::monostate> SlangServer::
-    getDocDefinition(const lsp::DefinitionParams& params) {
-    if (auto instance = m_driver->getDesignInstancePathAt(params.textDocument.uri,
-                                                          params.position)) {
-        activateInstance({
-            .hierPath = std::move(*instance),
-            .interactionSource = SlangLspClient::InteractionSource::editor,
-        });
+    getDocDefinition(const lsp::DefinitionParams& params, lsp::RequestContext ctx) {
+    if (auto instance = m_driver->getDesignInstancePathAt(params.textDocument.uri, params.position,
+                                                          ctx)) {
+        activateInstance(
+            {
+                .hierPath = std::move(*instance),
+                .interactionSource = SlangLspClient::InteractionSource::editor,
+            },
+            ctx);
     }
 
-    auto info = m_driver->getDefinitionInfoAt(params.textDocument.uri, params.position);
+    auto info = m_driver->getDefinitionInfoAt(params.textDocument.uri, params.position, ctx);
+    ctx.throwIfCancelled("after definition lookup");
     if (m_client.capabilities.definitionLinksSupported)
         return info ? info->getDefinitionLspLinks() : std::vector<lsp::DefinitionLink>{};
 
     return lsp::Definition(info ? info->getDefinitionLspLocs() : std::vector<lsp::Location>{});
 }
 
-std::optional<lsp::Hover> SlangServer::getDocHover(const lsp::HoverParams& params) {
-    return m_driver->getDocHover(params.textDocument.uri, params.position);
+std::optional<lsp::Hover> SlangServer::getDocHover(const lsp::HoverParams& params,
+                                                   lsp::RequestContext ctx) {
+    return m_driver->getDocHover(params.textDocument.uri, params.position, ctx);
 }
 
 std::optional<std::vector<rfl::Variant<lsp::Command, lsp::CodeAction>>> SlangServer::
@@ -891,12 +1000,167 @@ std::optional<std::vector<lsp::DocumentHighlight>> SlangServer::getDocDocumentHi
 }
 
 std::monostate SlangServer::onShutdown(const std::nullopt_t&) {
+    m_shutdownRequested = true;
     INFO("Server shutting down");
     return std::monostate{};
 }
 
+void SlangServer::onProtocolStopped() {
+    if (m_diagnosticProcess) {
+        m_diagnosticProcess->requestStop();
+        m_diagnosticProcess->join();
+    }
+    m_activeDiagnosticSnapshot.reset();
+}
+
+void SlangServer::onForegroundComplete() {
+    if (m_shutdownRequested) {
+        if (m_diagnosticProcess)
+            m_diagnosticProcess->requestStop();
+        m_activeDiagnosticSnapshot.reset();
+        return;
+    }
+    refreshContextFileWatches();
+    if (m_activeDiagnosticSnapshot &&
+        (!m_driver || !m_driver->isDiagnosticSnapshotCurrent(*m_activeDiagnosticSnapshot))) {
+        m_diagnosticProcess->cancel();
+        m_activeDiagnosticSnapshot.reset();
+    }
+}
+
+bool SlangServer::hasBackgroundWork() const {
+    return !m_shutdownRequested && m_driver &&
+           (m_diagnosticWake->ready.load() ||
+            (!m_activeDiagnosticSnapshot && m_driver->hasPendingDiagnostics()));
+}
+
+void SlangServer::reportFastCwdFailure(const slang::SourceManager::FastCwdContextError& error) {
+    if (m_activeDiagnosticSnapshot && m_diagnosticProcess)
+        m_diagnosticProcess->cancel();
+    m_activeDiagnosticSnapshot.reset();
+    if (m_diagnosticFallbackReason != error.what()) {
+        m_diagnosticFallbackReason = error.what();
+        m_client.showError(error.what());
+    }
+}
+
+void SlangServer::onMessageException(const std::exception& error) {
+    if (const auto* cwdError = dynamic_cast<const slang::SourceManager::FastCwdContextError*>(&error))
+        reportFastCwdFailure(*cwdError);
+}
+
+void SlangServer::runBackgroundWork(const lsp::RequestContext& ctx) {
+    if (m_shutdownRequested || !m_driver)
+        return;
+    auto reportFallback = [&](std::string_view reason) {
+        if (((!m_driver->comp && m_driver->hasConfiguredCompilationInputs()) ||
+             m_driver->hasSourceContextHints()) &&
+            m_diagnosticFallbackReason != reason) {
+            m_diagnosticFallbackReason = reason;
+            m_client.showWarning("Diagnostics are running sequentially: " + std::string(reason));
+        }
+    };
+    auto runPending = [&] {
+        try { m_driver->runPendingDiagnostics(ctx); }
+        catch (const slang::SourceManager::FastCwdContextError& error) {
+            reportFastCwdFailure(error);
+            throw;
+        }
+    };
+    if (m_diagnosticProcess) {
+        m_diagnosticWake->ready.exchange(false);
+        if (auto result = m_diagnosticProcess->takeResult()) {
+            if (m_activeDiagnosticSnapshot && result->jobId == m_diagnosticJobId &&
+                result->generation == m_activeDiagnosticSnapshot->diagnosticGeneration &&
+                m_driver->isDiagnosticSnapshotCurrent(*m_activeDiagnosticSnapshot)) {
+                if (result->error.empty()) {
+                    auto output = rfl::json::read<DiagnosticJobOutput, rfl::UnderlyingEnums>(
+                        result->output);
+                    if (output) {
+                        // Retain the snapshot until commit succeeds; cancellation
+                        // cannot lose the only pending complete result.
+                        try {
+                            m_driver->commitDiagnosticSnapshot(*m_activeDiagnosticSnapshot,
+                                                               std::move(output).value(), ctx);
+                            m_activeDiagnosticSnapshot.reset();
+                            if (!m_diagnosticFallbackReason.empty()) {
+                                m_diagnosticFallbackReason.clear();
+                                m_client.showInfo("Package diagnostics are isolated again");
+                            }
+                            return;
+                        }
+                        catch (const slang::SourceManager::FastCwdContextError& error) {
+                            reportFastCwdFailure(error);
+                            throw;
+                        }
+                        catch (const std::exception& error) {
+                            result->error = error.what();
+                        }
+                    }
+                    else
+                        result->error = output.error().what();
+                }
+                ctx.error("Isolated diagnostics unavailable for this generation: {}. Using "
+                          "sequential diagnostics.",
+                          result->error);
+                reportFallback(result->error);
+                m_activeDiagnosticSnapshot.reset();
+                runPending();
+                return;
+            }
+            m_activeDiagnosticSnapshot.reset();
+        }
+    }
+    if (m_activeDiagnosticSnapshot || !m_driver->hasPendingDiagnostics())
+        return;
+    if (!m_diagnosticExecutable.empty()) {
+        try {
+            if (!m_diagnosticProcess) {
+                auto state = m_diagnosticWake;
+                auto wake = backgroundWakeCallback();
+                m_diagnosticProcess = std::make_unique<isolated_diagnostics::DiagnosticProcess>(
+                    m_diagnosticExecutable, isolated_diagnostics::Limits{}, [state, wake] {
+                        state->ready.store(true);
+                        wake();
+                    });
+            }
+            auto snapshot = m_driver->captureDiagnosticSnapshot(ctx);
+            if (snapshot) {
+                auto metadata = snapshot->metadata;
+                auto input = snapshot->input;
+                isolated_diagnostics::Job job;
+                job.generation = snapshot->diagnosticGeneration;
+                job.jobId = ++m_diagnosticJobId;
+                job.encode = [metadata = std::move(metadata), input] {
+                    return encodeDiagnosticJob(metadata, *input);
+                };
+                if (!m_diagnosticProcess->submit(std::move(job)))
+                    throw std::runtime_error("diagnostic helper is stopped");
+                m_activeDiagnosticSnapshot = std::move(snapshot);
+                ctx.info("Submitted isolated diagnostic snapshot job {}", m_diagnosticJobId);
+                return;
+            }
+        }
+        catch (const lsp::RequestCancelled&) {
+            throw;
+        }
+        catch (const slang::SourceManager::FastCwdContextError& error) {
+            reportFastCwdFailure(error);
+            throw;
+        }
+        catch (const std::exception& error) {
+            ctx.info("Isolated diagnostics unsupported for this context: {}. Using sequential "
+                     "diagnostics.",
+                     error.what());
+            reportFallback(error.what());
+        }
+    }
+    runPending();
+}
+
 void SlangServer::onDocDidOpen(const lsp::DidOpenTextDocumentParams& params) {
-    m_driver->openDocument(params.textDocument.uri, params.textDocument.text);
+    m_driver->openDocument(params.textDocument.uri, params.textDocument.text,
+                           params.textDocument.version, !m_diagnosticExecutable.empty());
 }
 
 void SlangServer::onDocDidChange(const lsp::DidChangeTextDocumentParams& params,
@@ -934,23 +1198,45 @@ void SlangServer::onDocDidSave(const lsp::DidSaveTextDocumentParams& params) {
 void SlangServer::onDocDidClose(const lsp::DidCloseTextDocumentParams& params) {
     // TODO: Add method in ServerDriver to check that the rc of the document is 1 before
     // removing (non-compilation mode)
+    bool restorePreinclude = !m_driver->comp && !m_buildfile && !m_topFile &&
+                             m_driver->isDocumentOpen(params.textDocument.uri) &&
+                             (m_driver->isExplorePreinclude(params.textDocument.uri) ||
+                              m_driver->hasConfiguredCompilationInputs() ||
+                              m_driver->hasSourceContextHints());
     m_driver->closeDocument(params.textDocument.uri);
+    if (restorePreinclude) {
+        // didClose returns content authority to disk, including discarded edits.
+        // A fresh cache also handles an unsaved header that never existed on disk.
+        // copyOpenDocumentsFrom retains every other open unsaved buffer.
+        setExplore();
+        m_driver->refreshOpenIncludeContexts();
+    }
 }
 
 void SlangServer::onWorkspaceDidChangeWatchedFiles(const lsp::DidChangeWatchedFilesParams& params) {
     // Check if any config or active build files changed
     bool needsReload = false;
     for (const auto& change : params.changes) {
-        auto path = change.uri.getPath();
-        if (path.ends_with(".json")) {
+        const auto changedPath = normalizeWatchedPath(fs::path(change.uri.getPath()));
+        auto isConfigPath = [&](const fs::path& root) {
+            return changedPath == normalizeWatchedPath(root / ".slang" / "server.json") ||
+                   changedPath == normalizeWatchedPath(root / ".slang" / "local" / "server.json");
+        };
+        if (m_workspaceFolder && isConfigPath(fs::path(m_workspaceFolder->uri.getPath())))
             needsReload = true;
+        if (const char* home = std::getenv("HOME"); home && !std::getenv("SLANG_SERVER_TESTS"))
+            needsReload |= changedPath ==
+                           normalizeWatchedPath(fs::path(home) / ".slang" / "server.json");
+        if (needsReload)
             break;
+        for (const auto& [commandPath, _] : m_driver->driver.getCommandFileMetadata()) {
+            if (normalizeWatchedPath(commandPath) == changedPath) {
+                needsReload = true;
+                break;
+            }
         }
-        if (path.ends_with(".f") &&
-            m_driver->driver.getCommandFileMetadata().contains(std::filesystem::path(path))) {
-            needsReload = true;
+        if (needsReload)
             break;
-        }
     }
 
     if (needsReload) {
@@ -962,9 +1248,72 @@ void SlangServer::onWorkspaceDidChangeWatchedFiles(const lsp::DidChangeWatchedFi
         return;
     }
 
-    // Handle external source file changes (from git, formatters, etc)
-    m_driver->onWorkspaceDidChangeWatchedFiles(params);
-    m_indexer.onWorkspaceDidChangeWatchedFiles(params);
+    // Disk events never supersede an open editor buffer. Filter before deciding
+    // to rebuild the SourceManager, and use canonical paths as clients can report
+    // another URI spelling for the same file (including deletion notifications).
+    lsp::DidChangeWatchedFilesParams sourceChanges;
+    for (const auto& change : params.changes) {
+        const auto changedPath = normalizeWatchedPath(fs::path(change.uri.getPath()));
+        bool openOverlay = m_driver->isDocumentOpen(change.uri);
+        if (!openOverlay) {
+            for (const auto& [uri, document] : m_driver->docs) {
+                if (m_driver->isDocumentOpen(uri) &&
+                    (normalizeWatchedPath(fs::path(uri.getPath())) == changedPath ||
+                     normalizeWatchedPath(m_driver->sm.getFullPath(document->getBuffer())) ==
+                         changedPath)) {
+                    openOverlay = true;
+                    break;
+                }
+            }
+        }
+        const bool protectOverlay = (!m_driver->comp &&
+                                     m_driver->hasConfiguredCompilationInputs()) ||
+                                    m_driver->hasSourceContextHints();
+        if (!openOverlay || !protectOverlay)
+            sourceChanges.changes.push_back(change);
+    }
+    if (sourceChanges.changes.empty())
+        return;
+
+    // SourceManager cannot evict one cached file. In package-first / explore mode,
+    // rebuild its cache after deletion or a cached failed read. Some clients coalesce
+    // create+write into Changed, so both Created and Changed must retry negative entries.
+    // Preserve every other open unsaved buffer. This reloads only open documents and their bounded
+    // owners/dependencies, not a design.
+    bool rebuildExplore = false;
+    if (!m_driver->comp && !m_buildfile && !m_topFile) {
+        for (const auto& change : sourceChanges.changes) {
+            auto path = change.uri.getPath();
+            if (m_driver->hasConfiguredCompilationInputs() &&
+                m_driver->configuredInputLoadFailed() &&
+                (change.type == lsp::FileChangeType::Created ||
+                 change.type == lsp::FileChangeType::Changed)) {
+                const auto changedPath = normalizeWatchedPath(fs::path(path));
+                for (const auto& failedPath :
+                     m_driver->driver.sourceLoader.getFailedLiteralPaths()) {
+                    if (normalizeWatchedPath(failedPath) == changedPath) {
+                        rebuildExplore = true;
+                        break;
+                    }
+                }
+            }
+            if (!m_driver->sm.isCached(path))
+                continue;
+            if (change.type == lsp::FileChangeType::Deleted ||
+                ((change.type == lsp::FileChangeType::Created ||
+                  change.type == lsp::FileChangeType::Changed) &&
+                 !m_driver->sm.readSource(path, nullptr)))
+                rebuildExplore = true;
+        }
+    }
+    m_indexer.onWorkspaceDidChangeWatchedFiles(sourceChanges);
+    if (rebuildExplore) {
+        setExplore();
+        m_driver->refreshOpenIncludeContexts();
+    }
+    else {
+        m_driver->onWorkspaceDidChangeWatchedFiles(sourceChanges);
+    }
 }
 
 static bool fuzzyMatch(std::string_view query, std::string_view candidate) {
@@ -997,7 +1346,7 @@ SlangServer::getWorkspaceSymbol(const lsp::WorkspaceSymbolParams& params) {
 }
 
 rfl::Variant<std::vector<lsp::CompletionItem>, lsp::CompletionList, std::monostate> SlangServer::
-    getDocCompletion(const lsp::CompletionParams& params) {
+    getDocCompletion(const lsp::CompletionParams& params, lsp::RequestContext requestCtx) {
     std::vector<lsp::CompletionItem> results;
 
     auto doc = m_driver->getDocument(params.textDocument.uri);
@@ -1005,7 +1354,8 @@ rfl::Variant<std::vector<lsp::CompletionItem>, lsp::CompletionList, std::monosta
         m_client.showError(fmt::format("Document {} not found", params.textDocument.uri.getPath()));
         return std::monostate{};
     }
-    auto maybeLoc = doc->getLocation(params.position);
+    auto maybeLoc = doc->getLocation(params.position, requestCtx);
+    m_driver->requireExplicitContext(params.textDocument.uri);
     if (!maybeLoc) {
         WARN("No location found for position {},{}", params.position.line,
              params.position.character);
@@ -1013,12 +1363,18 @@ rfl::Variant<std::vector<lsp::CompletionItem>, lsp::CompletionList, std::monosta
     }
     auto loc = maybeLoc.value();
 
-    auto ctx = CompletionContext::fromLocation(*doc, loc, *params.context);
+    // Clients only send context when they advertise contextSupport. Treat an omitted
+    // context as an ordinary invocation instead of dereferencing an empty optional.
+    auto lspContext = params.context.value_or(
+        lsp::CompletionContext{.triggerKind = lsp::CompletionTriggerKind::Invoked});
+    auto ctx = CompletionContext::fromLocation(*doc, loc, std::move(lspContext), requestCtx);
 
     INFO("Completion: kind={} trigger='{}' query={}", toString(ctx.lspContext.triggerKind),
          ctx.lspContext.triggerCharacter.value_or(""), toString(ctx.query->kind()));
 
+    requestCtx.throwIfCancelled("before completion lookup");
     m_driver->completions.getCompletions(results, doc, ctx);
+    requestCtx.throwIfCancelled("after completion lookup");
 
     // TODO: rank results using order- the lsp is pretty stupid with this.
     // We need to hack around with client side middileware like in clangd-

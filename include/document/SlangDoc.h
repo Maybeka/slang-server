@@ -12,8 +12,10 @@
 #include "lsp/LspTypes.h"
 #include "lsp/RequestContext.h"
 #include "lsp/URI.h"
+#include <filesystem>
 #include <memory>
 #include <optional>
+#include <span>
 #include <sys/types.h>
 #include <vector>
 
@@ -57,9 +59,26 @@ private:
     /// The syntax tree for this document
     std::shared_ptr<slang::syntax::SyntaxTree> m_tree;
 
+    /// A native tree may contain several ordered source roots and unit-specific
+    /// preprocessing options. Keep its recipe independently of the cached tree.
+    struct NativeCompilationUnit {
+        std::vector<std::filesystem::path> rootPaths;
+        std::vector<uint64_t> rootSortKeys;
+        slang::Bag options;
+        const slang::SourceLibrary* library = nullptr;
+        bool isLibraryUnit = false;
+        bool requiresNativeReplay = false;
+    };
+    std::optional<NativeCompilationUnit> m_nativeCompilationUnit;
+
     /// Document analysis for syntax and symbol analysis.
     /// Shared so that callers can hold the analysis alive even if getAnalysis() recreates it.
     std::shared_ptr<ShallowAnalysis> m_analysis;
+    uint64_t m_analysisIndexRevision = 0;
+    uint64_t m_analysisContextRevision = 0;
+
+    // Absent for disk-only buffers or text reloaded independently of the editor.
+    std::optional<int> m_version;
 
     // For testing
     friend class DocumentHandle;
@@ -69,9 +88,26 @@ private:
 public:
     SlangDoc(ServerDriver& driver, URI uri, slang::SourceBuffer buffer);
 
-    // Open a Document from a syntax tree (parsed from slang Driver)
+    /// Open a document from a native tree. Callers must mark units that can
+    /// inherit macros from another tree, even if no inherited definition survives
+    /// this particular parse (for example, a -C unit containing `undefineall).
     static std::shared_ptr<SlangDoc> fromTree(ServerDriver& driver,
-                                              std::shared_ptr<slang::syntax::SyntaxTree> tree);
+                                              std::shared_ptr<slang::syntax::SyntaxTree> tree,
+                                              bool requiresNativeReplay = false);
+
+    bool isNativeCompilationUnit() const { return m_nativeCompilationUnit.has_value(); }
+    void adoptNativeCompilationUnit(const SlangDoc& unit);
+    /// Root paths in native preprocessing order; includes are not separate roots.
+    std::span<const std::filesystem::path> getRootPaths() const {
+        return m_nativeCompilationUnit ? std::span(m_nativeCompilationUnit->rootPaths)
+                                       : std::span<const std::filesystem::path>{};
+    }
+
+    /// Inherited macros are not recorded as replayable inputs on a SyntaxTree.
+    /// The registry must replay these units with the native SourceLoader instead.
+    bool requiresNativeReplay() const {
+        return m_nativeCompilationUnit && m_nativeCompilationUnit->requiresNativeReplay;
+    }
 
     // Open a Document from text (LSP open)
     static std::shared_ptr<SlangDoc> fromText(ServerDriver& driver, const URI& uri,
@@ -82,6 +118,8 @@ public:
 
     SourceManager& getSourceManager() const { return m_sourceManager; }
     const slang::BufferID getBuffer() const { return m_buffer.id; }
+    std::optional<int> getVersion() const { return m_version; }
+    void setVersion(std::optional<int> version) { m_version = version; }
     const std::string_view getText() const;
     const URI& getURI() { return m_uri; }
     std::string_view getPath() const { return m_uri.getPath(); }
@@ -90,10 +128,30 @@ public:
     }
 
     /// @brief Get the syntax tree, creating it if necessary
-    std::shared_ptr<slang::syntax::SyntaxTree> getSyntaxTree();
+    std::shared_ptr<slang::syntax::SyntaxTree> getSyntaxTree(const lsp::RequestContext& ctx = {});
+
+    /// Inspect an already-parsed tree without loading unrelated documents.
+    std::shared_ptr<slang::syntax::SyntaxTree> getCachedSyntaxTree() const { return m_tree; }
+
+    /// Inspect the last analysis context, even if edits have made its buffers stale.
+    std::shared_ptr<slang::syntax::SyntaxTree> getCachedAnalysisTree() const {
+        return m_analysis ? m_analysis->getSyntaxTree() : nullptr;
+    }
 
     /// @brief Check if analysis exists without creating it
-    bool hasAnalysis() const { return m_analysis != nullptr && m_analysis->hasValidBuffers(); }
+    bool hasAnalysis() const;
+
+    // Syntax-only inputs for a private diagnostic compilation. All trees belong to
+    // this document's SourceManager; callers must capture them before returning
+    // to the protocol queue.
+    struct AnalysisInputs {
+        BufferID buffer;
+        std::shared_ptr<syntax::SyntaxTree> tree;
+        std::vector<std::shared_ptr<syntax::SyntaxTree>> trees;
+        uint64_t indexRevision;
+    };
+    AnalysisInputs getAnalysisInputs(const lsp::RequestContext& ctx = {});
+    const Bag& getOptions() const { return m_options; }
 
     /// @brief Get the analysis, creating it if necessary.
     /// Returns a shared_ptr so callers can hold the analysis alive independently of this document.
@@ -103,6 +161,13 @@ public:
     /// Used when an external change (e.g. active-instance selection) means cached
     /// goto/hover results must be recomputed.
     void invalidateAnalysis() { m_analysis.reset(); }
+
+    /// Global exploration preprocessing inputs changed, including a file that may
+    /// have entered or left the preinclude graph.
+    void invalidateSyntax() {
+        m_tree.reset();
+        m_analysis.reset();
+    }
 
     ////////////////////////////////////////////////
     /// Indexed Syntax Tree Methods
@@ -150,13 +215,17 @@ public:
     /// @param diagEngine The diagnostic engine to issue to
     /// @param ctx The request context used for timing logs
     void issueDiagnosticsTo(slang::DiagnosticEngine& diagEngine,
-                            const lsp::RequestContext& ctx = {});
+                            const lsp::RequestContext& ctx = {},
+                            SemanticDiagnosticBatch* batch = nullptr);
 
     /// @brief For the document symbols request
     // TODO: should this use the shallow compilation instead of syntax tree?
     std::vector<lsp::DocumentSymbol> getSymbols() { return getAnalysis()->getDocSymbols(); }
 
-    std::optional<slang::SourceLocation> getLocation(const lsp::Position& position);
+    /// Map editor coordinates into the selected analysis context. An included file has a
+    /// different BufferID there from the editor's backing buffer returned by getBuffer().
+    std::optional<slang::SourceLocation> getLocation(const lsp::Position& position,
+                                                     const lsp::RequestContext& ctx = {});
 
     std::vector<lsp::DocumentLink> getDocLinks() { return getAnalysis()->getDocLinks(); }
 

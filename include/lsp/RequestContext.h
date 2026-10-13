@@ -15,6 +15,7 @@
 #include <ctime>
 #include <fmt/chrono.h>
 #include <fmt/format.h>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <stdexcept>
@@ -29,6 +30,11 @@ class RequestCancelled : public std::runtime_error {
 public:
     explicit RequestCancelled(std::string_view checkpoint) :
         std::runtime_error(std::string(checkpoint)) {}
+};
+
+class RequestFailed : public std::runtime_error {
+public:
+    using std::runtime_error::runtime_error;
 };
 
 class RequestContext {
@@ -69,6 +75,21 @@ public:
     void throwIfCancelled(std::string_view checkpoint) const {
         if (isCancelled())
             throw RequestCancelled(checkpoint);
+    }
+
+    // Explicit safe boundaries only: never interrupt a parser, binder, or visitor in flight.
+    void checkpoint(std::string_view name) const {
+        throwIfCancelled(name);
+        if (m_checkpointObserver)
+            (*m_checkpointObserver)(name);
+        throwIfCancelled(name);
+    }
+
+    // Install before dispatch. Only deterministic tests use this per-request observer;
+    // normal requests carry no observer and no global test state is involved.
+    void setCheckpointObserverForTesting(std::function<void(std::string_view)> observer) {
+        m_checkpointObserver = std::make_shared<const std::function<void(std::string_view)>>(
+            std::move(observer));
     }
 
     std::string elapsedContext() const {
@@ -159,6 +180,7 @@ private:
     std::chrono::steady_clock::time_point m_start;
     bool m_supportsCancellation = false;
     std::shared_ptr<State> m_state;
+    std::shared_ptr<const std::function<void(std::string_view)>> m_checkpointObserver;
 };
 
 } // namespace lsp

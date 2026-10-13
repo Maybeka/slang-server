@@ -53,6 +53,10 @@ public:
 
     /// Update the compilation based by requesting all syntax trees from the documents
     void refresh();
+    void refreshDocuments(const std::vector<std::shared_ptr<SlangDoc>>& documents);
+
+    /// Whether the current full compilation covers the latest data for this source.
+    bool containsCurrentSource(const std::filesystem::path& path) const;
 
     InstanceIndexer& getInstances() { return m_analysis->instances; }
 

@@ -66,15 +66,18 @@ static bool symbolsMatch(const ast::Symbol* a, const ast::Symbol* b) {
 ShallowAnalysis::ShallowAnalysis(SourceManager& sourceManager, slang::BufferID buffer,
                                  std::shared_ptr<syntax::SyntaxTree> tree, slang::Bag options,
                                  const std::vector<std::shared_ptr<syntax::SyntaxTree>>& allTrees,
-                                 const ServerCompilation* design) :
-    syntaxes(*tree), m_sourceManager(sourceManager), m_buffer(buffer), m_tree(tree),
+                                 const ServerCompilation* design, const lsp::RequestContext& ctx,
+                                 bool packageOnly) :
+    syntaxes(*tree, buffer), m_sourceManager(sourceManager), m_buffer(buffer), m_tree(tree),
     m_allTrees(allTrees), m_analysisOptions(options.getOrDefault<analysis::AnalysisOptions>()),
-    m_symbolTreeVisitor(m_sourceManager), m_symbolIndexer(buffer) {
+    m_symbolTreeVisitor(m_sourceManager, buffer), m_symbolIndexer(buffer) {
 
     if (!m_tree) {
         ERROR("DocumentAnalysis initialized with null syntax tree");
         return;
     }
+
+    ctx.checkpoint("after syntax indexing");
 
     // Syntaxes are already indexed in the constructor
 
@@ -99,16 +102,25 @@ ShallowAnalysis::ShallowAnalysis(SourceManager& sourceManager, slang::BufferID b
     cOptions.flags |= ast::CompilationFlags::AllowTopLevelIfacePorts;
     cOptions.flags |= ast::CompilationFlags::CheckUninstantiated;
     cOptions.flags |= ast::CompilationFlags::AllowInvalidTop;
+    if (packageOnly) {
+        cOptions.flags |= ast::CompilationFlags::PackageAnalysis;
+        cOptions.flags &= ~ast::CompilationFlags::CheckUninstantiated;
+    }
     // Check the edited module and two levels of instantiated children.
     cOptions.maxInstanceDepth = 3;
 
     // Add definitions from this tree (even if they aren't valid tops)
     cOptions.topModules.clear();
+    ctx.checkpoint("before compilation construction");
     m_compilation = std::make_unique<ast::Compilation>(cOptions);
+    ctx.checkpoint("after compilation construction");
     for (auto& depTree : m_allTrees) {
+        ctx.checkpoint("before adding syntax tree");
         m_compilation->addSyntaxTree(depTree);
+        ctx.checkpoint("after adding syntax tree");
     }
     if (design) {
+        ctx.checkpoint("before active design context");
         std::vector<std::string_view> definitionNames;
         for (auto* symbol : m_compilation->getDefinitions()) {
             if (auto* definition = symbol->as_if<ast::DefinitionSymbol>())
@@ -116,16 +128,23 @@ ShallowAnalysis::ShallowAnalysis(SourceManager& sourceManager, slang::BufferID b
         }
         m_activeDesign = design->createActiveDesignContext(definitionNames);
         m_activeDesign->applyOverrides(*m_compilation);
+        ctx.checkpoint("after active design context");
     }
 
     // Elaborate and index
     // - token -> symbol defs
     // - syntax -> scopes
-    m_compilation->getRoot().visit(m_symbolIndexer);
+    ctx.checkpoint("before root binding");
+    const auto& root = m_compilation->getRoot();
+    ctx.checkpoint("after root binding");
+    ctx.checkpoint("before symbol indexing");
+    root.visit(m_symbolIndexer);
+    ctx.checkpoint("after symbol indexing");
 }
 
 const Diagnostics& ShallowAnalysis::getSemanticDiagnostics() {
-    if (!m_editedDefinitionsElaborated) {
+    if (!m_editedDefinitionsElaborated &&
+        !m_compilation->hasFlag(ast::CompilationFlags::PackageAnalysis)) {
         auto& root = m_compilation->getRoot();
         for (auto* symbol : m_compilation->getDefinitions()) {
             auto* definition = symbol->as_if<ast::DefinitionSymbol>();
@@ -140,6 +159,53 @@ const Diagnostics& ShallowAnalysis::getSemanticDiagnostics() {
     }
 
     return m_compilation->getSemanticDiagnostics();
+}
+
+bool SemanticDiagnosticBatch::eligible(ShallowAnalysis& analysis) {
+    if (analysis.m_activeDesign || !analysis.m_compilation ||
+        analysis.m_compilation->hasFatalErrors() || !analysis.hasValidBuffers() ||
+        !analysis.m_compilation->getRoot().topInstances.empty())
+        return false;
+    auto trees = analysis.m_compilation->getSyntaxTrees();
+    if (trees.empty() || trees.front() != analysis.m_tree)
+        return false;
+    bool hasPackage = false;
+    for (const auto& [node, _] : analysis.m_tree->getMetadata().nodeMeta) {
+        if (node->kind == syntax::SyntaxKind::PackageDeclaration)
+            hasPackage = true;
+    }
+    if (!hasPackage)
+        return false;
+    for (auto* symbol : analysis.m_compilation->getDefinitions()) {
+        auto* definition = symbol->as_if<ast::DefinitionSymbol>();
+        if (definition && definition->syntaxTree == analysis.m_tree.get())
+            return false;
+    }
+    return true;
+}
+
+SemanticDiagnosticBatch::Result SemanticDiagnosticBatch::collect(
+    const std::shared_ptr<ShallowAnalysis>& analysis) {
+    // Driver options and SourceManager are stable throughout this synchronous batch.
+    // Owner discovery and the complete dependency closure are recomputed by each refresh.
+    bool canReuse = eligible(*analysis);
+    if (canReuse) {
+        for (const auto& producer : m_producers) {
+            if (&producer->m_sourceManager == &analysis->m_sourceManager &&
+                producer->m_tree == analysis->m_tree &&
+                std::ranges::equal(producer->m_compilation->getSyntaxTrees(),
+                                   analysis->m_compilation->getSyntaxTrees()) &&
+                eligible(*producer)) {
+                ++m_statistics.hits;
+                return {producer->getSemanticDiagnostics(), true};
+            }
+        }
+    }
+    ++m_statistics.computations;
+    const auto& diagnostics = analysis->getSemanticDiagnostics();
+    if (canReuse && eligible(*analysis))
+        m_producers.push_back(analysis);
+    return {diagnostics, false};
 }
 
 const InterfaceConnection* ShallowAnalysis::getActiveInterfaceConnection(
@@ -310,17 +376,24 @@ const ast::Scope* ShallowAnalysis::getScopeFromSym(const ast::Symbol* symbol) co
         return &symbol->as<ast::Scope>();
     }
 
-    if (symbol->isType()) {
-        auto& type = unwrapErrorType(symbol->as<ast::Type>());
-        if (type.isScope()) {
+    auto typeScope = [](const ast::Type& original) -> const ast::Scope* {
+        auto& type = unwrapErrorType(original);
+        if (type.isScope())
             return &type.as<ast::Scope>();
+        if (auto* virtualInterface = type.as_if<ast::VirtualInterfaceType>()) {
+            // Use the bound instance, including parameter overrides and modport
+            // restrictions; a default interface instance can describe the wrong type.
+            if (virtualInterface->modport)
+                return virtualInterface->modport;
+            return &virtualInterface->iface.body;
         }
+        return nullptr;
+    };
+    if (symbol->isType()) {
+        return typeScope(symbol->as<ast::Type>());
     }
     else if (ast::ValueSymbol::isKind(symbol->kind)) {
-        auto& type = unwrapErrorType(symbol->as<ast::ValueSymbol>().getType());
-        if (type.isScope()) {
-            return &type.as<ast::Scope>();
-        }
+        return typeScope(symbol->as<ast::ValueSymbol>().getType());
     }
     else if (ast::InstanceSymbol::isKind(symbol->kind)) {
         return &symbol->as<ast::InstanceSymbol>().body.as<ast::Scope>();
@@ -1137,12 +1210,14 @@ const slang::analysis::AnalysisManager* ShallowAnalysis::getAnalysisManager() {
         return m_driverAnalysis.get();
     }
 
-    (void)getSemanticDiagnostics();
-
+    // getRoot was finalized during construction; semantic elaboration cannot add tops.
+    // Value hover should not force an unrelated semantic pass for known-empty drivers.
     if (!m_compilation || m_compilation->getRoot().topInstances.empty()) {
         m_cachedAnalysisDiags = Diagnostics{};
         return nullptr;
     }
+
+    (void)getSemanticDiagnostics();
 
     auto manager = std::make_unique<slang::analysis::AnalysisManager>(m_analysisOptions);
 

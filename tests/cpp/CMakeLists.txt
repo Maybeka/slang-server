@@ -40,3 +40,8 @@ if(CMAKE_SYSTEM_NAME MATCHES "Windows")
   target_sources(server_unittests
                  PRIVATE ${PROJECT_SOURCE_DIR}/scripts/win32.manifest)
 endif()
+
+# Same LSP entry point with a test-only held-child hook. Never installed.
+add_executable(diagnostic_test_server ${PROJECT_SOURCE_DIR}/src/server_main.cpp)
+target_compile_definitions(diagnostic_test_server PRIVATE SLANG_SERVER_TEST_DIAGNOSTIC_GATE)
+target_link_libraries(diagnostic_test_server PRIVATE slang_server_obj_lib reflectcpp)

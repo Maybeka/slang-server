@@ -22,7 +22,7 @@ namespace server {
 
 class SymbolTreeVisitor : public slang::syntax::SyntaxVisitor<SymbolTreeVisitor> {
 public:
-    explicit SymbolTreeVisitor(const slang::SourceManager& sourceManager);
+    explicit SymbolTreeVisitor(const slang::SourceManager& sourceManager, slang::BufferID buffer);
 
     std::vector<lsp::DocumentSymbol> getSymbols(std::shared_ptr<slang::syntax::SyntaxTree> tree,
                                                 bool macros);
@@ -82,6 +82,7 @@ private:
     void handleRecursive(const slang::syntax::SyntaxNode& node, lsp::DocumentSymbol& symbol);
 
     const slang::SourceManager& m_sourceManager;
+    slang::BufferID m_buffer;
     std::vector<lsp::DocumentSymbol> m_symbols;
     std::vector<lsp::DocumentSymbol>* m_currentSymbols = &m_symbols;
 };

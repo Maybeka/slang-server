@@ -33,6 +33,26 @@ struct Config {
     // all fields must be optional
     rfl::Description<"Flags to pass to slang", std::string> flags;
 
+    rfl::Description<"Complete compilation filelist for package-first exploration. The path is "
+                     "workspace-relative and uses native -F semantics; nested -f/-F options "
+                     "retain their native meaning. This does not select a full RTL build.",
+                     std::optional<std::string>>
+        compilationFilelist;
+
+    rfl::Description<"Ordered files prepended to separately parsed exploration-mode sources. "
+                     "Use real shared macro headers; relative paths are workspace-relative. "
+                     "Full builds retain their own compilation-unit preprocessing.",
+                     std::vector<std::string>>
+        explorePreincludeFiles;
+
+    rfl::Description<"Opt-in fast snapshot cwd checks (default false = strict). Requires the "
+                     "process working directory and its ancestors not to be moved, deleted "
+                     "or renamed during analysis. Ordinary source edits remain allowed. "
+                     "Checks phase boundaries; transient changes restored between checks "
+                     "are undetected. A changed/unavailable cwd discards the result and "
+                     "requires configuration reload. Filesystem lookup rules are unchanged.", bool>
+        fastCwdSnapshotChecks = false;
+
     // Legacy indexing globs, kept for backwards compatibility
     rfl::Deprecated<"Use 'index' instead.",
                     "Globs of what to index. By default will "

@@ -8,6 +8,12 @@
 export interface Config {
   /** Flags to pass to slang */
   flags?: string
+  /** Complete compilation filelist for package-first exploration. The path is workspace-relative and uses native -F semantics; nested -f/-F options retain their native meaning. This does not select a full RTL build. */
+  compilationFilelist?: string | null
+  /** Ordered files prepended to separately parsed exploration-mode sources. Use real shared macro headers; relative paths are workspace-relative. Full builds retain their own compilation-unit preprocessing. */
+  explorePreincludeFiles?: string[]
+  /** Opt-in fast snapshot cwd checks (default false = strict). Requires the process working directory and its ancestors not to be moved, deleted or renamed during analysis. Ordinary source edits remain allowed. Checks phase boundaries; transient changes restored between checks are undetected. A changed/unavailable cwd discards the result and requires configuration reload. Filesystem lookup rules are unchanged. */
+  fastCwdSnapshotChecks?: boolean
   /**
    * @deprecated
    * Globs of what to index. By default will index all sv and svh files in the workspace.

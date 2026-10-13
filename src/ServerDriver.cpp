@@ -21,10 +21,12 @@
 #include "util/Formatting.h"
 #include "util/Logging.h"
 #include "util/Markdown.h"
+#include "util/SlangExtensions.h"
 #include <algorithm>
 #include <filesystem>
 #include <memory>
 #include <queue>
+#include <set>
 #include <string_view>
 
 #include "slang/ast/Compilation.h"
@@ -44,6 +46,7 @@
 #include "slang/parsing/ParserMetadata.h"
 #include "slang/syntax/AllSyntax.h"
 #include "slang/syntax/SyntaxTree.h"
+#include "slang/syntax/SyntaxVisitor.h"
 #include "slang/text/SourceLocation.h"
 #include "slang/text/SourceManager.h"
 
@@ -59,14 +62,39 @@ bool ServerDriver::s_debugHoversEnabled =
 
 ServerDriver::ServerDriver(Indexer& indexer, SlangLspClient& client, const Config& config,
                            std::vector<std::string> buildfiles,
-                           std::optional<std::string_view> workspaceFolder) :
+                           std::optional<std::string_view> workspaceFolder,
+                           const ServerDriver* overlays) :
     sm(driver.sourceManager), diagEngine(driver.diagEngine), client(client),
     diagClient(std::make_shared<ServerDiagClient>(sm, client)),
     completions(*this, indexer, sm, options), codeActions(*this, sm), m_indexer(indexer),
     m_config(config), m_workspacePathPrefix(workspaceFolder.value_or("")) {
+    diagClient->setUriResolver([this](const URI& physical) {
+        // Exact open URIs win; otherwise bind the known physical source to its
+        // client's spelling. Never canonicalize arbitrary publication URIs.
+        if (m_openDocs.contains(physical))
+            return physical;
+        for (const auto& uri : m_openDocs) {
+            auto found = docs.find(uri);
+            if (found != docs.end() &&
+                sm.getFullPath(found->second->getBuffer()).generic_string() == physical.getPath())
+                return uri;
+        }
+        return physical;
+    });
     if (!m_workspacePathPrefix.empty() && m_workspacePathPrefix.back() != '/' &&
         m_workspacePathPrefix.back() != '\\') {
         m_workspacePathPrefix.push_back(std::filesystem::path::preferred_separator);
+    }
+    if (overlays) {
+        for (const auto& uri : overlays->m_openDocs) {
+            auto found = overlays->docs.find(uri);
+            if (found == overlays->docs.end())
+                continue;
+            auto text = found->second->getText();
+            if (!text.empty() && text.back() == '\0')
+                text.remove_suffix(1);
+            sm.assignText(overlays->sm.getFullPath(found->second->getBuffer()).string(), text);
+        }
     }
     parseAndLoadSources(buildfiles);
 }
@@ -90,21 +118,32 @@ void ServerDriver::parseAndLoadSources(const std::vector<std::string>& buildfile
         ok &= driver.parseCommandLine(src.flags, parseOpts);
     }
 
-    driver.options.errorLimit = 0;
-    ok &= driver.processOptions(false);
-    if (!ok) {
-        client.showError("Failed to parse config flags");
+    if (m_config.compilationFilelist.value()) {
+        auto path = std::filesystem::path(*m_config.compilationFilelist.value());
+        if (path.is_relative())
+            path = std::filesystem::path(m_workspacePathPrefix) / path;
+        ok &= !m_config.compilationFilelist.value()->empty() &&
+              driver.processCommandFiles(path.string(), true, false);
     }
 
     for (auto& buildfile : buildfiles) {
-        ok = driver.processCommandFiles(buildfile, m_config.buildRelativePaths.value(), false);
-        if (ok) {
+        bool loaded = driver.processCommandFiles(buildfile, m_config.buildRelativePaths.value(),
+                                                 false);
+        ok &= loaded;
+        if (loaded) {
             INFO("Processed build file: {}", buildfile);
         }
         else {
             client.showError(fmt::format("Failed to process build file: {}", buildfile));
         }
     }
+
+    driver.options.errorLimit = 0;
+    ok &= driver.processOptions(false);
+    if (!ok)
+        client.showError(m_config.compilationFilelist.value()
+                             ? "Failed to parse configuration or compilation filelist"
+                             : "Failed to parse config flags");
 
     // Build macro name -> source file map from the driver's per-file define lists
     for (auto& [path, meta] : driver.getCommandFileMetadata()) {
@@ -123,45 +162,152 @@ void ServerDriver::parseAndLoadSources(const std::vector<std::string>& buildfile
 
     options = driver.createOptionBag();
     options.set(driver.getAnalysisOptions());
-    ok = driver.parseAllSources();
+    // Native command files can change cwd and install include paths. Only the
+    // subsequent source parse belongs to the immutable diagnostic replay graph.
+    // Existing editor overlays remain in the cache and their actual reads are recorded.
+    sm.setFastCwdSnapshotChecks(m_config.fastCwdSnapshotChecks.value());
+    sm.enableSnapshotRecording(true);
+    m_configurationInputsFailed = !ok;
+    ok &= driver.parseAllSources();
     diagEngine.setMappingsFromPragmas();
 
-    // Create documents from syntax trees
-    INFO("Creating ServerDriver with {} trees", driver.syntaxTrees.size());
-    for (auto& tree : driver.syntaxTrees) {
-        for (auto buffer : tree->getSourceBufferIds()) {
+    m_nativeInputsFailed = !ok;
+    installConfiguredUnits(driver.syntaxTrees);
+}
+
+std::vector<SourceBuffer> ServerDriver::getExplorePreincludeBuffers(BufferID target) {
+    std::vector<SourceBuffer> buffers;
+    if (comp || m_config.explorePreincludeFiles.value().empty())
+        return buffers;
+
+    auto targetPath = sm.getFullPath(target);
+    bool targetIsRoot = false;
+    flat_hash_set<URI> roots;
+    for (const auto& configured : m_config.explorePreincludeFiles.value()) {
+        auto path = std::filesystem::path(configured);
+        if (path.is_relative())
+            path = std::filesystem::path(m_workspacePathPrefix) / path;
+        std::error_code ec;
+        auto canonical = std::filesystem::weakly_canonical(path, ec);
+        if (!ec)
+            path = canonical;
+        roots.emplace(URI::fromFile(path));
+        m_explorePreincludeUris.emplace(URI::fromFile(path));
+        targetIsRoot |= path == targetPath;
+        auto buffer = sm.readSource(path.string(), nullptr);
+        if (!buffer) {
+            if (m_reportedPreincludeFailures.emplace(path.string()).second)
+                client.showError(fmt::format("Failed to read exploration preinclude {}: {}",
+                                             path.string(), buffer.error().message()));
+            continue;
+        }
+        m_reportedPreincludeFailures.erase(path.string());
+        buffers.push_back(*buffer);
+    }
+    // Never force a macro header to include itself: include guards would hide its
+    // edited text and break diagnostics/navigation in the macro document itself.
+    if (buffers.empty()) {
+        if (m_explorePreincludeTree) {
+            m_explorePreincludeTree.reset();
+            ++m_explorePreincludeRevision;
+        }
+        return {};
+    }
+
+    if (!m_explorePreincludeTree || !hasValidBuffers(sm, m_explorePreincludeTree)) {
+        m_explorePreincludeTree = syntax::SyntaxTree::fromBuffers(buffers, sm, options);
+        ++m_explorePreincludeRevision;
+        m_explorePreincludeUris = std::move(roots);
+        for (auto buffer : m_explorePreincludeTree->getSourceBufferIds()) {
             auto path = sm.getFullPath(buffer);
             if (!path.empty())
-                m_buildSourceUris.emplace(URI::fromFile(path));
+                m_explorePreincludeUris.emplace(URI::fromFile(path));
         }
+    }
+    if (targetIsRoot || m_explorePreincludeUris.contains(URI::fromFile(targetPath)))
+        return {};
+    return buffers;
+}
 
-        auto uri = URI::fromFile(sm.getFullPath(tree->getSourceBufferIds()[0]));
-        auto doc = SlangDoc::fromTree(*this, std::move(tree));
-        docs[uri] = doc;
+bool ServerDriver::isExplorePreinclude(const URI& uri) const {
+    if (comp || m_config.explorePreincludeFiles.value().empty())
+        return false;
+    if (m_explorePreincludeUris.contains(uri))
+        return true;
+    auto found = docs.find(uri);
+    if (found != docs.end())
+        return m_explorePreincludeUris.contains(
+            URI::fromFile(sm.getFullPath(found->second->getBuffer())));
+    std::error_code ec;
+    auto path = std::filesystem::weakly_canonical(std::filesystem::path(uri.getPath()), ec);
+    return m_explorePreincludeUris.contains(ec ? uri : URI::fromFile(path));
+}
+
+void ServerDriver::issueExplorePreincludeDiagnostics(BufferID target) {
+    if (comp || m_config.explorePreincludeFiles.value().empty())
+        return;
+    auto targetUri = URI::fromFile(sm.getFullPath(target));
+    bool changed = m_publishedPreincludeRevision != m_explorePreincludeRevision;
+    if (changed) {
+        // Clear previous members too: a header may have left the preinclude graph.
+        for (const auto& uri : m_publishedPreincludeUris)
+            diagClient->clear(uri);
+        for (const auto& uri : m_explorePreincludeUris)
+            diagClient->clear(uri);
+    }
+    else if (m_explorePreincludeUris.contains(targetUri)) {
+        // analyzeDocument cleared this macro document before entering here.
+        diagClient->clear(targetUri);
+    }
+    else {
+        return;
+    }
+    if (!m_explorePreincludeTree)
+        return;
+    for (auto buffer : m_explorePreincludeTree->getSourceBufferIds())
+        diagEngine.setMappingsFromPragmas(buffer);
+    for (const auto& diagnostic : m_explorePreincludeTree->diagnostics()) {
+        auto location = sm.getFullyOriginalLoc(diagnostic.location);
+        if (changed ||
+            (location.valid() && URI::fromFile(sm.getFullPath(location.buffer())) == targetUri))
+            diagEngine.issue(diagnostic);
     }
 }
 
-void ServerDriver::analyzeDocument(SlangDoc& doc, const lsp::RequestContext& ctx) {
+void ServerDriver::analyzeDocument(SlangDoc& doc, const lsp::RequestContext& ctx,
+                                   SemanticDiagnosticBatch* batch) {
     ctx.throwIfCancelled("before diagnostics");
 
+    auto cwdPhase = sm.beginFastCwdPhase();
     // Clear and re-issue diagnostics for this document
+    auto update = diagClient->beginUpdate();
     diagClient->clear(doc.getURI());
 
-    // Pragma mappings are populated from the preprocessor/lexer
-    doc.getSyntaxTree();
-
-    // Update pragma mappings for the changed buffer
-    diagEngine.setMappingsFromPragmas(doc.getBuffer());
-
-    doc.issueDiagnosticsTo(diagEngine, ctx);
+    doc.issueDiagnosticsTo(diagEngine, ctx, batch);
+    issueExplicitContextDiagnostics(doc.getURI());
     ctx.throwIfCancelled("before publishing diagnostics");
+    cwdPhase.finish();
+    update.commit();
+    if (!comp && !m_config.explorePreincludeFiles.value().empty()) {
+        // Publication bookkeeping commits with the diagnostic transaction. A cancelled
+        // attempt must retry the shared header diagnostics on the next analysis.
+        m_publishedPreincludeRevision = m_explorePreincludeRevision;
+        m_publishedPreincludeUris = m_explorePreincludeUris;
+    }
+    diagClient->setVersion(doc.getURI(), doc.getVersion());
     diagClient->pushDiags(doc.getURI());
 
     publishInactiveRegions(doc, ctx);
 }
 
 void ServerDriver::onDocDidSave(SlangDoc& doc) {
-    m_indexer.updateDocument(doc.getURI().getPath(), *doc.getSyntaxTree());
+    ++m_snapshotRevision;
+    if (hasConfiguredCompilationInputs() || (!comp && hasSourceContextHints())) {
+        auto inputs = doc.getAnalysisInputs();
+        m_indexer.updateDocument(doc.getURI().getPath(), *inputs.tree, inputs.buffer);
+    }
+    else
+        m_indexer.updateDocument(doc.getURI().getPath(), *doc.getSyntaxTree());
 
     if (!comp) {
         analyzeDocument(doc);
@@ -183,19 +329,36 @@ void ServerDriver::onDocDidSave(SlangDoc& doc) {
     }
     else {
         diagClient->clear();
-        comp->refresh();
+        if (hasConfiguredCompilationInputs())
+            comp->refreshDocuments(m_configuredUnits);
+        else
+            comp->refresh();
         invalidateAnalysesAndRefreshClient();
         publishCompilationDiagnostics(&doc.getURI());
+        // Pending jobs covered by this full pass still finish their inactive-region
+        // work, but must not overwrite full-design diagnostics with shallow results.
+        m_fullDiagnosticGeneration = m_diagnosticGeneration;
         publishInactiveRegions(doc);
     }
 }
 
 void ServerDriver::publishCompilationDiagnostics(const URI* priorityUri) {
+    auto cwdPhase = sm.beginFastCwdPhase();
     diagEngine.setMappingsFromPragmas();
-    for (const auto& entry : docs) {
-        entry.second->issueParseDiagnostics(diagEngine);
+    if (hasConfiguredCompilationInputs()) {
+        for (const auto& tree : m_currentConfiguredTrees)
+            for (const auto& diagnostic : tree->diagnostics())
+                diagEngine.issue(diagnostic);
     }
+    else
+        for (const auto& entry : docs)
+            entry.second->issueParseDiagnostics(diagEngine);
     comp->issueDiagnosticsTo(diagEngine);
+    for (const auto& [uri, doc] : docs) {
+        issueExplicitContextDiagnostics(uri);
+        diagClient->setVersion(uri, doc->getVersion());
+    }
+    cwdPhase.finish();
     if (priorityUri)
         diagClient->pushDiags(*priorityUri);
     else
@@ -218,7 +381,7 @@ void ServerDriver::copyOpenDocumentsFrom(const ServerDriver* oldDriver) {
         // openDocument expects no \0
         auto text = docIt->second->getText();
         text.remove_suffix(1);
-        openDocument(uri, text);
+        openDocument(uri, text, docIt->second->getVersion());
     }
 }
 
@@ -226,7 +389,8 @@ std::unique_ptr<ServerDriver> ServerDriver::createForExplore(
     Indexer& indexer, SlangLspClient& client, const Config& config,
     std::optional<std::string_view> workspaceFolder, const ServerDriver* oldDriver) {
     auto newDriver = std::make_unique<ServerDriver>(indexer, client, config,
-                                                    std::vector<std::string>{}, workspaceFolder);
+                                                    std::vector<std::string>{}, workspaceFolder,
+                                                    oldDriver);
     newDriver->copyOpenDocumentsFrom(oldDriver);
     return newDriver;
 }
@@ -236,7 +400,7 @@ std::unique_ptr<ServerDriver> ServerDriver::createFromFileLists(
     std::vector<std::string> buildfiles, std::optional<std::string_view> workspaceFolder,
     const ServerDriver* oldDriver) {
     auto newDriver = std::make_unique<ServerDriver>(indexer, client, config, std::move(buildfiles),
-                                                    workspaceFolder);
+                                                    workspaceFolder, oldDriver);
 
     std::vector<std::shared_ptr<SlangDoc>> buildDocuments;
     buildDocuments.reserve(newDriver->docs.size());
@@ -260,8 +424,21 @@ std::unique_ptr<ServerDriver> ServerDriver::createFromFileLists(
     return newDriver;
 }
 
-void ServerDriver::openDocument(const URI& uri, const std::string_view text) {
+void ServerDriver::openDocument(const URI& uri, const std::string_view text,
+                                std::optional<int> version, bool deferConfiguredDiagnostics) {
+    ++m_snapshotRevision;
+    // An explicitly opened package takes precedence over automatic candidate discovery.
+    if (m_automaticOwnerRoots.erase(uri))
+        ++m_ownerEpoch;
     auto docIter = docs.find(uri);
+    // A missing nested preinclude has no BufferID to invalidate. Conservatively
+    // rebuild the explicit prelude when an editor supplies any cached failure.
+    bool recoveredMissingSource = !comp &&
+                                  (!m_config.explorePreincludeFiles.value().empty() ||
+                                   hasConfiguredCompilationInputs() || hasSourceContextHints()) &&
+                                  sm.isCached(uri.getPath()) && !sm.readSource(uri.getPath());
+    bool preincludeReplaced = (isExplorePreinclude(uri) || recoveredMissingSource) &&
+                              (docIter == docs.end() || !docIter->second->textMatches(text));
     std::shared_ptr<SlangDoc> doc;
     bool matchesBuildSource = false;
     if (docIter != docs.end() && docIter->second->textMatches(text)) {
@@ -286,7 +463,29 @@ void ServerDriver::openDocument(const URI& uri, const std::string_view text) {
         docs[uri] = doc;
     }
 
-    if (comp && matchesBuildSource) {
+    if (preincludeReplaced) {
+        ++m_ownerEpoch;
+        if (recoveredMissingSource)
+            m_explorePreincludeTree.reset();
+        for (auto& [_, document] : docs)
+            document->invalidateSyntax();
+    }
+    if (recoveredMissingSource)
+        for (const auto& unit : m_configuredUnits)
+            unit->invalidateSyntax();
+    doc->setVersion(version);
+    m_openDocs.insert(uri);
+    auto physicalUri = URI::fromFile(sm.getFullPath(doc->getBuffer()));
+    if (!m_openDocs.contains(physicalUri))
+        diagClient->adoptDocumentUri(physicalUri, uri);
+    // Protocol callers with an idle diagnostic loop can postpone complete
+    // filelist diagnostics. Direct callers retain synchronous publication.
+    const bool deferred = deferConfiguredDiagnostics && !comp &&
+                          hasConfiguredCompilationInputs() && !preincludeReplaced;
+    if (deferred) {
+        m_pendingIncludedDiagnostics.insert_or_assign(uri, ++m_diagnosticGeneration);
+    }
+    else if (comp && matchesBuildSource) {
         // File is already part of the compilation — compilation diags were
         // already published, so skip shallow diags. Still publish inactive regions.
         publishInactiveRegions(*doc);
@@ -295,8 +494,41 @@ void ServerDriver::openDocument(const URI& uri, const std::string_view text) {
         analyzeDocument(*doc);
     }
 
+    // Opening a package can supply context for headers that were already open.
+    // Refresh only headers whose selected context actually changes to this root.
+    auto tree = doc->getCachedSyntaxTree();
+    bool hasPackage = false;
+    if (tree) {
+        for (const auto& [node, _] : tree->getMetadata().nodeMeta) {
+            if (node->kind == syntax::SyntaxKind::PackageDeclaration) {
+                hasPackage = true;
+                break;
+            }
+        }
+    }
+    if (hasPackage) {
+        for (const auto& openUri : m_openDocs) {
+            if (openUri == uri)
+                continue;
+            auto openDoc = docs.find(openUri);
+            if (openDoc == docs.end())
+                continue;
+            auto previous = openDoc->second->getCachedAnalysisTree();
+            auto context = getIncludeContext(openUri, previous.get());
+            if (context && context->tree != previous &&
+                sm.getFullPath(context->tree->getSourceBufferIds().front()) ==
+                    sm.getFullPath(doc->getBuffer())) {
+                if (deferred)
+                    m_pendingIncludedDiagnostics.insert_or_assign(openUri, m_diagnosticGeneration);
+                else
+                    analyzeDocument(*openDoc->second);
+            }
+        }
+    }
+
     // Track this as an open document
-    m_openDocs.insert(uri);
+    if (preincludeReplaced)
+        refreshOpenIncludeContexts();
 }
 
 std::shared_ptr<SlangDoc> ServerDriver::getDocument(const URI& uri) {
@@ -317,29 +549,143 @@ bool ServerDriver::isDocumentOpen(const URI& uri) {
 
 void ServerDriver::onDocDidChange(const lsp::DidChangeTextDocumentParams& params,
                                   const lsp::RequestContext& ctx) {
+    ++m_snapshotRevision;
     auto doc = getDocument(params.textDocument.uri);
     if (!doc) {
         ctx.error("Document {} not found", params.textDocument.uri.getPath());
         return;
     }
 
-    doc->onChange(params.contentChanges);
-    if (ctx.isCancelled()) {
-        ctx.info("Applied changes for {}; skipping superseded analysis", doc->getWsRelativePath());
-        ctx.throwIfCancelled("before analysis");
+    ++m_diagnosticGeneration;
+    auto changedPath = sm.getFullPath(doc->getBuffer());
+    // Remember old ownership before replacing the owner's tree. In particular, a
+    // removed include must clear diagnostics in its still-open header.
+    for (const auto& uri : m_openDocs) {
+        if (uri == doc->getURI())
+            continue;
+        auto openDoc = docs.find(uri);
+        if (openDoc == docs.end())
+            continue;
+        auto tree = openDoc->second->getCachedAnalysisTree();
+        if (tree && sm.getFullPath(tree->getSourceBufferIds().front()) == changedPath)
+            m_pendingIncludedDiagnostics.insert_or_assign(uri, m_diagnosticGeneration);
     }
-    analyzeDocument(*doc, ctx);
+
+    ++m_ownerEpoch;
+    doc->onChange(params.contentChanges);
+    doc->setVersion(params.textDocument.version);
+    bool preincludeChanged = isExplorePreinclude(doc->getURI());
+    if (preincludeChanged) {
+        // A nested file can enter or leave the preinclude graph. Invalidate even
+        // exempt macro documents, whose old trees might not contain the changed file.
+        for (auto& [_, document] : docs)
+            document->invalidateSyntax();
+        for (const auto& uri : m_openDocs)
+            if (uri != doc->getURI())
+                m_pendingIncludedDiagnostics.insert_or_assign(uri, m_diagnosticGeneration);
+    }
+    // A changed sibling include can invalidate another open header's package
+    // analysis even though neither document is the package root. Keep standalone
+    // RTL dependency publication on its existing save-triggered path.
+    for (const auto& uri : m_openDocs) {
+        auto openDoc = docs.find(uri);
+        if (uri == doc->getURI() || openDoc == docs.end() || openDoc->second->hasAnalysis())
+            continue;
+        auto previous = openDoc->second->getCachedAnalysisTree();
+        if (previous && (preincludeChanged || hasConfiguredCompilationInputs() ||
+                         m_explicitContexts.contains(uri) ||
+                         sm.getFullPath(previous->getSourceBufferIds().front()) !=
+                             sm.getFullPath(openDoc->second->getBuffer())))
+            m_pendingIncludedDiagnostics.insert_or_assign(uri, m_diagnosticGeneration);
+    }
+    // Give the directly edited document the newest work generation. It leads the
+    // eventual batch, preserving producer-before-sibling diagnostic reuse.
+    m_pendingIncludedDiagnostics.insert_or_assign(doc->getURI(), ++m_diagnosticGeneration);
+}
+
+void ServerDriver::runPendingDiagnostics(const lsp::RequestContext& ctx) {
+    // This batch is scoped to one uninterrupted idle pass; it never crosses edits.
+    SemanticDiagnosticBatch batch(m_semanticDiagnosticStatistics);
+    auto* diagnosticBatch = comp ? nullptr : &batch;
+    while (!m_pendingIncludedDiagnostics.empty()) {
+        ctx.throwIfCancelled("before analysis");
+        auto newest = std::max_element(
+            m_pendingIncludedDiagnostics.begin(), m_pendingIncludedDiagnostics.end(),
+            [](const auto& left, const auto& right) { return left.second < right.second; });
+        auto [uri, generation] = *newest;
+        auto found = docs.find(uri);
+        if (found == docs.end()) {
+            m_pendingIncludedDiagnostics.erase(uri);
+            continue;
+        }
+        auto doc = found->second;
+        auto changedPath = sm.getFullPath(doc->getBuffer());
+        if (m_openDocs.contains(uri)) {
+            if (comp && generation <= m_fullDiagnosticGeneration &&
+                comp->containsCurrentSource(changedPath))
+                publishInactiveRegions(*doc, ctx);
+            else
+                analyzeDocument(*doc, ctx, diagnosticBatch);
+        }
+        else {
+            // Closing an edited owner cannot lose discovery of newly included open
+            // headers. Parse its retained context, but never publish closed-file diagnostics.
+            doc->getSyntaxTree();
+        }
+        ctx.throwIfCancelled("before discovering included header contexts");
+
+        auto tree = doc->getCachedSyntaxTree();
+        bool hasPackage = false;
+        if (tree) {
+            for (const auto& [node, _] : tree->getMetadata().nodeMeta) {
+                if (node->kind == syntax::SyntaxKind::PackageDeclaration) {
+                    hasPackage = true;
+                    break;
+                }
+            }
+        }
+        if (hasPackage) {
+            for (const auto& openUri : m_openDocs) {
+                if (openUri == uri)
+                    continue;
+                auto openDoc = docs.find(openUri);
+                if (openDoc == docs.end())
+                    continue;
+                auto previous = openDoc->second->getCachedAnalysisTree();
+                auto context = getIncludeContext(openUri, previous.get());
+                if (context &&
+                    sm.getFullPath(context->tree->getSourceBufferIds().front()) == changedPath) {
+                    auto [pending, inserted] = m_pendingIncludedDiagnostics.try_emplace(openUri,
+                                                                                        generation);
+                    if (!inserted)
+                        pending->second = std::max(pending->second, generation);
+                }
+            }
+        }
+        ctx.throwIfCancelled("before completing diagnostic generation");
+        auto pending = m_pendingIncludedDiagnostics.find(uri);
+        if (pending != m_pendingIncludedDiagnostics.end() && pending->second == generation)
+            m_pendingIncludedDiagnostics.erase(pending);
+    }
 }
 
 void ServerDriver::closeDocument(const URI& uri) {
+    ++m_snapshotRevision;
+    if (isExplorePreinclude(uri))
+        m_publishedPreincludeRevision.reset();
     // Remove from open docs set
     m_openDocs.erase(uri);
+    // Retain pending owner discovery; idle work skips publication for closed documents.
+    if (auto it = docs.find(uri); it != docs.end())
+        it->second->setVersion(std::nullopt);
+    diagClient->setVersion(uri, std::nullopt);
     if (!comp) {
         diagClient->clear(uri);
     }
 }
 
 void ServerDriver::reloadDocument(const URI& uri) {
+    ++m_snapshotRevision;
     // Only reload if this is an open document
     if (m_openDocs.find(uri) == m_openDocs.end()) {
         return;
@@ -363,46 +709,52 @@ void ServerDriver::reloadDocument(const URI& uri) {
 
 void ServerDriver::onWorkspaceDidChangeWatchedFiles(
     const lsp::DidChangeWatchedFilesParams& params) {
-    // Collect docs that need updating after all buffers are reloaded
-    std::vector<std::shared_ptr<SlangDoc>> updatedDocs;
-
+    ++m_snapshotRevision;
+    bool preincludeChanged = false;
     for (const auto& change : params.changes) {
-        switch (change.type) {
-            case lsp::FileChangeType::Changed: {
-                // Only reload if this is an open document
-                if (m_openDocs.find(change.uri) == m_openDocs.end()) {
-                    continue;
-                }
-
-                auto doc = getDocument(change.uri);
-                if (!doc) {
-                    WARN("Document {} not found for reload", change.uri.getPath());
-                    continue;
-                }
-
-                if (!doc->reloadBuffer()) {
-                    continue;
-                }
-
-                INFO("Reloaded document {} from disk", change.uri.getPath());
-                updatedDocs.push_back(doc);
-                break;
+        preincludeChanged |= isExplorePreinclude(change.uri);
+        bool openOverlay = false;
+        std::error_code canonicalError;
+        auto changedPath = std::filesystem::weakly_canonical(change.uri.getPath(), canonicalError);
+        for (const auto& openUri : m_openDocs) {
+            auto open = docs.find(openUri);
+            if (open != docs.end() && sm.getFullPath(open->second->getBuffer()) == changedPath)
+                openOverlay = true;
+        }
+        if (openOverlay && ((!comp && hasConfiguredCompilationInputs()) || hasSourceContextHints()))
+            continue;
+        if (change.type == lsp::FileChangeType::Changed ||
+            change.type == lsp::FileChangeType::Created) {
+            auto found = docs.find(change.uri);
+            if (found != docs.end()) {
+                found->second->reloadBuffer();
             }
-            case lsp::FileChangeType::Deleted:
-                closeDocument(change.uri);
-                break;
-            case lsp::FileChangeType::Created:
-                break;
+            else if (sm.isCached(change.uri.getPath())) {
+                // Nested include buffers may have no SlangDoc of their own.
+                auto buffer = sm.readSource(change.uri.getPath(), nullptr);
+                if (buffer) {
+                    auto reloaded = sm.reloadBuffer(buffer->id);
+                    if (!reloaded)
+                        WARN("Unable to reload cached include {}: {}", change.uri.getPath(),
+                             reloaded.error().message());
+                }
+            }
+        }
+        else if (change.type == lsp::FileChangeType::Deleted) {
+            closeDocument(change.uri);
+            docs.erase(change.uri);
+            m_automaticOwnerRoots.erase(change.uri);
         }
     }
-
-    // Update all open docs after all buffers have been reloaded
-    for (auto& doc : updatedDocs) {
-        analyzeDocument(*doc);
-    }
+    if (preincludeChanged)
+        for (auto& [_, document] : docs)
+            document->invalidateSyntax();
+    ++m_ownerEpoch;
+    refreshOpenIncludeContexts();
 }
 
 void ServerDriver::invalidateAnalysesAndRefreshClient() {
+    ++m_snapshotRevision;
     for (auto& [_, doc] : docs) {
         doc->invalidateAnalysis();
     }
@@ -423,11 +775,212 @@ bool ServerDriver::setActiveInstance(std::string_view hierPath) {
     return true;
 }
 
+std::optional<ServerDriver::IncludeContext> ServerDriver::getIncludeContext(
+    const URI& uri, const syntax::SyntaxTree* previous) {
+    auto target = docs.find(uri);
+    if (target == docs.end())
+        return std::nullopt;
+    const auto targetDoc = target->second;
+    const auto targetPath = sm.getFullPath(targetDoc->getBuffer());
+    bool explicitContext = false;
+    auto explicitSelection = getExplicitIncludeContext(uri, explicitContext);
+    if (explicitContext)
+        return explicitSelection;
+    auto findBuffer = [&](const syntax::SyntaxTree& tree) {
+        return findPackageInclude(tree, targetPath);
+    };
+
+    struct Candidate {
+        std::shared_ptr<SlangDoc> doc;
+        bool previous;
+    };
+    std::vector<Candidate> candidates;
+    for (const auto& [candidateUri, doc] : docs) {
+        if (m_automaticOwnerRoots.contains(candidateUri))
+            continue;
+        if (sm.getFullPath(doc->getBuffer()) == targetPath)
+            continue;
+        auto tree = doc->getCachedSyntaxTree();
+        if (!tree || !findBuffer(*tree))
+            continue;
+        bool wasPrevious = previous && sm.getFullPath(previous->getSourceBufferIds().front()) ==
+                                           sm.getFullPath(doc->getBuffer());
+        candidates.push_back({doc, wasPrevious});
+    }
+    std::ranges::sort(candidates, [](const Candidate& lhs, const Candidate& rhs) {
+        if (lhs.previous != rhs.previous)
+            return lhs.previous > rhs.previous;
+        return lhs.doc->getPath() < rhs.doc->getPath();
+    });
+    for (const auto& candidate : candidates) {
+        // Only reparse a known owner. Its cached includes may have become stale after an edit.
+        auto tree = candidate.doc->getSyntaxTree();
+        if (auto buffer = findBuffer(*tree)) {
+            m_ownerDiscovery.erase(uri);
+            return IncludeContext{std::move(tree), *buffer};
+        }
+    }
+
+    // Explicit full-design mode retains its configured/build contexts.
+    if (comp)
+        return std::nullopt;
+
+    auto hasStandaloneUnit = [&] {
+        auto localTree = targetDoc->getSyntaxTree();
+        for (auto* member : localTree->root().as<syntax::CompilationUnitSyntax>().members)
+            if (syntax::ModuleDeclarationSyntax::isKind(member->kind))
+                return true;
+        return false;
+    };
+    auto revision = m_indexer.getRevision();
+    auto cached = m_ownerDiscovery.find(uri);
+    auto previousDiscovery = cached == m_ownerDiscovery.end() ? std::optional<OwnerDiscoveryCache>{}
+                                                              : std::optional{cached->second};
+    if (cached != m_ownerDiscovery.end() && cached->second.indexRevision == revision &&
+        cached->second.ownerEpoch != m_ownerEpoch && cached->second.oneCandidate &&
+        cached->second.state == OwnerDiscoveryState::Unique && !hasStandaloneUnit()) {
+        // A single indexed candidate can be revalidated directly after text changes,
+        // without walking the reverse graph again on every keystroke.
+        auto root = docs.find(*cached->second.root);
+        if (root != docs.end()) {
+            auto tree = root->second->getSyntaxTree();
+            if (auto buffer = findBuffer(*tree)) {
+                cached->second.ownerEpoch = m_ownerEpoch;
+                return IncludeContext{std::move(tree), *buffer};
+            }
+        }
+    }
+    if (cached != m_ownerDiscovery.end() && cached->second.indexRevision == revision &&
+        cached->second.ownerEpoch == m_ownerEpoch) {
+        if (cached->second.root) {
+            auto root = docs.find(*cached->second.root);
+            if (root != docs.end()) {
+                auto tree = root->second->getSyntaxTree();
+                if (auto buffer = findBuffer(*tree))
+                    return IncludeContext{std::move(tree), *buffer};
+            }
+        }
+        return std::nullopt;
+    }
+
+    ++m_ownerDiscoveryAttempts;
+    OwnerDiscoveryCache discovery{.indexRevision = revision, .ownerEpoch = m_ownerEpoch};
+    // Standalone design units already provide their own scope. Never reinterpret RTL
+    // or package definitions through an indexed include candidate.
+    if (hasStandaloneUnit()) {
+        m_ownerDiscovery[uri] = discovery;
+        return std::nullopt;
+    }
+
+    auto indexed = m_indexer.getPackageOwnerCandidates(targetPath);
+    discovery.indexRevision = indexed.revision;
+    if (indexed.limitExceeded) {
+        discovery.state = OwnerDiscoveryState::LimitExceeded;
+        m_ownerDiscovery[uri] = discovery;
+        if (!previousDiscovery || previousDiscovery->indexRevision != indexed.revision ||
+            previousDiscovery->state != discovery.state)
+            client.showWarning(fmt::format("Package owner discovery limit reached for {}. Open the "
+                                           "owning package; semantic diagnostics are deferred.",
+                                           uri.getPath()));
+        return std::nullopt;
+    }
+
+    std::optional<IncludeContext> selected;
+    std::optional<URI> selectedUri;
+    std::set<std::filesystem::path> validatedRoots;
+    for (const auto& path : indexed.paths) {
+        auto rootUri = URI::fromFile(path);
+        auto found = docs.find(rootUri);
+        bool wasKnown = found != docs.end() && !m_automaticOwnerRoots.contains(rootUri);
+        std::error_code ec;
+        if (found == docs.end() && !std::filesystem::is_regular_file(path, ec))
+            continue;
+        std::shared_ptr<SlangDoc> root;
+        try {
+            root = getDocument(rootUri);
+        }
+        catch (const std::exception& error) {
+            WARN("Unable to load package candidate {}: {}", path.string(), error.what());
+            continue;
+        }
+        if (sm.getFullPath(root->getBuffer()) == targetPath)
+            continue;
+        if (!wasKnown && !m_openDocs.contains(rootUri) && !m_buildSourceUris.contains(rootUri))
+            m_automaticOwnerRoots.insert(rootUri);
+        auto tree = root->getSyntaxTree();
+        if (auto buffer = findBuffer(*tree)) {
+            if (wasKnown) {
+                m_ownerDiscovery.erase(uri);
+                return IncludeContext{std::move(tree), *buffer};
+            }
+            auto rootPath = sm.getFullPath(tree->getSourceBufferIds().front());
+            if (validatedRoots.insert(rootPath).second) {
+                selected = IncludeContext{std::move(tree), *buffer};
+                selectedUri = rootUri;
+            }
+        }
+    }
+    if (validatedRoots.size() > 1) {
+        discovery.state = OwnerDiscoveryState::Ambiguous;
+        if (!previousDiscovery || previousDiscovery->indexRevision != indexed.revision ||
+            previousDiscovery->state != discovery.state)
+            client.showWarning(
+                fmt::format("Multiple package owners found for {}. Open the intended "
+                            "package; semantic diagnostics are deferred.",
+                            uri.getPath()));
+    }
+    else if (selected) {
+        discovery.state = OwnerDiscoveryState::Unique;
+        discovery.oneCandidate = indexed.paths.size() == 1;
+        discovery.root = selectedUri;
+    }
+    m_ownerDiscovery[uri] = discovery;
+    return discovery.state == OwnerDiscoveryState::Unique ? selected : std::nullopt;
+}
+
+bool ServerDriver::isPackageContextDeferred(const URI& uri) const {
+    if (hasExplicitContextError(uri))
+        return true;
+    auto found = m_ownerDiscovery.find(uri);
+    return found != m_ownerDiscovery.end() &&
+           (found->second.state == OwnerDiscoveryState::Ambiguous ||
+            found->second.state == OwnerDiscoveryState::LimitExceeded);
+}
+
+void ServerDriver::refreshOpenIncludeContexts() {
+    // File/index changes can affect an automatically loaded, closed package owner.
+    // Refresh only open documents whose analysis or selected context actually changed.
+    for (const auto& uri : m_openDocs) {
+        auto found = docs.find(uri);
+        if (found == docs.end())
+            continue;
+        auto doc = found->second;
+        auto previous = doc->getCachedAnalysisTree();
+        bool wasDeferred = isPackageContextDeferred(uri);
+        auto context = getIncludeContext(uri, previous.get());
+        bool changed = context
+                           ? context->tree != previous
+                           : previous && sm.getFullPath(previous->getSourceBufferIds().front()) !=
+                                             sm.getFullPath(doc->getBuffer());
+        if (changed || !doc->hasAnalysis() || wasDeferred != isPackageContextDeferred(uri))
+            analyzeDocument(*doc);
+    }
+}
+
 std::vector<std::shared_ptr<syntax::SyntaxTree>> ServerDriver::getDependentTrees(
-    std::shared_ptr<syntax::SyntaxTree> tree) {
+    std::shared_ptr<syntax::SyntaxTree> tree, const URI* target) {
+    if (target) {
+        bool handled = false;
+        auto configured = getExplicitDependencies(tree, *target, handled);
+        if (handled)
+            return configured;
+    }
+    std::erase_if(m_virtualInterfaceReferences,
+                  [](const auto& entry) { return entry.first.expired(); });
     std::vector<std::shared_ptr<syntax::SyntaxTree>> result;
     std::queue<std::shared_ptr<syntax::SyntaxTree>> treesToProcess;
     flat_hash_set<std::string_view> knownNames;
+    flat_hash_map<std::string, std::shared_ptr<syntax::SyntaxTree>> knownProviders;
     flat_hash_set<std::string> processedFiles;
 
     treesToProcess.push(tree);
@@ -439,29 +992,46 @@ std::vector<std::shared_ptr<syntax::SyntaxTree>> ServerDriver::getDependentTrees
         auto& meta = currentTree->getMetadata();
 
         // Collect declared symbols from current tree
-        meta.visitDeclaredSymbols([&](std::string_view name) { knownNames.emplace(name); });
+        meta.visitDeclaredSymbols([&](std::string_view name) {
+            knownNames.emplace(name);
+            knownProviders.try_emplace(std::string(name), currentTree);
+        });
 
         auto loadDependency = [&](std::string_view name) {
-            if (knownNames.find(name) != knownNames.end())
-                return; // already added
-
-            // Don't try multiple times
+            std::shared_ptr<syntax::SyntaxTree> dependencyTree;
+            bool hinted = false;
+            if (target)
+                dependencyTree = getHintedPackageTree(currentTree, name, *target, hinted);
+            if (hinted && !dependencyTree)
+                return;
+            if (knownNames.contains(name)) {
+                if (hinted) {
+                    auto provider = knownProviders.find(std::string(name));
+                    if (provider != knownProviders.end() && provider->second != dependencyTree)
+                        addExplicitContextError(
+                            *target,
+                            "Package source directive conflicts with the selected provider: " +
+                                std::string(name));
+                }
+                return;
+            }
             knownNames.emplace(name);
-            auto symbolLoc = m_indexer.getFirstSymbolLoc(name);
-            if (!symbolLoc)
+            std::string filePath;
+            if (dependencyTree)
+                filePath = sm.getFullPath(dependencyTree->getSourceBufferIds().front()).string();
+            else {
+                auto symbolLoc = m_indexer.getFirstSymbolLoc(name);
+                if (!symbolLoc)
+                    return;
+                filePath = symbolLoc->uri->string();
+            }
+            if (!processedFiles.insert(filePath).second)
                 return;
-
-            std::string filePath = symbolLoc->uri->string();
-
-            // Check if we've already processed this file to avoid cycles
-            if (processedFiles.find(filePath) != processedFiles.end())
-                return;
-
-            processedFiles.insert(filePath);
-
-            auto newdoc = getDocument(URI::fromFile(filePath));
-            if (newdoc) {
-                auto dependencyTree = newdoc->getSyntaxTree();
+            auto newdoc = dependencyTree ? nullptr : getDocument(URI::fromFile(filePath));
+            if (newdoc || dependencyTree) {
+                if (!dependencyTree)
+                    dependencyTree = newdoc->getSyntaxTree();
+                knownProviders.try_emplace(std::string(name), dependencyTree);
                 result.push_back(dependencyTree);
 
                 // Recurse into packages and interfaces, since they may contain types from other
@@ -480,6 +1050,23 @@ std::vector<std::shared_ptr<syntax::SyntaxTree>> ServerDriver::getDependentTrees
         };
 
         meta.visitReferencedSymbols(loadDependency);
+        // Parser metadata records interface ports but not virtual interface types
+        // used by classes or typedefs. Those interfaces are required dependencies
+        // of verification packages even when no RTL module instantiates them.
+        auto [references, inserted] = m_virtualInterfaceReferences.try_emplace(currentTree);
+        if (inserted) {
+            flat_hash_set<std::string_view> seen;
+            auto virtualInterfaces = syntax::makeSyntaxVisitor(
+                [&](auto& visitor, const syntax::VirtualInterfaceTypeSyntax& type) {
+                    auto name = type.name.valueText();
+                    if (!name.empty() && seen.insert(name).second)
+                        references->second.emplace_back(name);
+                    visitor.visitDefault(type);
+                });
+            currentTree->root().visit(virtualInterfaces);
+        }
+        for (const auto& name : references->second)
+            loadDependency(name);
     }
 
     return result;
@@ -576,7 +1163,7 @@ std::unique_ptr<ServerDriver> ServerDriver::createFromTop(
 
 std::optional<DefinitionInfo> ServerDriver::getMacroDefinitionInfo(
     const ShallowAnalysis& analysis, const parsing::Token& token,
-    const syntax::SyntaxNode& referenceSyntax) {
+    const syntax::SyntaxNode& referenceSyntax, const lsp::RequestContext& ctx) {
     std::vector<const syntax::DefineDirectiveSyntax*> macroDefs;
     auto addMacroDef = [&](const syntax::DefineDirectiveSyntax* definition) {
         if (definition && std::ranges::find(macroDefs, definition) == macroDefs.end())
@@ -611,7 +1198,7 @@ std::optional<DefinitionInfo> ServerDriver::getMacroDefinitionInfo(
                 auto macroDoc = getDocument(URI::fromFile(path));
                 if (!macroDoc)
                     continue;
-                auto macroAnalysis = macroDoc->getAnalysis();
+                auto macroAnalysis = macroDoc->getAnalysis(ctx);
                 auto indexedMacro = macroAnalysis->macros.find(macroName);
                 if (indexedMacro != macroAnalysis->macros.end())
                     addMacroDef(indexedMacro->second);
@@ -647,15 +1234,16 @@ std::optional<DefinitionInfo> ServerDriver::getMacroDefinitionInfo(
 }
 
 std::optional<DefinitionInfo> ServerDriver::getDefinitionInfoAt(const URI& uri,
-                                                                const lsp::Position& position) {
+                                                                const lsp::Position& position,
+                                                                const lsp::RequestContext& ctx) {
     auto doc = getDocument(uri);
     if (!doc) {
         return {};
     }
-    auto analysis = doc->getAnalysis();
+    auto analysis = doc->getAnalysis(ctx);
 
     // Get location, token, and syntax node at position
-    auto loc = toSourceLocation(doc->getBuffer(), position, sm);
+    auto loc = toSourceLocation(analysis->getBuffer(), position, sm);
     if (!loc) {
         return {};
     }
@@ -686,7 +1274,7 @@ std::optional<DefinitionInfo> ServerDriver::getDefinitionInfoAt(const URI& uri,
     };
 
     if (isMacroRef() || isUndefRef() || isIfdefRef())
-        return getMacroDefinitionInfo(*analysis, *declTok, *declSyntax);
+        return getMacroDefinitionInfo(*analysis, *declTok, *declSyntax, ctx);
 
     if (declTok->kind == parsing::TokenKind::SystemIdentifier) {
         auto knownName = declTok->systemName();
@@ -814,7 +1402,7 @@ std::optional<DefinitionInfo> ServerDriver::getDefinitionInfoAt(const URI& uri,
         std::ranges::any_of(localSymbols, [&](const ast::Symbol* symbol) {
             return (symbol->kind == ast::SymbolKind::Definition ||
                     symbol->kind == ast::SymbolKind::Package) &&
-                   sm.getFullyExpandedLoc(symbol->location).buffer() == doc->getBuffer();
+                   sm.getFullyExpandedLoc(symbol->location).buffer() == analysis->getBuffer();
         });
 
     // A declaration in the queried document is authoritative. Externally resolved top-level
@@ -849,10 +1437,11 @@ std::optional<DefinitionInfo> ServerDriver::getDefinitionInfoAt(const URI& uri,
             auto symbolDoc = getDocument(URI::fromFile(path));
             if (!symbolDoc)
                 continue;
-            auto symbolAnalysis = symbolDoc->getAnalysis();
+            auto symbolAnalysis = symbolDoc->getAnalysis(ctx);
             auto addGlobalDefinition = [&](const ast::Symbol* symbol) {
                 if (symbol && symbol->name == declTok->valueText() &&
-                    sm.getFullyExpandedLoc(symbol->location).buffer() == symbolDoc->getBuffer() &&
+                    sm.getFullyExpandedLoc(symbol->location).buffer() ==
+                        symbolAnalysis->getBuffer() &&
                     matchesResolvedKind(symbol)) {
                     addSymbol(symbol, symbolAnalysis);
                 }
@@ -1000,33 +1589,34 @@ std::optional<DefinitionInfo> ServerDriver::getDefinitionInfoAt(const URI& uri,
 }
 
 std::optional<std::string> ServerDriver::getDesignInstancePathAt(const URI& uri,
-                                                                 const lsp::Position& position) {
+                                                                 const lsp::Position& position,
+                                                                 const lsp::RequestContext& ctx) {
     auto doc = getDocument(uri);
     if (!doc)
         return {};
 
-    auto loc = toSourceLocation(doc->getBuffer(), position, sm);
+    auto analysis = doc->getAnalysis(ctx);
+    auto loc = toSourceLocation(analysis->getBuffer(), position, sm);
     if (!loc)
         return {};
-
-    auto analysis = doc->getAnalysis();
     return analysis->getDesignInstancePathAtToken(analysis->syntaxes.getWordTokenAt(*loc));
 }
 
-std::optional<lsp::Hover> ServerDriver::getDocHover(const URI& uri, const lsp::Position& position) {
+std::optional<lsp::Hover> ServerDriver::getDocHover(const URI& uri, const lsp::Position& position,
+                                                    const lsp::RequestContext& ctx) {
     const auto doc = getDocument(uri);
     if (!doc) {
         return {};
     }
-    auto loc = toSourceLocation(doc->getBuffer(), position, sm);
+    auto analysis = doc->getAnalysis(ctx);
+    auto loc = toSourceLocation(analysis->getBuffer(), position, sm);
     if (!loc) {
         return {};
     }
-    auto maybeInfo = getDefinitionInfoAt(uri, position);
+    auto maybeInfo = getDefinitionInfoAt(uri, position, ctx);
     if (!maybeInfo) {
         if (s_debugHoversEnabled) {
             // Shows debug info for the token under cursor when debugging.
-            auto analysis = doc->getAnalysis();
             markup::Document markup;
             markup.addParagraph(analysis->getDebugHover(loc.value()));
             return lsp::Hover{.contents = markup.build()};
@@ -1034,7 +1624,7 @@ std::optional<lsp::Hover> ServerDriver::getDocHover(const URI& uri, const lsp::P
         return {};
     }
     const auto& info = *maybeInfo;
-    return lsp::Hover{.contents = info.getHover(doc->getBuffer(), m_config.hovers.value())};
+    return lsp::Hover{.contents = info.getHover(analysis->getBuffer(), m_config.hovers.value())};
 }
 
 std::optional<std::vector<lsp::DocumentHighlight>> ServerDriver::getDocDocumentHighlight(
@@ -1046,7 +1636,7 @@ std::optional<std::vector<lsp::DocumentHighlight>> ServerDriver::getDocDocumentH
     auto analysis = doc->getAnalysis();
 
     // Get the symbol at the position
-    auto loc = toSourceLocation(doc->getBuffer(), position, sm);
+    auto loc = toSourceLocation(analysis->getBuffer(), position, sm);
     if (!loc) {
         return std::nullopt;
     }
@@ -1149,7 +1739,7 @@ std::optional<std::vector<lsp::Location>> ServerDriver::getDocReferences(
     // valid even if getAnalysis() is called on this doc again.
     auto analysis = doc->getAnalysis(ctx);
     ctx.throwIfCancelled("before resolving reference target");
-    auto loc = toSourceLocation(doc->getBuffer(), position, sm);
+    auto loc = toSourceLocation(analysis->getBuffer(), position, sm);
     if (!loc) {
         return std::nullopt;
     }
@@ -1186,7 +1776,7 @@ std::optional<std::vector<lsp::Location>> ServerDriver::getDocReferences(
     };
 
     for (auto* symbol : analysis->getSymbolsAtToken(declTok))
-        addTargetSymbol(symbol, analysis, doc->getBuffer());
+        addTargetSymbol(symbol, analysis, analysis->getBuffer());
 
     if (targetSymbols.empty())
         return std::nullopt;
@@ -1334,12 +1924,12 @@ std::optional<std::vector<lsp::Location>> ServerDriver::getDocReferences(
             if (!referenceDoc || !referenceDoc->hasAnalysis())
                 continue;
 
-            auto referenceLoc = toSourceLocation(referenceDoc->getBuffer(),
+            auto referenceAnalysis = referenceDoc->getAnalysis(ctx);
+            auto referenceLoc = toSourceLocation(referenceAnalysis->getBuffer(),
                                                  references[i].range.start, sm);
             if (!referenceLoc)
                 continue;
 
-            auto referenceAnalysis = referenceDoc->getAnalysis(ctx);
             auto* referenceToken = referenceAnalysis->syntaxes.getWordTokenAt(*referenceLoc);
             if (!referenceToken)
                 continue;
@@ -1350,7 +1940,7 @@ std::optional<std::vector<lsp::Location>> ServerDriver::getDocReferences(
 
             // A multi-symbol reference joins its symbols into the same reference component.
             for (auto* symbol : referenceSymbols) {
-                addTargetSymbol(symbol, referenceAnalysis, referenceDoc->getBuffer());
+                addTargetSymbol(symbol, referenceAnalysis, referenceAnalysis->getBuffer());
             }
         }
 

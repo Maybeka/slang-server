@@ -6,17 +6,19 @@
 // SPDX-License-Identifier: MIT
 //------------------------------------------------------------------------------
 #pragma once
-
 #include "Config.h"
 #include "ServerDiagClient.h"
 #include "SlangLspClient.h"
 #include "ast/ServerCompilation.h"
 #include "codeactions/CodeActionDispatch.h"
 #include "completions/CompletionDispatch.h"
+#include "diagnostics/DiagnosticWorker.h"
 #include "document/DefinitionInfo.h"
 #include "lsp/RequestContext.h"
 #include "lsp/URI.h"
+#include "util/SourceContextHints.h"
 #include <filesystem>
+#include <map>
 #include <memory>
 #include <unordered_map>
 #include <vector>
@@ -73,13 +75,34 @@ public:
     };
 
     /// @brief Gets a document by URI, creating it if it doesn't exist
-    void openDocument(const URI& uri, const std::string_view text);
+    void openDocument(const URI& uri, const std::string_view text,
+                      std::optional<int> version = std::nullopt,
+                      bool deferConfiguredDiagnostics = false);
 
     /// @brief Close a document and remove it from the open docs set
     void closeDocument(const URI& uri);
 
     /// @brief Reload a document from disk, used when external tools modify open files
     void reloadDocument(const URI& uri);
+
+    uint64_t getDependencyIndexRevision() const { return m_indexer.getRevision(); }
+
+    struct DiagnosticSnapshot {
+        std::shared_ptr<const void> owner;
+        uint64_t revision;
+        uint64_t indexRevision;
+        uint64_t diagnosticGeneration;
+        std::vector<BufferID> buffers;
+        DiagnosticJobMetadata metadata;
+        std::shared_ptr<const diagnostic_snapshot::Input> input;
+    };
+    std::optional<DiagnosticSnapshot> captureDiagnosticSnapshot(const lsp::RequestContext& ctx);
+    bool isDiagnosticSnapshotCurrent(const DiagnosticSnapshot&) const;
+    void commitDiagnosticSnapshot(const DiagnosticSnapshot&, DiagnosticJobOutput,
+                                  const lsp::RequestContext& ctx);
+
+    bool hasPendingDiagnostics() const { return !m_pendingIncludedDiagnostics.empty(); }
+    void runPendingDiagnostics(const lsp::RequestContext& ctx = {});
 
     void onDocDidChange(const lsp::DidChangeTextDocumentParams& params,
                         const lsp::RequestContext& ctx = {});
@@ -101,8 +124,43 @@ public:
     /// selection. Refreshes client-side code lenses and inlay hints.
     bool setActiveInstance(std::string_view hierPath);
 
+    struct IncludeContext {
+        std::shared_ptr<syntax::SyntaxTree> tree;
+        BufferID buffer;
+    };
+
+    /// Find an already-known including root without parsing the rest of the workspace.
+    std::optional<IncludeContext> getIncludeContext(const URI& uri,
+                                                    const syntax::SyntaxTree* previous = nullptr);
+
+    bool isPackageContextDeferred(const URI& uri) const;
+    bool hasExplicitContextError(const URI& uri) const;
+    void requireExplicitContext(const URI& uri) const;
+    void issueExplicitContextDiagnostics(const URI& uri);
+    bool isPackageOnlyContext(const URI& uri) const;
+    void updatePackageContextKind(const URI& uri, const syntax::SyntaxTree& tree);
+    uint64_t getExplicitContextRevision(const URI& uri) const;
+    bool hasConfiguredCompilationInputs() const {
+        return m_config.compilationFilelist.value().has_value() || !m_configuredUnits.empty();
+    }
+    bool hasSourceContextHints() const { return !m_explicitContexts.empty(); }
+    uint64_t getContextInputRevision() const { return m_snapshotRevision; }
+    std::vector<std::filesystem::path> getContextWatchPaths() const;
+    bool configuredInputLoadFailed() const { return m_nativeInputsFailed; }
+    uint64_t getOwnerDiscoveryAttemptCount() const { return m_ownerDiscoveryAttempts; }
+    const SemanticDiagnosticBatch::Statistics& getSemanticDiagnosticBatchStatistics() const {
+        return m_semanticDiagnosticStatistics;
+    }
+    void refreshOpenIncludeContexts();
+
+    /// Ordered preprocessing sources for an exploration document. Macro-header
+    /// documents themselves are parsed normally, including nested preinclude files.
+    std::vector<SourceBuffer> getExplorePreincludeBuffers(BufferID target);
+    bool isExplorePreinclude(const URI& uri) const;
+    void issueExplorePreincludeDiagnostics(BufferID target);
+
     std::vector<std::shared_ptr<syntax::SyntaxTree>> getDependentTrees(
-        std::shared_ptr<syntax::SyntaxTree> tree);
+        std::shared_ptr<syntax::SyntaxTree> tree, const URI* target = nullptr);
 
     std::vector<std::string> getModulesInFile(const std::string& path);
 
@@ -111,18 +169,20 @@ public:
     /// @param uri The URI of the document
     /// @param position The LSP position to query
     /// @return Optional definition information
-    std::optional<DefinitionInfo> getDefinitionInfoAt(const URI& uri,
-                                                      const lsp::Position& position);
+    std::optional<DefinitionInfo> getDefinitionInfoAt(const URI& uri, const lsp::Position& position,
+                                                      const lsp::RequestContext& ctx = {});
 
     /// Return the concrete full-design instance referenced by an instantiation token.
     std::optional<std::string> getDesignInstancePathAt(const URI& uri,
-                                                       const lsp::Position& position);
+                                                       const lsp::Position& position,
+                                                       const lsp::RequestContext& ctx = {});
 
     /// @brief Gets hover information for a symbol at an LSP position
     /// @param uri The URI of the document
     /// @param position The LSP position to query
     /// @return Optional hover information, or nullopt if none available
-    std::optional<lsp::Hover> getDocHover(const URI& uri, const lsp::Position& position);
+    std::optional<lsp::Hover> getDocHover(const URI& uri, const lsp::Position& position,
+                                          const lsp::RequestContext& ctx = {});
 
     /// @brief Gets highlight positions for a symbol and all its references in a document
     /// @param uri The URI of the document
@@ -161,7 +221,8 @@ public:
     /// @param buildfiles List of build files to process
     ServerDriver(Indexer& indexer, SlangLspClient& client, const Config& config,
                  std::vector<std::string> buildfiles,
-                 std::optional<std::string_view> workspaceFolder);
+                 std::optional<std::string_view> workspaceFolder,
+                 const ServerDriver* overlays = nullptr);
 
     size_t getWsRelativePathOffset(std::string_view path) const {
         return path.starts_with(m_workspacePathPrefix) ? m_workspacePathPrefix.size() : 0;
@@ -176,6 +237,17 @@ public:
     static bool s_debugHoversEnabled;
 
 private:
+    SemanticDiagnosticBatch::Statistics m_semanticDiagnosticStatistics;
+
+    // This syntax-only probe discovers nested macro headers; no compilation is built.
+    // Actual document trees parse the preincludes again and own all expanded tokens.
+    std::shared_ptr<syntax::SyntaxTree> m_explorePreincludeTree;
+    flat_hash_set<URI> m_explorePreincludeUris;
+    flat_hash_set<std::string> m_reportedPreincludeFailures;
+    uint64_t m_explorePreincludeRevision = 0;
+    std::optional<uint64_t> m_publishedPreincludeRevision;
+    flat_hash_set<URI> m_publishedPreincludeUris;
+
     /// Reference to the indexer for module/macro indexing
     Indexer& m_indexer;
 
@@ -192,18 +264,78 @@ private:
 
     std::optional<DefinitionInfo> getMacroDefinitionInfo(const ShallowAnalysis& analysis,
                                                          const parsing::Token& token,
-                                                         const syntax::SyntaxNode& referenceSyntax);
+                                                         const syntax::SyntaxNode& referenceSyntax,
+                                                         const lsp::RequestContext& ctx);
 
     /// Set of URIs for documents that are explicitly opened by the client
     flat_hash_set<URI> m_openDocs;
 
+    /// Included-header diagnostics awaiting refresh after an owner edit. Keep these
+    /// across superseded didChange notifications until analysis actually completes.
+    std::shared_ptr<const void> m_snapshotOwner = std::make_shared<int>(0);
+    uint64_t m_snapshotRevision = 0;
+    uint64_t m_diagnosticGeneration = 0;
+    uint64_t m_fullDiagnosticGeneration = 0;
+    flat_hash_map<URI, uint64_t> m_pendingIncludedDiagnostics;
+
+    enum class OwnerDiscoveryState { None, Unique, Ambiguous, LimitExceeded };
+    struct OwnerDiscoveryCache {
+        uint64_t indexRevision = 0;
+        uint64_t ownerEpoch = 0;
+        OwnerDiscoveryState state = OwnerDiscoveryState::None;
+        bool oneCandidate = false;
+        std::optional<URI> root;
+    };
+    std::unordered_map<URI, OwnerDiscoveryCache> m_ownerDiscovery;
+    flat_hash_set<URI> m_automaticOwnerRoots;
+    uint64_t m_ownerEpoch = 0;
+    uint64_t m_ownerDiscoveryAttempts = 0;
+    // Weak keys never retain obsolete parse trees after an edit. Cached names are
+    // valid only for the immutable tree identity that produced them.
+    using TreeIdentity = std::weak_ptr<syntax::SyntaxTree>;
+    std::map<TreeIdentity, std::vector<std::string>, std::owner_less<TreeIdentity>>
+        m_virtualInterfaceReferences;
+
     /// Every source file covered by the build, including secondary single-unit buffers.
     flat_hash_set<URI> m_buildSourceUris;
+    std::vector<std::shared_ptr<SlangDoc>> m_configuredUnits;
+    bool m_nativeInputsFailed = false;
+    bool m_configurationInputsFailed = false;
+    uint64_t m_configuredUnitRevision = UINT64_MAX;
+    std::vector<std::shared_ptr<syntax::SyntaxTree>> m_currentConfiguredTrees;
+    struct CachedSourceHints {
+        const char* data = nullptr;
+        size_t size = 0;
+        SourceContextHints hints;
+    };
+    std::unordered_map<std::string, CachedSourceHints> m_sourceHints;
+    std::map<TreeIdentity, SourceContextImportHints, std::owner_less<TreeIdentity>>
+        m_boundSourceHints;
+    uint64_t m_boundHintsRevision = UINT64_MAX;
+    std::unordered_map<URI, uint64_t> m_explicitResolutionRevision;
+    std::unordered_map<URI, std::vector<lsp::Diagnostic>> m_explicitContextErrors;
+    flat_hash_set<URI> m_explicitContexts;
+    flat_hash_set<URI> m_packageOnlyContexts;
+    void refreshConfiguredUnits();
+    void installConfiguredUnits(std::vector<std::shared_ptr<syntax::SyntaxTree>> trees);
+    SourceContextHints getSourceHints(BufferID buffer);
+    const SourceContextImportHints& getImportHints(const std::shared_ptr<syntax::SyntaxTree>& tree);
+    std::optional<IncludeContext> getExplicitIncludeContext(const URI& uri, bool& handled);
+    std::optional<BufferID> findPackageInclude(const syntax::SyntaxTree& tree,
+                                               const std::filesystem::path& target) const;
+    void addExplicitContextError(const URI& target, std::string message,
+                                 std::optional<SourceContextHintRange> hint = {});
+    std::vector<std::shared_ptr<syntax::SyntaxTree>> getExplicitDependencies(
+        const std::shared_ptr<syntax::SyntaxTree>& tree, const URI& target, bool& handled);
+    std::shared_ptr<syntax::SyntaxTree> getHintedPackageTree(
+        const std::shared_ptr<syntax::SyntaxTree>& tree, std::string_view name, const URI& target,
+        bool& handled);
 
     void copyOpenDocumentsFrom(const ServerDriver* oldDriver);
 
     /// @brief Run shallow analysis and publish diagnostics and inactive regions for one document
-    void analyzeDocument(SlangDoc& doc, const lsp::RequestContext& ctx = {});
+    void analyzeDocument(SlangDoc& doc, const lsp::RequestContext& ctx = {},
+                         SemanticDiagnosticBatch* batch = nullptr);
 
     /// @brief Publish diagnostics for the active full compilation, optionally prioritizing a URI
     void publishCompilationDiagnostics(const URI* priorityUri = nullptr);

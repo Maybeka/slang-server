@@ -15,6 +15,7 @@
 #include "util/Converters.h"
 #include "util/Logging.h"
 #include "util/SlangExtensions.h"
+#include <algorithm>
 #include <fmt/format.h>
 #include <fmt/ranges.h>
 #include <stdexcept>
@@ -27,30 +28,97 @@
 #include "slang/diagnostics/Diagnostics.h"
 #include "slang/diagnostics/ExpressionsDiags.h"
 #include "slang/diagnostics/LookupDiags.h"
+#include "slang/driver/SourceLoader.h"
+#include "slang/parsing/Preprocessor.h"
+#include "slang/syntax/AllSyntax.h"
 #include "slang/syntax/SyntaxTree.h"
 #include "slang/text/SourceLocation.h"
 #include "slang/text/SourceManager.h"
+#include "slang/util/FlatMap.h"
 namespace server {
 
 using namespace slang;
+
+// Match DiagnosticEngine attribution: macro bodies report at the call site,
+// while substituted arguments report at the argument's original location.
+static SourceLocation diagnosticLocation(const SourceManager& sm, SourceLocation loc) {
+    while (sm.isMacroLoc(loc))
+        loc = sm.isMacroArgLoc(loc) ? sm.getOriginalLoc(loc) : sm.getExpansionLoc(loc);
+    return loc;
+}
 
 SlangDoc::SlangDoc(ServerDriver& driver, URI uri, SourceBuffer buffer) :
     m_driver(driver), m_sourceManager(driver.sm), m_options(driver.options), m_uri(uri),
     m_wsRelativePathOffset(driver.getWsRelativePathOffset(m_uri.getPath())), m_buffer(buffer) {
 }
 
-std::optional<SourceLocation> SlangDoc::getLocation(const lsp::Position& position) {
-    return toSourceLocation(m_buffer.id, position, m_sourceManager);
+std::optional<SourceLocation> SlangDoc::getLocation(const lsp::Position& position,
+                                                    const lsp::RequestContext& ctx) {
+    return toSourceLocation(getAnalysis(ctx)->getBuffer(), position, m_sourceManager);
 }
 
 std::shared_ptr<SlangDoc> SlangDoc::fromTree(ServerDriver& driver,
-                                             std::shared_ptr<syntax::SyntaxTree> tree) {
+                                             std::shared_ptr<syntax::SyntaxTree> tree,
+                                             bool requiresNativeReplay) {
+    if (tree->getSourceBufferIds().empty())
+        throw std::invalid_argument("Native compilation unit has no source buffers");
     auto buffer = SourceBuffer{
         .data = driver.sm.getSourceText(tree->getSourceBufferIds()[0]),
+        .library = tree->getSourceLibrary(),
         .id = tree->getSourceBufferIds()[0],
     };
     auto uri = URI::fromFile(driver.sm.getFullPath(tree->getSourceBufferIds()[0]));
     auto ret = std::make_shared<SlangDoc>(driver, uri, buffer);
+    NativeCompilationUnit unit;
+    unit.options = tree->options();
+    unit.library = tree->getSourceLibrary();
+    unit.isLibraryUnit = tree->isLibraryUnit;
+    unit.requiresNativeReplay = requiresNativeReplay;
+    // SyntaxTree pushes roots in reverse order before preprocessing them. Included
+    // buffers follow those roots and must never become separately parsed roots.
+    for (auto id : tree->getSourceBufferIds()) {
+        if (!driver.sm.getIncludedFrom(id).valid()) {
+            unit.rootPaths.push_back(driver.sm.getFullPath(id));
+            unit.rootSortKeys.push_back(driver.sm.getSortKey(id));
+        }
+    }
+    std::reverse(unit.rootPaths.begin(), unit.rootPaths.end());
+    std::reverse(unit.rootSortKeys.begin(), unit.rootSortKeys.end());
+    if (unit.rootPaths.empty())
+        throw std::invalid_argument("Native compilation unit has no source roots");
+
+    auto sourceOptions = unit.options.getOrDefault<slang::driver::SourceOptions>();
+    unit.requiresNativeReplay |= sourceOptions.singleUnit &&
+                                 (unit.library ||
+                                  (unit.isLibraryUnit && sourceOptions.librariesInheritMacros));
+    // Driver callbacks can refer to one parse invocation's stack. They cannot
+    // safely be retained for a later local replay of the options bag.
+    if (auto* ppOptions = unit.options.get<parsing::PreprocessorOptions>())
+        unit.requiresNativeReplay |= bool(ppOptions->bufferChangeCB);
+    // Also recognize observed inherited definitions even for callers that did
+    // not obtain the tree from Driver. This cannot recover overwritten inputs;
+    // callers must explicitly mark other native consumers such as -C units.
+    flat_hash_set<BufferID> ownBuffers;
+    for (auto id : tree->getSourceBufferIds())
+        ownBuffers.insert(id);
+    for (auto id : tree->getPredefineBufferIds())
+        ownBuffers.insert(id);
+    auto externalDefinition = [&](const syntax::DefineDirectiveSyntax* definition) {
+        if (!definition)
+            return false;
+        auto location = driver.sm.getFullyOriginalLoc(definition->name.location());
+        if (!location.valid() || location == SourceLocation::NoLocation)
+            return false;
+        return !ownBuffers.contains(location.buffer());
+    };
+    for (auto definition : tree->getDefinedMacros())
+        unit.requiresNativeReplay |= externalDefinition(definition);
+    for (const auto& reference : tree->getMacroRefs()) {
+        if (unit.requiresNativeReplay)
+            break;
+        unit.requiresNativeReplay |= externalDefinition(reference.definition);
+    }
+    ret->m_nativeCompilationUnit = std::move(unit);
     ret->m_tree = tree;
     return ret;
 }
@@ -60,21 +128,39 @@ std::shared_ptr<SlangDoc> SlangDoc::fromText(ServerDriver& driver, const URI& ur
     std::string_view path = uri.getPath();
     SourceBuffer buffer;
 
-    // Check if this path was previously cached (e.g., from an include)
-    // If so, we need to replace the old buffer with the editor's version
+    // Includes can cache either successful reads or failed lookups. An editor
+    // buffer can supply a file before it has ever existed on disk.
+    std::optional<SourceBuffer> existingBuffer;
     if (driver.sm.isCached(path)) {
-        auto existingBuffer = driver.sm.readSource(path, nullptr).value();
+        auto cached = driver.sm.readSource(path, nullptr);
+        if (cached)
+            existingBuffer = *cached;
+    }
+    if (existingBuffer) {
         SmallVector<char> newBuffer;
         newBuffer.insert(newBuffer.end(), text.begin(), text.end());
         if (newBuffer.empty() || newBuffer.back() != '\0')
             newBuffer.push_back('\0');
-        buffer = driver.sm.replaceBuffer(existingBuffer.id, std::move(newBuffer));
+        buffer = driver.sm.replaceBuffer(existingBuffer->id, std::move(newBuffer));
     }
     else {
-        buffer = driver.sm.assignText(path, text);
+        std::error_code error;
+        auto canonical = std::filesystem::weakly_canonical(path, error);
+        buffer = driver.sm.assignText(error ? std::string(path) : canonical.string(), text);
     }
 
     return std::make_shared<SlangDoc>(driver, uri, buffer);
+}
+
+void SlangDoc::adoptNativeCompilationUnit(const SlangDoc& unit) {
+    if (!unit.m_nativeCompilationUnit || !unit.m_tree ||
+        m_sourceManager.getFullPath(m_buffer.id) != m_sourceManager.getFullPath(unit.m_buffer.id))
+        throw std::invalid_argument("Native unit does not match editor document");
+    m_nativeCompilationUnit = unit.m_nativeCompilationUnit;
+    m_tree = unit.m_tree;
+    m_buffer = unit.m_buffer;
+    m_options = unit.m_options;
+    m_analysis.reset();
 }
 
 std::shared_ptr<SlangDoc> SlangDoc::open(ServerDriver& driver, const URI& uri) {
@@ -87,39 +173,135 @@ const std::string_view SlangDoc::getText() const {
     return m_sourceManager.getSourceText(m_buffer.id);
 }
 
-std::shared_ptr<syntax::SyntaxTree> SlangDoc::getSyntaxTree() {
-    if (!m_tree) {
-        // Will read the cached file data if it exists
-        if (!m_sourceManager.isLatestData(m_buffer.id)) {
+std::shared_ptr<syntax::SyntaxTree> SlangDoc::getSyntaxTree(const lsp::RequestContext& ctx) {
+    auto cwdPhase = m_sourceManager.beginFastCwdPhase();
+    ctx.throwIfCancelled("before syntax tree");
+    if (!m_tree || !hasValidBuffers(m_sourceManager, m_tree)) {
+        if (requiresNativeReplay())
+            throw std::runtime_error("Native compilation unit requires SourceLoader replay to "
+                                     "preserve preprocessing context");
+        if (!m_sourceManager.isLatestData(m_buffer.id))
             m_buffer = m_sourceManager.readSource(m_uri.getPath(), nullptr).value();
+        ctx.checkpoint("before syntax parsing");
+        if (m_nativeCompilationUnit) {
+            const auto& unit = *m_nativeCompilationUnit;
+            std::vector<SourceBuffer> buffers;
+            buffers.reserve(unit.rootPaths.size());
+            for (size_t i = 0; i < unit.rootPaths.size(); ++i) {
+                ctx.throwIfCancelled("before compilation-unit root");
+                auto buffer = m_sourceManager.readSource(unit.rootPaths[i], unit.library,
+                                                         unit.rootSortKeys[i]);
+                if (!buffer)
+                    throw std::runtime_error(
+                        fmt::format("Cannot reload compilation-unit root {}: {}",
+                                    unit.rootPaths[i].string(), buffer.error().message()));
+                buffers.push_back(*buffer);
+                if (unit.rootPaths[i] == std::filesystem::path(m_uri.getPath()))
+                    m_buffer = *buffer;
+            }
+            auto tree = syntax::SyntaxTree::fromBuffers(buffers, m_sourceManager, unit.options);
+            tree->isLibraryUnit = unit.isLibraryUnit;
+            m_tree = std::move(tree);
         }
-        m_tree = syntax::SyntaxTree::fromBuffer(m_buffer, m_sourceManager, m_options);
+        else {
+            auto buffers = m_driver.getExplorePreincludeBuffers(m_buffer.id);
+            if (buffers.empty()) {
+                m_tree = syntax::SyntaxTree::fromBuffer(m_buffer, m_sourceManager, m_options);
+            }
+            else {
+                buffers.push_back(m_buffer);
+                // fromBuffers preprocesses in this order, while pushSource registers
+                // buffers in reverse. The document remains sourceBufferIds.front(),
+                // and every preinclude/nested include participates in normal validity checks.
+                m_tree = syntax::SyntaxTree::fromBuffers(buffers, m_sourceManager, m_options);
+            }
+        }
+        // A complete parse remains reusable even if its caller was cancelled.
+        ctx.checkpoint("after syntax parsing");
     }
-    else if (!hasValidBuffers(m_sourceManager, m_tree)) {
-        // Tree has invalid buffers, need to reparse
-        m_buffer = m_sourceManager.readSource(m_uri.getPath(), nullptr).value();
-        m_tree = syntax::SyntaxTree::fromBuffer(m_buffer, m_sourceManager, m_options);
-    }
+    cwdPhase.finish();
     return m_tree;
 }
 
-std::shared_ptr<ShallowAnalysis> SlangDoc::refreshAnalysis(const lsp::RequestContext& ctx) {
+SlangDoc::AnalysisInputs SlangDoc::getAnalysisInputs(const lsp::RequestContext& ctx) {
+    auto cwdPhase = m_sourceManager.beginFastCwdPhase();
     ctx.throwIfCancelled("before analysis");
-    auto tree = getSyntaxTree();
-    auto trees = m_driver.getDependentTrees(tree);
-    trees.insert(trees.begin(), tree);
-    auto analysis = std::make_shared<ShallowAnalysis>(m_sourceManager, m_buffer.id, tree, m_options,
-                                                      trees, m_driver.comp.get());
+    auto indexRevision = m_driver.getDependencyIndexRevision();
+    ctx.checkpoint("before owner resolution");
+    auto previousAnalysis = m_analysis;
+    auto context = m_driver.getIncludeContext(m_uri, previousAnalysis
+                                                         ? previousAnalysis->getSyntaxTree().get()
+                                                         : nullptr);
+    ctx.checkpoint("after owner resolution");
+    m_driver.requireExplicitContext(m_uri);
+    auto tree = context ? context->tree : getSyntaxTree(ctx);
+    auto buffer = context ? context->buffer : m_buffer.id;
+    ctx.checkpoint("before dependency resolution");
+    auto trees = m_driver.getDependentTrees(tree, &m_uri);
+    ctx.checkpoint("after dependency resolution");
+    // Resolving an explicit package reference can discover the owner for the first time.
+    // Do not retain a standalone copy of the header alongside that package's include.
+    if (!context) {
+        ctx.checkpoint("before owner recheck");
+        context = m_driver.getIncludeContext(m_uri);
+        ctx.checkpoint("after owner recheck");
+        if (context) {
+            tree = context->tree;
+            buffer = context->buffer;
+            ctx.checkpoint("before dependency resolution");
+            trees = m_driver.getDependentTrees(tree, &m_uri);
+            ctx.checkpoint("after dependency resolution");
+        }
+    }
+    if (std::find(trees.begin(), trees.end(), tree) == trees.end())
+        trees.insert(trees.begin(), tree);
+    m_driver.requireExplicitContext(m_uri);
+    m_driver.updatePackageContextKind(m_uri, *tree);
+    cwdPhase.finish();
+    return {buffer, std::move(tree), std::move(trees), indexRevision};
+}
+
+std::shared_ptr<ShallowAnalysis> SlangDoc::refreshAnalysis(const lsp::RequestContext& ctx) {
+    auto cwdPhase = m_sourceManager.beginFastCwdPhase();
+    auto [buffer, tree, trees, indexRevision] = getAnalysisInputs(ctx);
+    ctx.checkpoint("before analysis construction");
+    auto analysis = std::make_shared<ShallowAnalysis>(m_sourceManager, buffer, tree, m_options,
+                                                      trees, m_driver.comp.get(), ctx,
+                                                      m_driver.isPackageOnlyContext(m_uri));
     auto topNames = analysis->getCompilation()->getRoot().topInstances |
                     std::views::transform([](const auto& top) { return top->name; });
     ctx.info("Analyzed {} with tops: {}", getWsRelativePath(), fmt::join(topNames, ", "));
+    // Never publish a partially constructed or explicitly cancelled analysis.
+    ctx.checkpoint("before analysis publication");
+    cwdPhase.finish();
     m_analysis = analysis;
+    m_analysisIndexRevision = indexRevision;
+    m_analysisContextRevision = m_driver.getExplicitContextRevision(m_uri);
     return analysis;
 }
 
+bool SlangDoc::hasAnalysis() const {
+    return m_analysis && m_analysis->hasValidBuffers();
+}
+
 std::shared_ptr<ShallowAnalysis> SlangDoc::getAnalysis(const lsp::RequestContext& ctx) {
-    if (!m_analysis || !m_analysis->hasValidBuffers())
-        return refreshAnalysis(ctx);
+    auto cwdPhase = m_sourceManager.beginFastCwdPhase();
+    ctx.throwIfCancelled("before analysis");
+    if (!hasAnalysis() || m_analysisIndexRevision != m_driver.getDependencyIndexRevision() ||
+        m_analysisContextRevision != m_driver.getExplicitContextRevision(m_uri)) {
+        refreshAnalysis(ctx);
+    }
+    else {
+        ctx.checkpoint("before cached owner resolution");
+        auto previousAnalysis = m_analysis;
+        auto context = m_driver.getIncludeContext(m_uri, previousAnalysis->getSyntaxTree().get());
+        ctx.checkpoint("after cached owner resolution");
+        auto expectedTree = context ? context->tree : getSyntaxTree(ctx);
+        if (!m_analysis || expectedTree != m_analysis->getSyntaxTree())
+            refreshAnalysis(ctx);
+    }
+    m_driver.requireExplicitContext(m_uri);
+    cwdPhase.finish();
     return m_analysis;
 }
 
@@ -248,6 +430,7 @@ bool SlangDoc::reloadBuffer() {
         return false;
     }
     m_buffer = *result;
+    m_version.reset();
     m_tree.reset();
     m_analysis.reset();
     return true;
@@ -259,21 +442,61 @@ void SlangDoc::issueParseDiagnostics(DiagnosticEngine& diagEngine) {
     }
 }
 
-void SlangDoc::issueDiagnosticsTo(DiagnosticEngine& diagEngine, const lsp::RequestContext& ctx) {
-    // Issue compilation diagnostics
-    auto analysis = refreshAnalysis(ctx);
+void SlangDoc::issueDiagnosticsTo(DiagnosticEngine& diagEngine, const lsp::RequestContext& ctx,
+                                  SemanticDiagnosticBatch* batch) {
+    std::shared_ptr<ShallowAnalysis> analysis;
+    try {
+        analysis = getAnalysis(ctx);
+    }
+    catch (const lsp::RequestFailed&) {
+        if (!m_driver.hasExplicitContextError(m_uri))
+            throw;
+        // Invalid explicit context never constructs or binds a Compilation.
+        // Preserve the syntax/preprocessor evidence available in the selected
+        // owner, or in the document alone when no owner can be selected.
+        auto context = m_driver.getIncludeContext(m_uri);
+        auto tree = context ? context->tree : getSyntaxTree(ctx);
+        auto buffer = context ? context->buffer : m_buffer.id;
+        m_driver.issueExplorePreincludeDiagnostics(buffer);
+        diagEngine.setMappingsFromPragmas(buffer);
+        for (const auto& diag : tree->diagnostics())
+            if (diagnosticLocation(m_sourceManager, diag.location).buffer() == buffer)
+                diagEngine.issue(diag);
+        return;
+    }
+    m_driver.issueExplorePreincludeDiagnostics(analysis->getBuffer());
+    // Without a uniquely validated automatic owner, context-dependent macro/type
+    // diagnostics would be misleading. The driver emits a one-time selection warning.
+    if (m_driver.isPackageContextDeferred(m_uri))
+        return;
 
-    // Parse diags (just this tree, others will be handled by their SlangDoc objects
-    for (auto& diag : getSyntaxTree()->diagnostics()) {
-        diagEngine.issue(diag);
+    // Included documents must use their owner's preprocessing context, not a standalone parse.
+    auto analysisBuffer = analysis->getBuffer();
+    diagEngine.setMappingsFromPragmas(analysisBuffer);
+    bool included = analysisBuffer != analysis->getSyntaxTree()->getSourceBufferIds().front();
+    for (auto& diag : analysis->getSyntaxTree()->diagnostics()) {
+        auto location = diagnosticLocation(m_sourceManager, diag.location);
+        auto path = location.valid() ? m_sourceManager.getFullPath(location.buffer())
+                                     : std::filesystem::path{};
+        if (!path.empty() && m_driver.isExplorePreinclude(URI::fromFile(path)))
+            continue; // Shared preinclude diagnostics were issued once above.
+        if (!included ||
+            diagnosticLocation(m_sourceManager, diag.location).buffer() == analysisBuffer)
+            diagEngine.issue(diag);
     }
 
     // Parse and shallow compilation diagnostics
     // There will be many diags outside the buffer, like unknown modules.
-    const auto& semanticDiagnostics = analysis->getSemanticDiagnostics();
+    ctx.throwIfCancelled("before collecting semantic diagnostics");
+    if (ctx.method() == "background/diagnostics")
+        ctx.info("Collecting semantic diagnostics for {}", getWsRelativePath());
+    auto semantic = batch ? batch->collect(analysis)
+                          : SemanticDiagnosticBatch::Result{analysis->getSemanticDiagnostics(),
+                                                            false};
+    const auto& semanticDiagnostics = semantic.diagnostics;
     ctx.throwIfCancelled("before publishing semantic diagnostics");
     for (auto& diag : semanticDiagnostics) {
-        if (m_sourceManager.getFullyOriginalLoc(diag.location).buffer() != m_buffer.id) {
+        if (diagnosticLocation(m_sourceManager, diag.location).buffer() != analysisBuffer) {
             continue;
         }
         if (diag.code == slang::diag::MaxInstanceDepthExceeded) {
@@ -283,10 +506,12 @@ void SlangDoc::issueDiagnosticsTo(DiagnosticEngine& diagEngine, const lsp::Reque
     }
 
     // Analysis on the shallow compilation (unused, multidriven, etc)
-    auto analysisDiagnostics = analysis->getAnalysisDiags();
+    // Eligible reuse requires no top instances, so the producer and recipient have
+    // no driver-analysis diagnostics. Avoid triggering private semantic work again.
+    auto analysisDiagnostics = semantic.reused ? Diagnostics{} : analysis->getAnalysisDiags();
     ctx.throwIfCancelled("before publishing analysis diagnostics");
     for (auto& diag : analysisDiagnostics) {
-        if (m_sourceManager.getFullyOriginalLoc(diag.location).buffer() != m_buffer.id) {
+        if (diagnosticLocation(m_sourceManager, diag.location).buffer() != analysisBuffer) {
             continue;
         }
         diagEngine.issue(diag);
@@ -296,7 +521,15 @@ void SlangDoc::issueDiagnosticsTo(DiagnosticEngine& diagEngine, const lsp::Reque
 std::vector<lsp::Range> SlangDoc::getInactiveRegions(const lsp::RequestContext& ctx) {
     ctx.throwIfCancelled("before collecting inactive regions");
     std::vector<lsp::Range> result;
-    auto analysis = getAnalysis(ctx);
+    std::shared_ptr<ShallowAnalysis> analysis;
+    try {
+        analysis = getAnalysis(ctx);
+    }
+    catch (const lsp::RequestFailed&) {
+        if (!m_driver.hasExplicitContextError(m_uri))
+            throw;
+        return result;
+    }
     result.reserve(analysis->syntaxes.disabledRegions.size());
 
     for (const auto& region : analysis->syntaxes.disabledRegions) {

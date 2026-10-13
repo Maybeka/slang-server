@@ -28,7 +28,8 @@ class SyntaxNode;
 
 namespace slang::parsing {
 struct ParserMetadata;
-}
+struct PreprocessorMetadata;
+} // namespace slang::parsing
 
 struct Indexer {
 
@@ -54,7 +55,8 @@ struct Indexer {
     void onWorkspaceDidChangeWatchedFiles(const lsp::DidChangeWatchedFilesParams& params);
 
     // For open document lifecycle
-    void updateDocument(const std::filesystem::path& uri, const slang::syntax::SyntaxTree& tree);
+    void updateDocument(const std::filesystem::path& uri, const slang::syntax::SyntaxTree& tree,
+                        std::optional<slang::BufferID> targetBuffer = {});
 
     //////////////////////////////////////////
     // Querying interface
@@ -62,6 +64,16 @@ struct Indexer {
     std::vector<std::filesystem::path> getFilesForSymbol(std::string_view name) const;
     std::vector<std::filesystem::path> getFilesForMacro(std::string_view name) const;
     std::vector<std::filesystem::path> getFilesReferencingSymbol(std::string_view name) const;
+
+    struct PackageOwnerCandidates {
+        uint64_t revision = 0;
+        std::vector<std::filesystem::path> paths;
+        bool limitExceeded = false;
+    };
+    static constexpr size_t MaxOwnerGraphFiles = 256;
+    static constexpr size_t MaxOwnerCandidates = 16;
+    uint64_t getRevision() const;
+    PackageOwnerCandidates getPackageOwnerCandidates(const std::filesystem::path& header) const;
 
     struct GlobalSymbolLoc {
         const std::filesystem::path* uri;
@@ -90,11 +102,22 @@ private:
         slang::syntax::SyntaxKind kind;
     };
 
+    struct IncludeReference {
+        std::string spelling;
+        bool isSystem = false;
+        bool inPackage = false;
+    };
+    struct IncludeLocation {
+        const std::filesystem::path* path;
+        bool inPackage;
+    };
+
     struct IndexedPath {
         const std::filesystem::path* path = nullptr;
         slang::SmallVector<GlobalSymbol> symbols;
         slang::SmallVector<std::string> macros;
         slang::SmallVector<std::string> referencedSymbols;
+        slang::SmallVector<IncludeReference> includes;
     };
 
     // Index storage
@@ -104,6 +127,10 @@ private:
         macroToFiles_;
     // Top level references; References tend to have more entries
     std::unordered_map<std::string, std::vector<const std::filesystem::path*>> symbolReferences_;
+
+    // Basename buckets are candidate edges, never authoritative include resolution.
+    std::unordered_map<std::string, slang::SmallVector<IncludeLocation, 2>> includeToFiles_;
+    uint64_t revision_ = 0;
 
     // Storage for unique URIs (all pointers in the index point here)
     std::unordered_set<std::filesystem::path> uniqueUris_;
@@ -123,6 +150,11 @@ private:
     // Extracts symbols and referenced symbols
     static void extractFromRoot(const slang::syntax::CompilationUnitSyntax& root,
                                 const slang::parsing::ParserMetadata& meta, IndexedPath& dest);
+
+    static void extractIncludes(const slang::syntax::CompilationUnitSyntax& root,
+                                const slang::parsing::PreprocessorMetadata& metadata,
+                                const slang::SourceManager& sourceManager,
+                                slang::BufferID rootBuffer, IndexedPath& dest);
 
     // Extracts macros
     template<typename MacroRange>

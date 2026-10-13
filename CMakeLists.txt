@@ -316,6 +316,8 @@ add_library(
   src/completions/SystemTaskCompletions.cpp
   src/lsp/URI.cpp
   src/util/Converters.cpp
+  src/util/SourceContextHints.cpp
+  src/ExplicitContexts.cpp
   src/util/Formatting.cpp
   src/util/SlangExtensions.cpp
   src/util/Markdown.cpp
@@ -323,7 +325,11 @@ add_library(
   src/Indexer.cpp
   src/ServerDriver.cpp
   src/SlangServer.cpp
-  src/ServerDiagClient.cpp)
+  src/ServerDiagClient.cpp
+  src/diagnostics/DiagnosticProcess.cpp
+  src/diagnostics/DiagnosticSnapshotCodec.cpp
+  src/diagnostics/DiagnosticSnapshotCapture.cpp
+  src/diagnostics/DiagnosticWorker.cpp)
 
 target_include_directories(slang_server_obj_lib PUBLIC include)
 target_include_directories(slang_server_obj_lib SYSTEM
@@ -333,6 +339,16 @@ target_precompile_headers(slang_server_obj_lib PRIVATE
                           "${PROJECT_SOURCE_DIR}/include/lsp/LspTypes.h")
 
 target_link_libraries(slang_server_obj_lib PUBLIC slang::slang fmt::fmt ctre)
+if(APPLE)
+  find_library(SLANG_SECURITY_FRAMEWORK Security REQUIRED)
+  find_library(SLANG_COREFOUNDATION_FRAMEWORK CoreFoundation REQUIRED)
+  target_link_libraries(slang_server_obj_lib PUBLIC
+    ${SLANG_SECURITY_FRAMEWORK} ${SLANG_COREFOUNDATION_FRAMEWORK})
+  # Every universal-binary slice needs an exact live code identity, including
+  # Intel/Rosetta. Ad-hoc linker signing uses no identity, keychain or account.
+  target_link_options(slang_server_obj_lib PUBLIC "LINKER:-adhoc_codesign")
+endif()
+
 
 # Apply pedantic warnings only to slang-server code, not external libraries
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")

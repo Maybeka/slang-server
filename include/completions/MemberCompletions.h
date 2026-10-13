@@ -12,6 +12,7 @@
 #include "lsp/RequestContext.h"
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -56,12 +57,10 @@ protected:
                                bool labelOnly = false, bool deferCallableEdit = false,
                                bool isOriginalCall = true);
 
-    static lsp::CompletionItem getHierarchicalCompletion(const slang::ast::Symbol& parentSymbol,
-                                                         const slang::ast::Symbol& symbol,
-                                                         std::string_view documentUri,
-                                                         bool labelOnly = false,
-                                                         bool deferCallableEdit = false,
-                                                         std::string_view completionLabel = {});
+    static lsp::CompletionItem getHierarchicalCompletion(
+        const slang::ast::Symbol& parentSymbol, const slang::ast::Symbol& symbol,
+        std::string_view documentUri, bool labelOnly = false, bool deferCallableEdit = false,
+        std::string_view completionLabel = {}, const slang::parsing::Token* receiver = nullptr);
 
 private:
     struct CompletionData {
@@ -72,6 +71,8 @@ private:
         uint64_t offset = 0;
         slang::ast::SymbolKind symbolKind = slang::ast::SymbolKind::Unknown;
         bool labelOnly = false;
+        std::optional<uint32_t> receiverBufferId;
+        std::optional<uint64_t> receiverOffset;
     };
 
     static lsp::CompletionItemKind getCompletionKind(const slang::ast::Symbol& symbol);

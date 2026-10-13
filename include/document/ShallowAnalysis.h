@@ -13,6 +13,7 @@
 #include "document/SymbolTreeVisitor.h"
 #include "document/SyntaxIndexer.h"
 #include "lsp/LspTypes.h"
+#include "lsp/RequestContext.h"
 #include "util/Markdown.h"
 #include <memory>
 #include <optional>
@@ -57,7 +58,8 @@ public:
     ShallowAnalysis(SourceManager& sourceManager, slang::BufferID buffer,
                     std::shared_ptr<slang::syntax::SyntaxTree> tree, slang::Bag options,
                     const std::vector<std::shared_ptr<slang::syntax::SyntaxTree>>& allTrees = {},
-                    const ServerCompilation* design = nullptr);
+                    const ServerCompilation* design = nullptr, const lsp::RequestContext& ctx = {},
+                    bool packageOnly = false);
 
     /// @brief Retrieves document symbols for LSP outline view, called right after open
     /// @return Tree of LSP document symbols representing the document CST structure
@@ -109,6 +111,8 @@ public:
     bool hasValidBuffers();
 
     const std::unique_ptr<slang::ast::Compilation>& getCompilation() const { return m_compilation; }
+    slang::BufferID getBuffer() const { return m_buffer; }
+    const std::shared_ptr<slang::syntax::SyntaxTree>& getSyntaxTree() const { return m_tree; }
 
     /// @brief Gets semantic diagnostics after shallowly elaborating edited-file definitions.
     const Diagnostics& getSemanticDiagnostics();
@@ -163,6 +167,7 @@ public:
                          const slang::syntax::DefineDirectiveSyntax*>
         macroUsageDefinitions;
 
+    friend class SemanticDiagnosticBatch;
     friend class DocumentHandle;
     friend class InlayHintCollector;
 
@@ -279,6 +284,28 @@ private:
     /// @param node The syntax node to search from
     /// @return Pointer to the name syntax, or nullptr if none found
     const slang::syntax::NameSyntax* findNameSyntax(const slang::syntax::SyntaxNode& node) const;
+};
+
+/// Completed semantic diagnostics may be reused only during one synchronous edit refresh.
+/// Entries retain the producer (and its diagnostic argument pointers); recipient query
+/// compilations remain private. Never retain this object across document mutations.
+class SemanticDiagnosticBatch {
+public:
+    struct Statistics {
+        uint64_t computations = 0;
+        uint64_t hits = 0;
+    };
+    explicit SemanticDiagnosticBatch(Statistics& statistics) : m_statistics(statistics) {}
+    struct Result {
+        const Diagnostics& diagnostics;
+        bool reused;
+    };
+    Result collect(const std::shared_ptr<ShallowAnalysis>& analysis);
+
+private:
+    static bool eligible(ShallowAnalysis& analysis);
+    Statistics& m_statistics;
+    std::vector<std::shared_ptr<ShallowAnalysis>> m_producers;
 };
 
 } // namespace server

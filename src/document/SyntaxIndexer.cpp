@@ -35,15 +35,43 @@ std::string SyntaxIndexer::MacroExpansionTokens::getText() const {
     return result;
 }
 
-SyntaxIndexer::SyntaxIndexer(const slang::syntax::SyntaxTree& tree) {
+SyntaxIndexer::SyntaxIndexer(const slang::syntax::SyntaxTree& tree, slang::BufferID buffer) {
     SLANG_ASSERT(tree.getSourceBufferIds().size() >= 1);
-    m_buffer = tree.getSourceBufferIds()[0];
+    m_buffer = buffer;
     m_sourceManager = &tree.sourceManager();
+    for (auto ancestor = m_buffer; ancestor.valid();) {
+        m_includeAncestors.push_back(ancestor);
+        auto includedFrom = m_sourceManager->getIncludedFrom(ancestor);
+        if (!includedFrom)
+            break;
+        // Includes produced by a macro can name an expansion buffer here.
+        ancestor = m_sourceManager->getFullyExpandedLoc(includedFrom).buffer();
+    }
     visit(tree.root());
     flushMacroExpansion();
 }
 
 void SyntaxIndexer::visit(const slang::syntax::SyntaxNode& node) {
+    if (node.kind == syntax::SyntaxKind::ClassDeclaration) {
+        auto first = node.getFirstToken();
+        auto firstBuffer = first && first.location() != SourceLocation::NoLocation &&
+                                   first.location().valid()
+                               ? m_sourceManager->getFullyExpandedLoc(first.location()).buffer()
+                               : BufferID{};
+        auto last = node.getLastToken().location();
+        auto lastBuffer = last.valid() && last != SourceLocation::NoLocation
+                              ? m_sourceManager->getFullyExpandedLoc(last).buffer()
+                              : BufferID{};
+        if (firstBuffer.valid() && firstBuffer == lastBuffer &&
+            std::ranges::find(m_includeAncestors, firstBuffer) == m_includeAncestors.end()) {
+            // An unrelated class body cannot contain the edited include. Pending
+            // directives (including an entirely inactive header) can still be
+            // attached to its first token, so retain those before skipping it.
+            processTrivia(first.trivia(), node);
+            flushMacroExpansion();
+            return;
+        }
+    }
     switch (node.kind) {
         case syntax::SyntaxKind::MacroUsage: {
             if (node.getFirstToken().location().buffer() == m_buffer) {
@@ -56,8 +84,11 @@ void SyntaxIndexer::visit(const slang::syntax::SyntaxNode& node) {
         case syntax::SyntaxKind::HierarchyInstantiation:
         case syntax::SyntaxKind::ClassName:
         case syntax::SyntaxKind::AssignmentPatternExpression:
-            collectedHints.emplace(static_cast<uint32_t>(node.getFirstToken().location().offset()),
-                                   &node);
+            if (m_sourceManager->getFullyExpandedLoc(node.getFirstToken().location()).buffer() ==
+                m_buffer) {
+                collectedHints.emplace(
+                    static_cast<uint32_t>(node.getFirstToken().location().offset()), &node);
+            }
             break;
         case syntax::SyntaxKind::ParameterDeclaration:
             if (node.getFirstToken().location().buffer() == m_buffer) {
@@ -81,13 +112,22 @@ void SyntaxIndexer::visit(const slang::syntax::SyntaxNode& node) {
 
             // Track macro expansion tokens
             if (m_currentMacroUsage) {
-                if (token->location().buffer() != m_buffer) {
+                // Optional grammar tokens have no source location and do not end
+                // the surrounding macro expansion (for example an absent signing).
+                if (!*token || !token->location() ||
+                    token->location() == SourceLocation::NoLocation)
+                    continue;
+                auto invocation = m_currentMacroUsage->sourceRange();
+                auto expanded = m_sourceManager->getFullyExpandedLoc(token->location());
+                // Argument substitutions expand to positions inside the invocation,
+                // while macro body tokens expand to its start. Neither may escape
+                // into a following include or owner declaration.
+                if (token->location().buffer() != m_buffer && expanded.buffer() == m_buffer &&
+                    invocation.contains(expanded)) {
                     m_currentExpansionTokens.push_back(token);
                     continue;
                 }
-                else {
-                    flushMacroExpansion();
-                }
+                flushMacroExpansion();
             }
 
             if (token->location().buffer() == m_buffer &&

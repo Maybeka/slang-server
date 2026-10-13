@@ -53,6 +53,43 @@ All configuration options are optional and have sensible defaults. In VSCode, th
 
 ---
 
+### `explorePreincludeFiles`
+
+:   **Type:** `string[]`
+
+    **Default:** `[]`
+
+    Ordered shared headers to preprocess before each separately parsed source in exploration mode.
+    Use the real macro headers supplied by the project's compilation context. Relative paths are
+    resolved against the workspace root. Command-line defines are applied first; the headers can
+    redefine or undefine them, in the listed order.
+
+    For example, a UVM project whose compilation unit supplies UVM and assertion macros before its
+    interfaces can declare:
+
+    ```json
+    {
+      "explorePreincludeFiles": [
+        "/path/to/uvm-1.2/src/uvm_macros.svh",
+        "hw/ip/prim/rtl/prim_assert.sv"
+      ]
+    }
+    ```
+
+    The server parses the headers together with each document, keeping actual source locations,
+    include guards, nested includes, macro arguments, and unsaved header edits. Macro-header
+    documents themselves are parsed without forcing their own preinclude graph. Changes to these
+    global preprocessing inputs invalidate and refresh open consumers. Closing a macro header
+    restores its disk contents, including when unsaved edits were discarded, while preserving
+    other open unsaved buffers. Keep external macro headers
+    in the configured index/watch scope so filesystem notifications are delivered.
+
+    This explicitly supplies shared header context; it does not infer arbitrary macro state from
+    earlier RTL files. Full builds keep their build-file compilation-unit preprocessing. Workspace
+    symbol/owner discovery retains its existing lightweight indexing behavior.
+
+---
+
 ### `indexingThreads`
 
 :   **Type:** `integer`
