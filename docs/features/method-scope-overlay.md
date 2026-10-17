@@ -14,7 +14,7 @@ use those locals and arguments, integer literals, parentheses, unary `+`/`-`,
 and binary `+`/`-`/`*`. A mini compilation verifies the new bindings and types.
 
 Only the target header may be open. Macro environments, repeated includes,
-imports in the containing package, inheritance, local names shadowing class
+imports in the containing package, inheritance, local names shadowing enclosing-scope
 members, nonlocal expressions, interface changes, variable-length edits,
 line-layout changes, and local additions/removals are outside this first slice.
 Configuration, command files, source bytes, successful and failed lookups,
@@ -52,3 +52,8 @@ sequence and diagnostic waits separate, and reports the ninth edit separately
 from the eight accepted edits. Measurements from another build are not current
 validation. This experiment does not establish general responsiveness gains or
 UVM support.
+
+The 2026-10-17 Linux rebuild passed its recorded correctness checks, but its
+synthetic timing medians were slower at every measured step for both query
+kinds. See [the validation record](https://github.com/Maybeka/slang-server/blob/main/validation/linux-2026-10-17.json). The
+experiment remains default off.

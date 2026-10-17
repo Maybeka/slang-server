@@ -1,0 +1,344 @@
+{
+  "schema": 1,
+  "dateUtc": "2026-10-17",
+  "testedProductCommit": "18b5a8e2eb580c4d781a1390f4f8edb42df2d511",
+  "baseMainCommit": "7cc41bac96ae39dc79c77c2bff0a5d01dd4fd1ad",
+  "restoredBaselineCommit": "fab1a707df7ac4175c052713f3ba8b619ac9f307",
+  "originalSourceArchiveAvailableInWorkspace": false,
+  "restoredArchiveSourceFilesVerified": 2881,
+  "platform": {
+    "os": "Linux",
+    "kernel": "6.18.55",
+    "architecture": "x86_64",
+    "compiler": "GCC 14.2.0 (Debian 14.2.0-19)",
+    "cmake": "4.4.4",
+    "ninja": "1.13.2",
+    "buildType": "Release (-O3 -DNDEBUG)",
+    "mimalloc": false,
+    "systemTestsPython": "3.12.6",
+    "cmakeGenerationPython": "3.12.14"
+  },
+  "sdk": {
+    "baseCommit": "151a801ceaf6faf23d79a42d210ff67e50eb4660",
+    "patchSha256": "96550dbfbfd65a0a986c0e6e2769a3f96857b0d70ec6bb728eeb612b41da4bbe",
+    "verifiedPatchedFiles": 708,
+    "inventorySha256": "0e9303eb42d793f7cf0b3ed9a6e57dc8f5fd8e53fef467f972b8d3871fdfb231"
+  },
+  "offlineDependencies": {
+    "inventorySha256": "9691644e67adf3b45dd9ac626929e74203b7098b8ea780e4eb921cbd01ebe67b",
+    "verifiedFiles": 1296,
+    "commits": {
+      "catch2": "25319fd3047c6bdcf3c0170e76fa526c77f99ca9",
+      "fmt": "1be298e1bd68957e4cd352e1f676f00e07dcfb57",
+      "boost_regex": "2b3ac0834f31086c6e3c0e0ceb8516e427d5c39d",
+      "tomlplusplus": "30172438cee64926dc41fdd9c11fb3ba5b2ba9de"
+    }
+  },
+  "binaries": {
+    "slang-server": "183e8e528c5b025dbc9b3c0fa8495871b0d4b8f5146be2fc127b89c07b37d98c",
+    "slang_server_counted": "869fdcbd370f9fcddfb68c7d10718bc16e07c13ecf453f1211b223b0d57bdc2b",
+    "normalDefinesParserWrapper": false
+  },
+  "tests": {
+    "ctest": {
+      "registered": 604,
+      "passed": 604,
+      "failed": 0
+    },
+    "serverCpp": {
+      "cases": 589,
+      "assertions": 71423,
+      "passed": true
+    },
+    "sdkCpp": {
+      "cases": 2561,
+      "assertions": 23611,
+      "passed": true
+    },
+    "sdkTidy": {
+      "cases": 207,
+      "assertions": 307,
+      "passed": true
+    },
+    "sdkRegressionEntrypoints": {
+      "registered": 13,
+      "passed": 13
+    },
+    "pythonSystemAndMeasurementProtocol": {
+      "passed": 10,
+      "failed": 0
+    },
+    "diagnosticTransport": {
+      "passed": 32,
+      "failed": 0
+    },
+    "methodOracle": "passed: nine versions, ordered complete JSON, all local references at start/middle/end, resolved items and old handles",
+    "methodParserCounts": "passed: one mini-shaped parent parse per accepted edit 1..8, no additional completion parse, native fallback on edit 9",
+    "heldOldDiagnostics": "passed: two overlay versions served with old child held; only latest diagnostic version published"
+  },
+  "benchmark": {
+    "seed": 20261017,
+    "blocksPerQueryKind": 3,
+    "order": "preregistered balanced ABBA/BAAB",
+    "runs": 24,
+    "responses": 216,
+    "outcomes": {
+      "success": 216,
+      "timeout": 0,
+      "cancelled": 0,
+      "crash": 0,
+      "error": 0
+    },
+    "samplesPerArmPerStep": 6,
+    "fixture": "synthetic F1: three ordered roots, one included class header, 500 package noise variables; only the header open",
+    "metric": "before pre-encoded batch write to matching complete response-body receipt, before JSON decode",
+    "firstEightAndNinthReportedSeparately": true,
+    "summary": {
+      "completion/native": {
+        "outcomes": {
+          "cancelled": 0,
+          "crash": 0,
+          "error": 0,
+          "success": 54,
+          "timeout": 0
+        },
+        "steps": {
+          "1": {
+            "n": 6,
+            "medianMs": 2.010166
+          },
+          "2": {
+            "n": 6,
+            "medianMs": 2.0646205
+          },
+          "3": {
+            "n": 6,
+            "medianMs": 2.0135515
+          },
+          "4": {
+            "n": 6,
+            "medianMs": 2.0202915
+          },
+          "5": {
+            "n": 6,
+            "medianMs": 2.0114780000000003
+          },
+          "6": {
+            "n": 6,
+            "medianMs": 2.0049989999999998
+          },
+          "7": {
+            "n": 6,
+            "medianMs": 2.016095
+          },
+          "8": {
+            "n": 6,
+            "medianMs": 2.04431
+          },
+          "9": {
+            "n": 6,
+            "medianMs": 2.020374
+          }
+        },
+        "coldProcessPreparationMedianMs": 8.409192000000001,
+        "fullNineEditSequenceMedianMs": 39.7901925
+      },
+      "completion/method": {
+        "outcomes": {
+          "cancelled": 0,
+          "crash": 0,
+          "error": 0,
+          "success": 54,
+          "timeout": 0
+        },
+        "steps": {
+          "1": {
+            "n": 6,
+            "medianMs": 6.627235499999999
+          },
+          "2": {
+            "n": 6,
+            "medianMs": 2.2404305
+          },
+          "3": {
+            "n": 6,
+            "medianMs": 2.1907535
+          },
+          "4": {
+            "n": 6,
+            "medianMs": 2.2481125000000004
+          },
+          "5": {
+            "n": 6,
+            "medianMs": 2.4120150000000002
+          },
+          "6": {
+            "n": 6,
+            "medianMs": 2.22846
+          },
+          "7": {
+            "n": 6,
+            "medianMs": 2.388401
+          },
+          "8": {
+            "n": 6,
+            "medianMs": 2.330495
+          },
+          "9": {
+            "n": 6,
+            "medianMs": 2.381323
+          }
+        },
+        "coldProcessPreparationMedianMs": 7.596432500000001,
+        "fullNineEditSequenceMedianMs": 72.407777
+      },
+      "definition/native": {
+        "outcomes": {
+          "cancelled": 0,
+          "crash": 0,
+          "error": 0,
+          "success": 54,
+          "timeout": 0
+        },
+        "steps": {
+          "1": {
+            "n": 6,
+            "medianMs": 0.429772
+          },
+          "2": {
+            "n": 6,
+            "medianMs": 0.384905
+          },
+          "3": {
+            "n": 6,
+            "medianMs": 0.401091
+          },
+          "4": {
+            "n": 6,
+            "medianMs": 0.40940600000000005
+          },
+          "5": {
+            "n": 6,
+            "medianMs": 0.40238799999999997
+          },
+          "6": {
+            "n": 6,
+            "medianMs": 0.410504
+          },
+          "7": {
+            "n": 6,
+            "medianMs": 0.365951
+          },
+          "8": {
+            "n": 6,
+            "medianMs": 0.4012445
+          },
+          "9": {
+            "n": 6,
+            "medianMs": 0.393954
+          }
+        },
+        "coldProcessPreparationMedianMs": 7.858138,
+        "fullNineEditSequenceMedianMs": 22.1225575
+      },
+      "definition/method": {
+        "outcomes": {
+          "cancelled": 0,
+          "crash": 0,
+          "error": 0,
+          "success": 54,
+          "timeout": 0
+        },
+        "steps": {
+          "1": {
+            "n": 6,
+            "medianMs": 4.8316444999999995
+          },
+          "2": {
+            "n": 6,
+            "medianMs": 0.784644
+          },
+          "3": {
+            "n": 6,
+            "medianMs": 0.5746005
+          },
+          "4": {
+            "n": 6,
+            "medianMs": 0.5988564999999999
+          },
+          "5": {
+            "n": 6,
+            "medianMs": 0.5746990000000001
+          },
+          "6": {
+            "n": 6,
+            "medianMs": 0.6263449999999999
+          },
+          "7": {
+            "n": 6,
+            "medianMs": 0.575149
+          },
+          "8": {
+            "n": 6,
+            "medianMs": 0.574881
+          },
+          "9": {
+            "n": 6,
+            "medianMs": 0.583724
+          }
+        },
+        "coldProcessPreparationMedianMs": 8.251630500000001,
+        "fullNineEditSequenceMedianMs": 28.596608500000002
+      }
+    },
+    "conclusion": "No responsiveness improvement in this rebuild: method medians are slower at every measured step in both query kinds; retain default off. Parser scope reduction is not a timing improvement. Small synthetic dataset; no general performance claim."
+  },
+  "defaults": {
+    "experimentalMethodScopeOverlay": false,
+    "fastCwdSnapshotChecks": false
+  },
+  "integrationPolicy": [
+    "Preserve main shared Compilation with per-file indexes and first-source include default plus explicit picker. Explicit filelists and physical source hints still reject ambiguous contexts; automatic candidate budgets are checked before parsing roots.",
+    "Preserve main editor-authoritative open buffers and transactional configuration reloads. Adapt archived tests for these main contracts rather than reverting main behavior.",
+    "No golden files were rewritten. All new experiment behavior remains opt-in."
+  ],
+  "notValidated": [
+    "Linux arm64",
+    "GCC 13",
+    "UVM dataset or production UVM workloads",
+    "macOS performance"
+  ],
+  "evidenceFilesSha256": {
+    "ctest-full-final.log": "45834108314d7b9776df353e718589b656939036948c2cee6fa6da52ad0d8293",
+    "server-formatted-full.log": "3223b3b6cd9cf0bc239ca59247272a22f97c31341b056742f2dc7d9e8ce369b5",
+    "sdk-unit-tests.log": "7d5bb7f67ad44ae0f20e40f69b30b5725edd1b44667a7eb8c69e65a4db16bebd",
+    "sdk-tidy-tests.log": "63bab7bf58bfc5f2f5a62d53855732c7e7866e92cb0342cde097695a4908f454",
+    "python-full-final.log": "eab610e3d4107126ec3aad23a178af335b4ac213b05f6ed4ec8444a6af2c0b2a",
+    "transport-final.log": "88383cda49854d926e4beaba37d65937c39b4d0d1e0e65a0429b6ceda3bc91ba",
+    "method-oracle-final.log": "facc2cb2f6382d4abd543df45cffb65e212e11ca0aa6c1fb8e41ca5c333d48e6",
+    "method-oracle-final.json": "e543e3afbd9e7e8365e718e947ec45f0fbf09ab723f2a9c09c1de600a1c35121",
+    "method-parser-counts-final.log": "c0162f39bf47283253f2f88545370fc60294a7efd23d0667595c39111fc7cc28",
+    "method-parser-counts-final.json": "af478f49547084453efeba0a0588807fd13a06effefa8625edbe2fadb3c7a43e",
+    "method-held-diagnostics.log": "020db2f257aea3ffd5ecad3d3ed575da25d8f24ada8b01ba3459e4d8be0785fa",
+    "method-held-diagnostics.json": "a97d7034a28a836f219237e89120917c4a1bcc0af5c0d941971c9f5c8fc6bee5",
+    "measurement-protocol-tests.log": "cdf8d13a3f141b449c7d92c9b86d6fd681de17445a1d661236b92f93860eafac",
+    "benchmark-plan-final.json": "aa783c323617bc79cd8ad968803a06147035fc0d29a5aab07335265a14f468b0",
+    "benchmark-final.json": "ffb95a26d16ed9ad2630ed380d22116bf815ee9820ea93c2917a4f1a7d95d875",
+    "instrumentation-isolation.txt": "1541976eafeba5c029af749331c1c785d867216e2a4fabe005b33c4fa857aaea",
+    "configure-final.log": "110a810a5c7334c03e7c5cfb81b5a3bc19dfc879e1b848a6d2bf50eaa47e7da3",
+    "build-final.log": "240e0bd877ff44e5b196d0f91b6b803cec0aad342d3b259480c3e0950379000f",
+    "main-sdk-integrity.log": "5b99651a845eda6e362367312498c7a43f22b9474bdde781652b69860b0cec68",
+    "binary-sha256-final.txt": "2a51655a9d6bbb1b4fc5bdb709733ec323bfe884ce6f425b1d5f3bfd6748782b"
+  },
+  "codeBundle": {
+    "filename": "slang-server-code-18b5a8e.bundle",
+    "sha256": "a271e43734f91f1cbdde0faa8b214b46c69b97dda295a53c713fc7664dac302b",
+    "verify": "git bundle verify: complete history, passed",
+    "scope": "Root repository history; SDK changes are represented by the committed patch and pinned source inventories. This local file is not a promise of cloud workspace persistence."
+  },
+  "publication": {
+    "authorizedDestination": "Maybeka/slang-server main",
+    "performedAtReportCreation": false,
+    "releaseOrPullRequestCreated": false
+  }
+}
