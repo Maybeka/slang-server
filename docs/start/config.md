@@ -78,6 +78,40 @@ All configuration options are optional and have sensible defaults. In VSCode, th
     Directories from `flags` and build files are searched before this list. File-local lookup follows slang's normal rules, including `--incdir-first`. Lists from workspace, user, and local configuration are appended in that order. System includes (`<...>`) continue to use system include directories.
 
     **Example:** `"incdirs": ["rtl/include", "verification/include"]`
+### `explorePreincludeFiles`
+
+:   **Type:** `string[]`
+
+    **Default:** `[]`
+
+    Ordered shared headers to preprocess before each separately parsed source in exploration mode.
+    Use the real macro headers supplied by the project's compilation context. Relative paths are
+    resolved against the workspace root. Command-line defines are applied first; the headers can
+    redefine or undefine them, in the listed order.
+
+    For example, a UVM project whose compilation unit supplies UVM and assertion macros before its
+    interfaces can declare:
+
+    ```json
+    {
+      "explorePreincludeFiles": [
+        "/path/to/uvm-1.2/src/uvm_macros.svh",
+        "hw/ip/prim/rtl/prim_assert.sv"
+      ]
+    }
+    ```
+
+    The server parses the headers together with each document, keeping actual source locations,
+    include guards, nested includes, macro arguments, and unsaved header edits. Macro-header
+    documents themselves are parsed without forcing their own preinclude graph. Changes to these
+    global preprocessing inputs invalidate and refresh open consumers. Closing a macro header
+    restores its disk contents, including when unsaved edits were discarded, while preserving
+    other open unsaved buffers. Keep external macro headers
+    in the configured index/watch scope so filesystem notifications are delivered.
+
+    This explicitly supplies shared header context; it does not infer arbitrary macro state from
+    earlier RTL files. Full builds keep their build-file compilation-unit preprocessing. Workspace
+    symbol/owner discovery retains its existing lightweight indexing behavior.
 
 ---
 
@@ -286,3 +320,10 @@ Personal overrides for this workspace, not checked in (add `.slang/local` to `.g
 ```
 
 These flags are **appended** to whichever base flags won (workspace or user), so the final flags in this example would be `-f tools/slang/slang-server.f -DSIM_MODE -DDEBUG_LEVEL=2`. The `build` field overrides any previous value since it's a scalar.
+
+### Experimental method scope overlay
+
+`experimentalMethodScopeOverlay` is `false` by default. Its initial scope is
+closed flat `int` methods with equal-length ASCII edits, fixed line layout and
+local count, and a literal single-unit filelist. See
+[the experiment's boundaries and validation tools](../features/method-scope-overlay.md).

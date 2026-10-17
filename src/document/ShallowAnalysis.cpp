@@ -59,11 +59,13 @@ static bool symbolsMatch(const ast::Symbol* a, const ast::Symbol* b) {
     }
     return false;
 }
-ShallowAnalysis::ShallowAnalysis(BufferID buffer, std::shared_ptr<ShallowCompilation> compilation) :
+ShallowAnalysis::ShallowAnalysis(BufferID buffer, std::shared_ptr<ShallowCompilation> compilation,
+                                 const lsp::RequestContext& ctx) :
     syntaxes(*compilation->getSyntaxTree(), buffer),
     m_sourceManager(compilation->getSourceManager()), m_buffer(buffer),
-    m_shallowCompilation(std::move(compilation)), m_symbolTreeVisitor(m_sourceManager),
+    m_shallowCompilation(std::move(compilation)), m_symbolTreeVisitor(m_sourceManager, buffer),
     m_symbolIndexer(buffer) {
+    ctx.checkpoint("after syntax indexing");
     if (syntaxes.collected.empty())
         ERROR("No syntaxes found in document {}", m_sourceManager.getFullPath(m_buffer).string());
 
@@ -77,7 +79,11 @@ ShallowAnalysis::ShallowAnalysis(BufferID buffer, std::shared_ptr<ShallowCompila
          loc = m_sourceManager.getIncludedFrom(loc.buffer())) {
         m_symbolIndexer.enclosingBuffers.push_back(loc.buffer());
     }
-    getCompilation()->getRoot().visit(m_symbolIndexer);
+    ctx.checkpoint("before root binding");
+    auto& root = getCompilation()->getRoot();
+    ctx.checkpoint("after root binding");
+    ctx.checkpoint("before symbol indexing");
+    root.visit(m_symbolIndexer);
     SmallVector<const ast::DefinitionSymbol*> unindexedDefinitions;
     for (auto* symbol : getCompilation()->getDefinitions()) {
         auto* definition = symbol->as_if<ast::DefinitionSymbol>();
@@ -113,6 +119,65 @@ ShallowAnalysis::ShallowAnalysis(BufferID buffer, std::shared_ptr<ShallowCompila
         instance.setParent(getCompilation()->getRoot());
         instance.visit(m_symbolIndexer);
     }
+    ctx.checkpoint("after symbol indexing");
+}
+
+ShallowAnalysis::ShallowAnalysis(
+    SourceManager& sm, BufferID buffer, std::shared_ptr<syntax::SyntaxTree> tree, Bag options,
+    const std::vector<std::shared_ptr<syntax::SyntaxTree>>& dependencies,
+    const ServerCompilation* design, const lsp::RequestContext& ctx, bool packageOnly) :
+    ShallowAnalysis(buffer,
+                    std::make_shared<ShallowCompilation>(sm, std::move(tree), options, dependencies,
+                                                         design, ctx, packageOnly),
+                    ctx) {
+    ctx.checkpoint("after per-file indexing");
+}
+
+bool SemanticDiagnosticBatch::eligible(ShallowAnalysis& analysis) {
+    if (analysis.m_shallowCompilation->hasActiveDesign() || !analysis.getCompilation() ||
+        analysis.getCompilation()->hasFatalErrors() || !analysis.hasValidBuffers() ||
+        !analysis.getCompilation()->getRoot().topInstances.empty())
+        return false;
+    auto trees = analysis.getCompilation()->getSyntaxTrees();
+    if (trees.empty() || trees.front() != analysis.getSyntaxTree())
+        return false;
+    bool hasPackage = false;
+    for (const auto& [node, _] : analysis.getSyntaxTree()->getMetadata().nodeMeta) {
+        if (node->kind == syntax::SyntaxKind::PackageDeclaration)
+            hasPackage = true;
+    }
+    if (!hasPackage)
+        return false;
+    for (auto* symbol : analysis.getCompilation()->getDefinitions()) {
+        auto* definition = symbol->as_if<ast::DefinitionSymbol>();
+        if (definition && definition->syntaxTree == analysis.getSyntaxTree().get())
+            return false;
+    }
+    return true;
+}
+
+SemanticDiagnosticBatch::Result SemanticDiagnosticBatch::collect(
+    const std::shared_ptr<ShallowAnalysis>& analysis) {
+    // Driver options and SourceManager are stable throughout this synchronous batch.
+    // Owner discovery and the complete dependency closure are recomputed by each refresh.
+    bool canReuse = eligible(*analysis);
+    if (canReuse) {
+        for (const auto& producer : m_producers) {
+            if (&producer->m_sourceManager == &analysis->m_sourceManager &&
+                producer->getSyntaxTree() == analysis->getSyntaxTree() &&
+                std::ranges::equal(producer->getCompilation()->getSyntaxTrees(),
+                                   analysis->getCompilation()->getSyntaxTrees()) &&
+                eligible(*producer)) {
+                ++m_statistics.hits;
+                return {producer->getSemanticDiagnostics(), true};
+            }
+        }
+    }
+    ++m_statistics.computations;
+    const auto& diagnostics = analysis->getSemanticDiagnostics();
+    if (canReuse && eligible(*analysis))
+        m_producers.push_back(analysis);
+    return {diagnostics, false};
 }
 
 std::optional<std::string> ShallowAnalysis::getDesignInstancePathAtToken(
@@ -271,17 +336,24 @@ const ast::Scope* ShallowAnalysis::getScopeFromSym(const ast::Symbol* symbol) co
         return &symbol->as<ast::Scope>();
     }
 
-    if (symbol->isType()) {
-        auto& type = unwrapErrorType(symbol->as<ast::Type>());
-        if (type.isScope()) {
+    auto typeScope = [](const ast::Type& original) -> const ast::Scope* {
+        auto& type = unwrapErrorType(original);
+        if (type.isScope())
             return &type.as<ast::Scope>();
+        if (auto* virtualInterface = type.as_if<ast::VirtualInterfaceType>()) {
+            // Use the bound instance, including parameter overrides and modport
+            // restrictions; a default interface instance can describe the wrong type.
+            if (virtualInterface->modport)
+                return virtualInterface->modport;
+            return &virtualInterface->iface.body;
         }
+        return nullptr;
+    };
+    if (symbol->isType()) {
+        return typeScope(symbol->as<ast::Type>());
     }
     else if (ast::ValueSymbol::isKind(symbol->kind)) {
-        auto& type = unwrapErrorType(symbol->as<ast::ValueSymbol>().getType());
-        if (type.isScope()) {
-            return &type.as<ast::Scope>();
-        }
+        return typeScope(symbol->as<ast::ValueSymbol>().getType());
     }
     else if (ast::InstanceSymbol::isKind(symbol->kind)) {
         return &symbol->as<ast::InstanceSymbol>().body.as<ast::Scope>();

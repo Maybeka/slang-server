@@ -692,3 +692,68 @@ endmodule
     CHECK(sawSecondParamRhs);
     CHECK(sawPortRhs);
 }
+
+TEST_CASE("Full design save retires deferred shallow diagnostics", "[background][lifecycle]") {
+    ServerHarness server("background_build");
+    auto child = server.openFile("submodule.sv");
+    auto hasInstanceDiag = [&] {
+        return std::ranges::any_of(child.getDiagnostics(), [](const auto& diagnostic) {
+            return diagnostic.message.find("instance width differs") != std::string::npos;
+        });
+    };
+    REQUIRE(hasInstanceDiag());
+    auto text = child.doc->getText();
+    std::string changed(text.data(), text.size() - 1);
+    changed += "\n";
+    server.SlangServer::onDocDidChange(lsp::DidChangeTextDocumentParams{
+        .textDocument = {.version = 2, .uri = child.doc->getURI()},
+        .contentChanges = {lsp::TextDocumentContentChangeWholeDocument{changed}}});
+    REQUIRE(server.m_driver->hasPendingDiagnostics());
+    server.onDocDidSave(lsp::DidSaveTextDocumentParams{.textDocument = {child.doc->getURI()}});
+    REQUIRE(hasInstanceDiag());
+    server.m_driver->runPendingDiagnostics();
+    CHECK_FALSE(server.m_driver->hasPendingDiagnostics());
+    CHECK(hasInstanceDiag());
+}
+
+TEST_CASE("Full save coverage excludes pending non-build documents", "[background][lifecycle]") {
+    ServerHarness server("background_build");
+    auto child = server.openFile("submodule.sv");
+    auto extra = server.openFile("not_in_build.sv", "module extra; int value; endmodule\n");
+    server.SlangServer::onDocDidChange(lsp::DidChangeTextDocumentParams{
+        .textDocument = {.version = 2, .uri = extra.doc->getURI()},
+        .contentChanges = {lsp::TextDocumentContentChangeWholeDocument{
+            "module extra; latest_missing_type value; endmodule\n"}}});
+    server.onDocDidSave(lsp::DidSaveTextDocumentParams{.textDocument = {child.doc->getURI()}});
+    server.m_driver->runPendingDiagnostics();
+    CHECK(std::ranges::any_of(extra.getDiagnostics(), [](const auto& diagnostic) {
+        return diagnostic.message.find("latest_missing_type") != std::string::npos;
+    }));
+    CHECK(server.client.diagnosticVersions.at(extra.doc->getURI()) == 2);
+}
+
+TEST_CASE("Saved full diagnostics lose coverage when a sibling buffer changes",
+          "[background][lifecycle]") {
+    ServerHarness server("background_build");
+    server.client.capabilities.inactiveRegionsSupported = false;
+    auto child = server.openFile("submodule.sv");
+    auto definitions = server.openFile("defs.svh");
+    auto text = child.doc->getText();
+    server.SlangServer::onDocDidChange(lsp::DidChangeTextDocumentParams{
+        .textDocument = {.version = 2, .uri = child.doc->getURI()},
+        .contentChanges = {lsp::TextDocumentContentChangeWholeDocument{
+            std::string(text.data(), text.size() - 1) + "\n"}}});
+    server.onDocDidSave(lsp::DidSaveTextDocumentParams{.textDocument = {child.doc->getURI()}});
+    REQUIRE(server.m_driver->hasPendingDiagnostics());
+    auto childPath = server.m_driver->sm.getFullPath(child.doc->getBuffer());
+    REQUIRE(server.m_driver->comp->containsCurrentSource(childPath));
+    server.SlangServer::onDocDidChange(lsp::DidChangeTextDocumentParams{
+        .textDocument = {.version = 2, .uri = definitions.doc->getURI()},
+        .contentChanges = {lsp::TextDocumentContentChangeWholeDocument{
+            "`define DEFAULT_WIDTH invalid_width_token\n"}}});
+    CHECK_FALSE(server.m_driver->comp->containsCurrentSource(childPath));
+    server.m_driver->runPendingDiagnostics();
+    CHECK(std::ranges::any_of(child.getDiagnostics(), [](const auto& diagnostic) {
+        return diagnostic.message.find("invalid_width_token") != std::string::npos;
+    }));
+}

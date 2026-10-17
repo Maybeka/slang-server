@@ -14,8 +14,11 @@
 #include <condition_variable>
 #include <deque>
 #include <functional>
+#include <memory>
 #include <mutex>
 #include <optional>
+#include <rfl/generic/Parser.hpp>
+#include <rfl/parsing/Parent.hpp>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -30,6 +33,18 @@ namespace lsp {
 template<typename Impl>
 class JsonRpcServer {
 protected:
+    template<typename T>
+    static rfl::Generic makeResponseValue(const T& value) {
+        // Use the same public Writer/Parser path as rfl::to_generic, but transfer
+        // the completed tree instead of copying the writer's lvalue root.
+        using Writer = rfl::generic::Writer;
+        using Parent = rfl::parsing::Parent<Writer>;
+        Writer writer;
+        rfl::generic::Parser<T, rfl::Processors<rfl::UnderlyingEnums>>::write(
+            writer, value, typename Parent::Root{});
+        return std::move(writer.root());
+    }
+
     std::unordered_map<std::string,
                        std::function<rfl::Generic(rfl::Generic, const RequestContext&)>>
         requests;
@@ -78,7 +93,7 @@ protected:
                 return std::nullopt;
             }
             else {
-                return rfl::to_generic<rfl::UnderlyingEnums>(getResult());
+                return makeResponseValue(getResult());
             }
         };
     }
@@ -119,6 +134,18 @@ protected:
             }
         };
     }
+
+    // Called only by the state-owning worker, never under the queue mutex.
+    virtual void onForegroundComplete() {}
+    virtual void onProtocolStopped() {}
+    virtual bool hasBackgroundWork() const { return false; }
+    virtual void runBackgroundWork(const RequestContext&) {}
+    // Foreground requests and notifications report exceptions under the state lock.
+    virtual void onMessageException(const std::exception&) {}
+    // Only the state worker obtains this callback. Copies are safe on an I/O
+    // thread and become inert when the protocol loop exits.
+    std::function<void()> backgroundWakeCallback() const { return m_backgroundWake; }
+    std::function<void()> m_backgroundWake = [] {};
 
     RequestContext createContext(const RpcRequest& request) const {
         return RequestContext(request.method, request.id,
@@ -270,6 +297,7 @@ protected:
                 }
                 catch (const std::exception& e) {
                     messageLog.setError(e.what());
+                    onMessageException(e);
                 }
             }
             else if (request.method.starts_with("$/")) {
@@ -305,8 +333,14 @@ protected:
             return RpcError{.code = static_cast<int>(LSPErrorCodes::RequestCancelled),
                             .message = "Request cancelled"};
         }
+        catch (const RequestFailed& e) {
+            messageLog.setError(e.what());
+            return RpcError{.code = static_cast<int>(LSPErrorCodes::RequestFailed),
+                            .message = e.what()};
+        }
         catch (const std::exception& e) {
             messageLog.setError(e.what());
+            onMessageException(e);
             return RpcError{.code = static_cast<int>(ErrorCodes::InternalError),
                             .message = e.what()};
         }
@@ -323,13 +357,13 @@ protected:
         auto result = processMessage(request, ctx, logStart);
         unregisterContext(request, ctx);
         std::visit(
-            [request](auto&& value) {
+            [&request](auto&& value) {
                 using T = std::decay_t<decltype(value)>;
                 if constexpr (std::is_same_v<T, rfl::Generic>) {
                     sendMessage(RpcResponse{
                         .jsonrpc = "2.0",
                         .id = request.id,
-                        .result = value,
+                        .result = std::move(value),
                     });
                 }
                 else if constexpr (std::is_same_v<T, RpcError>) {
@@ -392,30 +426,91 @@ public:
         std::deque<QueuedMessage> queue;
 
         // Protects the queue, worker state, and deferred log separator.
-        std::mutex queueMutex;
-        std::condition_variable queueCondition;
+        struct WakeState {
+            std::mutex mutex;
+            std::condition_variable condition;
+            bool requested = false;
+        };
+        auto wakeState = std::make_shared<WakeState>();
+        auto& queueMutex = wakeState->mutex;
+        auto& queueCondition = wakeState->condition;
+        m_backgroundWake = [weak = std::weak_ptr<WakeState>(wakeState)] {
+            if (auto state = weak.lock()) {
+                {
+                    std::lock_guard lock(state->mutex);
+                    state->requested = true;
+                }
+                state->condition.notify_one();
+            }
+        };
         bool inputFinished = false;
         bool workerBusy = false;
         bool separatorPending = false;
+        bool backgroundPending = false;
+        std::optional<RequestContext> activeBackground;
 
         // worker- processes messages in order
         auto* logOutput = server::logging::getOutput();
         std::thread worker([&, logOutput] {
             server::logging::setOutput(logOutput);
             while (true) {
-                QueuedMessage message;
+                std::optional<QueuedMessage> message;
+                RequestContext background;
                 {
                     std::unique_lock lock(queueMutex);
-                    queueCondition.wait(lock, [&] { return inputFinished || !queue.empty(); });
-                    if (queue.empty())
+                    queueCondition.wait(lock, [&] {
+                        return inputFinished || !queue.empty() || backgroundPending ||
+                               wakeState->requested;
+                    });
+                    if (!queue.empty()) {
+                        message = std::move(queue.front());
+                        queue.pop_front();
+                    }
+                    else if (inputFinished) {
                         return;
-                    message = std::move(queue.front());
-                    queue.pop_front();
+                    }
+                    else {
+                        // Consume the wake here, before calling user code. A completion
+                        // racing that code re-arms it and cannot be overwritten below.
+                        wakeState->requested = false;
+                        backgroundPending = false;
+                        // Selection and registration are atomic with enqueue/cancellation.
+                        background = RequestContext("background/diagnostics", std::nullopt);
+                        activeBackground = background;
+                    }
                     workerBusy = true;
                 }
-                handleMessage(std::move(message.request), std::move(message.ctx), false);
+
+                bool pending = false;
+                if (message) {
+                    handleMessage(std::move(message->request), std::move(message->ctx), false);
+                    std::lock_guard stateLock(serverStateMutex);
+                    onForegroundComplete();
+                    pending = hasBackgroundWork();
+                }
+                else {
+                    std::lock_guard stateLock(serverStateMutex);
+                    try {
+                        background.startInfo("Started background diagnostics");
+                        background.throwIfCancelled("before background work");
+                        runBackgroundWork(background);
+                        pending = hasBackgroundWork();
+                        background.info("Finished background diagnostics");
+                    }
+                    catch (const RequestCancelled& e) {
+                        background.info("Deferred background diagnostics: {}", e.what());
+                        pending = hasBackgroundWork();
+                    }
+                    catch (const std::exception& e) {
+                        // Keep driver work pending, but retry only after another foreground
+                        // message. A persistent failure must not become an idle busy loop.
+                        background.error("Background diagnostics failed: {}", e.what());
+                    }
+                }
                 {
                     std::lock_guard lock(queueMutex);
+                    activeBackground.reset();
+                    backgroundPending = pending;
                     workerBusy = false;
                     if (queue.empty())
                         separatorPending = true;
@@ -437,6 +532,8 @@ public:
                 std::lock_guard lock(queueMutex);
                 printPendingSeparatorLocked();
                 ctx.startInfo("<--- {}", ctx.method());
+                if (activeBackground)
+                    activeBackground->cancel();
                 queue.push_back({std::move(queuedRequest), std::move(ctx)});
             }
             queueCondition.notify_one();
@@ -446,6 +543,8 @@ public:
             {
                 std::lock_guard lock(queueMutex);
                 printPendingSeparatorLocked();
+                if (activeBackground)
+                    activeBackground->cancel();
             }
             processMessage(std::move(cancellationRequest));
             {
@@ -493,9 +592,13 @@ public:
         {
             std::lock_guard lock(queueMutex);
             inputFinished = true;
+            if (activeBackground)
+                activeBackground->cancel();
         }
         queueCondition.notify_one();
         worker.join();
+        onProtocolStopped();
+        m_backgroundWake = [] {};
     }
 };
 } // namespace lsp

@@ -1,0 +1,3413 @@
+diff --git a/docs/command-line-ref.dox b/docs/command-line-ref.dox
+index 153bb54e1b1ba9c278a844e004f3099f4cdce6f4..3dc00ddb388db1389032fa8166fdd96e13c8272a 100644
+--- a/docs/command-line-ref.dox
++++ b/docs/command-line-ref.dox
+@@ -576,8 +576,11 @@ permit this, but some tools allow it anyway so this flag can be used for compati
+ 
+ `--relax-string-conversions`
+ 
+-Allow string types to convert implicitly to integral types in assignments. SystemVerilog doesn't
+-permit this, but some tools allow it anyway so this flag can be used for compatibility purposes.
++Allow implicit conversions between string and integral types in assignments, and allow integral
++operands in string concatenations. Integral concatenation operands are converted as if explicitly
++cast to `string`, preserving their character bytes rather than formatting their numeric values.
++SystemVerilog doesn't permit these implicit conversions, but some tools allow them anyway so this
++flag can be used for compatibility purposes. This flag is enabled by `--compat vcs`.
+ 
+ `--allow-dup-initial-drivers`
+ 
+diff --git a/include/slang/ast/Compilation.h b/include/slang/ast/Compilation.h
+index b7ddc64e46b08cf082b7e7ffec12ffe769afc693..b6ca1f791d306069279b5cf8792be0d705849e9c 100644
+--- a/include/slang/ast/Compilation.h
++++ b/include/slang/ast/Compilation.h
+@@ -88,7 +88,8 @@ enum class SLANG_EXPORT CompilationFlags {
+     /// for an unknown definition.
+     IgnoreUnknownModules = 1 << 5,
+ 
+-    /// Allow strings to implicitly convert to integers.
++    /// Allow implicit conversions between strings and integers, including
++    /// integral operands in string concatenations.
+     RelaxStringConversions = 1 << 6,
+ 
+     /// Allow implicit call expressions (lacking parentheses) to be recursive function calls.
+@@ -151,8 +152,17 @@ enum class SLANG_EXPORT CompilationFlags {
+     /// (untaken generate branches and uninstantiated module instances) so that
+     /// additional lints, like port and parameter name checks, can run on it.
+     CheckUninstantiated = 1 << 21,
++
++    /// Analyze compilation-unit and package declarations without elaborating a design.
++    /// No top-level or unused module, interface, or program instances are created,
++    /// even if topModules is specified. Top-level parameter overrides, defparams,
++    /// and bind directives are ignored. Package and class declarations are checked
++    /// normally; virtual interface types and their members still bind on demand,
++    /// but their instance bodies are not exhaustively checked for diagnostics.
++    /// Parse errors and errors encountered while registering declarations are retained.
++    PackageAnalysis = 1 << 22,
+ };
+-SLANG_BITMASK(CompilationFlags, CheckUninstantiated)
++SLANG_BITMASK(CompilationFlags, PackageAnalysis)
+ 
+ /// Contains various options that can control compilation behavior.
+ struct SLANG_EXPORT CompilationOptions {
+diff --git a/include/slang/ast/types/TypePrinter.h b/include/slang/ast/types/TypePrinter.h
+index 9b2fe5cb9b06ede36a1a8e39427e5a035c010fdb..26d2b1b6788df71f901bce71a48ee6dde9f738d2 100644
+--- a/include/slang/ast/types/TypePrinter.h
++++ b/include/slang/ast/types/TypePrinter.h
+@@ -133,12 +133,19 @@ public:
+     TypeArgFormatter();
+ 
+     /// Set the options to use when formatting types.
+-    void setOptions(const TypePrintingOptions& options) { printer.options = options; }
++    void setOptions(const TypePrintingOptions& options) {
++        printer.options = options;
++        customOptions = true;
++    }
++
++    /// Whether the formatter has been explicitly customized by a caller.
++    bool hasCustomOptions() const { return customOptions; }
+ 
+     void startMessage(const Diagnostic& diag) final;
+     std::string format(const std::any& arg) final;
+ 
+ private:
++    bool customOptions = false;
+     TypePrinter printer;
+     flat_hash_set<const Type*> seenTypes;
+     flat_hash_set<const Type*> typesToDisambiguate;
+diff --git a/include/slang/diagnostics/DiagnosticEngine.h b/include/slang/diagnostics/DiagnosticEngine.h
+index bc43d0037063e9e47d7c4fbd85473077d953a4a4..0354fae611098e36f7d52216b5b98888357c0bd1 100644
+--- a/include/slang/diagnostics/DiagnosticEngine.h
++++ b/include/slang/diagnostics/DiagnosticEngine.h
+@@ -21,6 +21,7 @@
+ namespace slang {
+ 
+ namespace ast {
++class Compilation;
+ class Symbol;
+ }
+ 
+@@ -68,6 +69,38 @@ struct SLANG_EXPORT ReportedDiagnostic : ReportedDiagnosticInfo {
+ ///
+ class SLANG_EXPORT DiagnosticEngine {
+ public:
++    /// Owned, source-manager-independent settings for a diagnostic engine.
++    ///
++    /// This does not contain diagnostic clients, counters, source locations, or
++    /// pragma mappings. Rebuild pragma mappings from the newly parsed source.
++    /// Only the built-in type formatter and symbol path callback are transferable.
++    struct SettingsSnapshot {
++        flat_hash_map<DiagCode, DiagnosticSeverity> severityTable;
++        flat_hash_map<DiagCode, DiagnosticSeverity> baselineSeverityTable;
++        flat_hash_map<DiagCode, std::string> messageTable;
++        std::vector<std::filesystem::path> ignoreWarnPatterns;
++        std::vector<std::filesystem::path> ignoreMacroWarnPatterns;
++        int errorLimit = 0;
++        bool ignoreAllWarnings = false;
++        bool ignoreAllNotes = false;
++        bool warningsAsErrors = false;
++        bool errorsAsFatal = false;
++        bool fatalsAsErrors = false;
++        bool useBuiltinTypeFormatter = false;
++        bool useBuiltinSymbolPath = false;
++    };
++
++    /// Captures settings without retaining any source manager, client, callback,
++    /// or formatter objects. Throws if waivers, per-buffer options, or custom
++    /// formatters / callbacks cannot be transferred safely.
++    [[nodiscard]] SettingsSnapshot captureSettings() const;
++
++    /// Replaces this engine's settings with an owned snapshot. Source-dependent
++    /// mappings are cleared; call setMappingsFromPragmas() after fresh parsing.
++    /// Clients and already-issued diagnostic counts are unchanged. Throws if this
++    /// engine or the process-wide defaults contain unsupported custom policies.
++    void applySettings(const SettingsSnapshot& settings);
++
+     /// Constructs a new diagnostic engine, using the specified source manager
+     /// for reporting source-based information from diagnostics.
+     ///
+@@ -204,6 +237,7 @@ public:
+     template<typename ForType>
+     void setFormatter(std::shared_ptr<DiagArgFormatter> formatter) {
+         formatters[SLANG_TYPEOF(ForType)] = std::move(formatter);
++        hasCustomFormatters = true;
+     }
+ 
+     /// Sets a custom formatter for the given type that should apply by default to
+@@ -211,6 +245,7 @@ public:
+     template<typename ForType>
+     static void setDefaultFormatter(std::shared_ptr<DiagArgFormatter> formatter) {
+         defaultFormatters[SLANG_TYPEOF(ForType)] = std::move(formatter);
++        defaultHasCustomFormatters = true;
+     }
+ 
+     using FormatterMap = flat_hash_map<SLANG_TYPEINDEX, std::shared_ptr<DiagArgFormatter>>;
+@@ -224,6 +259,7 @@ public:
+     template<typename TFunc>
+     void setSymbolPathCB(TFunc&& func) {
+         symbolPathCB = std::forward<TFunc>(func);
++        symbolPathKind = symbolPathCB ? SymbolPathKind::Custom : SymbolPathKind::None;
+     }
+ 
+     /// Gets the callback to use for getting a symbol path for a given symbol.
+@@ -234,6 +270,7 @@ public:
+     template<typename TFunc>
+     static void setDefaultSymbolPathCB(TFunc&& func) {
+         defaultSymbolPathCB = std::forward<TFunc>(func);
++        defaultSymbolPathKind = defaultSymbolPathCB ? SymbolPathKind::Custom : SymbolPathKind::None;
+     }
+ 
+     /// Formats the given diagnostic using its arguments and the currently mapped
+@@ -290,6 +327,16 @@ public:
+     void clearIncludeStack();
+ 
+ private:
++    friend class ast::Compilation;
++
++    enum class SymbolPathKind { None, Builtin, Custom };
++
++    // Compilation registers these separately from user-provided defaults so that
++    // snapshots can recreate built-ins without retaining callable objects.
++    static void registerBuiltinDefaults();
++    static bool validateFormattersForSnapshot(const FormatterMap& map, bool hasCustom);
++    void validateSettingsForSnapshot() const;
++
+     // An entry added by `pragma diagnostic at the given source offset which
+     // sets a diagnostic to the given severity.
+     struct DiagnosticMapping {
+@@ -381,14 +428,19 @@ private:
+     // Callbacks for retrieving a path for symbol arguments in diagnostics.
+     SymbolPathCB symbolPathCB;
+     static SymbolPathCB defaultSymbolPathCB;
++    SymbolPathKind symbolPathKind = SymbolPathKind::None;
++    static SymbolPathKind defaultSymbolPathKind;
+ 
+     // A map from type_index to a formatter for that type. Used to register custom
+     // formatters for subsystem-specific types.
+     mutable FormatterMap formatters;
++    mutable bool hasCustomFormatters = false;
++    bool inheritDefaultFormatters = true;
+ 
+     // A set of default formatters that will be assigned to each new DiagnosticEngine instance
+     // that gets created. These can later be overridden on a per-instance basis.
+     static FormatterMap defaultFormatters;
++    static bool defaultHasCustomFormatters;
+ };
+ 
+ } // namespace slang
+diff --git a/include/slang/driver/Driver.h b/include/slang/driver/Driver.h
+index 0f9cff2a3c5865d20a9f6c570e07ab640a1b0f69..3580c9c8e54e2103cea139848d9f8b4c01136141 100644
+--- a/include/slang/driver/Driver.h
++++ b/include/slang/driver/Driver.h
+@@ -15,6 +15,7 @@
+ #include "slang/driver/SourceLoader.h"
+ #include "slang/parsing/LexerFacts.h"
+ #include "slang/text/SourceManager.h"
++#include "slang/util/CwdCoordinator.h"
+ #include "slang/util/Bag.h"
+ #include "slang/util/CommandLine.h"
+ #include "slang/util/ConcurrentMap.h"
+@@ -391,6 +392,7 @@ public:
+     template<typename TArgs>
+     [[nodiscard]] bool parseCommandLine(int argc, TArgs argv,
+                                         const CommandLine::ParseOptions& parseOptions = {}) {
++        CwdCoordinator::WriteLease cwdLease;
+         if (!cmdLine.parse(argc, argv, parseOptions)) {
+             issueCommandLineErrors(cmdLine);
+             return false;
+diff --git a/include/slang/driver/SourceLoader.h b/include/slang/driver/SourceLoader.h
+index 0913e369e9dfcbcc41ca5dc07b1892631b767833..eef399de445fb2fd607b48bce09d6adf52f8deb9 100644
+--- a/include/slang/driver/SourceLoader.h
++++ b/include/slang/driver/SourceLoader.h
+@@ -151,6 +151,13 @@ public:
+     /// Returns the source paths that have been loaded.
+     std::vector<std::filesystem::path> getFilePaths() const;
+ 
++    /// Exact source candidates that failed to load, including attempted directory
++    /// prefixes. Paths are resolved when the source argument is processed, so
++    /// callers can watch for their creation and retry the original command files.
++    const flat_hash_set<std::filesystem::path>& getFailedLiteralPaths() const {
++        return failedLiteralPaths;
++    }
++
+     /// Loads all of the sources that have been added to the loader,
+     /// but does not parse them. Returns the loaded buffers.
+     std::vector<SourceBuffer> loadSources();
+@@ -172,7 +179,8 @@ public:
+     /// it does not exist. Returns nullptr if @a name is empty.
+     SourceLibrary* getOrAddLibrary(std::string_view name);
+ 
+-    /// Find a source buffer by searching through libraries added via -y
++    /// Find a source buffer by searching through libraries added via -y.
++    /// Cached source contents, including editor overlays, are eligible for lookup.
+     SourceBuffer findBuffer(std::string_view name) const;
+ 
+     /// Load trees using a custom buffer finder function
+@@ -256,6 +264,8 @@ private:
+                        const std::filesystem::path& basePath);
+     LoadResult loadAndParse(const FileEntry& fileEntry, const Bag& optionBag,
+                             const SourceOptions& srcOptions, uint64_t fileSortKey = UINT64_MAX);
++    SourceBuffer findBuffer(std::string_view name,
++                            const flat_hash_set<std::filesystem::path>& loadedPaths) const;
+     void addError(const std::filesystem::path& path, std::error_code ec);
+ 
+     SourceManager& sourceManager;
+@@ -270,6 +280,7 @@ private:
+     flat_hash_set<std::string> uniqueExtensions;
+     flat_hash_map<BufferID, std::vector<std::string>> bufferWarningOptions;
+     std::vector<std::string> errors;
++    flat_hash_set<std::filesystem::path> failedLiteralPaths;
+     SyntaxTreeList libraryMapTrees;
+ 
+     static constexpr int MinFilesForThreading = 4;
+diff --git a/include/slang/parsing/PreprocessorMetadata.h b/include/slang/parsing/PreprocessorMetadata.h
+index fc3236bf12bc3f64d131decc19c66be949bda1a4..ce4f769274e44cc1acb2229f52c1435eb76fddf3 100644
+--- a/include/slang/parsing/PreprocessorMetadata.h
++++ b/include/slang/parsing/PreprocessorMetadata.h
+@@ -45,6 +45,9 @@ struct SLANG_EXPORT PreprocessorMetadata {
+     /// The source buffer IDs that were pushed into the preprocessor, in order.
+     /// This includes top-level and included source files, but not macro expansion buffers.
+     std::vector<BufferID> sourceBufferIds;
++
++    /// Generated command-line macro buffers, in creation order for this parse.
++    std::vector<BufferID> predefineBufferIds;
+ };
+ 
+ } // namespace slang::parsing
+diff --git a/include/slang/syntax/SyntaxTree.h b/include/slang/syntax/SyntaxTree.h
+index a8d51f7746b0d8d0b2d5baf9c3dd9ef6477b4154..232b2615fb2a592f8eb0cc7c6765d17dc026da58 100644
+--- a/include/slang/syntax/SyntaxTree.h
++++ b/include/slang/syntax/SyntaxTree.h
+@@ -233,6 +233,11 @@ public:
+     /// This is empty if created from a SyntaxRewriter.
+     MacroList getDefinedMacros() const { return preprocessorMetadata.definedMacros; }
+ 
++    /// Generated command-line macro source buffers in their original parse order.
++    std::span<const BufferID> getPredefineBufferIds() const {
++        return preprocessorMetadata.predefineBufferIds;
++    }
++
+     /// Gets the list of include directives that were encountered while parsing.
+     /// This is empty if created from a SyntaxRewriter.
+     IncludeList getIncludeDirectives() const { return preprocessorMetadata.includeDirectives; }
+diff --git a/include/slang/text/SourceManager.h b/include/slang/text/SourceManager.h
+index de1d1c27195b364570eab007408f2aac14f86a17..fcdda998186c3ac71b62a6307142cbf26d016541 100644
+--- a/include/slang/text/SourceManager.h
++++ b/include/slang/text/SourceManager.h
+@@ -16,12 +16,14 @@
+ #include <set>
+ #include <shared_mutex>
+ #include <span>
++#include <stdexcept>
+ #include <string>
+ #include <variant>
+ #include <vector>
+ 
+ #include "slang/text/SourceLocation.h"
+ #include "slang/util/FlatMap.h"
++#include "slang/util/CwdCoordinator.h"
+ #include "slang/util/SmallVector.h"
+ #include "slang/util/Util.h"
+ 
+@@ -44,6 +46,75 @@ class SLANG_EXPORT SourceManager {
+ public:
+     using BufferOrError = nonstd::expected<SourceBuffer, std::error_code>;
+ 
++    /// Owned, process-transferable input state. File IDs are one-based DTO indices.
++    struct SourceSnapshot {
++        static constexpr uint32_t SchemaVersion = 1;
++        uint32_t schemaVersion = SchemaVersion;
++        struct File {
++            std::string fullPath, directory, displayName, bytes;
++            bool generated = false;
++        };
++        struct Lookup {
++            std::string path;
++            uint32_t fileId = 0;
++            int errorValue = 0;
++            std::string errorCategory;
++        };
++        std::string cwd;
++        bool disableProximatePaths = false, disableLocalIncludes = false, incDirFirst = false;
++        std::vector<std::string> systemDirectories, userDirectories;
++        std::vector<File> files;
++        std::vector<Lookup> lookups;
++        std::vector<std::string> headerRequests;
++        // Parallel to capture's input list; synthetic macro buffers have file ID zero.
++        std::vector<uint32_t> graphFileIds;
++    };
++    class SnapshotIncompleteError : public std::runtime_error {
++    public:
++        explicit SnapshotIncompleteError(const std::string& path) :
++            std::runtime_error("source snapshot incomplete: " + path) {}
++    };
++    /// Starts the immutable replay lookup history. Normally this precedes all reads.
++    /// allowConfigurationBuffers permits cached command-file / editor buffers after
++    /// configuration has finished, but must precede parsing the source graph. This
++    /// never resets an active recording and does not permit unknown replay reads.
++    void enableSnapshotRecording(bool allowConfigurationBuffers = false);
++    class FastCwdContextError : public std::runtime_error {
++    public:
++        FastCwdContextError() : std::runtime_error(
++            "fast cwd snapshot context changed or is unavailable; result discarded; reload configuration") {}
++    };
++    /// Opt in before recording. Outside a phase, lookup checks remain strict.
++    /// Caller must keep cwd and its ancestor namespace stable during analysis.
++    /// A single state thread owns / nests phases. Join all borrowed pool work
++    /// before finish; workers must not acquire phases. All manager reads must
++    /// belong to this owner / cohort. This is not an arbitrary-embedding API;
++    /// other uses stay strict. Finish nested scopes in LIFO order.
++    void setFastCwdSnapshotChecks(bool enabled);
++    class SLANG_EXPORT FastCwdPhase {
++    public:
++        explicit FastCwdPhase(SourceManager& manager);
++        ~FastCwdPhase() noexcept;
++        FastCwdPhase(const FastCwdPhase&) = delete;
++        FastCwdPhase& operator=(const FastCwdPhase&) = delete;
++        /// Must finish successfully before returning / publishing a result.
++        void finish();
++    private:
++        SourceManager* manager = nullptr;
++        std::optional<CwdCoordinator::AnalysisLease> lease;
++        bool outer = false;
++    };
++    [[nodiscard]] FastCwdPhase beginFastCwdPhase() { return FastCwdPhase(*this); }
++
++    SourceSnapshot captureSnapshot(std::span<const BufferID> graphBuffers) const;
++    /// Loads into a fresh manager. Replay never consults the source filesystem.
++    void loadSnapshot(const SourceSnapshot& snapshot);
++    SourceBuffer createRootBuffer(uint32_t fileId, uint64_t sortKey = UINT64_MAX);
++    bool snapshotIncomplete() const { return snapshotIncompleteFlag.load(); }
++    /// Bracket one fresh parse with the exact generated file IDs captured for that tree.
++    void setSnapshotGeneratedSequence(std::span<const uint32_t> fileIds);
++    void finishSnapshotGeneratedSequence();
++
+     /// Information about a `line directive in a source buffer.
+     struct LineDirectiveInfo {
+         std::string name;       // File name set by directive
+@@ -259,25 +330,46 @@ public:
+     /// Sets whether filenames should be made "proximate" to the current directory
+     /// for diagnostic reporting purposes. This is on by default but can be
+     /// disabled to always use the simple filename.
+-    void setDisableProximatePaths(bool set) { disableProximatePaths = set; }
++    void setDisableProximatePaths(bool set) {
++        std::unique_lock<std::shared_mutex> lock(mutex);
++        if (snapshotReplay && disableProximatePaths != set)
++            failSnapshot("path policy changed during replay");
++        if (snapshotRecording && bufferEntries.size() != 1 && disableProximatePaths != set)
++            snapshotConflict = true;
++        disableProximatePaths = set;
++    }
+ 
+     /// Sets whether to disable "local" include path lookup, where include directives search
+     /// relative to the file containing the directive first.
+-    void setDisableLocalIncludes(bool set) { disableLocalIncludes = set; }
++    void setDisableLocalIncludes(bool set) {
++        std::unique_lock<std::shared_mutex> lock(mutex);
++        if (snapshotReplay && disableLocalIncludes != set)
++            failSnapshot("path policy changed during replay");
++        if (snapshotRecording && bufferEntries.size() != 1 && disableLocalIncludes != set)
++            snapshotConflict = true;
++        disableLocalIncludes = set;
++    }
+ 
+     /// Sets whether user-specified include directories (+incdir/-I) are searched before
+     /// the local directory of the file containing the include directive. When false (the
+     /// default), the local directory is searched first. When true, the behavior matches
+     /// VCS and similar simulators that always prefer +incdir directories over local lookup.
+-    void setIncDirFirst(bool set) { incDirFirst = set; }
++    void setIncDirFirst(bool set) {
++        std::unique_lock<std::shared_mutex> lock(mutex);
++        if (snapshotReplay && incDirFirst != set)
++            failSnapshot("path policy changed during replay");
++        if (snapshotRecording && bufferEntries.size() != 1 && incDirFirst != set)
++            snapshotConflict = true;
++        incDirFirst = set;
++    }
+ 
+     /// Adds a line directive at the given location.
+     void addLineDirective(SourceLocation location, size_t lineNum, std::string_view name,
+-                          uint8_t level);
++                          uint8_t level, bool fromSource = false);
+ 
+     /// Adds a diagnostic directive at the given location.
+     void addDiagnosticDirective(SourceLocation location, std::string_view name,
+-                                DiagnosticSeverity severity);
++                                DiagnosticSeverity severity, bool fromSource = false);
+ 
+     /// Stores information specified in a pragma diagnostic directive, which alters the
+     /// currently active set of diagnostic mappings.
+@@ -370,6 +462,7 @@ private:
+         uint64_t sortKey = 0;
+         BufferKind bufferKind = BufferKind::DesignFile;
+         std::vector<LineDirectiveInfo> lineDirectives;
++        bool hasExternalDirectives = false;
+ 
+         FileInfo() = default;
+ 
+@@ -455,6 +548,31 @@ private:
+     // map from buffer to diagnostic directive lists
+     flat_hash_map<BufferID, std::vector<DiagnosticDirectiveInfo>> diagDirectives;
+ 
++    bool fastCwdSnapshotChecks = false;
++    // A phase is owned / nested only by the state thread. Pool workers borrow
++    // its active state and never acquire the coordinator; owner must join them.
++    std::atomic<unsigned> fastCwdPhaseDepth{0};
++    bool fastCwdInvalid = false;
++    void validateFastCwd();
++    bool snapshotRecording = false;
++    bool snapshotReplay = false;
++    bool snapshotConflict = false;
++    std::string snapshotCwd;
++    mutable std::atomic<bool> snapshotIncompleteFlag = false;
++    // Keys are exact read arguments, before canonicalization or any normalization.
++    flat_hash_map<std::string, std::pair<std::shared_ptr<FileData>, std::error_code>> snapshotLookups;
++    flat_hash_map<std::string, std::string> snapshotLookupTargets;
++    flat_hash_set<std::string> snapshotHeaderRequests;
++    flat_hash_set<std::string> snapshotGeneratedPaths;
++    std::vector<std::shared_ptr<FileData>> snapshotFiles;
++    std::vector<uint32_t> snapshotGeneratedSequence;
++    size_t snapshotGeneratedIndex = 0;
++    bool snapshotGeneratedSequenceActive = false;
++    [[noreturn]] void failSnapshot(std::string_view reason) const;
++    BufferOrError openCachedImpl(const std::filesystem::path& fullPath,
++                                SourceLocation includedFrom, const SourceLibrary* library,
++                                uint64_t sortKey, std::string* resolvedPath);
++
+     std::atomic<uint32_t> unnamedBufferCount = 0;
+     bool disableProximatePaths = false;
+     bool disableLocalIncludes = false;
+diff --git a/include/slang/util/Bag.h b/include/slang/util/Bag.h
+index 989512211f988a20c626534386bcf9c817c380ff..9998e942d0f4886b556712d85db657a6e87d6ba9 100644
+--- a/include/slang/util/Bag.h
++++ b/include/slang/util/Bag.h
+@@ -36,6 +36,9 @@ public:
+     /// Returns true if there are no items in the bag.
+     [[nodiscard]] bool empty() const { return items.empty(); }
+ 
++    /// Number of distinct option types stored in the bag.
++    [[nodiscard]] size_t size() const { return items.size(); }
++
+     /// Adds or overwrites an existing element of type T in the bag
+     /// (making a copy in the process).
+     template<typename T>
+diff --git a/include/slang/util/CwdCoordinator.h b/include/slang/util/CwdCoordinator.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..9e2d67cfc61d06f5bbe33ce83e43ae566efd7555
+--- /dev/null
++++ b/include/slang/util/CwdCoordinator.h
+@@ -0,0 +1,33 @@
++// SPDX-License-Identifier: MIT
++#pragma once
++#include <atomic>
++#include <filesystem>
++#include <mutex>
++#include "slang/util/Util.h"
++namespace slang {
++/// Coordinates internal command-file cwd writers with trusted analysis phases.
++/// Does not protect the filesystem namespace against other processes.
++class SLANG_EXPORT CwdCoordinator {
++public:
++    class SLANG_EXPORT WriteLease {
++    public:
++        WriteLease();
++    private:
++        std::unique_lock<std::recursive_mutex> lock;
++    };
++    class SLANG_EXPORT AnalysisLease {
++    public:
++        AnalysisLease();
++        ~AnalysisLease();
++        AnalysisLease(const AnalysisLease&) = delete;
++        AnalysisLease& operator=(const AnalysisLease&) = delete;
++    private:
++        std::unique_lock<std::recursive_mutex> lock;
++    };
++    static void setCurrentPath(const std::filesystem::path& path, std::error_code& ec);
++private:
++    static std::recursive_mutex mutex;
++    static std::atomic<unsigned> activeAnalyses;
++    static thread_local unsigned localAnalyses;
++};
++} // namespace slang
+diff --git a/source/CMakeLists.txt b/source/CMakeLists.txt
+index ce1415ffde4d4ad8d37542cec33691a79ed56a2b..ab8affba575e4aff3b538e34ff67d9a31da0b162 100644
+--- a/source/CMakeLists.txt
++++ b/source/CMakeLists.txt
+@@ -117,6 +117,7 @@ add_library(
+   text/SourceManager.cpp
+   util/BumpAllocator.cpp
+   util/CommandLine.cpp
++  util/CwdCoordinator.cpp
+   util/Fmt.cpp
+   util/IntervalMap.cpp
+   util/OS.cpp
+diff --git a/source/ast/Compilation.cpp b/source/ast/Compilation.cpp
+index ed7528f2c63e43df29c59538afa58b94099e6df0..200af8071476f6939ffd3ae2c6b21037e18e3a0b 100644
+--- a/source/ast/Compilation.cpp
++++ b/source/ast/Compilation.cpp
+@@ -14,7 +14,6 @@
+ 
+ #include "slang/ast/ScriptSession.h"
+ #include "slang/ast/SystemSubroutine.h"
+-#include "slang/ast/types/TypePrinter.h"
+ #include "slang/diagnostics/DiagnosticEngine.h"
+ #include "slang/diagnostics/Diagnostics.h"
+ #include "slang/diagnostics/LookupDiags.h"
+@@ -148,11 +147,7 @@ Compilation::Compilation(const Bag& options, const SourceLibrary* defaultLib) :
+ 
+     // Set a default handler for printing types and symbol paths, for convenience.
+     static std::once_flag onceFlag;
+-    std::call_once(onceFlag, [] {
+-        DiagnosticEngine::setDefaultFormatter<const Type*>(std::make_unique<TypeArgFormatter>());
+-        DiagnosticEngine::setDefaultSymbolPathCB(
+-            [](const Symbol& sym) { return sym.getHierarchicalPath(); });
+-    });
++    std::call_once(onceFlag, [] { DiagnosticEngine::registerBuiltinDefaults(); });
+ 
+     // Reset systemId counters that may have been changed due to creation of types
+     // in the std package.
+@@ -310,6 +305,15 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
+             defaultLiblist.push_back(lib);
+     }
+ 
++    // Declaration analysis has no design hierarchy. Finalize the compilation units
++    // before any override resolution or top selection can instantiate RTL. Definitions
++    // remain available for lookups, including virtual interface types in packages.
++    if (hasFlag(CompilationFlags::PackageAnalysis)) {
++        root->compilationUnits = compilationUnits;
++        finalized = true;
++        return *root;
++    }
++
+     // If any top-level parameter overrides were provided, parse them now.
+     flat_hash_map<std::string_view, HierarchyOverrideNode::ParamOverride> cliOverrides;
+     parseParamOverrides(skipDefParamsAndBinds, cliOverrides);
+@@ -1560,10 +1564,12 @@ void Compilation::elaborate() {
+     // Double check any bind directives for correctness. These were already
+     // resolved prior to full elaboration but their diagnostics were not
+     // issued so we need to check again.
+-    for (auto [directive, scope] : bindDirectives) {
+-        ResolvedBind resolvedBind;
+-        resolveBindTargets(*directive, *scope, resolvedBind);
+-        checkBindTargetParams(*directive, *scope, resolvedBind);
++    if (!hasFlag(CompilationFlags::PackageAnalysis)) {
++        for (auto [directive, scope] : bindDirectives) {
++            ResolvedBind resolvedBind;
++            resolveBindTargets(*directive, *scope, resolvedBind);
++            checkBindTargetParams(*directive, *scope, resolvedBind);
++        }
+     }
+ 
+     // Report any lingering name conflicts.
+diff --git a/source/ast/ElabVisitors.h b/source/ast/ElabVisitors.h
+index 2f346fa600e460dd4df92866801bf263296174c7..1ac0db2f31e0247218e226cdb4e9def98817ef3a 100644
+--- a/source/ast/ElabVisitors.h
++++ b/source/ast/ElabVisitors.h
+@@ -314,7 +314,7 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
+     }
+ 
+     void handle(const InstanceSymbol& symbol) {
+-        if (finishedEarly())
++        if (finishedEarly() || compilation.hasFlag(CompilationFlags::PackageAnalysis))
+             return;
+ 
+         // If we're not visiting instances and this instance came from a bind directive
+@@ -368,6 +368,12 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
+         }
+     }
+ 
++    void handle(const InstanceBodySymbol& symbol) {
++        // forceElaborate can enter an instance body directly during wildcard lookup.
++        if (!compilation.hasFlag(CompilationFlags::PackageAnalysis))
++            handleDefault(symbol);
++    }
++
+     void handle(const SubroutineSymbol& symbol) {
+         if (!handleDefault(symbol))
+             return;
+@@ -377,7 +383,7 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
+     }
+ 
+     void handle(const DefParamSymbol& symbol) {
+-        if (!handleDefault(symbol))
++        if (compilation.hasFlag(CompilationFlags::PackageAnalysis) || !handleDefault(symbol))
+             return;
+ 
+         symbol.getTarget();
+@@ -483,6 +489,11 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
+             compilation.virtualIfaceInstances.clear();
+ 
+             for (auto inst : vii) {
++                // Virtual interface types are still bound on demand during declaration
++                // analysis, but visiting their bodies would also elaborate unrelated RTL.
++                if (compilation.hasFlag(CompilationFlags::PackageAnalysis))
++                    continue;
++
+                 inst->visit(*this);
+                 compilation.checkVirtualIfaceInstance(*inst);
+             }
+diff --git a/source/ast/builtins/MiscSystemFuncs.cpp b/source/ast/builtins/MiscSystemFuncs.cpp
+index fcdb3f43617be3c20b8a3f6d9e8b2bcfd37dced4..1e4ab3f975c0eae196060e6a3f7e9b0d853a36cc 100644
+--- a/source/ast/builtins/MiscSystemFuncs.cpp
++++ b/source/ast/builtins/MiscSystemFuncs.cpp
+@@ -141,7 +141,7 @@ public:
+         // This can only be called via a special lookup on a class handle or as a local
+         // class member, so we know either the this expression gives us the class type
+         // or we can look it up from our current scope.
+-        const Scope* ct;
++        const ClassType* ct;
+         if (thisExpr)
+             ct = &thisExpr->type->getCanonicalType().as<ClassType>();
+         else
+@@ -157,7 +157,10 @@ public:
+             }
+ 
+             auto sym = arg->getSymbolReference();
+-            if (!sym || sym->kind != SymbolKind::ClassProperty || sym->getParentScope() != ct) {
++            // Inherited properties belong to the object too. Visibility has already
++            // been checked when binding the argument in the randomize lookup scope.
++            if (!sym || sym->kind != SymbolKind::ClassProperty ||
++                !Lookup::isAccessibleFrom(*sym, *ct)) {
+                 context.addDiag(diag::ExpectedClassPropertyName, arg->sourceRange);
+                 return comp.getErrorType();
+             }
+diff --git a/source/ast/expressions/OperatorExpressions.cpp b/source/ast/expressions/OperatorExpressions.cpp
+index e51460a5ccaad10cdffb74b8f7b965f705e25673..0f4ee0c8c00db997acd0367bbc746542e5d26920 100644
+--- a/source/ast/expressions/OperatorExpressions.cpp
++++ b/source/ast/expressions/OperatorExpressions.cpp
+@@ -1985,8 +1985,11 @@ Expression& ConcatenationExpression::fromSyntax(Compilation& comp,
+                     selfDetermined(context, expr);
+                 }
+                 else {
+-                    if (!expr->isImplicitString())
++                    if (!expr->isImplicitString() &&
++                        (!expr->type->isIntegral() ||
++                         !comp.hasFlag(CompilationFlags::RelaxStringConversions))) {
+                         context.addDiag(diag::ConcatWithStringInt, expr->sourceRange);
++                    }
+ 
+                     expr = &ConversionExpression::makeImplicit(context, comp.getStringType(),
+                                                                ConversionKind::Explicit, *expr,
+diff --git a/source/diagnostics/DiagnosticEngine.cpp b/source/diagnostics/DiagnosticEngine.cpp
+index 3fa297e9c399e3143a30eeebacbcd569f3f30159..97f78013d3a4937b887e7f882cae37dbb197d77c 100644
+--- a/source/diagnostics/DiagnosticEngine.cpp
++++ b/source/diagnostics/DiagnosticEngine.cpp
+@@ -9,7 +9,10 @@
+ 
+ #include <algorithm>
+ #include <fmt/args.h>
++#include <stdexcept>
+ 
++#include "slang/ast/Symbol.h"
++#include "slang/ast/types/TypePrinter.h"
+ #include "slang/diagnostics/DiagArgFormatter.h"
+ #include "slang/diagnostics/DiagnosticClient.h"
+ #include "slang/diagnostics/MetaDiags.h"
+@@ -32,13 +35,130 @@ const DiagGroup* findDefaultDiagGroup(std::string_view name);
+ 
+ DiagnosticEngine::SymbolPathCB DiagnosticEngine::defaultSymbolPathCB;
+ DiagnosticEngine::FormatterMap DiagnosticEngine::defaultFormatters;
++DiagnosticEngine::SymbolPathKind DiagnosticEngine::defaultSymbolPathKind = SymbolPathKind::None;
++bool DiagnosticEngine::defaultHasCustomFormatters = false;
++
++static std::string builtinSymbolPath(const ast::Symbol& symbol) {
++    return symbol.getHierarchicalPath();
++}
++
++void DiagnosticEngine::registerBuiltinDefaults() {
++    defaultFormatters[SLANG_TYPEOF(const ast::Type*)] = std::make_shared<ast::TypeArgFormatter>();
++    defaultSymbolPathCB = builtinSymbolPath;
++    defaultSymbolPathKind = SymbolPathKind::Builtin;
++}
+ 
+ DiagnosticEngine::DiagnosticEngine(const SourceManager& sourceManager) :
+-    sourceManager(sourceManager), symbolPathCB(defaultSymbolPathCB), formatters(defaultFormatters) {
++    sourceManager(sourceManager), symbolPathCB(defaultSymbolPathCB),
++    symbolPathKind(defaultSymbolPathKind), formatters(defaultFormatters),
++    hasCustomFormatters(defaultHasCustomFormatters) {
+ }
+ 
+ DiagnosticEngine::~DiagnosticEngine() = default;
+ 
++bool DiagnosticEngine::validateFormattersForSnapshot(const FormatterMap& map, bool hasCustom) {
++    if (hasCustom) {
++        SLANG_THROW(std::runtime_error(
++            "Diagnostic settings snapshot does not support custom argument formatters"));
++    }
++
++    if (map.empty())
++        return false;
++
++    auto it = map.find(SLANG_TYPEOF(const ast::Type*));
++    if (map.size() != 1 || it == map.end() || !it->second) {
++        SLANG_THROW(std::runtime_error(
++            "Diagnostic settings snapshot does not support custom argument formatters"));
++    }
++
++    // Only registerBuiltinDefaults() and applySettings() install formatters without
++    // marking them custom, so this downcast does not require RTTI.
++    auto& formatter = static_cast<const ast::TypeArgFormatter&>(*it->second);
++    if (formatter.hasCustomOptions()) {
++        SLANG_THROW(std::runtime_error(
++            "Diagnostic settings snapshot does not support custom type formatter options"));
++    }
++    return true;
++}
++
++void DiagnosticEngine::validateSettingsForSnapshot() const {
++    if (waiverManager) {
++        SLANG_THROW(std::runtime_error(
++            "Diagnostic settings snapshot does not support waiver managers"));
++    }
++    if (!perBufferSeverity.empty()) {
++        SLANG_THROW(std::runtime_error(
++            "Diagnostic settings snapshot does not support per-buffer warning options"));
++    }
++    if (symbolPathKind == SymbolPathKind::Custom) {
++        SLANG_THROW(std::runtime_error(
++            "Diagnostic settings snapshot does not support custom symbol path callbacks"));
++    }
++
++    // Resolve the engine's existing lazy defaults before checking their provenance.
++    getFormatters();
++    validateFormattersForSnapshot(formatters, hasCustomFormatters);
++}
++
++DiagnosticEngine::SettingsSnapshot DiagnosticEngine::captureSettings() const {
++    validateSettingsForSnapshot();
++
++    SettingsSnapshot settings;
++    settings.severityTable = severityTable;
++    settings.baselineSeverityTable = baselineSeverityTable;
++    settings.messageTable = messageTable;
++    settings.ignoreWarnPatterns = ignoreWarnPatterns;
++    settings.ignoreMacroWarnPatterns = ignoreMacroWarnPatterns;
++    settings.errorLimit = errorLimit;
++    settings.ignoreAllWarnings = ignoreAllWarnings;
++    settings.ignoreAllNotes = ignoreAllNotes;
++    settings.warningsAsErrors = warningsAsErrors;
++    settings.errorsAsFatal = errorsAsFatal;
++    settings.fatalsAsErrors = fatalsAsErrors;
++    settings.useBuiltinTypeFormatter = !formatters.empty();
++    settings.useBuiltinSymbolPath = symbolPathKind == SymbolPathKind::Builtin;
++    return settings;
++}
++
++void DiagnosticEngine::applySettings(const SettingsSnapshot& settings) {
++    // Do not quietly discard unsupported policies on the receiving engine or
++    // inherit custom process-wide defaults when reconstructing a snapshot.
++    validateSettingsForSnapshot();
++    validateFormattersForSnapshot(defaultFormatters, defaultHasCustomFormatters);
++    if (defaultSymbolPathKind == SymbolPathKind::Custom) {
++        SLANG_THROW(std::runtime_error(
++            "Diagnostic settings snapshot does not support custom default symbol path callbacks"));
++    }
++
++    // Complete allocations before changing this engine's settings.
++    auto copy = settings;
++    FormatterMap newFormatters;
++    if (copy.useBuiltinTypeFormatter) {
++        newFormatters[SLANG_TYPEOF(const ast::Type*)] = std::make_shared<ast::TypeArgFormatter>();
++    }
++    SymbolPathCB newSymbolPathCB;
++    if (copy.useBuiltinSymbolPath)
++        newSymbolPathCB = builtinSymbolPath;
++
++    severityTable = std::move(copy.severityTable);
++    baselineSeverityTable = std::move(copy.baselineSeverityTable);
++    messageTable = std::move(copy.messageTable);
++    ignoreWarnPatterns = std::move(copy.ignoreWarnPatterns);
++    ignoreMacroWarnPatterns = std::move(copy.ignoreMacroWarnPatterns);
++    errorLimit = copy.errorLimit;
++    ignoreAllWarnings = copy.ignoreAllWarnings;
++    ignoreAllNotes = copy.ignoreAllNotes;
++    warningsAsErrors = copy.warningsAsErrors;
++    errorsAsFatal = copy.errorsAsFatal;
++    fatalsAsErrors = copy.fatalsAsErrors;
++    formatters = std::move(newFormatters);
++    hasCustomFormatters = false;
++    inheritDefaultFormatters = false;
++    symbolPathCB = std::move(newSymbolPathCB);
++    symbolPathKind = copy.useBuiltinSymbolPath ? SymbolPathKind::Builtin : SymbolPathKind::None;
++    diagMappings.clear();
++}
++
+ void DiagnosticEngine::addClient(const std::shared_ptr<DiagnosticClient>& client) {
+     client->setEngine(*this);
+     clients.push_back(client);
+@@ -328,8 +448,10 @@ std::optional<ReportedDiagnosticInfo> DiagnosticEngine::getReportedDiag(
+ }
+ 
+ const DiagnosticEngine::FormatterMap& DiagnosticEngine::getFormatters() const {
+-    if (formatters.empty())
++    if (formatters.empty() && inheritDefaultFormatters) {
+         formatters = defaultFormatters;
++        hasCustomFormatters = defaultHasCustomFormatters;
++    }
+     return formatters;
+ }
+ 
+@@ -339,8 +461,7 @@ std::string DiagnosticEngine::formatMessage(const Diagnostic& diag) const {
+         return std::string(getMessage(diag.code));
+ 
+     // Let each formatter have a look at the diagnostic before we begin.
+-    if (formatters.empty())
+-        formatters = defaultFormatters;
++    getFormatters();
+ 
+     for (auto& [key, formatter] : formatters)
+         formatter->startMessage(diag);
+diff --git a/source/driver/Driver.cpp b/source/driver/Driver.cpp
+index d049078b09193791a4dfbc2e7dd89db458bf61f6..cff5ff4cab1ee52c18bdecc047c0c1d9f5d58163 100644
+--- a/source/driver/Driver.cpp
++++ b/source/driver/Driver.cpp
+@@ -27,6 +27,7 @@
+ #include "slang/syntax/SyntaxTree.h"
+ #include "slang/text/Json.h"
+ #include "slang/util/Random.h"
++#include "slang/util/CwdCoordinator.h"
+ #include "slang/util/String.h"
+ #include "slang/util/ThreadPool.h"
+ 
+@@ -333,7 +334,7 @@ void Driver::addStandardArgs() {
+     addCompFlag(CompilationFlags::RelaxEnumConversions, "--relax-enum-conversions",
+                 "Allow all integral types to convert implicitly to enum types");
+     addCompFlag(CompilationFlags::RelaxStringConversions, "--relax-string-conversions",
+-                "Allow string types to convert implicitly to integral types");
++                "Allow implicit string/integral conversions, including string concatenations");
+     addCompFlag(CompilationFlags::AllowHierarchicalConst, "--allow-hierarchical-const",
+                 "Allow hierarchical references in constant expressions");
+     addCompFlag(CompilationFlags::AllowTopLevelIfacePorts, "--allow-toplevel-iface-ports",
+@@ -526,6 +527,7 @@ void Driver::addStandardArgs() {
+ 
+ [[nodiscard]] bool Driver::parseCommandLine(std::string_view argList,
+                                             const CommandLine::ParseOptions& parseOptions) {
++    CwdCoordinator::WriteLease cwdLease;
+     if (!cmdLine.parse(argList, parseOptions)) {
+         issueCommandLineErrors(cmdLine);
+         return false;
+@@ -546,6 +548,7 @@ void Driver::issueCommandLineErrors(const CommandLine& cl) {
+ }
+ 
+ bool Driver::processCommandFiles(std::string_view pattern, bool makeRelative, bool separateUnit) {
++    CwdCoordinator::WriteLease cwdLease;
+     auto onError = [this](const auto& name, std::error_code ec) {
+         printError(fmt::format("command file '{}': {}", name, ec.message()));
+         anyFailedLoads = true;
+@@ -554,11 +557,20 @@ bool Driver::processCommandFiles(std::string_view pattern, bool makeRelative, bo
+ 
+     SmallVector<fs::path> files;
+     std::error_code globEc;
+-    svGlob({}, pattern, GlobMode::Files, files, /* expandEnvVars */ false, globEc);
+-    if (globEc)
++    auto rank = svGlob({}, pattern, GlobMode::Files, files, /* expandEnvVars */ false, globEc);
++    if (globEc) {
++        if (rank == GlobRank::ExactPath) {
++            // Retain failed literal command files so callers can track their creation.
++            // Resolve relative names before the enclosing -F restores its directory.
++            std::error_code ec;
++            auto path = fs::absolute(fs::path(pattern), ec);
++            auto guard = setCurrentCommandFile(ec ? fs::path(pattern) : std::move(path));
++        }
+         return onError(pattern, globEc);
++    }
+ 
+     for (auto& path : files) {
++        auto commandFileGuard = setCurrentCommandFile(path);
+         auto buffer = sourceManager.readSource(path);
+         if (!buffer)
+             return onError(getU8Str(path), buffer.error());
+@@ -574,10 +586,8 @@ bool Driver::processCommandFiles(std::string_view pattern, bool makeRelative, bo
+         std::error_code ec;
+         if (makeRelative) {
+             currPath = fs::current_path(ec);
+-            fs::current_path(path.parent_path(), ec);
++            CwdCoordinator::setCurrentPath(path.parent_path(), ec);
+         }
+-        auto commandFileGuard = setCurrentCommandFile(path);
+-
+         bool result;
+         if (separateUnit) {
+             result = parseUnitListing(*buffer);
+@@ -593,7 +603,7 @@ bool Driver::processCommandFiles(std::string_view pattern, bool makeRelative, bo
+         }
+ 
+         if (makeRelative)
+-            fs::current_path(currPath, ec);
++            CwdCoordinator::setCurrentPath(currPath, ec);
+ 
+         activeCommandFiles.erase(path);
+ 
+@@ -607,6 +617,7 @@ bool Driver::processCommandFiles(std::string_view pattern, bool makeRelative, bo
+ }
+ 
+ bool Driver::processOptions(bool checkFiles) {
++    CwdCoordinator::WriteLease cwdLease;
+     if (options.languageVersion.has_value()) {
+         if (options.languageVersion == "1364-2005")
+             languageVersion = LanguageVersion::v1364_2005;
+@@ -1086,6 +1097,7 @@ static std::string_view bufferKindToStr(SourceManager::BufferKind kind) {
+ }
+ 
+ bool Driver::parseAllSources(function_ref<void(BufferID, bool, bool)> bufferChangeCB) {
++    auto cwdPhase = sourceManager.beginFastCwdPhase();
+     if (!threadPool) {
+         const auto numThreads = options.numThreads.value_or(0u);
+         if (numThreads != 1u)
+@@ -1143,6 +1155,7 @@ bool Driver::parseAllSources(function_ref<void(BufferID, bool, bool)> bufferChan
+         syntaxTrees = sourceLoader.loadAndParseSources(bag, threadPool.get());
+     }
+ 
++    cwdPhase.finish(); // All SourceLoader pool work has joined before releasing the lease.
+     if (!reportLoadErrors())
+         return false;
+ 
+diff --git a/source/driver/SourceLoader.cpp b/source/driver/SourceLoader.cpp
+index 99b853be78fe889077b3cd38965417c5955788e7..c1711074d5f288d631f3eaae9b32a934e041b98e 100644
+--- a/source/driver/SourceLoader.cpp
++++ b/source/driver/SourceLoader.cpp
+@@ -14,6 +14,7 @@
+ #include "slang/syntax/AllSyntax.h"
+ #include "slang/syntax/SyntaxTree.h"
+ #include "slang/text/SourceManager.h"
++#include "slang/util/OS.h"
+ #include "slang/util/SmallVector.h"
+ #include "slang/util/String.h"
+ #include "slang/util/ThreadPool.h"
+@@ -191,16 +192,27 @@ std::vector<SourceBuffer> SourceLoader::loadSources() {
+     return results;
+ }
+ 
++static fs::path canonicalSourcePath(const fs::path& path) {
++    std::error_code ec;
++    auto canonical = fs::weakly_canonical(path, ec);
++    return ec ? path.lexically_normal() : canonical;
++}
++
+ SourceBuffer SourceLoader::findBuffer(std::string_view name) const {
++    return findBuffer(name, {});
++}
++
++SourceBuffer SourceLoader::findBuffer(std::string_view name,
++                                      const flat_hash_set<fs::path>& loadedPaths) const {
+     for (auto& dir : searchDirectories) {
+         fs::path path(dir);
+         path /= name;
+ 
+         for (auto& ext : searchExtensions) {
+             path.replace_extension(ext);
+-            if (!sourceManager.isCached(path)) {
+-                // This file is never part of a library because if
+-                // it was we would have already loaded it earlier.
++            if (!loadedPaths.contains(canonicalSourcePath(path))) {
++                // Reuse cached contents, including overlays, while creating a
++                // fresh buffer occurrence for this parse.
+                 auto readResult = sourceManager.readSource(path);
+                 if (readResult) {
+                     return *readResult;
+@@ -369,9 +381,29 @@ SourceLoader::SyntaxTreeList SourceLoader::loadAndParseSources(const Bag& option
+     }
+ 
+     if (!searchDirectories.empty()) {
++        // SourceManager caches file contents across parses (including unsaved edits).
++        // Only sources participating in this load should suppress a library lookup.
++        flat_hash_set<fs::path> loadedPaths;
++        size_t indexedTrees = 0;
+         loadTrees(
+-            syntaxTrees, [this](std::string_view name) { return findBuffer(name); }, sourceManager,
+-            optionBag, inheritedMacros, pool);
++            syntaxTrees,
++            [&](std::string_view name) {
++                // Include roots and headers from both the initial trees and any
++                // libraries parsed since the previous lookup.
++                while (indexedTrees < syntaxTrees.size()) {
++                    for (auto id : syntaxTrees[indexedTrees++]->getSourceBufferIds())
++                        loadedPaths.emplace(canonicalSourcePath(sourceManager.getFullPath(id)));
++                }
++
++                auto buffer = findBuffer(name, loadedPaths);
++                if (buffer) {
++                    // Reserve the root before parsing a parallel batch so aliases
++                    // cannot select the same source more than once.
++                    loadedPaths.emplace(canonicalSourcePath(sourceManager.getFullPath(buffer.id)));
++                }
++                return buffer;
++            },
++            sourceManager, optionBag, inheritedMacros, pool);
+     }
+ 
+     // Collect per-buffer warning options from all separate compilation units.
+@@ -511,6 +543,39 @@ void SourceLoader::addFilesInternal(std::string_view pattern, const fs::path& ba
+     std::error_code ec;
+     auto rank = svGlob(basePath, pattern, GlobMode::Files, files, expandEnvVars, ec);
+ 
++    std::vector<fs::path> failedCandidates;
++    auto recordCandidate = [&](std::string_view candidate, GlobRank candidateRank,
++                               const std::error_code& candidateError) {
++        if (!candidateError || candidateRank != GlobRank::ExactPath)
++            return;
++
++        // Match svGlob's literal-path resolution, including the command file's
++        // current directory. No wildcard is interpreted as a concrete source.
++        std::string expanded;
++        if (expandEnvVars) {
++            auto ptr = candidate.data();
++            auto end = ptr + candidate.size();
++            while (ptr != end) {
++                char c = *ptr++;
++                if (c == '$' && ptr != end)
++                    expanded.append(OS::parseEnvVar(ptr, end));
++                else
++                    expanded.push_back(c);
++            }
++        }
++        else {
++            expanded = candidate;
++        }
++        auto path = fs::path(expanded).lexically_normal();
++        if (!path.has_root_path())
++            path = basePath / path;
++        std::error_code pathError;
++        auto absolute = fs::absolute(path, pathError);
++        if (!pathError)
++            failedCandidates.push_back(canonicalSourcePath(absolute));
++    };
++    recordCandidate(pattern, rank, ec);
++
+     if (ec && !dirPrefixes.empty()) {
+         // The file was not found at the given path; try prepending each
+         // registered directory prefix in the order they were added.
+@@ -520,6 +585,7 @@ void SourceLoader::addFilesInternal(std::string_view pattern, const fs::path& ba
+             std::error_code prefixEc;
+             auto prefixRank = svGlob(basePath, prefix + patternStr, GlobMode::Files, prefixed,
+                                      expandEnvVars, prefixEc);
++            recordCandidate(prefix + patternStr, prefixRank, prefixEc);
+             if (!prefixEc) {
+                 files = std::move(prefixed);
+                 rank = prefixRank;
+@@ -530,6 +596,8 @@ void SourceLoader::addFilesInternal(std::string_view pattern, const fs::path& ba
+     }
+ 
+     if (ec) {
++        for (auto& path : failedCandidates)
++            failedLiteralPaths.emplace(std::move(path));
+         addError(pattern, ec);
+         return;
+     }
+diff --git a/source/parsing/Lexer.cpp b/source/parsing/Lexer.cpp
+index a91519cb4e865e7b578b6f3f458e13cd7a67963e..56f6b9ac1f1e1c6d9963efde55cc46bb3de5f377 100644
+--- a/source/parsing/Lexer.cpp
++++ b/source/parsing/Lexer.cpp
+@@ -1426,16 +1426,16 @@ bool Lexer::tryApplyCommentHandler() {
+                                diag::UnclosedTranslateOff);
+             return true;
+         case CommentHandler::LintOff:
+-            sourceManager.addDiagnosticDirective(loc(), nextWord(), DiagnosticSeverity::Ignored);
++            sourceManager.addDiagnosticDirective(loc(), nextWord(), DiagnosticSeverity::Ignored, true);
+             return false;
+         case CommentHandler::LintOn:
+-            sourceManager.addDiagnosticDirective(loc(), nextWord(), DiagnosticSeverity::Warning);
++            sourceManager.addDiagnosticDirective(loc(), nextWord(), DiagnosticSeverity::Warning, true);
+             return false;
+         case CommentHandler::LintSave:
+-            sourceManager.addDiagnosticDirective(loc(), "__push__", DiagnosticSeverity::Ignored);
++            sourceManager.addDiagnosticDirective(loc(), "__push__", DiagnosticSeverity::Ignored, true);
+             return false;
+         case CommentHandler::LintRestore:
+-            sourceManager.addDiagnosticDirective(loc(), "__pop__", DiagnosticSeverity::Ignored);
++            sourceManager.addDiagnosticDirective(loc(), "__pop__", DiagnosticSeverity::Ignored, true);
+             return false;
+     }
+     SLANG_UNREACHABLE;
+diff --git a/source/parsing/Preprocessor.cpp b/source/parsing/Preprocessor.cpp
+index 5601d7e738142d8a7906fef416c07b9f927543d0..9bd1ee80bf3da8527693284fd4cafab893b8f5fd 100644
+--- a/source/parsing/Preprocessor.cpp
++++ b/source/parsing/Preprocessor.cpp
+@@ -99,7 +99,7 @@ void Preprocessor::pushSource(std::string_view source, std::string_view name) {
+     pushSource(buffer);
+ 
+     if (!name.empty())
+-        sourceManager.addLineDirective(SourceLocation(buffer.id, 0), 2, name, 0);
++        sourceManager.addLineDirective(SourceLocation(buffer.id, 0), 2, name, 0, true);
+ }
+ 
+ void Preprocessor::pushSource(SourceBuffer buffer) {
+@@ -222,6 +222,13 @@ void Preprocessor::predefine(const std::string& definition, std::string_view nam
+         // Nothing to do but keep going.
+     }
+ 
++    // Only the pushed synthetic root belongs to the generated sequence. A multiline
++    // definition can also read normal include files, which replay through readHeader.
++    metadata.predefineBufferIds.push_back(pp.metadata.sourceBufferIds.front());
++    metadata.predefineBufferIds.insert(metadata.predefineBufferIds.end(),
++                                       pp.metadata.predefineBufferIds.begin(),
++                                       pp.metadata.predefineBufferIds.end());
++
+     // Look for the macro in the temporary preprocessor's macro map.
+     // Any macros found that are not the built-in intrinsic macros should
+     // be copied over to our own map.
+@@ -1130,7 +1137,7 @@ Trivia Preprocessor::handleLineDirective(Token directive) {
+             // We should only notify the source manager about the line directive if it
+             // is well formed, to avoid very strange line number issues.
+             sourceManager.addLineDirective(directive.location(), *lineNum, fileName.valueText(),
+-                                           *levNum);
++                                           *levNum, true);
+         }
+     }
+     return Trivia(TriviaKind::Directive, result);
+diff --git a/source/parsing/Preprocessor_pragmas.cpp b/source/parsing/Preprocessor_pragmas.cpp
+index e86c15c68a361c3168d7948e294e33fdbd0b9b92..b426ae04e2afb57532572913f65b51714ab4218d 100644
+--- a/source/parsing/Preprocessor_pragmas.cpp
++++ b/source/parsing/Preprocessor_pragmas.cpp
+@@ -257,11 +257,11 @@ void Preprocessor::applyDiagnosticPragma(const PragmaDirectiveSyntax& pragma) {
+             std::string_view action = simple.value.rawText();
+             if (simple.value.kind == TokenKind::Identifier && action == "push") {
+                 sourceManager.addDiagnosticDirective(simple.value.location(), "__push__",
+-                                                     DiagnosticSeverity::Ignored);
++                                                     DiagnosticSeverity::Ignored, true);
+             }
+             else if (simple.value.kind == TokenKind::Identifier && action == "pop") {
+                 sourceManager.addDiagnosticDirective(simple.value.location(), "__pop__",
+-                                                     DiagnosticSeverity::Ignored);
++                                                     DiagnosticSeverity::Ignored, true);
+             }
+             else {
+                 addDiag(diag::UnknownDiagPragmaArg, simple.value.range()) << action;
+@@ -290,7 +290,7 @@ void Preprocessor::applyDiagnosticPragma(const PragmaDirectiveSyntax& pragma) {
+                     auto& simple = expr.as<SimplePragmaExpressionSyntax>();
+                     if (simple.value.kind == TokenKind::StringLiteral) {
+                         sourceManager.addDiagnosticDirective(simple.value.location(),
+-                                                             simple.value.valueText(), severity);
++                                                             simple.value.valueText(), severity, true);
+                     }
+                     else {
+                         addDiag(diag::ExpectedDiagPragmaArg, simple.value.range());
+diff --git a/source/text/SourceManager.cpp b/source/text/SourceManager.cpp
+index 386684b5adada5a55d10eb0152211b4ce63be7e4..692ccfb4bda92050509167edca9f7bceb0d1ac2d 100644
+--- a/source/text/SourceManager.cpp
++++ b/source/text/SourceManager.cpp
+@@ -8,6 +8,7 @@
+ #include "slang/text/SourceManager.h"
+ 
+ #include <memory>
++#include <functional>
+ #include <string>
+ 
+ #include "slang/text/CharInfo.h"
+@@ -22,6 +23,280 @@ namespace slang {
+ 
+ static const fs::path emptyPath;
+ 
++void SourceManager::setFastCwdSnapshotChecks(bool enabled) {
++    std::unique_lock lock(mutex);
++    if (snapshotRecording || snapshotReplay)
++        SLANG_THROW(std::runtime_error("fast cwd mode must be selected before recording"));
++    fastCwdSnapshotChecks = enabled;
++}
++
++void SourceManager::validateFastCwd() {
++    std::error_code ec;
++    const auto cwd = fs::current_path(ec);
++    std::unique_lock lock(mutex);
++    if (fastCwdInvalid || ec || getU8Str(cwd) != snapshotCwd) {
++        fastCwdInvalid = snapshotConflict = true;
++        SLANG_THROW(FastCwdContextError());
++    }
++}
++
++SourceManager::FastCwdPhase::FastCwdPhase(SourceManager& sm) {
++    if (!sm.fastCwdSnapshotChecks || !sm.snapshotRecording || sm.snapshotReplay)
++        return;
++    lease.emplace(); // Coordinator first, then SourceManager locks.
++    outer = sm.fastCwdPhaseDepth.load() == 0;
++    if (outer)
++        sm.validateFastCwd();
++    ++sm.fastCwdPhaseDepth;
++    manager = &sm;
++}
++
++void SourceManager::FastCwdPhase::finish() {
++    if (!manager)
++        return;
++    auto& sm = *manager;
++    manager = nullptr;
++    try {
++        if (outer)
++            sm.validateFastCwd();
++    }
++    catch (...) {
++        --sm.fastCwdPhaseDepth;
++        lease.reset();
++        throw;
++    }
++    --sm.fastCwdPhaseDepth;
++    lease.reset();
++}
++
++SourceManager::FastCwdPhase::~FastCwdPhase() noexcept {
++    // Unwinding must release the phase, preserving the original cancellation /
++    // failure. A boundary failure still poisons the manager for later attempts.
++    try { finish(); } catch (...) {}
++}
++
++
++[[noreturn]] void SourceManager::failSnapshot(std::string_view reason) const {
++    snapshotIncompleteFlag = true;
++    SLANG_THROW(SnapshotIncompleteError(std::string(reason)));
++}
++
++void SourceManager::enableSnapshotRecording(bool allowConfigurationBuffers) {
++    std::unique_lock<std::shared_mutex> includeLock(includeDirMutex);
++    std::unique_lock<std::shared_mutex> lock(mutex);
++    if (snapshotReplay || snapshotRecording ||
++        (!allowConfigurationBuffers && (bufferEntries.size() != 1 || !lookupCache.empty())))
++        SLANG_THROW(std::runtime_error("snapshot recording must precede source loading"));
++    snapshotCwd = getU8Str(fs::current_path());
++    snapshotRecording = true;
++}
++
++SourceManager::SourceSnapshot SourceManager::captureSnapshot(
++    std::span<const BufferID> graphBuffers) const {
++    if (snapshotReplay)
++        SLANG_THROW(std::runtime_error("cannot capture a replay manager"));
++    const auto cwd = getU8Str(fs::current_path());
++    std::shared_lock<std::shared_mutex> includeLock(includeDirMutex);
++    std::shared_lock<std::shared_mutex> lock(mutex);
++    if (!snapshotRecording || snapshotReplay || snapshotConflict || cwd != snapshotCwd)
++        SLANG_THROW(std::runtime_error("source snapshot has unsupported or conflicting context"));
++    constexpr size_t maxCapturedFiles = 100000;
++    constexpr size_t maxCapturedEntries = 500000;
++    constexpr size_t maxCapturedFileBytes = 64 * 1024 * 1024;
++    if (snapshotLookups.size() > maxCapturedEntries ||
++        snapshotHeaderRequests.size() > maxCapturedEntries)
++        SLANG_THROW(std::runtime_error("source snapshot exceeds 500000 recorded-entry limit"));
++    SourceSnapshot result;
++    result.cwd = snapshotCwd;
++    result.disableProximatePaths = disableProximatePaths;
++    result.disableLocalIncludes = disableLocalIncludes;
++    result.incDirFirst = incDirFirst;
++    for (auto& dir : systemDirectories)
++        result.systemDirectories.push_back(getU8Str(dir));
++    for (auto& dir : userDirectories)
++        result.userDirectories.push_back(getU8Str(dir));
++    size_t capturedFileBytes = 0;
++    flat_hash_map<const FileData*, uint32_t> ids;
++    auto addFile = [&](const std::shared_ptr<FileData>& fd) -> uint32_t {
++        if (!fd || fd->isStale)
++            SLANG_THROW(std::runtime_error("source snapshot contains stale source data"));
++        if (fd->mem.empty() || fd->mem.back() != '\0')
++            SLANG_THROW(std::runtime_error("source snapshot buffer is missing its sentinel"));
++        if (auto it = ids.find(fd.get()); it != ids.end())
++            return it->second;
++        if (result.files.size() >= maxCapturedFiles)
++            SLANG_THROW(std::runtime_error("source snapshot exceeds 100000 unique-file limit"));
++        if (fd->mem.size() > maxCapturedFileBytes - capturedFileBytes)
++            SLANG_THROW(std::runtime_error("source snapshot exceeds 64 MiB file-byte limit"));
++        const auto id = uint32_t(result.files.size() + 1);
++        ids.emplace(fd.get(), id);
++        capturedFileBytes += fd->mem.size();
++        result.files.push_back({getU8Str(fd->fullPath), getU8Str(*fd->directory), fd->name,
++                                std::string(fd->mem.data(), fd->mem.size()),
++                                snapshotGeneratedPaths.contains(getU8Str(fd->fullPath))});
++        return id;
++    };
++    flat_hash_set<BufferID> visited;
++    std::function<void(BufferID)> validateBuffer = [&](BufferID id) {
++        if (!id || id.getId() >= bufferEntries.size())
++            SLANG_THROW(std::runtime_error("source snapshot graph has unknown buffer"));
++        if (!visited.insert(id).second)
++            return;
++        if (auto info = getFileInfo(id, lock)) {
++            if (info->library || info->bufferKind == BufferKind::LibraryFile ||
++                info->bufferKind == BufferKind::LibraryMap)
++                SLANG_THROW(std::runtime_error("source library contexts are unsupported"));
++            if (info->hasExternalDirectives)
++                SLANG_THROW(std::runtime_error("externally injected source directives are unsupported"));
++            addFile(info->data);
++            if (info->includedFrom.valid())
++                validateBuffer(info->includedFrom.buffer());
++        }
++        else {
++            auto& expansion = std::get<ExpansionInfo>(bufferEntries[id.getId()]);
++            if (expansion.originalLoc.valid())
++                validateBuffer(expansion.originalLoc.buffer());
++            if (expansion.expansionRange.start().valid())
++                validateBuffer(expansion.expansionRange.start().buffer());
++            if (expansion.expansionRange.end().valid())
++                validateBuffer(expansion.expansionRange.end().buffer());
++        }
++    };
++    for (auto id : graphBuffers) {
++        validateBuffer(id);
++        if (!id || id.getId() >= bufferEntries.size())
++            SLANG_THROW(std::runtime_error("source snapshot graph has unknown buffer"));
++        auto info = getFileInfo(id, lock);
++        if (info) {
++            if (info->library)
++                SLANG_THROW(std::runtime_error("source libraries are unsupported in snapshots"));
++            result.graphFileIds.push_back(addFile(info->data));
++        }
++        else {
++            result.graphFileIds.push_back(0);
++        }
++    }
++    // Include generated/predefine buffers too: the fresh preprocessor recreates their
++    // locations and directives but must receive the same owned bytes and display names.
++    for (auto& entry : bufferEntries) {
++        if (auto info = std::get_if<FileInfo>(&entry); info && info->library)
++            SLANG_THROW(std::runtime_error("source libraries are unsupported in snapshots"));
++    }
++    for (auto& [key, value] : lookupCache) {
++        if (value.first)
++            addFile(value.first);
++    }
++    for (auto& [key, value] : snapshotLookups) {
++        SourceSnapshot::Lookup lookup;
++        lookup.path = key;
++        if (value.first)
++            lookup.fileId = addFile(value.first);
++        else {
++            if (!value.second)
++                SLANG_THROW(std::runtime_error("source snapshot contains an incomplete lookup"));
++            lookup.errorValue = value.second.value();
++            lookup.errorCategory = value.second.category().name();
++            if (value.second.category() != std::generic_category() &&
++                value.second.category() != std::system_category())
++                SLANG_THROW(std::runtime_error("unsupported source error category"));
++        }
++        result.lookups.push_back(std::move(lookup));
++    }
++    result.headerRequests.assign(snapshotHeaderRequests.begin(), snapshotHeaderRequests.end());
++    return result;
++}
++
++void SourceManager::loadSnapshot(const SourceSnapshot& snapshot) {
++    std::unique_lock<std::shared_mutex> includeLock(includeDirMutex);
++    std::unique_lock<std::shared_mutex> lock(mutex);
++    if (bufferEntries.size() != 1 || !lookupCache.empty() || !systemDirectories.empty() ||
++        !userDirectories.empty() || snapshotRecording || snapshotReplay ||
++        snapshot.schemaVersion != SourceSnapshot::SchemaVersion)
++        SLANG_THROW(std::runtime_error("snapshot load requires a fresh manager and known schema"));
++    // Validate before changing any state.
++    flat_hash_set<std::string> paths;
++    for (auto& file : snapshot.files) {
++        if (file.bytes.empty() || file.bytes.back() != '\0' || !paths.insert(file.fullPath).second)
++            SLANG_THROW(std::runtime_error("invalid or conflicting snapshot file"));
++    }
++    paths.clear();
++    for (auto& lookup : snapshot.lookups) {
++        if (!paths.insert(lookup.path).second || lookup.fileId > snapshot.files.size() ||
++            (lookup.fileId && (lookup.errorValue || !lookup.errorCategory.empty())) ||
++            (!lookup.fileId && (!lookup.errorValue ||
++                (lookup.errorCategory != "generic" && lookup.errorCategory != "system"))))
++            SLANG_THROW(std::runtime_error("invalid snapshot lookup"));
++    }
++    for (auto id : snapshot.graphFileIds) {
++        if (id > snapshot.files.size())
++            SLANG_THROW(std::runtime_error("invalid snapshot graph file ID"));
++    }
++    snapshotCwd = snapshot.cwd;
++    disableProximatePaths = snapshot.disableProximatePaths;
++    disableLocalIncludes = snapshot.disableLocalIncludes;
++    incDirFirst = snapshot.incDirFirst;
++    for (auto& dir : snapshot.systemDirectories)
++        systemDirectories.emplace_back(dir);
++    for (auto& dir : snapshot.userDirectories)
++        userDirectories.emplace_back(dir);
++    snapshotFiles.push_back(nullptr);
++    for (auto& file : snapshot.files) {
++        SmallVector<char> bytes;
++        bytes.insert(bytes.end(), file.bytes.begin(), file.bytes.end());
++        auto directory = &*directories.insert(fs::path(file.directory)).first;
++        auto fd = std::make_shared<FileData>(directory, file.displayName, std::move(bytes),
++                                             fs::path(file.fullPath));
++        snapshotFiles.push_back(fd);
++        if (file.generated)
++            snapshotGeneratedPaths.insert(file.fullPath);
++        lookupCache.emplace(file.fullPath, std::pair{fd, std::error_code{}});
++    }
++    for (auto& lookup : snapshot.lookups) {
++        std::pair<std::shared_ptr<FileData>, std::error_code> value;
++        if (lookup.fileId)
++            value.first = snapshotFiles[lookup.fileId];
++        else
++            value.second = std::error_code(lookup.errorValue, lookup.errorCategory == "generic" ?
++                std::generic_category() : std::system_category());
++        snapshotLookups.emplace(lookup.path, std::move(value));
++    }
++    snapshotHeaderRequests.insert(snapshot.headerRequests.begin(), snapshot.headerRequests.end());
++    snapshotReplay = true;
++}
++
++SourceBuffer SourceManager::createRootBuffer(uint32_t fileId, uint64_t sortKey) {
++    std::unique_lock<std::shared_mutex> lock(mutex);
++    if (!snapshotReplay || !fileId || fileId >= snapshotFiles.size())
++        failSnapshot("invalid root file ID");
++    return createBufferEntry(snapshotFiles[fileId], {}, nullptr, sortKey, lock);
++}
++
++
++
++void SourceManager::setSnapshotGeneratedSequence(std::span<const uint32_t> fileIds) {
++    std::unique_lock<std::shared_mutex> lock(mutex);
++    if (!snapshotReplay || snapshotGeneratedSequenceActive)
++        failSnapshot("generated parse sequence requires an idle replay manager");
++    for (auto id : fileIds) {
++        if (!id || id >= snapshotFiles.size() ||
++            !snapshotGeneratedPaths.contains(getU8Str(snapshotFiles[id]->fullPath)))
++            failSnapshot("invalid generated source file ID");
++    }
++    snapshotGeneratedSequence.assign(fileIds.begin(), fileIds.end());
++    snapshotGeneratedIndex = 0;
++    snapshotGeneratedSequenceActive = true;
++}
++
++void SourceManager::finishSnapshotGeneratedSequence() {
++    std::unique_lock<std::shared_mutex> lock(mutex);
++    if (!snapshotReplay || !snapshotGeneratedSequenceActive ||
++        snapshotGeneratedIndex != snapshotGeneratedSequence.size())
++        failSnapshot("generated parse sequence was not fully consumed");
++    snapshotGeneratedSequence.clear();
++    snapshotGeneratedIndex = 0;
++    snapshotGeneratedSequenceActive = false;
++}
++
+ static size_t getTextEnd(const SmallVector<char>& mem) {
+     size_t result = mem.size();
+     if (result && mem[result - 1] == '\0')
+@@ -29,6 +304,20 @@ static size_t getTextEnd(const SmallVector<char>& mem) {
+     return result;
+ }
+ 
++static std::string getBufferName(const fs::path& path, bool disableProximatePaths) {
++    std::string name;
++    if (!disableProximatePaths) {
++        std::error_code ec;
++        name = getU8Str(fs::proximate(path, ec));
++        if (ec)
++            name = {};
++    }
++
++    if (name.empty())
++        name = getU8Str(path);
++    return name;
++}
++
+ SourceManager::SourceManager() {
+     // add a dummy entry to the start of the directory list so that our file IDs line up
+     FileInfo file;
+@@ -36,23 +325,33 @@ SourceManager::SourceManager() {
+ }
+ 
+ std::error_code SourceManager::addSystemDirectories(std::string_view pattern) {
++    if (snapshotReplay)
++        failSnapshot("include directories cannot change during replay");
+     SmallVector<fs::path> dirs;
+     std::error_code ec;
+     svGlob({}, pattern, GlobMode::Directories, dirs, /* expandEnvVars */ false, ec);
+ 
+     // Note: locking the separate mutex for include dirs here.
+     std::unique_lock<std::shared_mutex> lock(includeDirMutex);
++    std::unique_lock<std::shared_mutex> sourceLock(mutex);
++    if (snapshotRecording && bufferEntries.size() != 1)
++        snapshotConflict = true;
+     systemDirectories.insert(systemDirectories.end(), dirs.begin(), dirs.end());
+     return ec;
+ }
+ 
+ std::error_code SourceManager::addUserDirectories(std::string_view pattern) {
++    if (snapshotReplay)
++        failSnapshot("include directories cannot change during replay");
+     SmallVector<fs::path> dirs;
+     std::error_code ec;
+     svGlob({}, pattern, GlobMode::Directories, dirs, /* expandEnvVars */ false, ec);
+ 
+     // Note: locking the separate mutex for include dirs here.
+     std::unique_lock<std::shared_mutex> lock(includeDirMutex);
++    std::unique_lock<std::shared_mutex> sourceLock(mutex);
++    if (snapshotRecording && bufferEntries.size() != 1)
++        snapshotConflict = true;
+     userDirectories.insert(userDirectories.end(), dirs.begin(), dirs.end());
+     return ec;
+ }
+@@ -497,8 +796,9 @@ SourceBuffer SourceManager::assignText(std::string_view text, SourceLocation inc
+ 
+ SourceBuffer SourceManager::assignText(std::string_view path, std::string_view text,
+                                        SourceLocation includedFrom, const SourceLibrary* library) {
++    const bool generated = path.empty();
+     std::string temp;
+-    if (path.empty()) {
++    if (generated) {
+         using namespace std::literals;
+         temp = "<unnamed_buffer"s + std::to_string(unnamedBufferCount++) + ">"s;
+         path = temp;
+@@ -509,26 +809,70 @@ SourceBuffer SourceManager::assignText(std::string_view path, std::string_view t
+     if (buffer.empty() || buffer.back() != '\0')
+         buffer.push_back('\0');
+ 
+-    return assignBuffer(path, std::move(buffer), includedFrom, library);
++    if (generated && snapshotReplay) {
++        std::unique_lock<std::shared_mutex> lock(mutex);
++        if (!snapshotGeneratedSequenceActive ||
++            snapshotGeneratedIndex >= snapshotGeneratedSequence.size() || library)
++            failSnapshot("unrecorded generated source buffer");
++        auto match = snapshotFiles[snapshotGeneratedSequence[snapshotGeneratedIndex]];
++        if (std::string_view(match->mem.data(), match->mem.size()) !=
++            std::string_view(buffer.data(), buffer.size()))
++            failSnapshot("generated source bytes differ from captured parse");
++        snapshotGeneratedIndex++;
++        return createBufferEntry(match, includedFrom, nullptr, UINT64_MAX, lock);
++    }
++    auto result = assignBuffer(path, std::move(buffer), includedFrom, library);
++    if (generated && snapshotRecording) {
++        std::unique_lock<std::shared_mutex> lock(mutex);
++        snapshotGeneratedPaths.insert(std::string(path));
++    }
++    return result;
+ }
+ 
+ SourceBuffer SourceManager::assignBuffer(std::string_view bufferPath, SmallVector<char>&& buffer,
+                                          SourceLocation includedFrom,
+                                          const SourceLibrary* library) {
+-    // first see if we have this file cached
+     fs::path path(bufferPath);
+     auto pathStr = getU8Str(path);
+-    {
+-        std::shared_lock<std::shared_mutex> lock(mutex);
++    if (snapshotReplay) {
++        std::unique_lock<std::shared_mutex> lock(mutex);
++        if (library)
++            failSnapshot("source libraries are unsupported");
+         auto it = lookupCache.find(pathStr);
+-        if (it != lookupCache.end()) {
+-            SLANG_THROW(std::runtime_error(
+-                "Buffer with the given path has already been assigned to the source manager"));
+-        }
++        if (it == lookupCache.end() || !it->second.first ||
++            std::string_view(it->second.first->mem.data(), it->second.first->mem.size()) !=
++                std::string_view(buffer.data(), buffer.size()))
++            failSnapshot(pathStr);
++        return createBufferEntry(it->second.first, includedFrom, nullptr, UINT64_MAX, lock);
+     }
++    auto name = getBufferName(path, disableProximatePaths);
+ 
+-    return cacheBuffer(std::move(path), std::move(pathStr), includedFrom, library, UINT64_MAX,
+-                       std::move(buffer));
++    // Failed lookups can be replaced by editor-provided text. Check and publish
++    // under the same lock so another assignment cannot replace successful data.
++    std::unique_lock<std::shared_mutex> lock(mutex);
++    if (snapshotRecording && (getU8Str(fs::current_path()) != snapshotCwd || library))
++        snapshotConflict = true;
++    auto it = lookupCache.find(pathStr);
++    if (it != lookupCache.end() && !it->second.second) {
++        SLANG_THROW(std::runtime_error(
++            "Buffer with the given path has already been assigned to the source manager"));
++    }
++
++    auto directory = &*directories.insert(path.parent_path()).first;
++    auto fd = std::make_shared<FileData>(directory, std::move(name), std::move(buffer),
++                                         std::move(path));
++    // An editor overlay is an explicit transition from a cached failed lookup to
++    // owned source bytes. Update aliases using their original resolved cache key,
++    // never by recanonicalizing against potentially changed filesystem metadata.
++    if (snapshotRecording) {
++        for (auto& [alias, result] : snapshotLookups) {
++            auto target = snapshotLookupTargets.find(alias);
++            if (result.second && target != snapshotLookupTargets.end() && target->second == pathStr)
++                result = std::pair{fd, std::error_code{}};
++        }
++    }
++    lookupCache.insert_or_assign(std::move(pathStr), std::pair{fd, std::error_code{}});
++    return createBufferEntry(std::move(fd), includedFrom, library, UINT64_MAX, lock);
+ }
+ 
+ SourceManager::BufferOrError SourceManager::readSource(const fs::path& path,
+@@ -541,6 +885,29 @@ SourceManager::BufferOrError SourceManager::readHeader(
+     std::string_view path, SourceLocation includedFrom, const SourceLibrary* library,
+     bool isSystemPath, std::span<std::filesystem::path const> additionalIncludePaths) {
+ 
++    if (snapshotRecording || snapshotReplay) {
++        std::string request;
++        auto append = [&](std::string_view value) {
++            request += std::to_string(value.size()) + ":";
++            request += value;
++        };
++        append(path);
++        append(getU8Str(getFullPath(getFullyExpandedLoc(includedFrom).buffer())));
++        append(isSystemPath ? "system" : "user");
++        for (auto& dir : additionalIncludePaths)
++            append(getU8Str(dir));
++        std::unique_lock<std::shared_mutex> lock(mutex);
++        if (snapshotReplay) {
++            if (library || !snapshotHeaderRequests.contains(request))
++                failSnapshot("unrecorded header request: " + std::string(path));
++        }
++        else {
++            snapshotHeaderRequests.insert(std::move(request));
++            if (library)
++                snapshotConflict = true;
++        }
++    }
++
+     // if the header is specified as an absolute path, just do a straight lookup
+     SLANG_ASSERT(!path.empty());
+     fs::path p = path;
+@@ -614,18 +981,24 @@ SourceManager::BufferOrError SourceManager::readHeader(
+ }
+ 
+ void SourceManager::addLineDirective(SourceLocation location, size_t lineNum, std::string_view name,
+-                                     uint8_t level) {
++                                     uint8_t level, bool fromSource) {
+     std::unique_lock<std::shared_mutex> lock(mutex);
++    if (snapshotReplay && !fromSource)
++        failSnapshot("external line directive injection during replay");
+     SourceLocation fileLocation = getFullyExpandedLocImpl(location, lock);
+     FileInfo* info = getFileInfo(fileLocation.buffer(), lock);
+     if (!info || !info->data)
+         return;
+ 
++    if (!fromSource)
++        info->hasExternalDirectives = true;
+     fs::path full;
+     fs::path linePath = name;
++    if (snapshotRecording && getU8Str(fs::current_path()) != snapshotCwd)
++        snapshotConflict = true;
+     std::error_code ec;
+     if (!disableProximatePaths && linePath.has_relative_path())
+-        full = linePath.lexically_proximate(fs::current_path(ec));
++        full = linePath.lexically_proximate(snapshotReplay ? fs::path(snapshotCwd) : fs::current_path(ec));
+     else
+         full = fs::path(info->data->name).replace_filename(linePath);
+ 
+@@ -634,9 +1007,15 @@ void SourceManager::addLineDirective(SourceLocation location, size_t lineNum, st
+ }
+ 
+ void SourceManager::addDiagnosticDirective(SourceLocation location, std::string_view name,
+-                                           DiagnosticSeverity severity) {
++                                           DiagnosticSeverity severity, bool fromSource) {
+     std::unique_lock<std::shared_mutex> lock(mutex);
++    if (snapshotReplay && !fromSource)
++        failSnapshot("external diagnostic directive injection during replay");
+     SourceLocation fileLocation = getFullyExpandedLocImpl(location, lock);
++    if (!fromSource) {
++        if (auto info = getFileInfo(fileLocation.buffer(), lock))
++            info->hasExternalDirectives = true;
++    }
+ 
+     size_t offset = fileLocation.offset();
+     auto& vec = diagDirectives[fileLocation.buffer()];
+@@ -699,6 +1078,8 @@ std::vector<std::shared_ptr<void>> SourceManager::retainBuffers(
+ 
+ SourceBuffer SourceManager::replaceBufferImpl(FileInfo* oldInfo, SmallVector<char>&& buffer,
+                                               std::unique_lock<std::shared_mutex>& lock) {
++    if (snapshotReplay)
++        failSnapshot("buffer replacement during replay");
+     auto oldData = oldInfo->data;
+ 
+     // Mark old data as stale, remove reference
+@@ -713,6 +1094,12 @@ SourceBuffer SourceManager::replaceBufferImpl(FileInfo* oldInfo, SmallVector<cha
+     lookupCache.insert_or_assign(getU8Str(newData->fullPath),
+                                  std::pair{newData, std::error_code{}});
+ 
++    // Editor replacement supersedes the bytes of all successful aliases.
++    for (auto& [alias, result] : snapshotLookups) {
++        if (result.first == oldData)
++            result.first = newData;
++    }
++
+     // Create a new FileInfo entry with new data (don't modify old entry!)
+     // Old data should be freed if nothing more points to it.
+     return createBufferEntry(newData, oldInfo->includedFrom, oldInfo->library, oldInfo->sortKey,
+@@ -727,6 +1114,8 @@ SourceBuffer SourceManager::replaceBuffer(BufferID id, SmallVector<char>&& buffe
+ }
+ 
+ SourceManager::BufferOrError SourceManager::reloadBuffer(BufferID id) {
++    if (snapshotReplay)
++        failSnapshot("reload during replay");
+     std::unique_lock<std::shared_mutex> lock(mutex);
+ 
+     auto oldInfo = getFileInfo(id, lock);
+@@ -783,6 +1172,9 @@ SourceBuffer SourceManager::createBufferEntry(std::shared_ptr<FileData> fd,
+ }
+ 
+ bool SourceManager::isCached(const fs::path& path) const {
++    if (snapshotReplay) {
++        failSnapshot("live cache queries are unsupported during replay");
++    }
+     fs::path absPath;
+     if (!disableProximatePaths) {
+         std::error_code ec;
+@@ -800,9 +1192,51 @@ bool SourceManager::isCached(const fs::path& path) const {
+ }
+ 
+ SourceManager::BufferOrError SourceManager::openCached(const fs::path& fullPath,
++    SourceLocation includedFrom, const SourceLibrary* library, uint64_t sortKey) {
++    const auto raw = getU8Str(fullPath);
++    if (snapshotReplay) {
++        std::unique_lock<std::shared_mutex> lock(mutex);
++        if (library)
++            failSnapshot("source libraries are unsupported");
++        auto it = snapshotLookups.find(raw);
++        if (it == snapshotLookups.end())
++            failSnapshot(raw);
++        if (it->second.second)
++            return nonstd::make_unexpected(it->second.second);
++        return createBufferEntry(it->second.first, includedFrom, nullptr, sortKey, lock);
++    }
++    const bool strictCwd = snapshotRecording && fastCwdPhaseDepth.load() == 0;
++    const auto startingCwd = strictCwd ? getU8Str(fs::current_path()) : std::string{};
++    std::string resolvedPath;
++    auto result = openCachedImpl(fullPath, includedFrom, library, sortKey,
++                                 snapshotRecording ? &resolvedPath : nullptr);
++    if (snapshotRecording) {
++        const auto cwd = strictCwd ? getU8Str(fs::current_path()) : std::string{};
++        std::unique_lock<std::shared_mutex> lock(mutex);
++        if ((strictCwd && (cwd != snapshotCwd || startingCwd != snapshotCwd)) || library)
++            snapshotConflict = true;
++        std::pair<std::shared_ptr<FileData>, std::error_code> value;
++        if (result) {
++            value.first = getFileInfo(result->id, lock)->data;
++            if (!value.first || value.first->isStale)
++                snapshotConflict = true;
++        }
++        else
++            value.second = result.error();
++        auto [target, targetAdded] = snapshotLookupTargets.emplace(raw, resolvedPath);
++        if (!targetAdded && target->second != resolvedPath)
++            snapshotConflict = true;
++        auto [it, inserted] = snapshotLookups.emplace(raw, value);
++        if (!inserted && it->second != value)
++            snapshotConflict = true;
++    }
++    return result;
++}
++
++SourceManager::BufferOrError SourceManager::openCachedImpl(const fs::path& fullPath,
+                                                        SourceLocation includedFrom,
+                                                        const SourceLibrary* library,
+-                                                       uint64_t sortKey) {
++                                                       uint64_t sortKey, std::string* resolvedPath) {
+     fs::path absPath;
+     if (!disableProximatePaths) {
+         std::error_code ec;
+@@ -816,6 +1250,8 @@ SourceManager::BufferOrError SourceManager::openCached(const fs::path& fullPath,
+ 
+     // first see if we have this file cached
+     std::string pathStr = getU8Str(absPath);
++    if (resolvedPath)
++        *resolvedPath = pathStr;
+     {
+         std::unique_lock<std::shared_mutex> lock(mutex);
+         auto it = lookupCache.find(pathStr);
+@@ -844,31 +1280,23 @@ SourceManager::BufferOrError SourceManager::openCached(const fs::path& fullPath,
+ SourceBuffer SourceManager::cacheBuffer(fs::path&& path, std::string&& pathStr,
+                                         SourceLocation includedFrom, const SourceLibrary* library,
+                                         uint64_t sortKey, SmallVector<char>&& buffer) {
+-    std::string name;
+-    if (!disableProximatePaths) {
+-        std::error_code ec;
+-        name = getU8Str(fs::proximate(path, ec));
+-        if (ec)
+-            name = {};
+-    }
+-
+-    if (name.empty())
+-        name = getU8Str(path);
++    auto name = getBufferName(path, disableProximatePaths);
+ 
+     std::unique_lock<std::shared_mutex> lock(mutex);
+ 
++    // Another thread may have cached a lookup while we were reading the file.
++    // Reuse successful reads instead of replacing their data.
++    auto it = lookupCache.find(pathStr);
++    if (it != lookupCache.end() && !it->second.second)
++        return createBufferEntry(it->second.first, includedFrom, library, sortKey, lock);
++
+     auto directory = &*directories.insert(path.parent_path()).first;
+     auto fd = std::make_shared<FileData>(directory, std::move(name), std::move(buffer),
+                                          std::move(path));
+ 
+-    // Note: it's possible that insertion here fails due to another thread
+-    // racing against us to open and insert the same file. We do a lookup
+-    // in the cache before proceeding to read the file but we drop the lock
+-    // during the read. It's not actually a problem, we'll just use the data
+-    // we already loaded (just like we had gotten a hit on the cache in the
+-    // first place).
+-    auto [it, inserted] = lookupCache.emplace(pathStr, std::pair{std::move(fd), std::error_code{}});
+-    return createBufferEntry(it->second.first, includedFrom, library, sortKey, lock);
++    // A successful read supersedes a failure cached by another thread during file I/O.
++    lookupCache.insert_or_assign(std::move(pathStr), std::pair{fd, std::error_code{}});
++    return createBufferEntry(std::move(fd), includedFrom, library, sortKey, lock);
+ }
+ 
+ template<IsLock TLock>
+diff --git a/source/util/CwdCoordinator.cpp b/source/util/CwdCoordinator.cpp
+new file mode 100644
+index 0000000000000000000000000000000000000000..f5fd85238ecea8f0ea25dc2a58b622c00b6c9745
+--- /dev/null
++++ b/source/util/CwdCoordinator.cpp
+@@ -0,0 +1,34 @@
++// SPDX-License-Identifier: MIT
++#include "slang/util/CwdCoordinator.h"
++#include <stdexcept>
++namespace slang {
++std::recursive_mutex CwdCoordinator::mutex;
++std::atomic<unsigned> CwdCoordinator::activeAnalyses{0};
++thread_local unsigned CwdCoordinator::localAnalyses = 0;
++CwdCoordinator::WriteLease::WriteLease() : lock(mutex, std::defer_lock) {
++    // Fail before waiting: a parser callback can run on a pool worker while the
++    // phase owner is waiting for that worker. Waiting here would deadlock.
++    if (activeAnalyses.load())
++        SLANG_THROW(std::runtime_error("internal cwd mutation during fast analysis is forbidden"));
++    lock.lock();
++    if (activeAnalyses.load())
++        SLANG_THROW(std::runtime_error("internal cwd mutation during fast analysis is forbidden"));
++}
++CwdCoordinator::AnalysisLease::AnalysisLease() : lock(mutex, std::defer_lock) {
++    // Workers borrow an existing phase, never recursively acquire it. Reject
++    // accidental acquisition before locking so owner->pool waits cannot cycle.
++    if (activeAnalyses.load() && !localAnalyses)
++        SLANG_THROW(std::runtime_error("fast analysis phases must be owned by one state thread; workers borrow the phase"));
++    lock.lock();
++    ++localAnalyses;
++    ++activeAnalyses;
++}
++CwdCoordinator::AnalysisLease::~AnalysisLease() {
++    --localAnalyses;
++    --activeAnalyses;
++}
++void CwdCoordinator::setCurrentPath(const std::filesystem::path& path, std::error_code& ec) {
++    WriteLease lease;
++    std::filesystem::current_path(path, ec);
++}
++} // namespace slang
+diff --git a/tests/unittests/CMakeLists.txt b/tests/unittests/CMakeLists.txt
+index f1b0a80f7ac9be510a57709c2f92953be448d534..d51707507c2bf8cb3c8db6373b194abc96164801 100644
+--- a/tests/unittests/CMakeLists.txt
++++ b/tests/unittests/CMakeLists.txt
+@@ -25,6 +25,7 @@ add_executable(
+   ast/InterfaceTests.cpp
+   ast/LookupTests.cpp
+   ast/MemberTests.cpp
++  ast/PackageAnalysisTests.cpp
+   ast/ParameterTests.cpp
+   ast/PortTests.cpp
+   ast/PrimitiveTests.cpp
+@@ -53,6 +54,7 @@ add_executable(
+   diagnostics/WaiverTests.cpp
+   DriverTests.cpp
+   FileTests.cpp
++  SourceSnapshotTests.cpp
+   main.cpp
+   Test.cpp)
+ 
+diff --git a/tests/unittests/DriverTests.cpp b/tests/unittests/DriverTests.cpp
+index b4f6b728ec76e88401c81479159b7cc702b4e74a..bb5841a2c93fcb25f132c463fc3adc6aa3b08b28 100644
+--- a/tests/unittests/DriverTests.cpp
++++ b/tests/unittests/DriverTests.cpp
+@@ -41,6 +41,33 @@ TEST_CASE("Driver processOptions can skip input file check") {
+     CHECK(driver.processOptions(false));
+ }
+ 
++TEST_CASE("Driver string concatenation compatibility") {
++    Driver driver;
++    driver.addStandardArgs();
++
++    SECTION("Explicit relaxation") {
++        CHECK(driver.parseCommandLine("testfoo --relax-string-conversions"));
++    }
++    SECTION("VCS compatibility") {
++        CHECK(driver.parseCommandLine("testfoo --compat vcs"));
++    }
++    CHECK(driver.processOptions(false));
++
++    driver.syntaxTrees.push_back(SyntaxTree::fromText(R"(
++module m;
++function automatic string append(string text, byte character);
++    return {text, character};
++endfunction
++$static_assert(append("ab", 8'h63) == "abc");
++endmodule
++)",
++                                                      driver.sourceManager));
++
++    auto compilation = driver.createCompilation();
++    CHECK(compilation->hasFlag(CompilationFlags::RelaxStringConversions));
++    CHECK(compilation->getAllDiagnostics().empty());
++}
++
+ TEST_CASE("Driver valid column unit") {
+     Driver driver;
+     driver.addStandardArgs();
+@@ -150,6 +177,285 @@ TEST_CASE("Driver tracks command file metadata") {
+     CHECK(jsonIt->second.defines == std::vector<std::string>{"BAZ=3"});
+ }
+ 
++namespace {
++
++class SourceLoaderTestFiles {
++    TempFile marker;
++
++public:
++    SourceLoaderTestFiles() : marker(""), root(marker.path.string() + ".dir") {
++        fs::create_directory(root);
++    }
++
++    ~SourceLoaderTestFiles() {
++        std::error_code ec;
++        fs::remove_all(root, ec);
++    }
++
++    fs::path write(std::string_view name, std::string_view contents) const {
++        auto path = root / name;
++        fs::create_directories(path.parent_path());
++        std::ofstream out(path);
++        REQUIRE(out.good());
++        out << contents;
++        return path;
++    }
++
++    fs::path root;
++};
++
++void replaceSource(SourceManager& manager, BufferID id, std::string_view contents) {
++    SmallVector<char> bytes;
++    bytes.insert(bytes.end(), contents.begin(), contents.end());
++    bytes.push_back('\0');
++    manager.replaceBuffer(id, std::move(bytes));
++}
++
++} // namespace
++
++TEST_CASE("Driver retains metadata for missing nested command files") {
++    auto outputGuard = OS::captureOutput();
++    SourceLoaderTestFiles files;
++    auto originalPath = fs::current_path();
++    auto pathGuard = ScopeGuard([&] { fs::current_path(originalPath); });
++    fs::current_path(files.root);
++
++    bool makeRelative = true;
++    std::string missingName = "missing.f";
++    SECTION("Relative to the enclosing command file") {
++    }
++    SECTION("Relative to the working directory") {
++        makeRelative = false;
++    }
++    SECTION("Normalized nested relative path") {
++        missingName = "./nested/../missing.f";
++        fs::create_directories(files.root / "manifests/nested");
++    }
++
++    auto parent = files.write("manifests/parent.f",
++                              fmt::format("-D BEFORE=1\n-F {}\n-D AFTER=2\n", missingName));
++    auto missing = (makeRelative ? parent.parent_path() : files.root) / missingName;
++    auto expectedMissing = fs::weakly_canonical(missing);
++    REQUIRE(expectedMissing.is_absolute());
++    REQUIRE_FALSE(fs::exists(expectedMissing));
++
++    Driver driver;
++    driver.addStandardArgs();
++    CHECK_FALSE(driver.processCommandFiles(parent.string(), makeRelative, false));
++    CHECK(fs::current_path() == files.root);
++    CHECK(contains(OS::capturedStderr, fmt::format("command file '{}'", missingName)));
++
++    auto& metadata = driver.getCommandFileMetadata();
++    REQUIRE(metadata.size() == 2);
++    auto parentIt = metadata.find(fs::weakly_canonical(parent));
++    REQUIRE(parentIt != metadata.end());
++    CHECK(parentIt->second.defines == std::vector<std::string>{"BEFORE=1", "AFTER=2"});
++    auto missingIt = metadata.find(expectedMissing);
++    REQUIRE(missingIt != metadata.end());
++    CHECK(missingIt->second.defines.empty());
++
++    // Failure stays sticky, but neither temporary command-file guard may capture
++    // defines parsed after returning to the caller.
++    CHECK_FALSE(driver.parseCommandLine("testfoo -D OUTSIDE=3"));
++    CHECK(driver.options.defines.back() == "OUTSIDE=3");
++    CHECK(parentIt->second.defines == std::vector<std::string>{"BEFORE=1", "AFTER=2"});
++    CHECK(missingIt->second.defines.empty());
++}
++
++TEST_CASE("Driver command file metadata excludes unmatched wildcard patterns") {
++    auto outputGuard = OS::captureOutput();
++    SourceLoaderTestFiles files;
++    auto originalPath = fs::current_path();
++
++    std::string pattern;
++    SECTION("Star wildcard") {
++        pattern = "missing*.f";
++    }
++    SECTION("Question mark wildcard") {
++        pattern = "missing?.f";
++    }
++    SECTION("Recursive directory wildcard") {
++        pattern = ".../missing.f";
++    }
++
++    auto parent = files.write("manifests/parent.f",
++                              fmt::format("-D BEFORE=1\n-F {}\n-D AFTER=2\n", pattern));
++    Driver driver;
++    driver.addStandardArgs();
++    CHECK(driver.processCommandFiles(parent.string(), true, false));
++    CHECK(fs::current_path() == originalPath);
++
++    auto& metadata = driver.getCommandFileMetadata();
++    REQUIRE(metadata.size() == 1);
++    auto it = metadata.find(fs::weakly_canonical(parent));
++    REQUIRE(it != metadata.end());
++    CHECK(it->second.defines == std::vector<std::string>{"BEFORE=1", "AFTER=2"});
++}
++
++TEST_CASE("Driver libdir repeated parsing uses current macros and overlays") {
++    SourceLoaderTestFiles files;
++    auto top = files.write("top.sv", R"(
++`define LIB_FIELD old_field
++module top;
++    leaf child();
++    initial child.old_field = 1;
++endmodule
++)");
++    auto leaf = files.write("leaf.sv", "module leaf; int `LIB_FIELD; endmodule\n");
++
++    Driver driver;
++    driver.addStandardArgs();
++    REQUIRE(driver.parseCommandLine(fmt::format(
++        "testfoo \"{}\" -y \"{}\" --single-unit --libraries-inherit-macros --top top -j 1",
++        top.string(), files.root.string())));
++    REQUIRE(driver.processOptions());
++    REQUIRE(driver.parseAllSources());
++    REQUIRE(driver.syntaxTrees.size() == 2);
++    CHECK(driver.createCompilation()->getAllDiagnostics().empty());
++    CHECK_FALSE(driver.syntaxTrees[0]->isLibraryUnit);
++    CHECK(driver.syntaxTrees[1]->isLibraryUnit);
++
++    auto rootId = driver.syntaxTrees[0]->getSourceBufferIds().front();
++    auto leafId = driver.syntaxTrees[1]->getSourceBufferIds().front();
++    replaceSource(driver.sourceManager, rootId, R"(
++`define LIB_FIELD new_field
++module top;
++    leaf child();
++    initial begin
++        child.new_field = 1;
++        child.unsaved_only = 2;
++    end
++endmodule
++)");
++    replaceSource(driver.sourceManager, leafId,
++                  "module leaf; int `LIB_FIELD; int unsaved_only; endmodule\n");
++
++    for (int i = 0; i < 2; i++) {
++        REQUIRE(driver.parseAllSources());
++        REQUIRE(driver.syntaxTrees.size() == 2);
++        CHECK(driver.createCompilation()->getAllDiagnostics().empty());
++        CHECK(driver.syntaxTrees[1]->isLibraryUnit);
++        CHECK(fs::equivalent(driver.sourceManager.getFullPath(
++                                 driver.syntaxTrees[1]->getSourceBufferIds().front()),
++                             leaf));
++    }
++
++    // A previously discovered file is not promoted to an explicit -v input.
++    replaceSource(driver.sourceManager, driver.syntaxTrees[0]->getSourceBufferIds().front(),
++                  "module top; endmodule\n");
++    REQUIRE(driver.parseAllSources());
++    CHECK(driver.syntaxTrees.size() == 1);
++    CHECK(driver.createCompilation()->getAllDiagnostics().empty());
++}
++
++TEST_CASE("Driver libdir skips current roots and includes on repeated parses") {
++    SourceLoaderTestFiles files;
++    fs::path top;
++    SECTION("Root with the requested library name") {
++        top = files.write("first/leaf.sv", "module top; leaf child(); endmodule\n");
++    }
++    SECTION("Include with the requested library name") {
++        top = files.write("top.sv", R"(
++`include "first/./leaf.sv"
++module top; leaf child(); endmodule
++)");
++        files.write("first/leaf.sv", "module helper; endmodule\n");
++    }
++    SECTION("Include discovered while loading a library") {
++        top = files.write("top.sv", "module top; mid child(); endmodule\n");
++        files.write("first/mid.sv", R"(
++`include "./leaf.sv"
++module mid; leaf child(); endmodule
++)");
++        files.write("first/leaf.sv", "module helper; endmodule\n");
++    }
++    auto leaf = files.write("second/leaf.sv", "module leaf; endmodule\n");
++
++    Driver driver;
++    driver.addStandardArgs();
++    REQUIRE(driver.parseCommandLine(fmt::format("testfoo \"{}\" -y \"{}\" -y \"{}\" --top top -j 1",
++                                                top.string(), (files.root / "first").string(),
++                                                (files.root / "second").string())));
++    REQUIRE(driver.processOptions());
++    for (int i = 0; i < 2; i++) {
++        REQUIRE(driver.parseAllSources());
++        REQUIRE(driver.syntaxTrees.size() >= 2);
++        CHECK(driver.createCompilation()->getAllDiagnostics().empty());
++        CHECK(fs::equivalent(driver.sourceManager.getFullPath(
++                                 driver.syntaxTrees.back()->getSourceBufferIds().front()),
++                             leaf));
++    }
++}
++
++TEST_CASE("Driver libdir repeated parsing preserves directory and extension precedence") {
++    SourceLoaderTestFiles files;
++    auto top = files.write("top.sv", R"(
++module top;
++    leaf child();
++    initial child.first_choice = 1;
++endmodule
++)");
++    auto first = files.write("first/leaf.qv", "module leaf; int first_choice; endmodule\n");
++    files.write("first/leaf.rv", "module leaf; int wrong_extension; endmodule\n");
++    auto second = files.write("second/leaf.sv", "module leaf; int wrong_directory; endmodule\n");
++
++    Driver driver;
++    driver.addStandardArgs();
++    REQUIRE(driver.parseCommandLine(fmt::format(
++        "testfoo \"{}\" -y \"{}\" -y \"{}\" --libext .qv --libext .rv --top top -j 1", top.string(),
++        (files.root / "first").string(), (files.root / "second").string())));
++    REQUIRE(driver.processOptions());
++    // Neither selected nor unselected cached files are already part of this load.
++    REQUIRE(driver.sourceManager.readSource(first));
++    REQUIRE(driver.sourceManager.readSource(second));
++    for (int i = 0; i < 2; i++) {
++        REQUIRE(driver.parseAllSources());
++        REQUIRE(driver.syntaxTrees.size() == 2);
++        CHECK(driver.createCompilation()->getAllDiagnostics().empty());
++        CHECK(fs::equivalent(driver.sourceManager.getFullPath(
++                                 driver.syntaxTrees[1]->getSourceBufferIds().front()),
++                             first));
++    }
++}
++
++TEST_CASE("Driver libdir finds an overlay after a missing lookup") {
++    SourceLoaderTestFiles files;
++    auto top = files.write("top.sv", "module top; leaf child(); endmodule\n");
++
++    Driver driver;
++    driver.addStandardArgs();
++    REQUIRE(driver.parseCommandLine(
++        fmt::format("testfoo \"{}\" -y \"{}\" --top top -j 1", top.string(), files.root.string())));
++    REQUIRE(driver.processOptions());
++    REQUIRE(driver.parseAllSources());
++    CHECK(driver.syntaxTrees.size() == 1);
++    auto missingPath = fs::weakly_canonical(files.root / "leaf.sv");
++    driver.sourceManager.assignText(missingPath.string(), "module leaf; endmodule\n");
++    for (int i = 0; i < 2; i++) {
++        REQUIRE(driver.parseAllSources());
++        REQUIRE(driver.syntaxTrees.size() == 2);
++        CHECK(driver.createCompilation()->getAllDiagnostics().empty());
++    }
++}
++
++TEST_CASE("Driver libdir repeated parsing terminates cyclic library discovery") {
++    SourceLoaderTestFiles files;
++    auto top = files.write("top.sv", "module top; a child(); endmodule\n");
++    files.write("a.sv", "module a; b child(); endmodule\n");
++    files.write("b.sv", "module b; if (0) begin : unused a child(); end endmodule\n");
++
++    Driver driver;
++    driver.addStandardArgs();
++    REQUIRE(driver.parseCommandLine(
++        fmt::format("testfoo \"{}\" -y \"{}\" --top top -j 1", top.string(), files.root.string())));
++    REQUIRE(driver.processOptions());
++    for (int i = 0; i < 2; i++) {
++        REQUIRE(driver.parseAllSources());
++        REQUIRE(driver.syntaxTrees.size() == 3);
++        CHECK(driver.createCompilation()->getAllDiagnostics().empty());
++    }
++}
++
+ TEST_CASE("SourceLoader doesn't reload names satisfied by later worklist entries") {
+     SourceManager sourceManager;
+ 
+@@ -344,13 +650,15 @@ endmodule
+                             (root / "top.sv").string(), root.string());
+     CHECK(driver.parseCommandLine(args));
+     CHECK(driver.processOptions());
+-    CHECK(driver.parseAllSources());
+-    CHECK(driver.reportParseDiags());
+-    CHECK(driver.syntaxTrees.size() == 9);
+-
+-    auto compilation = driver.createCompilation();
+-    driver.reportCompilation(*compilation, true);
+-    CHECK(driver.reportDiagnostics(true));
++    for (int i = 0; i < 2; i++) {
++        CHECK(driver.parseAllSources());
++        CHECK(driver.reportParseDiags());
++        CHECK(driver.syntaxTrees.size() == 9);
++
++        auto compilation = driver.createCompilation();
++        driver.reportCompilation(*compilation, true);
++        CHECK(driver.reportDiagnostics(true));
++    }
+ }
+ #endif
+ 
+diff --git a/tests/unittests/FileTests.cpp b/tests/unittests/FileTests.cpp
+index d3e9fbb31e44cdb6bac0817c03e01b3f83e52fe4..1668b07cdfbe4e7e1f93b50c06692c6fd18a5e5d 100644
+--- a/tests/unittests/FileTests.cpp
++++ b/tests/unittests/FileTests.cpp
+@@ -3,6 +3,7 @@
+ 
+ #include "Test.h"
+ #include <fstream>
++#include <stdexcept>
+ 
+ #include "slang/text/Glob.h"
+ #include "slang/text/SourceManager.h"
+@@ -358,6 +359,97 @@ static SmallVector<char> makeBuffer(std::string_view text) {
+     return buffer;
+ }
+ 
++TEST_CASE("Assign source after a failed lookup") {
++    TempFile file("");
++    REQUIRE(fs::remove(file.path));
++    auto path = fs::weakly_canonical(file.path).string();
++
++    SourceManager manager;
++    REQUIRE(!manager.readSource(path));
++    REQUIRE(manager.isCached(path));
++    CHECK(manager.getAllBuffers().empty());
++
++    const std::string text = "module unsaved; endmodule\n";
++    SourceBuffer assigned;
++    SECTION("Assign text") {
++        assigned = manager.assignText(path, text);
++    }
++    SECTION("Assign buffer") {
++        assigned = manager.assignBuffer(path, makeBuffer(text));
++    }
++
++    REQUIRE(assigned);
++    CHECK(!fs::exists(file.path));
++    auto loaded = manager.readSource(path);
++    REQUIRE(loaded);
++    CHECK(loaded->data.data() == assigned.data.data());
++    CHECK(loaded->data.substr(0, loaded->data.size() - 1) == text);
++    CHECK(manager.getFullPath(loaded->id) == fs::path(path));
++
++    auto count = manager.getAllBuffers().size();
++    CHECK_THROWS_AS(manager.assignText(path, "replacement"), std::runtime_error);
++    CHECK_THROWS_AS(manager.assignBuffer(path, makeBuffer("replacement")), std::runtime_error);
++    CHECK(manager.getAllBuffers().size() == count);
++    CHECK(manager.getSourceText(assigned.id) == loaded->data);
++    CHECK(manager.isLatestData(assigned.id));
++}
++
++TEST_CASE("Assign source rejects a successful disk lookup") {
++    TempFile file("module original; endmodule\n");
++    SourceManager manager;
++    auto loaded = manager.readSource(file.path);
++    REQUIRE(loaded);
++    auto path = manager.getFullPath(loaded->id).string();
++    auto count = manager.getAllBuffers().size();
++
++    CHECK_THROWS_AS(manager.assignText(path, "replacement"), std::runtime_error);
++    CHECK_THROWS_AS(manager.assignBuffer(path, makeBuffer("replacement")), std::runtime_error);
++    CHECK(manager.getAllBuffers().size() == count);
++
++    auto again = manager.readSource(file.path);
++    REQUIRE(again);
++    CHECK(again->data.data() == loaded->data.data());
++    CHECK(again->data.starts_with("module original; endmodule\n"));
++}
++
++TEST_CASE("Assign missing nested include and reparse") {
++    TempFile uniquePath("");
++    auto dir = fs::weakly_canonical(uniquePath.path).string() + ".d";
++    REQUIRE(!fs::exists(dir));
++
++    SourceManager manager;
++    auto top = manager.assignText((fs::path(dir) / "top.sv").string(), R"(
++module m;
++    `include "nested/wrapper.svh"
++    $static_assert(answer == 42);
++endmodule
++)");
++    auto wrapper = manager.assignText((fs::path(dir) / "nested/wrapper.svh").string(),
++                                      "`include \"leaf.svh\"\n");
++    auto leafPath = (fs::path(dir) / "nested/leaf.svh").string();
++
++    auto failed = SyntaxTree::fromBuffer(top, manager);
++    REQUIRE(failed->diagnostics().size() == 1);
++    CHECK(failed->diagnostics()[0].code == diag::CouldNotOpenIncludeFile);
++    REQUIRE(manager.isCached(leafPath));
++
++    auto leaf = manager.assignText(leafPath, "localparam int answer = 42;\n");
++    REQUIRE(leaf);
++    CHECK(!fs::exists(leafPath));
++
++    auto repaired = SyntaxTree::fromBuffer(top, manager);
++    REQUIRE(repaired->diagnostics().empty());
++    Compilation compilation;
++    compilation.addSyntaxTree(repaired);
++    CHECK(compilation.getAllDiagnostics().empty());
++
++    auto included = manager.readHeader("leaf.svh", SourceLocation(wrapper.id, 0), nullptr, false,
++                                       {});
++    REQUIRE(included);
++    CHECK(included->data.data() == leaf.data.data());
++    CHECK(manager.getIncludedFrom(included->id) == SourceLocation(wrapper.id, 0));
++}
++
+ TEST_CASE("Replace assigned source buffer") {
+     SourceManager manager;
+ 
+diff --git a/tests/unittests/SourceSnapshotTests.cpp b/tests/unittests/SourceSnapshotTests.cpp
+new file mode 100644
+index 0000000000000000000000000000000000000000..481f13d56fae5a8cf0f5611c257cfcc7a5ef6319
+--- /dev/null
++++ b/tests/unittests/SourceSnapshotTests.cpp
+@@ -0,0 +1,409 @@
++// SPDX-License-Identifier: MIT
++#include "Test.h"
++#include <fstream>
++
++#include "slang/diagnostics/DiagnosticEngine.h"
++#include "slang/parsing/Preprocessor.h"
++#include "slang/syntax/SyntaxTree.h"
++#include "slang/text/SourceManager.h"
++
++namespace {
++struct SnapshotFixture {
++    fs::path saved = fs::current_path();
++    fs::path dir = fs::temp_directory_path() / "slang-strict-source-snapshot-test";
++    SnapshotFixture() {
++        fs::remove_all(dir);
++        fs::create_directories(dir / "first");
++        fs::create_directories(dir / "second");
++    }
++    ~SnapshotFixture() {
++        fs::current_path(saved);
++        fs::remove_all(dir);
++    }
++    void write(const fs::path& path, std::string_view bytes) {
++        std::ofstream out(dir / path, std::ios::binary);
++        out.write(bytes.data(), std::streamsize(bytes.size()));
++    }
++};
++} // namespace
++
++TEST_CASE("Strict source snapshots freeze reads, aliases, misses and display context") {
++    SnapshotFixture f;
++    f.write("root.sv",
++            "`include \"header.svh\"\nmodule m; initial $display(`__FILE__); endmodule\n");
++    f.write("second/header.svh", "`line 51 \"virtual.sv\" 0\nBAD SYNTAX\n");
++    fs::create_directory_symlink(f.dir / "second", f.dir / "alias");
++    fs::current_path(f.dir);
++    SourceManager original;
++    original.enableSnapshotRecording();
++    REQUIRE(!original.addUserDirectories("first"));
++    REQUIRE(!original.addUserDirectories("alias"));
++    auto root = original.readSource("root.sv");
++    REQUIRE(root);
++    auto tree = SyntaxTree::fromBuffer(*root, original);
++    auto before = DiagnosticEngine::reportAll(original, tree->diagnostics());
++    REQUIRE(!before.empty());
++    // A cache hit through a symlink/.. alias must still record the raw spelling.
++    auto alias = original.readSource("alias/../second/header.svh");
++    REQUIRE(alias);
++    auto ids = original.getAllBuffers();
++    auto snapshot = original.captureSnapshot(ids);
++    auto rootId = snapshot.graphFileIds.front();
++    f.write("first/header.svh", "this would shadow the captured successful header\n");
++    fs::remove(f.dir / "alias");
++    fs::remove(f.dir / "second/header.svh");
++    fs::remove(f.dir / "root.sv");
++    fs::current_path(f.saved);
++    SourceManager replay;
++    replay.loadSnapshot(snapshot);
++    auto restored = replay.createRootBuffer(rootId);
++    auto afterTree = SyntaxTree::fromBuffer(restored, replay);
++    CHECK(DiagnosticEngine::reportAll(replay, afterTree->diagnostics()) == before);
++    CHECK(replay.readSource("alias/../second/header.svh"));
++    CHECK(!replay.snapshotIncomplete());
++    CHECK_THROWS_AS(replay.readSource("never-requested.sv"),
++                    SourceManager::SnapshotIncompleteError);
++    CHECK(replay.snapshotIncomplete());
++}
++
++TEST_CASE("Strict source snapshot preserves replacement bytes and rejects stale roots") {
++    SnapshotFixture f;
++    SourceManager original;
++    original.enableSnapshotRecording();
++    auto root = original.assignText((f.dir / "unsaved.sv").string(), "module old; endmodule\n");
++    SmallVector<char> replacement;
++    std::string bytes = "module fresh; // \xc3\xa9\r\nendmodule\r\n";
++    bytes.push_back('\0');
++    bytes += "embedded tail";
++    bytes.push_back('\0');
++    replacement.insert(replacement.end(), bytes.begin(), bytes.end());
++    auto fresh = original.replaceBuffer(root.id, std::move(replacement));
++    auto originalTree = SyntaxTree::fromBuffer(fresh, original);
++    std::vector stale{root.id};
++    CHECK_THROWS(original.captureSnapshot(stale));
++    std::vector graph{fresh.id};
++    auto snapshot = original.captureSnapshot(graph);
++    SourceManager replay;
++    replay.loadSnapshot(snapshot);
++    auto restored = replay.createRootBuffer(snapshot.graphFileIds.front());
++    CHECK(restored.data == bytes);
++    auto restoredTree = SyntaxTree::fromBuffer(restored, replay);
++    CHECK(DiagnosticEngine::reportAll(replay, restoredTree->diagnostics()) ==
++          DiagnosticEngine::reportAll(original, originalTree->diagnostics()));
++    CHECK(replay.getFullPath(restored.id) == f.dir / "unsaved.sv");
++    CHECK_THROWS_AS(replay.reloadBuffer(restored.id), SourceManager::SnapshotIncompleteError);
++}
++
++TEST_CASE("Strict snapshot unknown empty-search include is incomplete, not missing") {
++    SourceManager original;
++    original.enableSnapshotRecording();
++    original.setDisableLocalIncludes(true);
++    auto root = original.assignText("module m; endmodule\n");
++    CHECK(!original.readHeader("known.svh", SourceLocation(root.id, 0), nullptr, false, {}));
++    std::vector graph{root.id};
++    auto snapshot = original.captureSnapshot(graph);
++    SourceManager replay;
++    replay.loadSnapshot(snapshot);
++    auto restored = replay.createRootBuffer(snapshot.graphFileIds.front());
++    CHECK(!replay.readHeader("known.svh", SourceLocation(restored.id, 0), nullptr, false, {}));
++    CHECK_THROWS_AS(replay.readHeader("unknown.svh", SourceLocation(restored.id, 0), nullptr, false,
++                                      {}),
++                    SourceManager::SnapshotIncompleteError);
++}
++
++TEST_CASE("Strict source snapshots reject late recording and changed path policy") {
++    SourceManager late;
++    late.assignText("module m; endmodule");
++    CHECK_THROWS(late.enableSnapshotRecording());
++    SourceManager original;
++    original.enableSnapshotRecording();
++    auto root = original.assignText("module m; endmodule");
++    original.setIncDirFirst(true);
++    std::vector graph{root.id};
++    CHECK_THROWS(original.captureSnapshot(graph));
++}
++
++TEST_CASE("Strict source snapshot reconstructs ordered preincludes and generated macros") {
++    SnapshotFixture f;
++    SourceManager original;
++    original.enableSnapshotRecording();
++    auto first = original.assignText((f.dir / "first.svh").string(), "`define ORDER 1\n");
++    auto second = original.assignText((f.dir / "second.svh").string(),
++                                      "`undef ORDER\n`define ORDER 2\n");
++    auto root = original.assignText((f.dir / "root.sv").string(),
++                                    "module m; localparam A = `ORDER; localparam B = `CMD; initial "
++                                    "$display(`__FILE__); endmodule\n");
++    PreprocessorOptions pp;
++    pp.predefines.emplace_back("CMD=7");
++    std::vector roots{first, second, root};
++    auto tree = SyntaxTree::fromBuffers(roots, original, Bag{pp});
++    auto originalText = tree->root().toString();
++    std::vector rootIds{first.id, second.id, root.id};
++    rootIds.insert(rootIds.end(), tree->getPredefineBufferIds().begin(),
++                   tree->getPredefineBufferIds().end());
++    auto snapshot = original.captureSnapshot(rootIds);
++    SourceManager replay;
++    replay.loadSnapshot(snapshot);
++    std::vector<SourceBuffer> restored;
++    for (size_t i = 0; i < 3; i++)
++        restored.push_back(replay.createRootBuffer(snapshot.graphFileIds[i]));
++    replay.setSnapshotGeneratedSequence(std::span(snapshot.graphFileIds).subspan(3));
++    auto replayTree = SyntaxTree::fromBuffers(restored, replay, Bag{pp});
++    replay.finishSnapshotGeneratedSequence();
++    CHECK(replayTree->root().toString() == originalText);
++    CHECK(DiagnosticEngine::reportAll(replay, replayTree->diagnostics()) ==
++          DiagnosticEngine::reportAll(original, tree->diagnostics()));
++}
++
++TEST_CASE("Strict source snapshot preserves canonicalization failures and validates load") {
++    SnapshotFixture f;
++    fs::create_symlink("cycle", f.dir / "cycle");
++    SourceManager original;
++    original.enableSnapshotRecording();
++    auto failure = original.readSource(f.dir / "cycle/file.sv");
++    REQUIRE(!failure);
++    auto snapshot = original.captureSnapshot({});
++    fs::remove(f.dir / "cycle");
++    fs::create_directories(f.dir / "cycle");
++    f.write("cycle/file.sv", "module now_exists; endmodule\n");
++    SourceManager replay;
++    replay.loadSnapshot(snapshot);
++    auto same = replay.readSource(f.dir / "cycle/file.sv");
++    REQUIRE(!same);
++    CHECK(same.error() == failure.error());
++    SourceManager configured;
++    REQUIRE(!configured.addUserDirectories(f.dir.string()));
++    CHECK_THROWS(configured.loadSnapshot(snapshot));
++    snapshot.lookups.push_back(snapshot.lookups.front());
++    SourceManager invalid;
++    CHECK_THROWS(invalid.loadSnapshot(snapshot));
++}
++
++TEST_CASE("Strict source snapshot preserves repeated predefine identities in subset replay") {
++    SourceManager original;
++    original.enableSnapshotRecording();
++    auto a = original.assignText("first.sv", "module a; localparam P = `CMD; endmodule\n");
++    auto b = original.assignText("second.sv", "module b; localparam P = `CMD; endmodule\n");
++    PreprocessorOptions pp;
++    pp.predefines.emplace_back("CMD=7");
++    auto first = SyntaxTree::fromBuffer(a, original, Bag{pp});
++    auto second = SyntaxTree::fromBuffer(b, original, Bag{pp});
++    REQUIRE(first->getPredefineBufferIds().size() == 1);
++    REQUIRE(second->getPredefineBufferIds().size() == 1);
++    std::vector graph{a.id, b.id, first->getPredefineBufferIds()[0],
++                      second->getPredefineBufferIds()[0]};
++    auto snapshot = original.captureSnapshot(graph);
++    SourceManager replay;
++    replay.loadSnapshot(snapshot);
++    auto root = replay.createRootBuffer(snapshot.graphFileIds[1]);
++    replay.setSnapshotGeneratedSequence(std::span(snapshot.graphFileIds).subspan(3, 1));
++    auto restored = SyntaxTree::fromBuffer(root, replay, Bag{pp});
++    replay.finishSnapshotGeneratedSequence();
++    REQUIRE(restored->getPredefineBufferIds().size() == 1);
++    CHECK(replay.getFullPath(restored->getPredefineBufferIds()[0]) ==
++          original.getFullPath(second->getPredefineBufferIds()[0]));
++    CHECK(restored->root().toString() == second->root().toString());
++    // The same immutable tree can be replayed again without consuming global identities.
++    replay.setSnapshotGeneratedSequence(std::span(snapshot.graphFileIds).subspan(3, 1));
++    CHECK(SyntaxTree::fromBuffer(root, replay, Bag{pp}));
++    replay.finishSnapshotGeneratedSequence();
++    CHECK(!replay.snapshotIncomplete());
++
++    SourceManager incomplete;
++    incomplete.loadSnapshot(snapshot);
++    incomplete.setSnapshotGeneratedSequence(std::span(snapshot.graphFileIds).subspan(3, 1));
++    CHECK_THROWS_AS(incomplete.finishSnapshotGeneratedSequence(),
++                    SourceManager::SnapshotIncompleteError);
++}
++
++TEST_CASE("Strict source snapshot separates multiline predefine includes from generated roots") {
++    SnapshotFixture f;
++    f.write("defs.svh", "`define INCLUDED 8\n");
++    SourceManager original;
++    original.enableSnapshotRecording();
++    auto root = original.assignText("design.sv", "module m; localparam P = `INCLUDED; endmodule\n");
++    PreprocessorOptions pp;
++    pp.predefines.push_back("CMD=7\n`include \"" + (f.dir / "defs.svh").string() + "\"");
++    auto tree = SyntaxTree::fromBuffer(root, original, Bag{pp});
++    REQUIRE(tree->getPredefineBufferIds().size() == 1);
++    std::vector graph{root.id, tree->getPredefineBufferIds()[0]};
++    auto snapshot = original.captureSnapshot(graph);
++    fs::remove(f.dir / "defs.svh");
++    SourceManager replay;
++    replay.loadSnapshot(snapshot);
++    auto restoredRoot = replay.createRootBuffer(snapshot.graphFileIds[0]);
++    replay.setSnapshotGeneratedSequence(std::span(snapshot.graphFileIds).subspan(1));
++    auto restored = SyntaxTree::fromBuffer(restoredRoot, replay, Bag{pp});
++    replay.finishSnapshotGeneratedSequence();
++    CHECK(restored->root().toString() == tree->root().toString());
++    CHECK(DiagnosticEngine::reportAll(replay, restored->diagnostics()) ==
++          DiagnosticEngine::reportAll(original, tree->diagnostics()));
++}
++
++TEST_CASE("Strict source snapshot rejects caller injected location and diagnostic directives") {
++    SourceManager original;
++    original.enableSnapshotRecording();
++    auto root = original.assignText("root.sv", "module m; endmodule\n");
++    SECTION("line mapping") {
++        original.addLineDirective(SourceLocation(root.id, 0), 2, "virtual.sv", 0);
++    }
++    SECTION("diagnostic mapping") {
++        original.addDiagnosticDirective(SourceLocation(root.id, 0), "empty-member",
++                                        DiagnosticSeverity::Ignored);
++    }
++    std::vector graph{root.id};
++    CHECK_THROWS(original.captureSnapshot(graph));
++}
++
++TEST_CASE("Strict source snapshot reconstructs source diagnostic pragmas") {
++    SourceManager original;
++    original.enableSnapshotRecording();
++    auto root = original.assignText(
++        "root.sv", "`pragma diagnostic ignore=\"empty-member\"\nmodule m; ; endmodule\n");
++    auto tree = SyntaxTree::fromBuffer(root, original);
++    DiagnosticEngine before(original);
++    before.setMappingsFromPragmas();
++    std::vector graph{root.id};
++    auto snapshot = original.captureSnapshot(graph);
++    auto settings = before.captureSettings();
++    SourceManager replay;
++    replay.loadSnapshot(snapshot);
++    auto restored = replay.createRootBuffer(snapshot.graphFileIds[0]);
++    auto restoredTree = SyntaxTree::fromBuffer(restored, replay);
++    DiagnosticEngine after(replay);
++    after.applySettings(settings);
++    after.setMappingsFromPragmas();
++    CHECK(before.getSeverity(diag::EmptyMember, SourceLocation(root.id, 55)) ==
++          after.getSeverity(diag::EmptyMember, SourceLocation(restored.id, 55)));
++    CHECK(after.getSeverity(diag::EmptyMember, SourceLocation(restored.id, 55)) ==
++          DiagnosticSeverity::Ignored);
++}
++
++TEST_CASE("Strict source snapshot recovers failed include aliases after an editor overlay") {
++    SnapshotFixture f;
++    SourceManager original;
++    original.enableSnapshotRecording();
++    auto root = original.assignText((f.dir / "root.sv").string(),
++                                    "`include \"new.svh\"\nmodule m; endmodule\n");
++    auto missingTree = SyntaxTree::fromBuffer(root, original);
++    REQUIRE(!missingTree->diagnostics().empty());
++    const auto alias = f.dir / "first/../new.svh";
++    REQUIRE(!original.readSource(alias));
++    auto overlay = original.assignText((f.dir / "new.svh").string(), "`define NEW 1\n");
++    REQUIRE(original.readSource(alias));
++    auto freshTree = SyntaxTree::fromBuffer(root, original);
++    std::vector graph{root.id, overlay.id};
++    auto snapshot = original.captureSnapshot(graph);
++    SourceManager replay;
++    replay.loadSnapshot(snapshot);
++    auto restored = replay.createRootBuffer(snapshot.graphFileIds[0]);
++    auto freshReplay = SyntaxTree::fromBuffer(restored, replay);
++    CHECK(DiagnosticEngine::reportAll(replay, freshReplay->diagnostics()) ==
++          DiagnosticEngine::reportAll(original, freshTree->diagnostics()));
++    auto restoredAlias = replay.readSource(alias);
++    REQUIRE(restoredAlias);
++    CHECK(restoredAlias->data == overlay.data);
++    CHECK(!replay.snapshotIncomplete());
++}
++
++TEST_CASE("Strict source snapshot bounds captured file bytes before copying") {
++    constexpr size_t limit = 64 * 1024 * 1024;
++    SourceManager original;
++    original.setDisableProximatePaths(true);
++    original.enableSnapshotRecording();
++    auto addBuffer = [&](std::string_view name, size_t size) {
++        SmallVector<char> bytes;
++        bytes.resize(size, 'x');
++        bytes.back() = '\0';
++        return original.assignBuffer(name, std::move(bytes));
++    };
++
++    SECTION("exact limit counts shared file data once") {
++        auto root = addBuffer("large.sv", limit);
++        auto alias = original.readSource("large.sv");
++        REQUIRE(alias);
++        std::vector graph{root.id, alias->id};
++        auto snapshot = original.captureSnapshot(graph);
++        REQUIRE(snapshot.files.size() == 1);
++        CHECK(snapshot.files.front().bytes.size() == limit);
++        CHECK(snapshot.graphFileIds[0] == snapshot.graphFileIds[1]);
++    }
++    SECTION("single oversized file") {
++        auto root = addBuffer("large.sv", limit + 1);
++        std::vector graph{root.id};
++        CHECK_THROWS_WITH(original.captureSnapshot(graph),
++                          "source snapshot exceeds 64 MiB file-byte limit");
++    }
++    SECTION("aggregate limit includes terminating sentinels") {
++        auto first = addBuffer("first.sv", limit / 2);
++        auto second = addBuffer("second.sv", limit / 2 + 1);
++        std::vector graph{first.id, second.id};
++        CHECK_THROWS_WITH(original.captureSnapshot(graph),
++                          "source snapshot exceeds 64 MiB file-byte limit");
++    }
++}
++
++TEST_CASE("Strict source snapshot bounds unique files and recorded entries") {
++    SourceManager original;
++    original.setDisableProximatePaths(true);
++    original.setDisableLocalIncludes(true);
++    original.enableSnapshotRecording();
++    SECTION("unique file ceiling") {
++        for (size_t i = 0; i < 100000; i++)
++            original.assignText("file" + std::to_string(i), "");
++        {
++            auto snapshot = original.captureSnapshot({});
++            CHECK(snapshot.files.size() == 100000);
++        }
++        original.assignText("one-too-many", "");
++        CHECK_THROWS_WITH(original.captureSnapshot({}),
++                          "source snapshot exceeds 100000 unique-file limit");
++    }
++    SECTION("recorded header ceiling uses no filesystem reads") {
++        // No local directory or include paths means these requests perform no I/O.
++        for (size_t i = 0; i < 500001; i++)
++            (void)original.readHeader("header" + std::to_string(i), {}, nullptr, false, {});
++        CHECK_THROWS_WITH(original.captureSnapshot({}),
++                          "source snapshot exceeds 500000 recorded-entry limit");
++    }
++}
++
++TEST_CASE("Strict source snapshot begins after command-file configuration and editor seeding") {
++    SnapshotFixture f;
++    f.write("first/inputs.f", "+incdir+../second\n");
++    f.write("second/decl.svh", "int retained_member;\n");
++    SourceManager original;
++    fs::current_path(f.dir / "first");
++    REQUIRE(original.readSource("inputs.f"));
++    REQUIRE(!original.addUserDirectories("../second"));
++    fs::current_path(f.dir);
++    original.assignText((f.dir / "root.sv").string(),
++                        "module current;\n`include \"decl.svh\"\nendmodule\n");
++    CHECK_THROWS(original.enableSnapshotRecording());
++    original.enableSnapshotRecording(true);
++    auto root = original.readSource(f.dir / "root.sv");
++    REQUIRE(root);
++    auto tree = SyntaxTree::fromBuffer(*root, original);
++    REQUIRE(tree->diagnostics().empty());
++    auto snapshot = original.captureSnapshot(tree->getSourceBufferIds());
++    f.write("second/decl.svh", "bad poisoned replacement\n");
++    fs::current_path(f.saved);
++    SourceManager replay;
++    replay.loadSnapshot(snapshot);
++    auto restored = replay.createRootBuffer(snapshot.graphFileIds.front());
++    auto replayTree = SyntaxTree::fromBuffer(restored, replay);
++    CHECK(replayTree->root().toString() == tree->root().toString());
++    CHECK(replayTree->diagnostics().empty());
++    CHECK_THROWS_AS(replay.readSource("first/inputs.f"), SourceManager::SnapshotIncompleteError);
++}
++
++TEST_CASE("Strict source recording cannot reset an active configuration epoch") {
++    SnapshotFixture f;
++    SourceManager original;
++    original.enableSnapshotRecording();
++    auto root = original.assignText((f.dir / "root.sv").string(), "module m; endmodule\n");
++    REQUIRE(!original.addUserDirectories(f.dir.string()));
++    CHECK_THROWS(original.captureSnapshot(std::vector{root.id}));
++    CHECK_THROWS(original.enableSnapshotRecording(true));
++    CHECK_THROWS(original.captureSnapshot(std::vector{root.id}));
++}
+diff --git a/tests/unittests/ast/ClassTests.cpp b/tests/unittests/ast/ClassTests.cpp
+index 2353d21435f167a21bb448971b690d482d541bf5..72709888ec652c537fcd6ed9d2314d9092a147a9 100644
+--- a/tests/unittests/ast/ClassTests.cpp
++++ b/tests/unittests/ast/ClassTests.cpp
+@@ -2199,6 +2199,105 @@ endclass
+     CHECK(diags[10].code == diag::NameListWithScopeRandomize);
+ }
+ 
++TEST_CASE("Class randomize accepts inherited properties") {
++    auto tree = SyntaxTree::fromText(R"(
++class Base #(type T = int);
++    rand T inherited;
++    protected rand int protected_value;
++    local rand int local_value;
++    int non_rand;
++
++    function void run_base();
++        void'(this.randomize(local_value));
++    endfunction
++endclass
++
++class Middle extends Base #(byte);
++endclass
++
++class Derived extends Middle;
++    rand int own_value;
++    function void run();
++        void'(this.randomize(inherited, protected_value, non_rand, own_value));
++        void'(randomize(inherited));
++        void'(this.randomize(inherited) with { inherited > 0; });
++        void'(this.randomize(null));
++    endfunction
++endclass
++
++module m;
++    Derived d;
++    initial void'(d.randomize(inherited, non_rand));
++endmodule
++)");
++
++    Compilation compilation;
++    compilation.addSyntaxTree(tree);
++    NO_COMPILATION_ERRORS;
++}
++
++TEST_CASE("Class randomize inherited property restrictions") {
++    auto tree = SyntaxTree::fromText(R"(
++class Base;
++    rand int inherited;
++    protected rand int protected_value;
++    local rand int local_value;
++endclass
++
++class Derived extends Base;
++    function void run();
++        void'(this.randomize(local_value));
++        void'(this.randomize(inherited[0]));
++        void'(this.randomize(this.inherited));
++    endfunction
++endclass
++
++class Unrelated;
++    rand int other_value;
++    Derived d;
++    function void run();
++        void'(d.randomize(other_value));
++        void'(d.randomize(protected_value));
++    endfunction
++endclass
++)");
++
++    Compilation compilation;
++    compilation.addSyntaxTree(tree);
++
++    auto& diags = compilation.getAllDiagnostics();
++    REQUIRE(diags.size() == 5);
++    CHECK(diags[0].code == diag::LocalMemberAccess);
++    CHECK(diags[1].code == diag::ExpectedClassPropertyName);
++    CHECK(diags[2].code == diag::ExpectedClassPropertyName);
++    CHECK(diags[3].code == diag::ExpectedClassPropertyName);
++    CHECK(diags[4].code == diag::ProtectedMemberAccess);
++}
++
++TEST_CASE("Class randomize rejects covergroup option properties") {
++    auto tree = SyntaxTree::fromText(R"(
++class C;
++    rand int x;
++endclass
++module m;
++    C d;
++    covergroup cg;
++        option.weight = d.randomize(option);
++        option.goal = d.randomize(type_option);
++    endgroup
++    cg g = new;
++endmodule
++)");
++
++    Compilation compilation;
++    compilation.addSyntaxTree(tree);
++
++    auto& diags = compilation.getAllDiagnostics();
++    REQUIRE(diags.size() == 2);
++    CHECK(diags[0].code == diag::ExpectedClassPropertyName);
++    CHECK(diags[1].code == diag::ExpectedClassPropertyName);
++}
++
+ TEST_CASE("Scope randomize rand variables") {
+     auto tree = SyntaxTree::fromText(R"(
+ module m;
+diff --git a/tests/unittests/ast/ExpressionTests.cpp b/tests/unittests/ast/ExpressionTests.cpp
+index 444eb7a0567e5a4db447035d4cb7d9b886b8e6df..6b3c4b8683fd0fad3f76d66785d10671bb2b4fdd 100644
+--- a/tests/unittests/ast/ExpressionTests.cpp
++++ b/tests/unittests/ast/ExpressionTests.cpp
+@@ -4262,6 +4262,82 @@ endmodule
+     CHECK(diags[2].code == diag::ConcatWithStringInt);
+ }
+ 
++TEST_CASE("String concatenation integral conversion compat flag") {
++    auto tree = SyntaxTree::fromText(R"(
++function automatic string append_byte(string text, byte character);
++    return {text, character};
++endfunction
++
++function automatic string append_index(string text, string suffix);
++    return {text, suffix[0]};
++endfunction
++
++function automatic string append_packed(string text, logic [31:0] characters);
++    return {text, characters};
++endfunction
++
++function automatic string append_unsigned(string text, byte unsigned character);
++    return {text, character};
++endfunction
++
++$static_assert(append_byte("abc", 8'h64) == "abcd");
++$static_assert(append_byte("abc", 8'h00) == "abc");
++$static_assert(append_byte("abc", byte'(8'hff)) == {"abc", string'(8'hff)});
++$static_assert(append_unsigned("abc", 8'hff) == {"abc", string'(8'hff)});
++$static_assert(append_index("abc", "def") == "abcd");
++$static_assert(append_packed("a", 32'h00620063) == "abc");
++$static_assert({string'("a"), 12'h162} == {"a", string'(12'h162)});
++$static_assert({8'h61, string'("b"), 8'h63} == "abc");
++$static_assert({8'h61, 8'h62} == 16'h6162);
++)");
++
++    SECTION("Strict mode still diagnoses integral operands") {
++        Compilation compilation;
++        compilation.addSyntaxTree(tree);
++        auto& diags = compilation.getAllDiagnostics();
++        REQUIRE(diags.size() == 7);
++        for (auto& diag : diags)
++            CHECK(diag.code == diag::ConcatWithStringInt);
++    }
++
++    SECTION("Relaxed mode evaluates operands as string casts") {
++        CompilationOptions options;
++        options.flags |= CompilationFlags::RelaxStringConversions;
++        Compilation compilation(options);
++        compilation.addSyntaxTree(tree);
++        NO_COMPILATION_ERRORS;
++    }
++}
++
++TEST_CASE("String concatenation compat flag rejects non-integral operands") {
++    auto tree = SyntaxTree::fromText(R"(
++module m;
++    string s;
++    event e;
++    real r;
++    byte a[];
++    initial begin
++        s = {s, e};
++        s = {s, r};
++        s = {s, a};
++        s = {s, {0{8'h62}}};
++    end
++endmodule
++)");
++
++    CompilationOptions options;
++    options.flags |= CompilationFlags::RelaxStringConversions;
++    Compilation compilation(options);
++    compilation.addSyntaxTree(tree);
++
++    auto& diags = compilation.getAllDiagnostics();
++    REQUIRE(diags.size() == 4);
++    CHECK(diags[0].code == diag::BadConcatExpression);
++    CHECK(diags[1].code == diag::BadConcatExpression);
++    CHECK(diags[2].code == diag::BadConcatExpression);
++    CHECK(diags[3].code == diag::ConcatWithStringInt);
++}
++
+ TEST_CASE("No range select ordering error for single bit value") {
+     auto tree = SyntaxTree::fromText(R"(
+ module m;
+diff --git a/tests/unittests/ast/PackageAnalysisTests.cpp b/tests/unittests/ast/PackageAnalysisTests.cpp
+new file mode 100644
+index 0000000000000000000000000000000000000000..0243e36ea4091617b7b471e13c507f875b14eda4
+--- /dev/null
++++ b/tests/unittests/ast/PackageAnalysisTests.cpp
+@@ -0,0 +1,282 @@
++// SPDX-FileCopyrightText: Michael Popoloski
++// SPDX-License-Identifier: MIT
++
++#include "Test.h"
++
++#include "slang/ast/ASTVisitor.h"
++#include "slang/ast/expressions/SelectExpressions.h"
++#include "slang/ast/symbols/ClassSymbols.h"
++#include "slang/ast/symbols/CompilationUnitSymbols.h"
++#include "slang/ast/symbols/InstanceSymbols.h"
++#include "slang/ast/symbols/ParameterSymbols.h"
++#include "slang/ast/types/AllTypes.h"
++
++TEST_CASE("Package analysis does not create design instances") {
++    auto tree = SyntaxTree::fromText(R"(
++package p;
++    typedef logic [12:0] word_t;
++    class Packet;
++        word_t data;
++    endclass
++endpackage
++
++module broken;
++    missing_module child();
++    initial missing_variable = 1;
++endmodule
++
++module recursive;
++    recursive child();
++endmodule
++
++module top;
++    recursive child();
++endmodule
++
++program invalid_program;
++    initial missing_program_variable = 1;
++endprogram
++
++interface unused_interface;
++    initial missing_interface_variable = 1;
++endinterface
++)");
++
++    CompilationOptions options;
++    // Also cover strict no-top checks and the opt-in check-uninstantiated mode.
++    options.flags = CompilationFlags::PackageAnalysis | CompilationFlags::CheckUninstantiated;
++    options.paramOverrides = {"malformed", "top.parameter=missing_value"};
++
++    SECTION("Automatic tops") {
++    }
++    SECTION("Explicit top") {
++        options.topModules.insert("top");
++    }
++    SECTION("Invalid explicit top") {
++        options.topModules.insert("missing_top");
++    }
++
++    Compilation compilation(options);
++    compilation.addSyntaxTree(tree);
++    auto& root = compilation.getRoot();
++    CHECK(root.topInstances.empty());
++    REQUIRE(root.compilationUnits.size() == 1);
++    for (auto& member : root.members())
++        CHECK(member.kind != SymbolKind::Instance);
++
++    // Wildcard import resolution can force elaboration before full diagnostics.
++    compilation.forceElaborate(root);
++    NO_COMPILATION_ERRORS;
++    CHECK(root.topInstances.empty());
++    CHECK_FALSE(tree->isLibraryUnit);
++
++    auto package = compilation.getPackage("p");
++    REQUIRE(package);
++    auto packet = package->find("Packet");
++    REQUIRE(packet);
++    REQUIRE(packet->kind == SymbolKind::ClassType);
++    auto data = packet->as<ClassType>().find("data");
++    REQUIRE(data);
++    REQUIRE(data->kind == SymbolKind::ClassProperty);
++    CHECK(data->as<ClassPropertySymbol>().getType().getBitWidth() == 13);
++
++    // Reusing the same tree in an ordinary compilation must still elaborate RTL.
++    CompilationOptions ordinaryOptions;
++    ordinaryOptions.maxInstanceDepth = 8;
++    Compilation ordinary(ordinaryOptions);
++    ordinary.addSyntaxTree(tree);
++    CHECK_FALSE(ordinary.getRoot().topInstances.empty());
++    auto& diagnostics = ordinary.getSemanticDiagnostics();
++    CHECK(std::ranges::any_of(diagnostics, [](auto& d) { return d.code == diag::UnknownModule; }));
++    CHECK(std::ranges::any_of(diagnostics, [](auto& d) {
++        return d.code == diag::InfinitelyRecursiveHierarchy ||
++               d.code == diag::MaxInstanceDepthExceeded;
++    }));
++}
++
++TEST_CASE("Package analysis retains package and class errors") {
++    auto tree = SyntaxTree::fromText(R"(
++package p;
++    localparam int bad = missing_package_name;
++    class C;
++        function int f();
++            return missing_class_name;
++        endfunction
++    endclass
++    class Generic #(int N = 1);
++        localparam int bad = missing_generic_name;
++    endclass
++endpackage
++
++class UnitClass;
++    int bad = missing_unit_class_name;
++endclass
++
++module ignored;
++    initial missing_rtl_name = 1;
++endmodule
++)");
++
++    CompilationOptions options;
++    options.flags |= CompilationFlags::PackageAnalysis;
++    Compilation compilation(options);
++    compilation.addSyntaxTree(tree);
++
++    auto& diagnostics = compilation.getSemanticDiagnostics();
++    REQUIRE(diagnostics.size() == 4);
++    for (auto& diagnostic : diagnostics)
++        CHECK(diagnostic.code == diag::UndeclaredIdentifier);
++    CHECK(compilation.getRoot().topInstances.empty());
++}
++
++TEST_CASE("Package analysis preserves imports and virtual interface member types") {
++    auto tree = SyntaxTree::fromText(R"(
++package source_pkg;
++    parameter int WIDTH = 17;
++    typedef logic [WIDTH-1:0] word_t;
++endpackage
++
++interface bus #(parameter int WIDTH = 1);
++    logic [WIDTH-1:0] data;
++    initial missing_interface_body_name = 1;
++    recursive child();
++endinterface
++
++package facade;
++    import source_pkg::*;
++    export *::*;
++    word_t reference_value;
++endpackage
++
++package consumer;
++    import facade::*;
++    class Packet;
++        word_t data;
++        virtual bus #($bits(word_t)) vif;
++        function word_t read();
++            return vif.data;
++        endfunction
++    endclass
++endpackage
++
++interface recursive;
++    recursive child();
++endinterface
++)");
++
++    CompilationOptions options;
++    options.flags |= CompilationFlags::PackageAnalysis;
++    Compilation compilation(options);
++    compilation.addSyntaxTree(tree);
++    auto package = compilation.getPackage("consumer");
++    REQUIRE(package);
++    compilation.forceElaborate(*package);
++
++    auto packet = package->find("Packet");
++    REQUIRE(packet);
++    REQUIRE(packet->kind == SymbolKind::ClassType);
++    auto data = packet->as<ClassType>().find("data");
++    REQUIRE(data);
++    REQUIRE(data->kind == SymbolKind::ClassProperty);
++    CHECK(data->as<ClassPropertySymbol>().getType().getBitWidth() == 17);
++    auto vif = packet->as<ClassType>().find("vif");
++    REQUIRE(vif);
++    REQUIRE(vif->kind == SymbolKind::ClassProperty);
++    auto& type = vif->as<ClassPropertySymbol>().getType().getCanonicalType();
++    REQUIRE(type.isVirtualInterface());
++    auto& vifType = type.as<VirtualInterfaceType>();
++    auto member = vifType.iface.body.find("data");
++    REQUIRE(member);
++    REQUIRE(member->kind == SymbolKind::Variable);
++    CHECK(member->as<VariableSymbol>().getType().getBitWidth() == 17);
++    compilation.forceElaborate(vifType.iface.body);
++    NO_COMPILATION_ERRORS;
++
++    size_t memberAccesses = 0;
++    package->visit(makeVisitor([&](auto&, const MemberAccessExpression& expr) {
++        if (expr.value().type->isVirtualInterface()) {
++            memberAccesses++;
++            CHECK(expr.member.name == "data");
++            CHECK(expr.type->getBitWidth() == 17);
++        }
++    }));
++    CHECK(memberAccesses == 1);
++    CHECK(compilation.getRoot().topInstances.empty());
++}
++
++TEST_CASE("Package analysis ignores defparams and binds only when requested") {
++    auto tree = SyntaxTree::fromText(R"(
++package p;
++    typedef int value_t;
++endpackage
++
++module target;
++    parameter int P = 1;
++endmodule
++
++module bound;
++endmodule
++
++bind target bound attached();
++)");
++    auto defparam = SyntaxTree::fromText("defparam target.P = 3;");
++
++    SECTION("Declaration analysis") {
++        CompilationOptions options;
++        options.flags |= CompilationFlags::PackageAnalysis;
++        Compilation compilation(options);
++        compilation.addSyntaxTree(tree);
++        compilation.addSyntaxTree(defparam);
++        compilation.forceElaborate(compilation.getRoot());
++        NO_COMPILATION_ERRORS;
++        CHECK(compilation.getRoot().topInstances.empty());
++    }
++
++    SECTION("Ordinary compilation") {
++        Compilation compilation;
++        compilation.addSyntaxTree(tree);
++        compilation.addSyntaxTree(defparam);
++        NO_COMPILATION_ERRORS;
++        auto& root = compilation.getRoot();
++        CHECK(root.lookupName<ParameterSymbol>("target.P").getValue().integer().as<int>() == 3);
++        CHECK(root.lookupName<InstanceSymbol>("target.attached").getDefinition().name == "bound");
++    }
++}
++
++TEST_CASE("Package analysis omits invalid top-level bind and defparam diagnostics") {
++    auto tree = SyntaxTree::fromText(R"(
++package p;
++    typedef int value_t;
++endpackage
++module target;
++    parameter int P = 1;
++endmodule
++module bound;
++endmodule
++bind missing_target bound attached();
++)");
++    auto defparam = SyntaxTree::fromText("defparam target.missing_parameter = 3;");
++
++    SECTION("Declaration analysis") {
++        CompilationOptions options;
++        options.flags |= CompilationFlags::PackageAnalysis;
++        Compilation compilation(options);
++        compilation.addSyntaxTree(tree);
++        compilation.addSyntaxTree(defparam);
++        NO_COMPILATION_ERRORS;
++        CHECK(compilation.getRoot().topInstances.empty());
++    }
++
++    SECTION("Ordinary compilation") {
++        Compilation compilation;
++        compilation.addSyntaxTree(tree);
++        compilation.addSyntaxTree(defparam);
++        auto& diagnostics = compilation.getSemanticDiagnostics();
++        CHECK(std::ranges::any_of(diagnostics,
++                                  [](auto& d) { return d.code == diag::UnknownModule; }));
++        CHECK(std::ranges::any_of(diagnostics, [](auto& d) {
++            return d.code == diag::UndeclaredIdentifier ||
++                   d.code == diag::CouldNotResolveHierarchicalPath;
++        }));
++    }
++}
+diff --git a/tests/unittests/parsing/DiagnosticTests.cpp b/tests/unittests/parsing/DiagnosticTests.cpp
+index 322dabb6a2b6442a0a22db9e3e46fce53ab16dfd..25e9c71a19209139472ef915922a498aa6a3963a 100644
+--- a/tests/unittests/parsing/DiagnosticTests.cpp
++++ b/tests/unittests/parsing/DiagnosticTests.cpp
+@@ -3,6 +3,7 @@
+ 
+ #include "Test.h"
+ 
++#include "slang/ast/types/TypePrinter.h"
+ #include "slang/diagnostics/DiagnosticClient.h"
+ #include "slang/diagnostics/JsonDiagnosticClient.h"
+ #include "slang/diagnostics/TextDiagnosticClient.h"
+@@ -1043,3 +1044,140 @@ TEST_CASE("DiagnosticEngine::setBaselineSeverity -- per-unit path") {
+     CHECK(diags2.empty());
+     CHECK(engine2.getSeverity(diag::UnknownSystemName, loc) == DiagnosticSeverity::Ignored);
+ }
++
++TEST_CASE("Diagnostic settings snapshots own global settings") {
++    Compilation initializeBuiltins;
++    DiagnosticEngine::SettingsSnapshot snapshot;
++    {
++        SourceManager sourceManager;
++        DiagnosticEngine engine(sourceManager);
++        engine.setSeverity(diag::ExpectedClosingQuote, DiagnosticSeverity::Warning);
++        engine.setBaselineSeverity(diag::UnknownSystemName, DiagnosticSeverity::Error);
++        engine.setMessage(diag::ExpectedClosingQuote, "snapshot message");
++        engine.setErrorLimit(3);
++        engine.setIgnoreAllWarnings(true);
++        engine.setIgnoreAllNotes(true);
++        engine.setWarningsAsErrors(true);
++        engine.setErrorsAsFatal(true);
++        engine.setFatalsAsErrors(true);
++        REQUIRE(!engine.addIgnorePaths(".../generated/..."));
++        REQUIRE(!engine.addIgnoreMacroPaths(".../macros/..."));
++        snapshot = engine.captureSettings();
++        engine.setMessage(diag::ExpectedClosingQuote, "changed after capture");
++        engine.clearMappings();
++    }
++
++    SourceManager freshSourceManager;
++    DiagnosticEngine replay(freshSourceManager);
++    replay.applySettings(snapshot);
++    CHECK(replay.getMessage(diag::ExpectedClosingQuote) == "snapshot message");
++    CHECK(replay.getSeverity(diag::ExpectedClosingQuote, {}) == DiagnosticSeverity::Warning);
++    CHECK(replay.getSeverity(diag::UnknownSystemName, {}) == DiagnosticSeverity::Error);
++    CHECK(replay.getSeverity(diag::RealLiteralUnderflow, {}) == DiagnosticSeverity::Ignored);
++    CHECK(replay.getSeverity(diag::NoteImportedFrom, {}) == DiagnosticSeverity::Ignored);
++    CHECK(replay.getSeverity(diag::DotOnType, {}) == DiagnosticSeverity::Fatal);
++    CHECK(replay.getNumErrors() == 0);
++    CHECK(replay.getNumWarnings() == 0);
++
++    auto copied = replay.captureSettings();
++    CHECK(copied.baselineSeverityTable.at(diag::UnknownSystemName) == DiagnosticSeverity::Error);
++    CHECK(copied.ignoreWarnPatterns == snapshot.ignoreWarnPatterns);
++    CHECK(copied.ignoreMacroWarnPatterns == snapshot.ignoreMacroWarnPatterns);
++    CHECK(copied.errorLimit == 3);
++    CHECK(copied.ignoreAllWarnings);
++    CHECK(copied.ignoreAllNotes);
++    CHECK(copied.warningsAsErrors);
++    CHECK(copied.errorsAsFatal);
++    CHECK(copied.fatalsAsErrors);
++    CHECK(copied.useBuiltinTypeFormatter);
++    CHECK(copied.useBuiltinSymbolPath);
++
++    // The replay formatter must not alias the process-wide mutable formatter.
++    DiagnosticEngine other(freshSourceManager);
++    CHECK(replay.getFormatters().at(SLANG_TYPEOF(const Type*)) !=
++          other.getFormatters().at(SLANG_TYPEOF(const Type*)));
++
++    // Subsequent warning options still consult the preserved baseline table.
++    REQUIRE(replay.setWarningOptions(std::vector{"none"s}).empty());
++    CHECK(replay.getSeverity(diag::UnknownSystemName, {}) == DiagnosticSeverity::Error);
++}
++
++TEST_CASE("Diagnostic settings snapshots reject unsupported policies") {
++    Compilation initializeBuiltins;
++    SourceManager sourceManager;
++    DiagnosticEngine engine(sourceManager);
++
++    SECTION("waiver manager") {
++        engine.setWaiverManager(std::make_shared<WaiverManager>());
++        CHECK_THROWS_WITH(engine.captureSettings(),
++                          "Diagnostic settings snapshot does not support waiver managers");
++    }
++    SECTION("per-buffer warnings") {
++        auto buffer = sourceManager.assignText("snapshot.sv", "");
++        flat_hash_map<BufferID, std::vector<std::string>> options;
++        options[buffer.id] = {"none"s};
++        REQUIRE(engine.setBufferWarningOptions(options).empty());
++        CHECK_THROWS_WITH(
++            engine.captureSettings(),
++            "Diagnostic settings snapshot does not support per-buffer warning options");
++    }
++    SECTION("custom symbol callback") {
++        engine.setSymbolPathCB([](const Symbol&) { return "custom"s; });
++        CHECK_THROWS_WITH(
++            engine.captureSettings(),
++            "Diagnostic settings snapshot does not support custom symbol path callbacks");
++    }
++    SECTION("custom formatter") {
++        engine.setFormatter<const Type*>(std::make_shared<TypeArgFormatter>());
++        CHECK_THROWS_WITH(
++            engine.captureSettings(),
++            "Diagnostic settings snapshot does not support custom argument formatters");
++    }
++    SECTION("modified builtin formatter") {
++        // First detach from the process-wide default formatter.
++        engine.applySettings(engine.captureSettings());
++        auto formatter = std::static_pointer_cast<TypeArgFormatter>(
++            engine.getFormatters().at(SLANG_TYPEOF(const Type*)));
++        formatter->setOptions(TypePrintingOptions{});
++        CHECK_THROWS_WITH(
++            engine.captureSettings(),
++            "Diagnostic settings snapshot does not support custom type formatter options");
++    }
++}
++
++TEST_CASE("Diagnostic settings snapshots rebuild pragma mappings") {
++    constexpr auto text = R"(
++`pragma diagnostic ignore="empty-member"
++module m;
++    ;
++endmodule
++)";
++    DiagnosticEngine::SettingsSnapshot snapshot;
++    {
++        SourceManager sourceManager;
++        auto buffer = sourceManager.assignText("source", text);
++        auto tree = SyntaxTree::fromBuffer(buffer, sourceManager);
++        DiagnosticEngine engine(sourceManager);
++        REQUIRE(engine.setMappingsFromPragmas().empty());
++        REQUIRE(tree->diagnostics().empty());
++        SourceLocation location(buffer.id, std::string_view(text).find("    ;") + 4);
++        CHECK(engine.getSeverity(diag::EmptyMember, location) == DiagnosticSeverity::Ignored);
++        snapshot = engine.captureSettings();
++    }
++
++    SourceManager freshSourceManager;
++    freshSourceManager.assignText("shift-buffer-id.sv", "");
++    auto buffer = freshSourceManager.assignText("source", text);
++    auto tree = SyntaxTree::fromBuffer(buffer, freshSourceManager);
++    DiagnosticEngine replay(freshSourceManager);
++    replay.applySettings(snapshot);
++    REQUIRE(tree->diagnostics().empty());
++    SourceLocation location(buffer.id, std::string_view(text).find("    ;") + 4);
++    CHECK(replay.getSeverity(diag::EmptyMember, location) == DiagnosticSeverity::Warning);
++    REQUIRE(replay.setMappingsFromPragmas().empty());
++    CHECK(replay.getSeverity(diag::EmptyMember, location) == DiagnosticSeverity::Ignored);
++
++    // Applying again clears previous mappings even when reusing an engine.
++    replay.applySettings(snapshot);
++    CHECK(replay.getSeverity(diag::EmptyMember, location) == DiagnosticSeverity::Warning);
++}

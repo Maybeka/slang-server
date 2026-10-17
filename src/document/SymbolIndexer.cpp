@@ -12,6 +12,7 @@
 #include "util/SlangExtensions.h"
 #include <algorithm>
 
+#include "slang/ast/Compilation.h"
 #include "slang/ast/Scope.h"
 #include "slang/ast/Symbol.h"
 #include "slang/ast/symbols/CompilationUnitSymbols.h"
@@ -284,6 +285,28 @@ void SymbolIndexer::indexSymbolName(const slang::ast::Symbol& symbol, bool isUnn
             }
         }
     }
+}
+
+void SymbolIndexer::handle(const slang::ast::PackageSymbol& sym) {
+    indexSymbolName(sym);
+    bool containsEditedFile = sym.location.buffer() == m_buffer;
+    // The package declaration is in its root file, while a class can be in an included
+    // buffer. Follow that include occurrence back to the enclosing package, without
+    // walking unrelated packages merely because they are compilation dependencies.
+    auto* syntax = sym.getSyntax();
+    auto* sourceManager = sym.getCompilation().getSourceManager();
+    if (!containsEditedFile && syntax && sourceManager) {
+        auto range = sourceManager->getFullyExpandedRange(syntax->sourceRange());
+        for (auto location = sourceManager->getIncludedFrom(m_buffer); location.valid();
+             location = sourceManager->getIncludedFrom(location.buffer())) {
+            if (range.contains(location)) {
+                containsEditedFile = true;
+                break;
+            }
+        }
+    }
+    if (containsEditedFile)
+        visitDefault(sym);
 }
 
 void SymbolIndexer::handle(const slang::ast::InstanceArraySymbol& sym) {

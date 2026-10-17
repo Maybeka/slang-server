@@ -22,10 +22,12 @@ using namespace slang;
 ShallowCompilation::ShallowCompilation(
     SourceManager& sourceManager, std::shared_ptr<syntax::SyntaxTree> tree, const Bag& options,
     const std::vector<std::shared_ptr<syntax::SyntaxTree>>& dependencies,
-    const ServerCompilation* design) :
+    const ServerCompilation* design, const lsp::RequestContext& ctx, bool packageOnly) :
     m_sourceManager(sourceManager), m_tree(std::move(tree)), m_allTrees{m_tree},
     m_analysisOptions(options.getOrDefault<analysis::AnalysisOptions>()) {
-    m_allTrees.insert(m_allTrees.end(), dependencies.begin(), dependencies.end());
+    for (const auto& dependency : dependencies)
+        if (std::find(m_allTrees.begin(), m_allTrees.end(), dependency) == m_allTrees.end())
+            m_allTrees.push_back(dependency);
 
     auto cOptions = options.getOrDefault<ast::CompilationOptions>();
     cOptions.flags |= ast::CompilationFlags::AllowTopLevelIfacePorts;
@@ -35,9 +37,18 @@ ShallowCompilation::ShallowCompilation(
     cOptions.maxInstanceDepth = 3;
     cOptions.topModules.clear();
 
+    if (packageOnly) {
+        cOptions.flags |= ast::CompilationFlags::PackageAnalysis;
+        cOptions.flags &= ~ast::CompilationFlags::CheckUninstantiated;
+    }
+    ctx.checkpoint("before compilation construction");
     m_compilation = std::make_unique<ast::Compilation>(cOptions);
-    for (auto& depTree : m_allTrees)
+    ctx.checkpoint("after compilation construction");
+    for (auto& depTree : m_allTrees) {
+        ctx.checkpoint("before adding syntax tree");
         m_compilation->addSyntaxTree(depTree);
+        ctx.checkpoint("after adding syntax tree");
+    }
 
     if (design) {
         std::vector<std::string_view> definitionNames;
@@ -59,7 +70,8 @@ bool ShallowCompilation::hasValidBuffers() const {
 }
 
 const Diagnostics& ShallowCompilation::getSemanticDiagnostics() {
-    if (!m_editedDefinitionsElaborated) {
+    if (!m_editedDefinitionsElaborated &&
+        !m_compilation->hasFlag(ast::CompilationFlags::PackageAnalysis)) {
         auto& root = m_compilation->getRoot();
         for (auto* symbol : m_compilation->getDefinitions()) {
             auto* definition = symbol->as_if<ast::DefinitionSymbol>();

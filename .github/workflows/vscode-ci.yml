@@ -39,7 +39,9 @@ jobs:
 
       - name: Checkout server dependencies
         if: runner.os == 'Linux'
-        run: git submodule update --init
+        run: |
+          git submodule update --init
+          python3 restoration/prepare-main-sdk.py --apply
 
       - name: Run Lint
         working-directory: clients/vscode

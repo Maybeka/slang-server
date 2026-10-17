@@ -63,7 +63,8 @@ struct Indexer {
     void onWorkspaceDidChangeWatchedFiles(const lsp::DidChangeWatchedFilesParams& params);
 
     // For open document lifecycle
-    void updateDocument(const std::filesystem::path& uri, const slang::syntax::SyntaxTree& tree);
+    void updateDocument(const std::filesystem::path& uri, const slang::syntax::SyntaxTree& tree,
+                        slang::BufferID target = {});
 
     /// Refresh direct include relationships from parsed buffers without changing search roots.
     void updateIncludes(const slang::syntax::SyntaxTree& tree);
@@ -149,6 +150,16 @@ struct Indexer {
     // Iterate over all symbols (for workspace symbols)
     template<std::invocable<const std::string&, const Indexer::GlobalSymbolLoc&> Callback>
     void forEachSymbol(Callback&& callback) const;
+
+    struct PackageOwnerCandidates {
+        uint64_t revision = 0;
+        std::vector<std::filesystem::path> paths;
+        bool limitExceeded = false;
+    };
+    static constexpr size_t MaxOwnerGraphFiles = 256;
+    static constexpr size_t MaxOwnerCandidates = 16;
+    uint64_t getRevision() const;
+    PackageOwnerCandidates getPackageOwnerCandidates(const std::filesystem::path& header) const;
 
 private:
     friend struct IndexWriteGuard;
@@ -261,6 +272,7 @@ private:
 
     // Threading - uses reader-writer lock pattern
     uint32_t numThreads_ = 0;
+    uint64_t revision_ = 0;
     mutable std::shared_mutex indexMutex_;
     mutable std::condition_variable_any indexingCondition_;
     bool indexingInProgress_ = false;
@@ -272,10 +284,13 @@ struct IndexWriteGuard {
     Indexer& indexer;
     std::unique_lock<std::shared_mutex> lock;
 
-    IndexWriteGuard(Indexer& idx) : indexer(idx), lock(idx.indexMutex_) {
+    IndexWriteGuard(Indexer& idx, bool advanceRevision = true) :
+        indexer(idx), lock(idx.indexMutex_) {
         // Wait for any in-progress indexing to complete
         idx.indexingCondition_.wait(lock, [&] { return !idx.indexingInProgress_; });
         idx.indexingInProgress_ = true;
+        if (advanceRevision)
+            ++idx.revision_;
     }
 
     IndexWriteGuard(const IndexWriteGuard&) = delete;

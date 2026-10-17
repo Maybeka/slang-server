@@ -8,6 +8,7 @@
 #pragma once
 
 #include "lsp/LspTypes.h"
+#include "lsp/RequestContext.h"
 #include <memory>
 #include <string_view>
 #include <utility>
@@ -115,7 +116,8 @@ struct CompletionContext {
     /// @param lspContext The LSP completion-request context
     /// @returns The completion context at that location
     static CompletionContext fromLocation(SlangDoc& doc, slang::SourceLocation loc,
-                                          lsp::CompletionContext lspContext = {});
+                                          lsp::CompletionContext lspContext = {},
+                                          const lsp::RequestContext& requestCtx = {});
 };
 
 } // namespace server

@@ -611,7 +611,9 @@ protected:
     /// Request to request hover information at a given text document position. The request's
     /// parameter is of type {@link TextDocumentPosition} the response is of
     /// type {@link Hover} or a Thenable that resolves to such.
-    virtual std::optional<Hover> getDocHover(const HoverParams&) { return std::optional<Hover>{}; }
+    virtual std::optional<Hover> getDocHover(const HoverParams&, RequestContext = {}) {
+        return std::optional<Hover>{};
+    }
 
     void registerDocHover() {
         this->template registerMethod<HoverParams, std::optional<Hover>, &Impl::getDocHover>(
@@ -751,7 +753,7 @@ protected:
     /// the response is of either type {@link Definition} or a typed array of
     /// {@link DefinitionLink} or a Thenable that resolves to such.
     virtual rfl::Variant<Definition, std::vector<DefinitionLink>, std::monostate> getDocDefinition(
-        const DefinitionParams&) {
+        const DefinitionParams&, RequestContext = {}) {
         return rfl::Variant<Definition, std::vector<DefinitionLink>, std::monostate>{};
     }
 
@@ -786,7 +788,7 @@ protected:
     /// sorting and filtering, like `sortText`, `filterText`, `insertText`, and `textEdit`, must not
     /// be changed during resolve.
     virtual rfl::Variant<std::vector<CompletionItem>, CompletionList, std::monostate>
-    getDocCompletion(const CompletionParams&) {
+    getDocCompletion(const CompletionParams&, RequestContext = {}) {
         return rfl::Variant<std::vector<CompletionItem>, CompletionList, std::monostate>{};
     }
 

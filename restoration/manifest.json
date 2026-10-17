@@ -1,0 +1,58 @@
+{
+  "format": 1,
+  "purpose": "Exact recovered Linux fast-CWD source baseline, strict default; restoration packaging only",
+  "archive": {
+    "filename": "slang-server-tested-linux-fast-cwd-source.tar.gz",
+    "sha256": "a0714d8e20284523d3e458dc1bb3d20247a7b9263c9ddcfde874c9ae2b89285e",
+    "bytes": 10228484
+  },
+  "evidence_archive": {
+    "sha256": "eac0d513e3bf46ecb9533bddf6c1c3bbe53233a49b25d73cc6f4238172172c8d",
+    "published": false
+  },
+  "server_base_commit": "a85abe34a802816f7dfded6e90d173c69ffc3364",
+  "observed_fork_main_before_publication": "7cc41bac96ae39dc79c77c2bff0a5d01dd4fd1ad",
+  "submodules": {
+    "external/slang": "eb8a331e244f7f10d04c605aff438bc6303ba1ee",
+    "external/ctre": "6225211806c48230e5d17a1e555ef69e7325051c",
+    "external/reflect-cpp": "a26047a4d3bdbd5cf6b65995cbc5e7862e241c57"
+  },
+  "slang_patch": {
+    "path": "restoration/slang.patch",
+    "sha256": "96550dbfbfd65a0a986c0e6e2769a3f96857b0d70ec6bb728eeb612b41da4bbe",
+    "files_changed": 32,
+    "apply_in": "external/slang"
+  },
+  "source_manifest": {
+    "path": "restoration/source-sha256.json",
+    "sha256": "b0cb1f5b5c5a057ec21cb8e53ced854a1458731067d913e22ae98f080cc3e426",
+    "files": 2881,
+    "original_files": 2887
+  },
+  "offline_dependencies": {
+    "path": "restoration/offline-dependencies.json",
+    "sha256": "9691644e67adf3b45dd9ac626929e74203b7098b8ea780e4eb921cbd01ebe67b",
+    "note": "Exact pinned upstream sources; tomlplusplus Windows project files use checkout CRLF as recorded by the hashes. No dependency source tarballs are republished."
+  },
+  "exclusions": [
+    "Four .pytest_cache files",
+    "Raw evidence and provenance logs",
+    "Build outputs and binaries",
+    "Offline dependency source copies (restore from pinned upstream commits)",
+    "Historical packaging note MACOS-SOURCE-PACKAGE.txt; original archive retained unchanged",
+    "Historical validation document docs/macos-diagnostics.md; original archive retained unchanged"
+  ],
+  "archive_omissions_restored_from_upstream": [
+    "docs/assets/",
+    "clients/vscode/images/",
+    "external/reflect-cpp/docs/assets/"
+  ],
+  "source_redactions": [],
+  "historical_validation": {
+    "platform": "Linux x86_64 Debian 13",
+    "compiler": "GCC 14.2.0",
+    "configuration": "Release -O3 -DNDEBUG; mimalloc OFF",
+    "tested_binary_sha256": "482df415afea042ffabcd63da376d71332b498832858635c42a1167163f008cd",
+    "limits": "Historical package evidence only. No new build, runtime, or performance tests during this restoration publication. GCC 13 and ARM64 untested in final validation; final Linux reload fix not revalidated on macOS. Older macOS packaging/validation documents are excluded. No demonstrated general responsiveness improvement; keep strict default."
+  }
+}

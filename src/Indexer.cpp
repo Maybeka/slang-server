@@ -298,28 +298,31 @@ const fs::path* Indexer::internUri(const fs::path& path) {
     return &(*it);
 }
 
-void Indexer::updateDocument(const fs::path& path, const slang::syntax::SyntaxTree& tree) {
+void Indexer::updateDocument(const fs::path& path, const slang::syntax::SyntaxTree& tree,
+                             slang::BufferID target) {
     IndexWriteGuard guard(*this);
 
     // Extract new data
     IndexedPath newPath;
     extractFromRoot(tree.root().as<slang::syntax::CompilationUnitSyntax>(), tree.getMetadata(),
-                    tree.sourceManager(), tree.getSourceBufferIds()[0], newPath);
+                    tree.sourceManager(), (target ? target : tree.getSourceBufferIds()[0]),
+                    newPath);
 
     // Extract macros only if no global symbols were found (header files)
     if (newPath.symbols.empty()) {
-        extractMacros(tree.getDefinedMacros(), tree.sourceManager(), tree.getSourceBufferIds()[0],
-                      newPath);
+        extractMacros(tree.getDefinedMacros(), tree.sourceManager(),
+                      (target ? target : tree.getSourceBufferIds()[0]), newPath);
     }
 
     for (const auto& include : tree.getIncludeDirectives()) {
-        if (!include.isSystem && tree.sourceManager()
-                                         .getFullyExpandedLoc(include.syntax->sourceRange().start())
-                                         .buffer() == tree.getSourceBufferIds()[0])
+        if (!include.isSystem &&
+            tree.sourceManager()
+                    .getFullyExpandedLoc(include.syntax->sourceRange().start())
+                    .buffer() == (target ? target : tree.getSourceBufferIds()[0]))
             newPath.includes.emplace_back(include.path);
     }
     extractHeaderSymbols(tree.root().as<slang::syntax::CompilationUnitSyntax>(),
-                         tree.getSourceBufferIds()[0], path, newPath);
+                         (target ? target : tree.getSourceBufferIds()[0]), path, newPath);
 
     indexPath(path, newPath);
 }
@@ -345,7 +348,7 @@ void Indexer::replaceIncludes(const fs::path& parent, std::vector<fs::path> targ
 }
 
 void Indexer::updateIncludes(const slang::syntax::SyntaxTree& tree) {
-    IndexWriteGuard guard(*this);
+    IndexWriteGuard guard(*this, false);
     const auto& sm = tree.sourceManager();
     std::unordered_map<fs::path, std::vector<fs::path>> includes;
     for (auto buffer : tree.getSourceBufferIds()) {
@@ -512,7 +515,7 @@ std::vector<fs::path> Indexer::getFilesIncluding(const fs::path& path) {
     auto canonicalPath = fs::weakly_canonical(path, ec);
     if (ec)
         return {};
-    IndexWriteGuard guard(*this);
+    IndexWriteGuard guard(*this, false);
     if (auto cached = resolvedIncluders_.find(canonicalPath); cached != resolvedIncluders_.end())
         return cached->second;
 
@@ -1250,6 +1253,11 @@ void Indexer::indexAndReport(std::vector<fs::path> pathsToIndex, bool inferInclu
     IndexWriteGuard guard(*this);
     ScopedTimer t_index("Workspace indexing");
     directoryEntryCounts_ = std::move(directoryEntries);
+    indexedFiles.clear();
+    symbolToFiles_.clear();
+    macroToFiles_.clear();
+    symbolReferences_.clear();
+    headerSymbolToFiles_.clear();
     includeReferences_.clear();
     includers_.clear();
     includedFiles_.clear();
@@ -1306,4 +1314,43 @@ void Indexer::indexAndReport(std::vector<fs::path> pathsToIndex, bool inferInclu
          "unique URIs (~{} KB)",
          symbolToFiles_.size(), symbolsSize / 1024, macroToFiles_.size(), macrosSize / 1024,
          symbolReferences_.size(), refsSize / 1024, uniqueUris_.size(), urisSize / 1024);
+}
+
+uint64_t Indexer::getRevision() const {
+    IndexReadGuard guard(*this);
+    return revision_;
+}
+
+Indexer::PackageOwnerCandidates Indexer::getPackageOwnerCandidates(const fs::path& header) const {
+    IndexReadGuard guard(*this);
+    PackageOwnerCandidates result{.revision = revision_};
+    std::vector<fs::path> pending{header};
+    std::set<fs::path> visited{header}, roots;
+    for (size_t i = 0; i < pending.size(); ++i) {
+        auto found = includeReferences_.find(pending[i].filename().string());
+        if (found == includeReferences_.end())
+            continue;
+        for (auto* source : found->second) {
+            const auto& indexed = indexedFiles.at(source);
+            bool package = std::ranges::any_of(indexed.symbols, [](const auto& symbol) {
+                return symbol.kind == slang::syntax::SyntaxKind::PackageDeclaration;
+            });
+            if (package) {
+                roots.insert(*source);
+                if (roots.size() > MaxOwnerCandidates) {
+                    result.limitExceeded = true;
+                    return result;
+                }
+            }
+            else if (visited.insert(*source).second) {
+                if (visited.size() > MaxOwnerGraphFiles) {
+                    result.limitExceeded = true;
+                    return result;
+                }
+                pending.push_back(*source);
+            }
+        }
+    }
+    result.paths.assign(roots.begin(), roots.end());
+    return result;
 }

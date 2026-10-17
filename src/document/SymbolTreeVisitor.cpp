@@ -25,8 +25,9 @@
 namespace server {
 using namespace slang::syntax;
 
-SymbolTreeVisitor::SymbolTreeVisitor(const slang::SourceManager& sourceManager) :
-    m_sourceManager(sourceManager) {
+SymbolTreeVisitor::SymbolTreeVisitor(const slang::SourceManager& sourceManager,
+                                     slang::BufferID buffer) :
+    m_sourceManager(sourceManager), m_buffer(buffer) {
 }
 
 std::vector<lsp::DocumentSymbol> SymbolTreeVisitor::getSymbols(

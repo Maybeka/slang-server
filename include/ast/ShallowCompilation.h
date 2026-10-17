@@ -8,6 +8,7 @@
 #pragma once
 
 #include "ast/ActiveDesignContext.h"
+#include "lsp/RequestContext.h"
 #include <memory>
 #include <optional>
 #include <vector>
@@ -33,7 +34,8 @@ public:
     ShallowCompilation(slang::SourceManager& sourceManager,
                        std::shared_ptr<slang::syntax::SyntaxTree> tree, const slang::Bag& options,
                        const std::vector<std::shared_ptr<slang::syntax::SyntaxTree>>& dependencies,
-                       const ServerCompilation* design);
+                       const ServerCompilation* design, const lsp::RequestContext& ctx = {},
+                       bool packageOnly = false);
 
     /// Source manager supplying the buffers used by this compilation.
     slang::SourceManager& getSourceManager() const { return m_sourceManager; }

@@ -79,7 +79,7 @@ logic h;
 )",
                                              sm, "test", "", options);
 
-    server::SyntaxIndexer indexer(*tree);
+    server::SyntaxIndexer indexer(*tree, tree->getSourceBufferIds().front());
     auto& disabled = indexer.disabledRegions;
 
     REQUIRE(disabled.size() >= 1);
@@ -109,7 +109,7 @@ TEST_CASE("InactiveRegions_ParseError") {
 )",
                                              sm, "test", "", options);
 
-    server::SyntaxIndexer indexer(*tree);
+    server::SyntaxIndexer indexer(*tree, tree->getSourceBufferIds().front());
     auto& disabled = indexer.disabledRegions;
 
     REQUIRE(disabled.size() == 1);
@@ -131,7 +131,7 @@ module top;
 )";
     auto tree = syntax::SyntaxTree::fromText(text, sm, "test", "", options);
 
-    server::SyntaxIndexer indexer(*tree);
+    server::SyntaxIndexer indexer(*tree, tree->getSourceBufferIds().front());
     auto missing = std::ranges::find_if(indexer.collected,
                                         [](const auto* token) { return token->isMissing(); });
     REQUIRE(missing != indexer.collected.end());
@@ -160,7 +160,7 @@ TEST_CASE("InactiveRegions_MacroInDisabledBranch") {
 )",
                                              sm, "test", "", options);
 
-    server::SyntaxIndexer indexer(*tree);
+    server::SyntaxIndexer indexer(*tree, tree->getSourceBufferIds().front());
     auto& disabled = indexer.disabledRegions;
 
     // The macro usage `WIDTH should not split the disabled region
@@ -189,7 +189,7 @@ TEST_CASE("InactiveRegions_CommentsAndWhitespace") {
             auto tree = syntax::SyntaxTree::fromText(
                 "// preceding comment\n" + std::string(prefix) + std::string(body) + "`endif\n",
                 sm);
-            server::SyntaxIndexer indexer(*tree);
+            server::SyntaxIndexer indexer(*tree, tree->getSourceBufferIds().front());
 
             if (body.empty()) {
                 CHECK(indexer.disabledRegions.empty());
@@ -229,7 +229,7 @@ TEST_CASE("InactiveRegions_NestedDirectivesMerged") {
 )",
                                              sm, "test", "", options);
 
-    server::SyntaxIndexer indexer(*tree);
+    server::SyntaxIndexer indexer(*tree, tree->getSourceBufferIds().front());
     auto& disabled = indexer.disabledRegions;
 
     // Each disabled branch is its own region (the `elsif lines between

@@ -19,6 +19,9 @@ cd slang-server
 # Pull direct dependencies (slang, reflect-cpp, and ctre)
 git submodule update --init
 
+# Prepare this fork's SDK patch and verify its exact source bytes
+python3 restoration/prepare-main-sdk.py --apply
+
 # Build with cmake using a C++20 compliant compiler
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j --target slang_server

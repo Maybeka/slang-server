@@ -18,6 +18,8 @@ jobs:
         with:
           fetch-depth: 0
           submodules: true
+      - name: Prepare patched SDK
+        run: python3 restoration/prepare-main-sdk.py --apply
       - name: Install dependencies
         run: |
           sudo add-apt-repository ppa:ubuntu-toolchain-r/test

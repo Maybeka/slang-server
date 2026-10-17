@@ -12,6 +12,15 @@
 #endif
 
 #include "SlangServer.h"
+#include "diagnostics/DiagnosticProcess.h"
+#include "diagnostics/DiagnosticWorker.h"
+#include <cstdio>
+#ifdef SLANG_SERVER_TEST_DIAGNOSTIC_GATE
+#    include <chrono>
+#    include <cstdlib>
+#    include <fstream>
+#    include <thread>
+#endif
 #include <fmt/format.h>
 #include <rfl/DefaultIfMissing.hpp>
 
@@ -22,6 +31,26 @@ using namespace slang;
 using namespace server;
 
 int main(int argc, char** argv) {
+    try {
+        isolated_diagnostics::initializeDiagnosticProcessPlatform();
+    }
+    catch (const std::exception& error) {
+        std::fprintf(stderr, "Cannot initialize diagnostic process safety: %s\n", error.what());
+        return 1;
+    }
+    if (argc == 2 && std::string_view(argv[1]) == "--diagnostic-worker") {
+#ifdef SLANG_SERVER_TEST_DIAGNOSTIC_GATE
+        runDiagnosticWorker([] {
+            if (const char* gate = std::getenv("SLANG_DIAGNOSTIC_TEST_GATE")) {
+                std::ofstream(std::string(gate) + ".ready") << "private semantic ready";
+                while (!std::filesystem::exists(std::string(gate) + ".release"))
+                    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+            }
+        });
+#else
+        runDiagnosticWorker();
+#endif
+    }
 
 #ifdef _WIN32
     // By default windows accesses streams in text mode. This mostly means that
@@ -77,6 +106,15 @@ int main(int argc, char** argv) {
     }
     SlangLspClient client;
     SlangServer server(client);
+#if defined(__linux__) || defined(__APPLE__)
+    try {
+        server.enableIsolatedDiagnostics(isolated_diagnostics::currentDiagnosticExecutable());
+    }
+    catch (const std::exception& error) {
+        // LSP stdout is protocol-only even before initialization.
+        std::fprintf(stderr, "Isolated diagnostics unavailable: %s\n", error.what());
+    }
+#endif
     server.run();
 
     return 0;

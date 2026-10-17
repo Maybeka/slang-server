@@ -116,6 +116,9 @@ jobs:
           submodules: true
           fetch-depth: 0
 
+      - name: Prepare patched SDK
+        run: python3 restoration/prepare-main-sdk.py --apply
+
       - name: Cache system package downloads
         if: startsWith(matrix.container, 'quay.io/pypa/manylinux_2_28') || startsWith(matrix.preset, 'clang-') || contains(matrix.name, 'gcc-13')
         uses: actions/cache@v6

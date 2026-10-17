@@ -40,3 +40,18 @@ if(CMAKE_SYSTEM_NAME MATCHES "Windows")
   target_sources(server_unittests
                  PRIVATE ${PROJECT_SOURCE_DIR}/scripts/win32.manifest)
 endif()
+
+# Same LSP entry point with a test-only held-child hook. Never installed.
+add_executable(diagnostic_test_server ${PROJECT_SOURCE_DIR}/src/server_main.cpp)
+target_compile_definitions(diagnostic_test_server PRIVATE SLANG_SERVER_TEST_DIAGNOSTIC_GATE)
+target_link_libraries(diagnostic_test_server PRIVATE slang_server_obj_lib reflectcpp)
+
+# Count parser entry points only in this test executable. Production and timing
+# executables share the ordinary objects and never link the wrapper.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  add_executable(slang_server_counted ${PROJECT_SOURCE_DIR}/src/server_main.cpp
+                 ${PROJECT_SOURCE_DIR}/tests/instrumentation/ParserCounts.cpp)
+  target_link_libraries(slang_server_counted PRIVATE slang_server_obj_lib reflectcpp)
+  target_link_options(slang_server_counted PRIVATE
+    "-Wl,--wrap=_ZN5slang7parsing6Parser20parseCompilationUnitEv")
+endif()

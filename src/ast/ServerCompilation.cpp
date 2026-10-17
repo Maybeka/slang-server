@@ -500,6 +500,28 @@ void ServerCompilation::refresh() {
     syncActiveInstances();
 }
 
+void ServerCompilation::refreshDocuments(const std::vector<std::shared_ptr<SlangDoc>>& documents) {
+    m_documents.clear();
+    for (const auto& document : documents)
+        m_documents.emplace(document->getPath(), document);
+    indexModuleDocs();
+    refresh();
+}
+
+bool ServerCompilation::containsCurrentSource(const std::filesystem::path& path) const {
+    bool found = false;
+    for (const auto& tree : m_analysis->compilation.getSyntaxTrees()) {
+        for (auto buffer : tree->getSourceBufferIds()) {
+            // A matching file alone is insufficient: a changed sibling or dependency
+            // can invalidate the full diagnostic snapshot for an unchanged target.
+            if (!m_sourceManager.isLatestData(buffer))
+                return false;
+            found |= m_sourceManager.getFullPath(buffer) == path;
+        }
+    }
+    return found;
+}
+
 std::vector<hier::InstanceSet> ServerCompilation::getScopesByModule() {
     std::vector<hier::InstanceSet> result;
     for (auto& [_name, instances] : m_analysis->instances.moduleToInstances) {

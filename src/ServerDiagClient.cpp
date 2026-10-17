@@ -27,6 +27,43 @@
 #include "slang/text/SourceManager.h"
 namespace server {
 
+ServerDiagClient::Update::Update(ServerDiagClient& client) : client(client) {
+    SLANG_ASSERT(!client.m_update);
+    client.m_update = this;
+}
+
+void ServerDiagClient::Update::remember(const URI& uri) {
+    if (previous.contains(uri))
+        return;
+    auto found = client.m_diagnostics.find(uri);
+    previous.emplace(uri,
+                     Previous{found == client.m_diagnostics.end() ? std::nullopt
+                                                                  : std::optional{found->second},
+                              client.getVersion(uri), client.m_dirtyUris.contains(uri)});
+}
+
+void ServerDiagClient::Update::commit() {
+    committed = true;
+    client.m_update = nullptr;
+}
+
+ServerDiagClient::Update::~Update() {
+    if (committed)
+        return;
+    for (auto& [uri, state] : previous) {
+        client.setVersion(uri, state.version);
+        if (state.diagnostics)
+            client.m_diagnostics.insert_or_assign(uri, std::move(*state.diagnostics));
+        else
+            client.m_diagnostics.erase(uri);
+        if (state.dirty)
+            client.m_dirtyUris.emplace(uri);
+        else
+            client.m_dirtyUris.erase(uri);
+    }
+    client.m_update = nullptr;
+}
+
 lsp::DiagnosticSeverity convertSeverity(slang::DiagnosticSeverity severity) {
     switch (severity) {
         case slang::DiagnosticSeverity::Ignored:
@@ -192,7 +229,14 @@ void ServerDiagClient::report(const slang::ReportedDiagnostic& diag) {
     }
     // end of text diag related code
 
+    mainLoc->uri = resolveUri(mainLoc->uri);
     auto uri = mainLoc->uri;
+    if (m_update)
+        m_update->remember(uri);
+    // An owner can append parse diagnostics to an included URI whose previous
+    // semantic diagnostics are still retained. Such an incidental batch has no
+    // single editor version; only a complete document update stamps a version.
+    m_versions.erase(uri);
     m_dirtyUris.emplace(uri);
 
     // Add notes from the original diagnostic as relatedInformation
@@ -216,6 +260,8 @@ void ServerDiagClient::report(const slang::ReportedDiagnostic& diag) {
         }
     }
 
+    for (auto& information : related)
+        information.location.uri = resolveUri(information.location.uri);
     m_diagnostics[uri].push_back(lsp::Diagnostic{
         .range = mainLoc->range,
         .severity = convertSeverity(diag.severity),
@@ -237,6 +283,9 @@ void ServerDiagClient::report(const slang::ReportedDiagnostic& diag) {
 }
 
 void ServerDiagClient::clear(URI uri) {
+    uri = resolveUri(uri);
+    if (m_update)
+        m_update->remember(uri);
     auto it = m_diagnostics.find(uri);
     if (it != m_diagnostics.end()) {
         m_diagnostics.erase(it);
@@ -244,14 +293,35 @@ void ServerDiagClient::clear(URI uri) {
     m_dirtyUris.emplace(uri);
 }
 
+void ServerDiagClient::adoptDocumentUri(const URI& physical, const URI& opened) {
+    if (physical == opened)
+        return;
+    if (m_update)
+        m_update->remember(physical);
+    m_diagnostics.erase(physical);
+    m_versions.erase(physical);
+    m_dirtyUris.erase(physical);
+    // Keep this retirement key literal: resolving it would clear only the new
+    // alias and leave the client's previously published physical error behind.
+    if (m_publishedNonemptyUris.contains(physical))
+        m_dirtyUris.emplace(physical);
+}
+
+void ServerDiagClient::publish(const URI& uri, const std::vector<lsp::Diagnostic>& diagnostics) {
+    m_client.onDocPublishDiagnostics(lsp::PublishDiagnosticsParams{
+        .uri = uri, .version = getVersion(uri), .diagnostics = diagnostics});
+    if (diagnostics.empty())
+        m_publishedNonemptyUris.erase(uri);
+    else
+        m_publishedNonemptyUris.emplace(uri);
+}
+
 void ServerDiagClient::clearAndPush() {
     for (const auto& [uri, diags] : m_diagnostics) {
-        m_client.onDocPublishDiagnostics(
-            lsp::PublishDiagnosticsParams{.uri = uri, .diagnostics = {}});
+        publish(uri, {});
     }
     for (auto& uri : m_dirtyUris) {
-        m_client.onDocPublishDiagnostics(
-            lsp::PublishDiagnosticsParams{.uri = uri, .diagnostics = {}});
+        publish(uri, {});
     }
     m_diagnostics.clear();
     m_dirtyUris.clear();
@@ -265,30 +335,42 @@ void ServerDiagClient::clear() {
     m_diagnostics.clear();
 }
 
+void ServerDiagClient::pushClearedDiags() {
+    // Clients can map a retired physical URI and its opened alias to one buffer.
+    // Retire old keys before publishing current diagnostics for that buffer.
+    std::vector<URI> cleared;
+    for (const auto& uri : m_dirtyUris) {
+        if (!m_diagnostics.contains(uri))
+            cleared.push_back(uri);
+    }
+    for (const auto& uri : cleared) {
+        publish(uri, {});
+        m_dirtyUris.erase(uri);
+    }
+}
+
 void ServerDiagClient::pushDiags(const URI& priorityUri) {
+    pushClearedDiags();
     auto it = m_diagnostics.find(priorityUri);
     if (it != m_diagnostics.end()) {
-        m_client.onDocPublishDiagnostics(
-            lsp::PublishDiagnosticsParams{.uri = priorityUri, .diagnostics = it->second});
+        publish(priorityUri, it->second);
     }
     else if (m_dirtyUris.contains(priorityUri)) {
-        m_client.onDocPublishDiagnostics(
-            lsp::PublishDiagnosticsParams{.uri = priorityUri, .diagnostics = {}});
+        publish(priorityUri, {});
     }
     m_dirtyUris.erase(priorityUri);
     pushDiags();
 }
 
 void ServerDiagClient::pushDiags() {
+    pushClearedDiags();
     for (auto& uri : m_dirtyUris) {
         auto it = m_diagnostics.find(uri);
         if (it != m_diagnostics.end()) {
-            m_client.onDocPublishDiagnostics(
-                lsp::PublishDiagnosticsParams{.uri = uri, .diagnostics = it->second});
+            publish(uri, it->second);
         }
         else {
-            m_client.onDocPublishDiagnostics(
-                lsp::PublishDiagnosticsParams{.uri = uri, .diagnostics = {}});
+            publish(uri, {});
         }
     }
     m_dirtyUris.clear();

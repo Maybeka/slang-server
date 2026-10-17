@@ -1,6 +1,7 @@
 #include "lsp/JsonRpcServer.h"
 #include <catch2/catch_test_macros.hpp>
 #include <cstdio>
+#include <iostream>
 #include <regex>
 #include <sstream>
 #include <stdexcept>
@@ -13,12 +14,25 @@ struct CancelParams {
     lsp::ID_t id;
 };
 
+struct WirePayload {
+    std::string label;
+    std::vector<int> values;
+    lsp::CompletionItemKind kind;
+    std::optional<std::string> omitted;
+};
+
 class TestJsonRpcServer : public lsp::JsonRpcServer<TestJsonRpcServer> {
 public:
     TestJsonRpcServer() {
         registerMethod<std::nullopt_t, int, &TestJsonRpcServer::succeedRequest>("success");
         registerMethod<std::nullopt_t, int, &TestJsonRpcServer::failRequest>("fail");
         registerMethod<std::nullopt_t, int, &TestJsonRpcServer::contextRequest>("context");
+        registerMethod<std::nullopt_t, std::vector<WirePayload>,
+                       &TestJsonRpcServer::payloadRequest>("payload");
+        registerMethod<std::nullopt_t, std::vector<WirePayload>, &TestJsonRpcServer::emptyRequest>(
+            "empty");
+        registerMethod<std::nullopt_t, std::optional<WirePayload>, &TestJsonRpcServer::nullRequest>(
+            "null");
         registerMethod<std::nullopt_t, std::monostate, &TestJsonRpcServer::contextVoidRequest>(
             "context-void");
         registerNotification<std::nullopt_t, &TestJsonRpcServer::succeedNotification>(
@@ -36,6 +50,14 @@ public:
     int succeedRequest(std::monostate) { return 42; }
 
     int failRequest(std::monostate) { throw std::runtime_error("failed"); }
+
+    std::vector<WirePayload> payloadRequest(std::monostate) {
+        return {{"quote\"\\\nλ", {1, 2, 3}, lsp::CompletionItemKind::Variable, std::nullopt}};
+    }
+
+    std::vector<WirePayload> emptyRequest(std::monostate) { return {}; }
+
+    std::optional<WirePayload> nullRequest(std::monostate) { return std::nullopt; }
 
     int contextRequest(std::monostate, const lsp::RequestContext& ctx) {
         contextRequestCalls++;
@@ -77,6 +99,7 @@ public:
 
     int contextRequestCalls = 0;
 
+    using JsonRpcServer::handleMessage;
     using JsonRpcServer::processMessage;
 };
 
@@ -130,6 +153,57 @@ TEST_CASE("JSON-RPC request IDs support integers and strings") {
     REQUIRE(string);
     REQUIRE(string->id);
     CHECK(std::get<std::string>(*string->id) == "request-id");
+}
+
+TEST_CASE("JSON-RPC response ownership preserves exact wire output", "[json-rpc][serialization]") {
+    TestJsonRpcServer server;
+    auto capture = [&](const lsp::RpcRequest& request, const lsp::RequestContext* ctx = nullptr) {
+        std::ostringstream output;
+        {
+            auto* original = std::cout.rdbuf(output.rdbuf());
+            slang::ScopeGuard restore([&] { std::cout.rdbuf(original); });
+            if (ctx)
+                server.handleMessage(request, *ctx);
+            else
+                server.handleMessage(request);
+        }
+        return output.str();
+    };
+
+    auto frame = [](const std::string& body) {
+        return "Content-Length: " + std::to_string(body.size()) + "\r\n\r\n" + body;
+    };
+    for (const auto& id :
+         {lsp::ID_t{17}, lsp::ID_t{std::string{"request-λ"}}, lsp::ID_t{std::string{}}}) {
+        const auto idJson = std::holds_alternative<int>(id)
+                                ? std::string{"17"}
+                                : "\"" + std::get<std::string>(id) + "\"";
+        const auto prefix = "{\"jsonrpc\":\"2.0\",\"id\":" + idJson;
+        auto check = [&](const std::string& method, const std::string& suffix) {
+            auto output = capture(lsp::RpcRequest{.jsonrpc = "2.0", .id = id, .method = method});
+            CHECK(output == frame(prefix + suffix));
+        };
+
+        // Every response consumes its own tree; subsequent responses must remain intact.
+        check("payload",
+              R"json(,"result":[{"label":"quote\"\\\nλ","values":[1,2,3],"kind":6}]})json");
+        check("payload",
+              R"json(,"result":[{"label":"quote\"\\\nλ","values":[1,2,3],"kind":6}]})json");
+        check("empty", R"(,"result":[]})");
+        check("null", R"(,"result":null})");
+        check("context-void", R"(,"result":null})");
+        check("success", R"(,"result":42})");
+        check("fail", R"(,"error":{"code":-32603,"message":"failed"}})");
+
+        lsp::RpcRequest request{.jsonrpc = "2.0", .id = id, .method = "context"};
+        auto ctx = server.track(request);
+        ctx.cancel();
+        CHECK(capture(request, &ctx) ==
+              frame(prefix + R"(,"error":{"code":-32800,"message":"Request cancelled"}})"));
+        CHECK(server.contextRequestCalls == 0);
+    }
+
+    CHECK(capture(lsp::RpcRequest{.jsonrpc = "2.0", .method = "notification"}).empty());
 }
 
 TEST_CASE("JSON-RPC server separates activity batches and exits when input closes") {
@@ -441,4 +515,560 @@ TEST_CASE("JSON-RPC messages log their latency") {
         server.untrack(second, secondContext);
         server.untrack(other, otherContext);
     }
+}
+
+#include "lsp/JsonRpcServer.h"
+#include <algorithm>
+#include <catch2/catch_test_macros.hpp>
+#include <chrono>
+#include <condition_variable>
+#include <cstdint>
+#include <cstdio>
+#include <deque>
+#include <exception>
+#include <iostream>
+#include <limits>
+#include <map>
+#include <mutex>
+#include <optional>
+#include <stdexcept>
+#include <streambuf>
+#include <string>
+#include <string_view>
+#include <thread>
+#include <type_traits>
+#include <utility>
+#include <vector>
+
+namespace {
+
+using namespace std::chrono_literals;
+
+// No get area is exposed, so every extraction is synchronized. An empty-read
+// boundary is stronger than "all bytes consumed": readJson has returned and the
+// server has dispatched/enqueued that frame before attempting the next read.
+class IdleBlockingInput : public std::streambuf {
+public:
+    size_t append(std::string_view text) {
+        std::lock_guard lock(mutex);
+        bytes.insert(bytes.end(), text.begin(), text.end());
+        appended += text.size();
+        changed.notify_all();
+        return appended;
+    }
+
+    bool waitForReadBoundary(size_t target) {
+        std::unique_lock lock(mutex);
+        return changed.wait_for(lock, 10s, [&] { return lastEmptyRead >= target; });
+    }
+
+    void close() {
+        std::lock_guard lock(mutex);
+        closed = true;
+        changed.notify_all();
+    }
+
+protected:
+    int_type underflow() override {
+        std::unique_lock lock(mutex);
+        waitForData(lock);
+        return bytes.empty() ? traits_type::eof() : traits_type::to_int_type(bytes.front());
+    }
+
+    int_type uflow() override {
+        std::unique_lock lock(mutex);
+        waitForData(lock);
+        if (bytes.empty())
+            return traits_type::eof();
+        auto value = traits_type::to_int_type(bytes.front());
+        bytes.pop_front();
+        ++consumed;
+        return value;
+    }
+
+    std::streamsize xsgetn(char* destination, std::streamsize requested) override {
+        std::unique_lock lock(mutex);
+        std::streamsize copied = 0;
+        while (copied < requested) {
+            waitForData(lock);
+            if (bytes.empty())
+                break;
+            auto count = std::min(bytes.size(), static_cast<size_t>(requested - copied));
+            for (size_t i = 0; i < count; ++i) {
+                destination[copied++] = bytes.front();
+                bytes.pop_front();
+            }
+            consumed += count;
+        }
+        return copied;
+    }
+
+private:
+    void waitForData(std::unique_lock<std::mutex>& lock) {
+        if (bytes.empty()) {
+            lastEmptyRead = consumed;
+            changed.notify_all();
+            changed.wait(lock, [&] { return closed || !bytes.empty(); });
+        }
+    }
+
+    std::mutex mutex;
+    std::condition_variable changed;
+    std::deque<char> bytes;
+    size_t appended = 0;
+    size_t consumed = 0;
+    size_t lastEmptyRead = 0;
+    bool closed = false;
+};
+
+class IdleCapturedOutput : public std::streambuf {
+public:
+    std::string str() {
+        std::lock_guard lock(mutex);
+        return text;
+    }
+
+protected:
+    int_type overflow(int_type value) override {
+        if (traits_type::eq_int_type(value, traits_type::eof()))
+            return traits_type::not_eof(value);
+        std::lock_guard lock(mutex);
+        text.push_back(traits_type::to_char_type(value));
+        return value;
+    }
+
+    std::streamsize xsputn(const char* source, std::streamsize count) override {
+        std::lock_guard lock(mutex);
+        text.append(source, static_cast<size_t>(count));
+        return count;
+    }
+
+    int sync() override { return 0; }
+
+private:
+    std::mutex mutex;
+    std::string text;
+};
+
+class IdlePermitGate {
+public:
+    void wait(size_t attempt) {
+        std::unique_lock lock(mutex);
+        changed.wait(lock, [&] { return allowedThrough >= attempt; });
+    }
+
+    void releaseThrough(size_t attempt) {
+        std::lock_guard lock(mutex);
+        allowedThrough = std::max(allowedThrough, attempt);
+        changed.notify_all();
+    }
+
+private:
+    std::mutex mutex;
+    std::condition_variable changed;
+    size_t allowedThrough = 0;
+};
+
+struct IdleSnapshotParams {
+    std::string uri;
+};
+
+struct IdleCancelParams {
+    lsp::ID_t id;
+};
+
+class IdleQueueTestServer : public lsp::JsonRpcServer<IdleQueueTestServer> {
+public:
+    explicit IdleQueueTestServer(bool gateBackground) : gateBackground(gateBackground) {
+        registerMethod<std::nullopt_t, std::monostate, &IdleQueueTestServer::initialize>(
+            "initialize");
+        registerMethod<std::nullopt_t, std::monostate, &IdleQueueTestServer::hold>("test/hold");
+        registerMethod<std::nullopt_t, std::monostate, &IdleQueueTestServer::captureWake>(
+            "test/captureWake");
+        registerMethod<IdleSnapshotParams, std::string, &IdleQueueTestServer::snapshot>(
+            "test/snapshot");
+        registerMethod<std::nullopt_t, std::monostate, &IdleQueueTestServer::shutdown>("shutdown");
+        registerNotification<lsp::DidChangeTextDocumentParams, &IdleQueueTestServer::edit>(
+            "textDocument/didChange");
+        registerNotification<IdleCancelParams, &IdleQueueTestServer::cancel>("$/cancelRequest");
+    }
+
+    bool waitForEvent(std::string_view wanted) {
+        std::unique_lock lock(observationMutex);
+        return observationChanged.wait_for(lock, 10s, [&] {
+            return std::ranges::find(events, wanted) != events.end();
+        });
+    }
+
+    std::vector<std::string> trace() {
+        std::lock_guard lock(observationMutex);
+        return events;
+    }
+
+    std::vector<uint64_t> backgroundContexts() {
+        std::lock_guard lock(observationMutex);
+        return contextIds;
+    }
+
+    std::function<void()> copiedWake() {
+        std::lock_guard lock(observationMutex);
+        return externalWake;
+    }
+
+    void releaseForeground() { foregroundGate.releaseThrough(1); }
+    void releaseBackground(size_t attempt) { backgroundGate.releaseThrough(attempt); }
+    void releaseAll() {
+        foregroundGate.releaseThrough(std::numeric_limits<size_t>::max());
+        backgroundGate.releaseThrough(std::numeric_limits<size_t>::max());
+    }
+
+protected:
+    bool hasBackgroundWork() const override {
+        if (shuttingDown) {
+            record("shutdown:idle-disabled");
+            return false;
+        }
+        return pending;
+    }
+
+    void runBackgroundWork(const lsp::RequestContext& context) override {
+        const auto attempt = ++backgroundAttempts;
+        {
+            std::lock_guard lock(observationMutex);
+            contextIds.push_back(context.id());
+        }
+        record("idle:start:" + std::to_string(attempt));
+        if (gateBackground)
+            backgroundGate.wait(attempt);
+        try {
+            context.throwIfCancelled("test background checkpoint");
+        }
+        catch (const lsp::RequestCancelled&) {
+            record("idle:cancel:" + std::to_string(attempt));
+            throw;
+        }
+
+        std::string publication = "publish:";
+        for (const auto& [uri, _] : documents) {
+            if (publication != "publish:")
+                publication += "|";
+            publication += describe(uri);
+        }
+        record(std::move(publication));
+        pending = false;
+        record("idle:finish:" + std::to_string(attempt));
+    }
+
+private:
+    struct Document {
+        std::string text;
+        int version = 0;
+    };
+
+    std::monostate initialize(std::monostate) {
+        record("initialize");
+        return {};
+    }
+
+    std::monostate captureWake(std::monostate) {
+        {
+            std::lock_guard lock(observationMutex);
+            externalWake = backgroundWakeCallback();
+        }
+        record("wake:captured");
+        return {};
+    }
+
+    std::monostate hold(std::monostate) {
+        record("hold");
+        foregroundGate.wait(1);
+        record("hold:released");
+        return {};
+    }
+
+    void edit(const lsp::DidChangeTextDocumentParams& params, const lsp::RequestContext&) {
+        // Like the real driver, synchronization runs even if a later same-document
+        // notification has already superseded this notification's analysis context.
+        auto uri = params.textDocument.uri.str();
+        auto& document = documents[uri];
+        for (const auto& change : params.contentChanges) {
+            rfl::visit(
+                [&](const auto& value) {
+                    using T = std::decay_t<decltype(value)>;
+                    if constexpr (std::is_same_v<T, lsp::TextDocumentContentChangePartial>) {
+                        if (value.range.start.line || value.range.end.line ||
+                            value.range.end.character < value.range.start.character ||
+                            value.range.end.character > document.text.size())
+                            throw std::runtime_error("Invalid test incremental edit");
+                        document.text.replace(
+                            value.range.start.character,
+                            value.range.end.character - value.range.start.character, value.text);
+                    }
+                    else {
+                        document.text = value.text;
+                    }
+                },
+                change);
+        }
+        document.version = params.textDocument.version;
+        pending = true;
+        record("edit:" + describe(uri));
+    }
+
+    std::string snapshot(const IdleSnapshotParams& params) {
+        auto value = describe(params.uri);
+        record("query:" + value);
+        return value;
+    }
+
+    std::monostate shutdown(std::monostate) {
+        shuttingDown = true;
+        record("shutdown");
+        return {};
+    }
+
+    void cancel(const IdleCancelParams& params) {
+        cancelRequest(params.id);
+        record("cancel-notification");
+    }
+
+    std::string describe(const std::string& uri) const {
+        const auto& document = documents.at(uri);
+        return uri.substr(uri.find_last_of('/') + 1) + "@" + std::to_string(document.version) +
+               ":" + document.text;
+    }
+
+    void record(std::string event) const {
+        std::lock_guard lock(observationMutex);
+        events.push_back(std::move(event));
+        observationChanged.notify_all();
+    }
+
+    const bool gateBackground;
+    bool pending = false;
+    bool shuttingDown = false;
+    size_t backgroundAttempts = 0;
+    std::map<std::string, Document> documents;
+    IdlePermitGate foregroundGate;
+    IdlePermitGate backgroundGate;
+    mutable std::mutex observationMutex;
+    mutable std::condition_variable observationChanged;
+    mutable std::vector<std::string> events;
+    std::vector<uint64_t> contextIds;
+    std::function<void()> externalWake;
+};
+
+std::string idleFrame(const lsp::RpcRequest& request) {
+    auto body = rfl::json::write<rfl::UnderlyingEnums>(request);
+    return "Content-Length: " + std::to_string(body.size()) + "\r\n\r\n" + body;
+}
+
+std::string idleMethodFrame(std::string method, std::optional<lsp::ID_t> id = std::nullopt) {
+    return idleFrame({.jsonrpc = "2.0", .id = std::move(id), .method = std::move(method)});
+}
+
+std::string idleEditFrame(std::string uri, int version, lsp::uint offset, std::string append) {
+    lsp::DidChangeTextDocumentParams params{
+        .textDocument = {.version = version, .uri = URI(std::move(uri))},
+        .contentChanges = {lsp::TextDocumentContentChangePartial{
+            .range = {{0, offset}, {0, offset}}, .text = std::move(append)}}};
+    return idleFrame({.jsonrpc = "2.0",
+                      .method = "textDocument/didChange",
+                      .params = rfl::to_generic<rfl::UnderlyingEnums>(params)});
+}
+
+std::string idleSnapshotFrame(std::string uri, int id) {
+    return idleFrame({.jsonrpc = "2.0",
+                      .id = id,
+                      .method = "test/snapshot",
+                      .params = rfl::to_generic(IdleSnapshotParams{std::move(uri)})});
+}
+
+// Restores global streams only after both the reader and its worker have joined.
+// Gates are released and input is closed even when REQUIRE aborts a test section.
+class IdleWireHarness {
+public:
+    explicit IdleWireHarness(bool gateBackground) : server(gateBackground) {
+        originalInputState = std::cin.rdstate();
+        originalInput = std::cin.rdbuf(&input);
+        originalOutput = std::cout.rdbuf(&output);
+        originalTie = std::cin.tie(nullptr);
+        std::cin.clear();
+        reader = std::thread([this] {
+            try {
+                server.run();
+            }
+            catch (...) {
+                readerFailure = std::current_exception();
+            }
+        });
+        send(idleMethodFrame("initialize", lsp::ID_t{1}));
+    }
+
+    ~IdleWireHarness() {
+        finish();
+        std::cin.rdbuf(originalInput);
+        std::cin.clear(originalInputState);
+        std::cin.tie(originalTie);
+        std::cout.rdbuf(originalOutput);
+    }
+
+    size_t send(std::string_view frames) { return input.append(frames); }
+    bool readThrough(size_t target) { return input.waitForReadBoundary(target); }
+    std::string wireOutput() { return output.str(); }
+
+    void finish() {
+        server.releaseAll();
+        input.close();
+        if (reader.joinable())
+            reader.join();
+    }
+
+    bool readerSucceeded() const { return !readerFailure; } // Inspect after finish().
+    IdleQueueTestServer server;
+
+private:
+    IdleBlockingInput input;
+    IdleCapturedOutput output;
+    std::streambuf* originalInput = nullptr;
+    std::streambuf* originalOutput = nullptr;
+    std::ostream* originalTie = nullptr;
+    std::ios::iostate originalInputState{};
+    std::thread reader;
+    std::exception_ptr readerFailure;
+};
+
+constexpr const char* idleA = "file:///idle-a.sv";
+constexpr const char* idleB = "file:///idle-b.sv";
+
+} // namespace
+
+TEST_CASE("JSON-RPC queued edit and query snapshots precede idle diagnostics", "[json-rpc][idle]") {
+    IdleWireHarness wire(false);
+    REQUIRE(wire.server.waitForEvent("initialize"));
+    wire.send(idleMethodFrame("test/hold", lsp::ID_t{2}));
+    REQUIRE(wire.server.waitForEvent("hold"));
+
+    auto boundary = wire.send(idleEditFrame(idleA, 1, 0, "x") + idleSnapshotFrame(idleA, 3) +
+                              idleEditFrame(idleB, 1, 0, "z") + idleEditFrame(idleA, 2, 1, "y") +
+                              idleSnapshotFrame(idleA, 4));
+    REQUIRE(wire.readThrough(boundary));
+    wire.server.releaseForeground();
+    REQUIRE(wire.server.waitForEvent("idle:finish:1"));
+    wire.finish();
+    REQUIRE(wire.readerSucceeded());
+
+    const std::vector<std::string> expected{
+        "initialize",          "hold",
+        "hold:released",       "edit:idle-a.sv@1:x",
+        "query:idle-a.sv@1:x", "edit:idle-b.sv@1:z",
+        "edit:idle-a.sv@2:xy", "query:idle-a.sv@2:xy",
+        "idle:start:1",        "publish:idle-a.sv@2:xy|idle-b.sv@1:z",
+        "idle:finish:1"};
+    CHECK(wire.server.trace() == expected);
+    CHECK(wire.wireOutput().find("\"result\":\"idle-a.sv@1:x\"") != std::string::npos);
+    CHECK(wire.wireOutput().find("\"result\":\"idle-a.sv@2:xy\"") != std::string::npos);
+}
+
+TEST_CASE("JSON-RPC new query interrupts idle diagnostics before a fresh retry",
+          "[json-rpc][idle]") {
+    IdleWireHarness wire(true);
+    REQUIRE(wire.server.waitForEvent("initialize"));
+    wire.send(idleEditFrame(idleA, 1, 0, "x"));
+    REQUIRE(wire.server.waitForEvent("idle:start:1"));
+
+    auto boundary = wire.send(idleSnapshotFrame(idleA, 2));
+    REQUIRE(wire.readThrough(boundary));
+    wire.server.releaseBackground(1);
+    REQUIRE(wire.server.waitForEvent("idle:start:2"));
+    wire.server.releaseBackground(2);
+    REQUIRE(wire.server.waitForEvent("idle:finish:2"));
+    wire.finish();
+    REQUIRE(wire.readerSucceeded());
+
+    const std::vector<std::string> expected{
+        "initialize",          "edit:idle-a.sv@1:x", "idle:start:1",          "idle:cancel:1",
+        "query:idle-a.sv@1:x", "idle:start:2",       "publish:idle-a.sv@1:x", "idle:finish:2"};
+    CHECK(wire.server.trace() == expected);
+    auto contexts = wire.server.backgroundContexts();
+    REQUIRE(contexts.size() == 2);
+    CHECK(contexts[0] != contexts[1]);
+}
+
+TEST_CASE("JSON-RPC cancellation-only input retries pending idle diagnostics", "[json-rpc][idle]") {
+    IdleWireHarness wire(true);
+    REQUIRE(wire.server.waitForEvent("initialize"));
+    wire.send(idleEditFrame(idleA, 1, 0, "x"));
+    REQUIRE(wire.server.waitForEvent("idle:start:1"));
+
+    auto boundary = wire.send(idleFrame({.jsonrpc = "2.0",
+                                         .method = "$/cancelRequest",
+                                         .params = rfl::to_generic(IdleCancelParams{.id = 404})}));
+    REQUIRE(wire.readThrough(boundary));
+    wire.server.releaseBackground(1);
+    REQUIRE(wire.server.waitForEvent("idle:start:2"));
+    wire.server.releaseBackground(2);
+    REQUIRE(wire.server.waitForEvent("idle:finish:2"));
+    wire.finish();
+    REQUIRE(wire.readerSucceeded());
+
+    const std::vector<std::string> expected{
+        "initialize",    "edit:idle-a.sv@1:x", "idle:start:1",          "cancel-notification",
+        "idle:cancel:1", "idle:start:2",       "publish:idle-a.sv@1:x", "idle:finish:2"};
+    CHECK(wire.server.trace() == expected);
+    auto contexts = wire.server.backgroundContexts();
+    REQUIRE(contexts.size() == 2);
+    CHECK(contexts[0] != contexts[1]);
+}
+
+TEST_CASE("JSON-RPC shutdown cancels idle work and prevents its restart", "[json-rpc][idle]") {
+    IdleWireHarness wire(true);
+    REQUIRE(wire.server.waitForEvent("initialize"));
+    wire.send(idleEditFrame(idleA, 1, 0, "x"));
+    REQUIRE(wire.server.waitForEvent("idle:start:1"));
+
+    // Keep the shutdown reader alive until the held worker has processed shutdown.
+    // Sending exit here too would allow EOF cancellation to mask the shutdown case.
+    auto boundary = wire.send(idleMethodFrame("shutdown", lsp::ID_t{2}));
+    REQUIRE(wire.readThrough(boundary));
+    wire.server.releaseBackground(1);
+    // hasBackgroundWork is queried after the foreground response was written.
+    // Observe its explicit false result before exit can terminate the worker.
+    REQUIRE(wire.server.waitForEvent("shutdown:idle-disabled"));
+    wire.send(idleMethodFrame("exit"));
+    wire.finish();
+    REQUIRE(wire.readerSucceeded());
+
+    const std::vector<std::string> expected{"initialize",   "edit:idle-a.sv@1:x",
+                                            "idle:start:1", "idle:cancel:1",
+                                            "shutdown",     "shutdown:idle-disabled"};
+    CHECK(wire.server.trace() == expected);
+    CHECK(wire.wireOutput().find("\"id\":2,\"result\":null") != std::string::npos);
+}
+
+TEST_CASE("JSON-RPC asynchronous completion wake survives an active idle pass",
+          "[json-rpc][idle]") {
+    std::function<void()> expiredWake;
+    {
+        IdleWireHarness wire(true);
+        REQUIRE(wire.server.waitForEvent("initialize"));
+        wire.send(idleMethodFrame("test/captureWake", lsp::ID_t{2}));
+        REQUIRE(wire.server.waitForEvent("wake:captured"));
+        auto wake = wire.server.copiedWake();
+        REQUIRE(bool(wake));
+        // No foreground message or preexisting pending work triggers either pass.
+        wake();
+        REQUIRE(wire.server.waitForEvent("idle:start:1"));
+        wake(); // A second completion races the first active idle callback.
+        wire.server.releaseBackground(1);
+        REQUIRE(wire.server.waitForEvent("idle:start:2"));
+        wire.server.releaseBackground(2);
+        REQUIRE(wire.server.waitForEvent("idle:finish:2"));
+        expiredWake = wake;
+        wire.finish();
+        REQUIRE(wire.readerSucceeded());
+        CHECK(wire.server.backgroundContexts().size() == 2);
+    }
+    // Helper teardown may race loop shutdown. The retained callback is inert.
+    expiredWake();
 }

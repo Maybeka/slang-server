@@ -27,6 +27,7 @@ class SyntaxIndexer {
 private:
     slang::BufferID m_buffer;
     const slang::SourceManager* m_sourceManager = nullptr;
+    std::vector<slang::BufferID> m_includeAncestors;
     const slang::syntax::SyntaxNode* m_currentMacroUsage = nullptr;
     std::vector<const slang::parsing::Token*> m_currentExpansionTokens;
 
@@ -55,8 +56,9 @@ public:
     /// Map from macro usage syntax node to its expanded tokens
     slang::flat_hash_map<const slang::syntax::SyntaxNode*, MacroExpansionTokens> macroExpansions;
 
-    /// @brief Constructor that takes a syntax tree and extracts buffer ID from sources
+    /// @brief Index the edited buffer within its syntax tree (possibly an including root).
     /// @param tree The syntax tree to analyze
+    /// @param buffer The source occurrence to index
     /// Also macro usage's parent pointers at the syntax's parents that they're trivia for
     /// An explicit buffer selects one included file within a shared syntax tree.
     SyntaxIndexer(const slang::syntax::SyntaxTree& tree, slang::BufferID buffer = {});

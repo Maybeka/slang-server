@@ -65,13 +65,7 @@ public:
 
     // Instance-like symbols
 
-    void handle(const slang::ast::PackageSymbol& sym) {
-        // For packages, only recurse if it's in our buffer
-        indexSymbolName(sym);
-        if (shouldVisit(sym.location.buffer())) {
-            visitDefault(sym);
-        }
-    }
+    void handle(const slang::ast::PackageSymbol& sym);
     void handle(const slang::ast::InstanceSymbol& sym);
     void handle(const slang::ast::InstanceArraySymbol& sym);
 
