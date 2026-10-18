@@ -54,4 +54,23 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Cla
   target_link_libraries(slang_server_counted PRIVATE slang_server_obj_lib reflectcpp)
   target_link_options(slang_server_counted PRIVATE
     "-Wl,--wrap=_ZN5slang7parsing6Parser20parseCompilationUnitEv")
+elseif(APPLE AND NOT BUILD_SHARED_LIBS)
+  set(counted_parser "${CMAKE_CURRENT_BINARY_DIR}/CountedParserMembers.cpp")
+  add_custom_command(
+    OUTPUT "${counted_parser}"
+    COMMAND "${CMAKE_COMMAND}"
+      "-DINPUT=${PROJECT_SOURCE_DIR}/external/slang/source/parsing/Parser_members.cpp"
+      "-DOUTPUT=${counted_parser}"
+      -P "${PROJECT_SOURCE_DIR}/tests/instrumentation/prepare-counted-parser.cmake"
+    DEPENDS
+      "${PROJECT_SOURCE_DIR}/external/slang/source/parsing/Parser_members.cpp"
+      "${PROJECT_SOURCE_DIR}/tests/instrumentation/prepare-counted-parser.cmake"
+    VERBATIM)
+  add_executable(slang_server_counted ${PROJECT_SOURCE_DIR}/src/server_main.cpp
+    ${PROJECT_SOURCE_DIR}/tests/instrumentation/ParserCounts.cpp "${counted_parser}")
+  target_compile_definitions(slang_server_counted PRIVATE
+    SLANG_SERVER_PARSER_SOURCE_INSTRUMENTATION)
+  target_include_directories(slang_server_counted PRIVATE
+    "${PROJECT_SOURCE_DIR}/tests/instrumentation")
+  target_link_libraries(slang_server_counted PRIVATE slang_server_obj_lib reflectcpp)
 endif()

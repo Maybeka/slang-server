@@ -72,8 +72,8 @@ def edited(step):
     return text
 
 
-def sequence(binary, root, enabled, resolve_all=False, steps=9):
-    uri = prepare(root, enabled)
+def sequence(binary, root, enabled, resolve_all=False, steps=9, noise=500):
+    uri = prepare(root, enabled, noise=noise)
     client = Client(binary, root)
     rows = []
     try:
@@ -170,9 +170,9 @@ def sequence(binary, root, enabled, resolve_all=False, steps=9):
         client.close()
 
 
-def focused(binary, root, enabled, scenario):
+def focused(binary, root, enabled, scenario, noise=500):
     """Real first/middle/last method selection and declaration+all-use rename."""
-    uri = prepare(root, enabled)
+    uri = prepare(root, enabled, noise=noise)
     client = Client(binary, root)
     try:
         open_document(client, uri)
@@ -231,12 +231,15 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--binary", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--classes", type=int, default=500)
     args = parser.parse_args()
+    if args.classes < 1:
+        parser.error("--classes must be positive")
     binary = args.binary.resolve()
     with tempfile.TemporaryDirectory(prefix="slang-method-check-") as path:
-        root = Path(path)
-        native = sequence(binary, root, False)
-        overlay = sequence(binary, root, True)
+        root = Path(path).resolve()
+        native = sequence(binary, root, False, noise=args.classes)
+        overlay = sequence(binary, root, True, noise=args.classes)
         for left, right in zip(native["rows"], overlay["rows"]):
             for key in ("items", "definition", "resolvedLocals", "references"):
                 assert left.get(key) == right.get(key), (
@@ -245,18 +248,19 @@ def main():
                     left.get(key),
                     right.get(key),
                 )
-        all_native = sequence(binary, root, False, True, 1)
-        all_overlay = sequence(binary, root, True, True, 1)
+        all_native = sequence(binary, root, False, True, 1, noise=args.classes)
+        all_overlay = sequence(binary, root, True, True, 1, noise=args.classes)
         assert all_native["rows"][-1]["resolved"] == all_overlay["rows"][-1]["resolved"]
         focused_rows = []
         for scenario in ("rename", "earlier", "later"):
-            left = focused(binary, root, False, scenario)
-            right = focused(binary, root, True, scenario)
+            left = focused(binary, root, False, scenario, noise=args.classes)
+            right = focused(binary, root, True, scenario, noise=args.classes)
             assert left == right, scenario
             focused_rows.append(right)
         args.output.write_text(
             json.dumps(
                 {
+                    "classes": args.classes,
                     "native": native,
                     "overlay": overlay,
                     "allResolved": all_overlay,

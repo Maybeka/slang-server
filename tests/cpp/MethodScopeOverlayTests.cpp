@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <rfl/json/write.hpp>
 
 #include "slang/util/ScopeGuard.h"
 
@@ -89,7 +90,12 @@ std::string edited() {
 TEST_CASE("Method overlay cancellation preserves text before and after publication",
           "[method-overlay]") {
     for (const auto* boundary :
-         {"after method certificate", "before method mini parse", "before method publication",
+         {"method certificate begin", "method certificate recipe ready",
+          "method certificate graph ready", "method certificate semantics ready",
+          "method certificate method ready", "method certificate completions ready",
+          "method certificate snapshot ready", "method certificate sources ready",
+          "method certificate completion scope", "after method certificate",
+          "before method mini parse", "before method publication",
           "after method text synchronization"}) {
         DYNAMIC_SECTION(boundary) {
             Workspace workspace;
@@ -321,4 +327,93 @@ TEST_CASE("Method overlay refuses dependency changes before certification", "[me
     CHECK_FALSE(status.active);
     CHECK(status.decline == "source changed before certification");
     CHECK(document.doc->getText() == edited() + '\0');
+}
+
+TEST_CASE("Method certificate refuses a dependency change between source and lookup witnesses",
+          "[method-overlay]") {
+    Workspace workspace;
+    workspace.write("sibling.svh", "class Sibling; int field; endclass\n");
+    workspace.write("owner.sv", "package owner;\n`include \"sibling.svh\"\n"
+                                "`include \"item.svh\"\nendpackage\n");
+    ServerHarness server(workspace.params());
+    auto document = server.openFile("item.svh", header);
+    document.doc->getAnalysis();
+    lsp::RequestContext ctx("textDocument/didChange", 44);
+    bool changed = false;
+    ctx.setCheckpointObserverForTesting([&](std::string_view phase) {
+        if (phase == "method certificate sources ready") {
+            REQUIRE_FALSE(changed);
+            changed = true;
+            workspace.write("sibling.svh", "class Sibling; int other; endclass\n");
+        }
+    });
+    change(server, document.m_uri, 2, edited(), ctx);
+    REQUIRE(changed);
+    CHECK_FALSE(state(server).active);
+    CHECK(state(server).decline == "input changed during certification");
+    CHECK(document.doc->getVersion() == 2);
+    CHECK(document.doc->getText() == edited() + '\0');
+}
+
+// Mechanism attribution only. Run explicitly and retain stdout; use the ordinary
+// LSP binary and benchmark.py for end-to-end latency without an observer.
+TEST_CASE("Profile first method certificate by phase", "[.method-profile]") {
+    struct Phase {
+        std::string boundary;
+        double elapsedMs;
+    };
+    struct Sample {
+        size_t classes;
+        size_t repetition;
+        std::vector<Phase> phases;
+    };
+    const std::vector<std::string_view> boundaries = {
+        "method certificate begin",          "method certificate recipe ready",
+        "method certificate graph ready",    "method certificate semantics ready",
+        "method certificate method ready",   "method certificate completions ready",
+        "method certificate snapshot ready", "after method certificate"};
+    for (size_t classes : {500, 5000, 10000}) {
+        for (size_t repetition = 0; repetition < 3; ++repetition) {
+            Workspace workspace;
+            std::string owner = "package owner;\n";
+            for (size_t chunk = 0; chunk < 5; ++chunk) {
+                std::string noise;
+                for (size_t i = chunk; i < classes; i += 5)
+                    noise += "class Noise_" + std::to_string(i) +
+                             "; int field; function int value(input int arg); "
+                             "return arg; endfunction endclass\n";
+                auto name = "classes_" + std::to_string(chunk) + ".svh";
+                workspace.write(name, noise);
+                if (chunk == 2) {
+                    workspace.write("nested.svh", "`include \"" + name + "\"\n");
+                    owner += "`include \"nested.svh\"\n";
+                }
+                else
+                    owner += "`include \"" + name + "\"\n";
+            }
+            owner += "`include \"item.svh\"\nendpackage\n";
+            workspace.write("owner.sv", owner);
+            ServerHarness server(workspace.params());
+            auto document = server.openFile("item.svh", header);
+            document.doc->getAnalysis();
+            Sample sample{classes, repetition, {}};
+            lsp::RequestContext ctx("textDocument/didChange", 43);
+            auto previous = std::chrono::steady_clock::now();
+            ctx.setCheckpointObserverForTesting([&](std::string_view boundary) {
+                if (std::find(boundaries.begin(), boundaries.end(), boundary) == boundaries.end())
+                    return;
+                auto now = std::chrono::steady_clock::now();
+                sample.phases.push_back(
+                    {std::string(boundary),
+                     std::chrono::duration<double, std::milli>(now - previous).count()});
+                previous = now;
+            });
+            change(server, document.m_uri, 2, edited(), ctx);
+            REQUIRE(state(server).active);
+            REQUIRE(sample.phases.size() == boundaries.size());
+            for (size_t i = 0; i < boundaries.size(); ++i)
+                CHECK(sample.phases[i].boundary == boundaries[i]);
+            std::cout << "METHOD_CERTIFICATE_PROFILE " << rfl::json::write(sample) << '\n';
+        }
+    }
 }

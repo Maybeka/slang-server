@@ -84,12 +84,18 @@ option(SLANG_SERVER_USE_SYSTEM_FMT
 if(CMAKE_SYSTEM_NAME MATCHES "Darwin")
   # This ensures that *all* targets (including slang and reflect-cpp) use the
   # default Apple C++ runtime, preventing dynamic link conflicts.
-  set(CMAKE_CXX_FLAGS
-      "${CMAKE_CXX_FLAGS} -stdlib=libc++"
-      CACHE STRING "" FORCE)
-  set(CMAKE_EXE_LINKER_FLAGS
-      "${CMAKE_EXE_LINKER_FLAGS} -stdlib=libc++"
-      CACHE STRING "" FORCE)
+  string(FIND "${CMAKE_CXX_FLAGS}" "-stdlib=libc++" slang_libcxx_compile_flag)
+  if(slang_libcxx_compile_flag EQUAL -1)
+    set(CMAKE_CXX_FLAGS
+        "${CMAKE_CXX_FLAGS} -stdlib=libc++"
+        CACHE STRING "" FORCE)
+  endif()
+  string(FIND "${CMAKE_EXE_LINKER_FLAGS}" "-stdlib=libc++" slang_libcxx_link_flag)
+  if(slang_libcxx_link_flag EQUAL -1)
+    set(CMAKE_EXE_LINKER_FLAGS
+        "${CMAKE_EXE_LINKER_FLAGS} -stdlib=libc++"
+        CACHE STRING "" FORCE)
+  endif()
   message(STATUS "macOS build: Forcing use of libc++ standard library.")
 endif()
 
@@ -274,6 +280,13 @@ set(SLANG_USE_SYSTEM_FMT
     CACHE BOOL "Use a system-installed fmt library instead of FetchContent"
           FORCE)
 add_subdirectory(external/slang)
+if(APPLE AND NOT BUILD_SHARED_LIBS)
+  # arm64 Bag keys use template-local type identities. Mach-O does not coalesce
+  # the SDK's hidden copies with consumer copies in a static link, so otherwise
+  # options created by Driver become invisible to snapshot capture in the server.
+  set_target_properties(slang_slang PROPERTIES
+    CXX_VISIBILITY_PRESET default VISIBILITY_INLINES_HIDDEN OFF)
+endif()
 if(SLANG_SERVER_USE_SYSTEM_FMT AND NOT TARGET fmt::fmt)
   find_package(fmt REQUIRED)
 endif()
@@ -355,6 +368,9 @@ if(APPLE)
   # Every universal-binary slice needs an exact live code identity, including
   # Intel/Rosetta. Ad-hoc linker signing uses no identity, keychain or account.
   target_link_options(slang_server_obj_lib PUBLIC "LINKER:-adhoc_codesign")
+  # The optional parser-count hook is supplied only by the counted test binary.
+  # Mach-O also needs an explicit allowance for this one weak import.
+  target_link_options(slang_server_obj_lib PUBLIC "LINKER:-U,_slang_server_parser_units")
 endif()
 
 

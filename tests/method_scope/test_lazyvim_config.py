@@ -1,41 +1,19 @@
 """Execute the shipped config with Lua and a Neovim API contract double.
 
 This validates merging, pinning and rejection behavior, not a real editor UI.
-Uses an existing system Lua library, with an explicit skip if unavailable.
+Uses an existing Lua executable or 5.3/5.4 library; explicitly skips if unavailable.
 """
 
 import ctypes
 import ctypes.util
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
 
 
-def test_lazyvim_fork_config():
-    library = ctypes.util.find_library("lua5.4") or ctypes.util.find_library("lua5.3")
-    if not library:
-        pytest.skip(
-            "No existing Lua shared library; full editor acceptance is separate"
-        )
-    lua = ctypes.CDLL(library)
-    lua.luaL_newstate.restype = ctypes.c_void_p
-    lua.luaL_openlibs.argtypes = [ctypes.c_void_p]
-    lua.luaL_loadstring.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
-    lua.lua_pushstring.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
-    lua.lua_pcallk.argtypes = [
-        ctypes.c_void_p,
-        ctypes.c_int,
-        ctypes.c_int,
-        ctypes.c_int,
-        ctypes.c_ssize_t,
-        ctypes.c_void_p,
-    ]
-    lua.lua_tolstring.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_void_p]
-    lua.lua_tolstring.restype = ctypes.c_char_p
-    lua.lua_close.argtypes = [ctypes.c_void_p]
-    state = lua.luaL_newstate()
-    assert state
-    script = b"""
+SCRIPT = b"""
 local path = ...
 local configured, enabled
 vim = {
@@ -75,11 +53,45 @@ for _, bad in ipairs({ "relative/slang-server", "/missing/slang-server" }) do
   assert(not pcall(specs[1].opts, nil, { servers = {}, setup = {} }))
 end
 """
+
+
+def test_lazyvim_fork_config():
+    path = Path(__file__).resolve().parents[2] / "clients/neovim/lazyvim-fork.lua"
+    executable = shutil.which("lua")
+    if executable:
+        result = subprocess.run(
+            [executable, "-", str(path)], input=SCRIPT, capture_output=True, timeout=10
+        )
+        assert result.returncode == 0, result.stderr.decode(errors="replace")
+        return
+    library = ctypes.util.find_library("lua5.4") or ctypes.util.find_library("lua5.3")
+    if not library:
+        pytest.skip(
+            "No existing Lua shared library; full editor acceptance is separate"
+        )
+    lua = ctypes.CDLL(library)
+    lua.luaL_newstate.restype = ctypes.c_void_p
+    lua.luaL_openlibs.argtypes = [ctypes.c_void_p]
+    lua.luaL_loadstring.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
+    lua.lua_pushstring.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
+    lua.lua_pcallk.argtypes = [
+        ctypes.c_void_p,
+        ctypes.c_int,
+        ctypes.c_int,
+        ctypes.c_int,
+        ctypes.c_ssize_t,
+        ctypes.c_void_p,
+    ]
+    lua.lua_tolstring.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_void_p]
+    lua.lua_tolstring.restype = ctypes.c_char_p
+    lua.lua_close.argtypes = [ctypes.c_void_p]
+    state = lua.luaL_newstate()
+    assert state
+
     try:
         lua.luaL_openlibs(state)
-        code = lua.luaL_loadstring(state, script)
+        code = lua.luaL_loadstring(state, SCRIPT)
         assert code == 0, lua.lua_tolstring(state, -1, None)
-        path = Path(__file__).resolve().parents[2] / "clients/neovim/lazyvim-fork.lua"
         lua.lua_pushstring(state, str(path).encode())
         result = lua.lua_pcallk(state, 1, 0, 0, 0, None)
         assert result == 0, lua.lua_tolstring(state, -1, None)

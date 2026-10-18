@@ -46,7 +46,9 @@
 #include "slang/util/TimeTrace.h"
 #include "slang/util/VersionInfo.h"
 
-#if defined(__GNUC__)
+#if defined(__APPLE__)
+extern "C" uint64_t slang_server_parser_units() __attribute__((weak_import));
+#elif defined(__GNUC__)
 extern "C" uint64_t slang_server_parser_units() __attribute__((weak));
 #endif
 

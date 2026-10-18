@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 #include "diagnostics/DiagnosticProcess.h"
+#include "diagnostics/DiagnosticSnapshotCodec.h"
 #include "diagnostics/DiagnosticWorker.h"
 #include "utils/ServerHarness.h"
 #include <algorithm>
@@ -8,6 +9,7 @@
 #include <rfl/json.hpp>
 #include <thread>
 
+#include "slang/driver/Driver.h"
 #include "slang/util/ScopeGuard.h"
 #ifndef _WIN32
 #    include <signal.h>
@@ -29,6 +31,34 @@ void changeWithoutDiagnostics(ServerHarness& server, const URI& uri, int version
          .contentChanges = {lsp::TextDocumentContentChangeWholeDocument{.text = text}}});
 }
 } // namespace
+
+TEST_CASE("SDK driver option identities survive server snapshot capture") {
+    slang::driver::Driver driver;
+    driver.addStandardArgs();
+    REQUIRE(driver.parseCommandLine("slang --single-unit --threads 1"));
+    REQUIRE(driver.processOptions(false));
+    auto options = driver.createOptionBag();
+    options.set(driver.getAnalysisOptions());
+    REQUIRE(options.size() == 6);
+    auto captured = server::diagnostic_snapshot::captureOptions(options);
+    REQUIRE(captured.source);
+    CHECK(captured.source->singleUnit);
+    CHECK(captured.source->numThreads == 1);
+    CHECK(captured.lexer);
+    CHECK(captured.parser);
+    CHECK(captured.preprocessor);
+    CHECK(captured.compilation);
+    CHECK(captured.analysis);
+    server::diagnostic_snapshot::ReconstructedOptions restored(captured);
+    CHECK(rfl::json::write(server::diagnostic_snapshot::captureOptions(restored.bag())) ==
+          rfl::json::write(captured));
+    struct UnsupportedOption {
+        int value;
+    };
+    options.set(UnsupportedOption{1});
+    CHECK_THROWS_AS(server::diagnostic_snapshot::captureOptions(options),
+                    server::diagnostic_snapshot::CodecError);
+}
 
 TEST_CASE("Private diagnostic snapshots preserve complete errors and empty repairs") {
     ServerHarness server;

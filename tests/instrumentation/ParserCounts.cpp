@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: MIT
+#include "ParserCounts.h"
+
 #include <atomic>
 #include <cstdint>
 #include <cstdio>
@@ -11,12 +13,11 @@
 namespace {
 std::atomic_uint64_t units{0};
 }
-extern "C" slang::syntax::CompilationUnitSyntax&
-__real__ZN5slang7parsing6Parser20parseCompilationUnitEv(slang::parsing::Parser*);
-extern "C" slang::syntax::CompilationUnitSyntax&
-__wrap__ZN5slang7parsing6Parser20parseCompilationUnitEv(slang::parsing::Parser* parser) {
+void slang_server_parser_enter() {
     units.fetch_add(1, std::memory_order_relaxed);
-    auto& result = __real__ZN5slang7parsing6Parser20parseCompilationUnitEv(parser);
+}
+slang::syntax::CompilationUnitSyntax& slang_server_record_parse(
+    slang::syntax::CompilationUnitSyntax& result) {
     // A fixture observation, not a production parser heuristic. The full test
     // fixture has three roots; its mini source has exactly one package/class/method.
     bool mini = false;
@@ -37,6 +38,16 @@ __wrap__ZN5slang7parsing6Parser20parseCompilationUnitEv(slang::parsing::Parser* 
         }
     return result;
 }
+#ifndef SLANG_SERVER_PARSER_SOURCE_INSTRUMENTATION
+extern "C" slang::syntax::CompilationUnitSyntax&
+__real__ZN5slang7parsing6Parser20parseCompilationUnitEv(slang::parsing::Parser*);
+extern "C" slang::syntax::CompilationUnitSyntax&
+__wrap__ZN5slang7parsing6Parser20parseCompilationUnitEv(slang::parsing::Parser* parser) {
+    slang_server_parser_enter();
+    return slang_server_record_parse(
+        __real__ZN5slang7parsing6Parser20parseCompilationUnitEv(parser));
+}
+#endif
 extern "C" uint64_t slang_server_parser_units() {
     return units.load(std::memory_order_relaxed);
 }

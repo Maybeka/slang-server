@@ -10,6 +10,7 @@ reported separately from edits 1..8. No parser-count executable is accepted.
 import argparse
 import hashlib
 import json
+import math
 from pathlib import Path
 import random
 import statistics
@@ -35,7 +36,7 @@ def validate(record):
 
 
 def run(binary, root, arm, method, plan):
-    uri = prepare(root, arm == "method")
+    uri = prepare(root, arm == "method", noise=plan["classes"])
     assert fixture_hashes(root) == plan["fixtureSha256"]
     config_hash = hashlib.sha256((root / ".slang/server.json").read_bytes()).hexdigest()
     assert config_hash == plan["configSha256"][arm]
@@ -115,7 +116,16 @@ def run(binary, root, arm, method, plan):
             if row["outcome"] != "success":
                 break
         sequence_ms = (time.perf_counter_ns() - sequence_start) / 1e6
-        return {"coldPreparationMs": cold, "sequenceMs": sequence_ms, "rows": rows}
+        return {
+            "coldPreparationMs": cold,
+            "sequenceMs": sequence_ms,
+            "interactiveSumMs": (
+                sum(row["latencyMs"] for row in rows)
+                if len(rows) == 9 and all(row["outcome"] == "success" for row in rows)
+                else None
+            ),
+            "rows": rows,
+        }
     finally:
         client.close()
 
@@ -136,10 +146,7 @@ def summarize(runs):
                     for outcome in sorted(OUTCOMES)
                 },
                 "steps": {
-                    str(step): {
-                        "n": len(values),
-                        "medianMs": statistics.median(values) if values else None,
-                    }
+                    str(step): describe(values)
                     for step in range(1, 10)
                     for values in [
                         [
@@ -149,8 +156,36 @@ def summarize(runs):
                         ]
                     ]
                 },
+                "sequences": {
+                    metric: describe(
+                        [
+                            run[metric]
+                            for run in runs
+                            if run["arm"] == arm
+                            and run["method"] == method
+                            and run.get(metric) is not None
+                        ]
+                    )
+                    for metric in (
+                        "coldPreparationMs",
+                        "sequenceMs",
+                        "interactiveSumMs",
+                    )
+                },
             }
     return summary
+
+
+def describe(values):
+    return {
+        "n": len(values),
+        "medianMs": statistics.median(values) if values else None,
+        # An empirical percentile, not a confidence bound. Small experiments
+        # retain their samples without presenting a stable tail estimate.
+        "empiricalP95Ms": sorted(values)[math.ceil(0.95 * len(values)) - 1]
+        if len(values) >= 100
+        else None,
+    }
 
 
 def fixture_hashes(root):
@@ -175,8 +210,11 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--seed", type=int, default=20261017)
     parser.add_argument("--blocks", type=int, default=3)
+    parser.add_argument("--classes", type=int, default=500)
     parser.add_argument("--plan-only", action="store_true")
     args = parser.parse_args()
+    if args.blocks < 1 or args.classes < 1:
+        parser.error("--blocks and --classes must be positive")
     binary = args.binary.resolve()
     if args.plan_only:
         if args.plan.exists():
@@ -192,10 +230,10 @@ def main():
                     {"method": method, "block": block, "arm": arm} for arm in arms
                 )
         with tempfile.TemporaryDirectory(prefix="slang-method-plan-") as tmp:
-            root = Path(tmp)
+            root = Path(tmp).resolve()
             configs = {}
             for arm in ("native", "method"):
-                prepare(root, arm == "method")
+                prepare(root, arm == "method", noise=args.classes)
                 configs[arm] = hashlib.sha256(
                     (root / ".slang/server.json").read_bytes()
                 ).hexdigest()
@@ -203,8 +241,9 @@ def main():
         args.plan.write_text(
             json.dumps(
                 {
-                    "schema": 1,
-                    "workload": "500 classes in five headers, one nested include, target class with three methods, two packages and three ordered roots; only target open",
+                    "schema": 2,
+                    "classes": args.classes,
+                    "workload": f"{args.classes} classes in five headers, one nested include, target class with three methods, two packages and three ordered roots; only target open",
                     "seed": args.seed,
                     "metric": "before pre-encoded batch write to matching complete response-body receipt, before JSON decode",
                     "fixtureSha256": fixture,
@@ -227,7 +266,7 @@ def main():
     )
     runs = []
     with tempfile.TemporaryDirectory(prefix="slang-method-timing-") as tmp:
-        root = Path(tmp)
+        root = Path(tmp).resolve()
         for entry in plan["order"]:
             result = run(binary, root, entry["arm"], entry["method"], plan)
             result.update(entry)

@@ -22,7 +22,7 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     with tempfile.TemporaryDirectory(prefix="slang-method-held-") as tmp:
-        root = Path(tmp)
+        root = Path(tmp).resolve()
         uri = prepare(root, True)
         gate = root / "diagnostic-gate"
         client = Client(

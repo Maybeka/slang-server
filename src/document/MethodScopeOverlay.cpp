@@ -9,6 +9,7 @@
 #include <regex>
 #include <set>
 #include <sstream>
+#include <tuple>
 
 #include "slang/ast/ASTVisitor.h"
 #include "slang/ast/expressions/LiteralExpressions.h"
@@ -169,6 +170,7 @@ std::optional<std::string> MethodScopeOverlay::read(const std::string& path) {
 MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, const URI& target,
                                        size_t editOffset, const lsp::RequestContext& ctx) :
     driver(&d), uri(target) {
+    ctx.checkpoint("method certificate begin");
     need(!d.comp && d.hasConfiguredCompilationInputs() && !d.completions.resolveEdits,
          "configured package exploration required");
     need(config.compilationFilelist.value().has_value() &&
@@ -230,6 +232,7 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
     if (list.is_relative())
         list = fs::path(d.m_workspacePathPrefix) / list;
     visit(visit, list, 0);
+    ctx.checkpoint("method certificate recipe ready");
     std::shared_ptr<SlangDoc> unit;
     for (auto& [_, document] : d.docs)
         if (document->isNativeCompilationUnit()) {
@@ -315,9 +318,11 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
     auto graph = document->getAnalysisInputs(ctx);
     need(graph.tree == tree && graph.buffer == occurrence && graph.trees.size() == 1,
          "nonunique owner graph");
+    ctx.checkpoint("method certificate graph ready");
     auto analysis = document->getAnalysis(ctx);
     auto& compilation = *analysis->getCompilation();
     need(compilation.getAllDiagnostics().empty(), "base semantic diagnostics");
+    ctx.checkpoint("method certificate semantics ready");
     const syntax::FunctionDeclarationSyntax* selected = nullptr;
     auto find = [&](auto&& self, const syntax::SyntaxNode& node) -> void {
         ctx.checkpoint("method certificate syntax");
@@ -434,6 +439,22 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
     originalBuffer = occurrence.getId();
     currentBuffer = document->getBuffer().getId();
     version = *document->getVersion();
+    ctx.checkpoint("method certificate method ready");
+    // Completion order still comes from the native queries below. Index only
+    // identity resolution, once, instead of scanning every visible member for
+    // each item. Pointers live only during this constructor; the retained
+    // interface consists of value DTOs. Outer matches overwrite inner matches
+    // in the same traversal order as the previous per-item search.
+    using Identity = std::tuple<ast::SymbolKind, std::string, std::string>;
+    std::map<Identity, const ast::Symbol*> symbols;
+    for (const ast::Scope* scope = &fn; scope; scope = scope->asSymbol().getParentScope()) {
+        ctx.checkpoint("method certificate completion scope");
+        for (auto& member : scope->members())
+            if (!member.name.empty())
+                symbols.insert_or_assign(Identity{member.kind, std::string(member.name),
+                                                  member.getHierarchicalPath()},
+                                         &member);
+    }
     for (size_t kind = 0; kind < 2; ++kind) {
         std::vector<lsp::CompletionItem> items;
         CompletionContext context;
@@ -445,14 +466,10 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
             if (item.data) {
                 auto data = rfl::from_generic<Data, rfl::UnderlyingEnums>(*item.data);
                 need(bool(data), "completion identity");
-                const ast::Symbol* found = nullptr;
-                for (const ast::Scope* scope = &fn; scope;
-                     scope = scope->asSymbol().getParentScope())
-                    for (auto& member : scope->members())
-                        if (member.kind == data->symbolKind && member.name == data->symbolName &&
-                            member.getHierarchicalPath() == data->symbolPath)
-                            found = &member;
-                need(found, "unaccounted completion symbol");
+                auto symbol = symbols.find(
+                    Identity{data->symbolKind, data->symbolName, data->symbolPath});
+                need(symbol != symbols.end(), "unaccounted completion symbol");
+                const auto* found = symbol->second;
                 dto.methodOwned = found->getParentScope() == &fn;
                 dto.resolved.data.reset();
                 completions::MemberCompletionQuery::resolve(*found, dto.resolved, false);
@@ -470,6 +487,7 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
             lexical[kind].push_back(std::move(dto));
         }
     }
+    ctx.checkpoint("method certificate completions ready");
     treeOptions = std::make_unique<diagnostic_snapshot::ReconstructedOptions>(
         diagnostic_snapshot::captureOptions(tree->options()));
     compilationOptions = std::make_unique<diagnostic_snapshot::ReconstructedOptions>(
@@ -487,15 +505,24 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
         throw;
     }
     need(frozen.metadata.trees.size() == 1, "diagnostic graph is not a single unit");
+    ctx.checkpoint("method certificate snapshot ready");
     for (auto& [openUri, doc] : d.docs)
         if (doc->getVersion() && d.isDocumentOpen(openUri)) {
             need(openUri == uri, "phase one requires only target header open");
             documents.emplace(openUri, DocumentWitness{doc.get(), doc->getBuffer().getId(),
                                                        *doc->getVersion(), plain(*doc)});
         }
+    // A path can appear as a source, lookup and context watch input. Never let
+    // a later read replace a witness already checked against the parsed bytes.
+    auto witness = [&](const std::string& path) -> const std::optional<std::string>& {
+        auto bytes = read(path);
+        auto [it, inserted] = disk.try_emplace(path, bytes);
+        need(inserted || it->second == bytes, "input changed during certification");
+        return it->second;
+    };
     for (auto& file : frozen.input->sources.files) {
         need(!file.generated, "generated input");
-        auto bytes = read(file.fullPath);
+        const auto& bytes = witness(file.fullPath);
         if (URI::fromFile(file.fullPath) != uri) {
             need(bool(bytes), "missing source witness");
             auto source = *bytes;
@@ -503,21 +530,20 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
                 source.push_back('\0');
             need(source == file.bytes, "source changed before certification");
         }
-        disk[file.fullPath] = std::move(bytes);
     }
+    ctx.checkpoint("method certificate sources ready");
     for (auto& lookup : frozen.input->sources.lookups) {
         need(lookup.fileId || lookup.errorValue == int(std::errc::no_such_file_or_directory),
              "unsupported lookup failure");
-        disk[lookup.path] = read(lookup.path);
-        need(bool(disk[lookup.path]) == bool(lookup.fileId), "lookup changed");
+        need(bool(witness(lookup.path)) == bool(lookup.fileId), "lookup changed");
     }
     for (auto& [path, _] : d.driver.getCommandFileMetadata())
-        disk[path.string()] = read(path.string());
+        witness(path.string());
     for (auto& path : d.getContextWatchPaths())
-        disk[path.string()] = read(path.string());
+        witness(path.string());
     for (auto path : {fs::path(d.m_workspacePathPrefix) / ".slang/server.json",
                       fs::path(d.m_workspacePathPrefix) / ".slang/local/server.json"})
-        disk[path.string()] = read(path.string());
+        witness(path.string());
     configKey = rfl::json::write(config);
     optionsKey = rfl::json::write(diagnostic_snapshot::captureOptions(d.options));
     inputRevision = d.getContextInputRevision();

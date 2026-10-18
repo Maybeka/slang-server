@@ -15,10 +15,13 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--binary", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--classes", type=int, default=500)
     args = parser.parse_args()
+    if args.classes < 1:
+        parser.error("--classes must be positive")
     with tempfile.TemporaryDirectory(prefix="slang-method-count-") as tmp:
-        root = Path(tmp)
-        uri = prepare(root, True)
+        root = Path(tmp).resolve()
+        uri = prepare(root, True, noise=args.classes)
         log = root / "parses.csv"
         client = Client(
             args.binary.resolve(), root, {"SLANG_SERVER_PARSE_COUNT_LOG": str(log)}
@@ -79,7 +82,7 @@ def main():
             client.close()
         fallbacks = []
         for reason in ("dependency-bytes", "repeated-target"):
-            uri = prepare(root, True)
+            uri = prepare(root, True, noise=args.classes)
             if reason == "repeated-target":
                 owner = root / "owner.sv"
                 owner.write_text(
@@ -161,10 +164,11 @@ def main():
             json.dumps(
                 {
                     "schema": 1,
+                    "classes": args.classes,
                     "observations": evidence,
                     "fallbacks": fallbacks,
                     "note": "mini-shape is the exact single-package/single-class/single-method fixture shape; "
-                    "the native fixture has three source roots, 500 sibling classes and seven include edges. "
+                    f"the native fixture has three source roots, {args.classes} sibling classes and seven include edges. "
                     "Private diagnostic children are excluded by PID.",
                 },
                 indent=2,
