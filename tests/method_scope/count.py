@@ -8,7 +8,7 @@ import tempfile
 
 from check import edited
 from fixture import change, open_document, prepare, query
-from protocol import Client
+from protocol import Client, RpcError
 
 
 def main():
@@ -91,7 +91,32 @@ def main():
                 args.binary.resolve(), root, {"SLANG_SERVER_PARSE_COUNT_LOG": str(log)}
             )
             try:
-                open_document(client, uri)
+                if reason == "repeated-target":
+                    from fixture import HEADER
+
+                    client.notify(
+                        "textDocument/didOpen",
+                        {
+                            "textDocument": {
+                                "uri": uri,
+                                "languageId": "systemverilog",
+                                "version": 1,
+                                "text": HEADER,
+                            }
+                        },
+                    )
+                    try:
+                        client.request(
+                            "textDocument/documentSymbol",
+                            {"textDocument": {"uri": uri}},
+                        )
+                        raise AssertionError(
+                            "Ambiguous configured context unexpectedly succeeded"
+                        )
+                    except RpcError as error:
+                        assert error.code == -32803
+                else:
+                    open_document(client, uri)
                 if reason == "dependency-bytes":
                     client.request(
                         "textDocument/definition",
@@ -104,11 +129,16 @@ def main():
                         sibling.read_text() + "\n// external edit, no watcher\n"
                     )
                 before = counts()
-                client.request(
-                    "textDocument/definition",
-                    query(uri, edited(2), "local_1 +"),
-                    [change(uri, 3, edited(2))],
-                )
+                native_error = None
+                try:
+                    client.request(
+                        "textDocument/definition",
+                        query(uri, edited(2), "local_1 +"),
+                        [change(uri, 3, edited(2))],
+                    )
+                except RpcError as error:
+                    assert reason == "repeated-target" and error.code == -32803
+                    native_error = error.code
                 delta = counts() - before
                 status = client.state()
                 assert not status["active"] and delta["other"] >= 1, (
@@ -122,6 +152,7 @@ def main():
                         "parentDelta": dict(delta),
                         "active": status["active"],
                         "decline": status["decline"],
+                        "nativeError": native_error,
                     }
                 )
             finally:
