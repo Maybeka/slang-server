@@ -13,6 +13,8 @@ nvim /absolute/path/design/item.svh
 ```
 
 The absolute `cmd` pins this executable independently of PATH and Mason. The
+path must refer to this fork's build/install directory, outside Mason's managed
+directories; do not point it at a Mason binary or symlink. The
 spec removes slang-server from Mason installation lists, sets `mason=false`,
 and uses LazyVim's setup callback to exclude Mason automatic activation. Mason
 can still manage other servers. Remove duplicate slang_server setup from other

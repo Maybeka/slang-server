@@ -1,6 +1,35 @@
 # Linux validation records
 
-`linux-2026-10-17.json` records tests and measurements from this rebuild. The
+The current capability acceptance is in [capability-acceptance.md](capability-acceptance.md),
+with executed results in [linux-2026-10-18.json](linux-2026-10-18.json).
+The `b194c8a` binary passed CTest 607/607, Python 11/11 (including the shipped
+Lua configuration contract), transport 32/32, the native oracle, parser counts,
+and held diagnostics on the multi-header fixture. The independent checkout
+verified SDK/dependency bytes and configured successfully; it was not separately
+fully compiled. No actual interactive Neovim/LazyVim session was run.
+
+The 500-class experiment uses five class headers, a nested include, two packages
+and three ordered roots. Each cell below is a median in milliseconds, n=6 per
+arm per step; the middle column is the range of the seven per-step medians.
+
+| Query / arm | First edit | Edits 2–8 | Ninth edit (native fallback) |
+|---|---:|---:|---:|
+| Completion / native | 1.842 | 1.522–1.690 | 1.594 |
+| Completion / overlay | 6.269 | 0.712–0.842 | 1.943 |
+| Definition / native | 1.745 | 1.384–1.513 | 1.469 |
+| Definition / overlay | 6.281 | 0.657–0.787 | 1.778 |
+
+All 216 requests succeeded in 24 fresh processes. Accepted repeated edits have
+lower medians in this fixture; certification and fallback cost more. Complete
+sequence times include diagnostic waits and do not consistently improve. This
+small synthetic experiment does not establish general or UVM responsiveness.
+Both experimental flags remain default off. Raw outcomes and preregistered
+binary/driver/fixture hashes accompany the report.
+
+Use [the complete fork checkout/build/acceptance recipe](../docs/start/building.md),
+including `SLANG_SERVER_INCLUDE_SDK_TESTS=ON`, for new environments.
+
+`linux-2026-10-17.json` records the previous rebuild. The
 `testedProductCommit` identifies the C++ product tree; a later evidence-only
 commit may contain the report and additional executed test drivers. No historical
 pass or performance sample is included as a current result.

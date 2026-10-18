@@ -1,0 +1,553 @@
+{
+  "schema": 1,
+  "dateUtc": "2026-10-18",
+  "testedProductCommit": "b194c8a23a10ebfbc724fa37c59b49229f05821e",
+  "baseline": "1f05b9efe29b7d856d8bf703b40b3229ebd6ef43",
+  "platform": "Linux-6.18.55-x86_64-with-glibc2.41",
+  "compiler": "g++-14 (Debian 14.2.0-19) 14.2.0",
+  "python": "3.12.6",
+  "buildType": "Release",
+  "mimalloc": false,
+  "sdkBase": "151a801ceaf6faf23d79a42d210ff67e50eb4660",
+  "sdkPatchSha256": "96550dbfbfd65a0a986c0e6e2769a3f96857b0d70ec6bb728eeb612b41da4bbe",
+  "sdkVerifiedFiles": 708,
+  "offlineDependencyVerifiedFiles": 1296,
+  "dependencies": {
+    "catch2": "25319fd3047c6bdcf3c0170e76fa526c77f99ca9",
+    "fmt": "1be298e1bd68957e4cd352e1f676f00e07dcfb57",
+    "boost_regex": "2b3ac0834f31086c6e3c0e0ceb8516e427d5c39d",
+    "tomlplusplus": "30172438cee64926dc41fdd9c11fb3ba5b2ba9de"
+  },
+  "tests": {
+    "ctest": {
+      "registered": 607,
+      "passed": 607,
+      "includesSdkUnitAndTidy": true
+    },
+    "pytest": {
+      "passed": 11,
+      "skipped": 0
+    },
+    "transport": {
+      "passed": 32,
+      "failed": 0
+    },
+    "targetedMethodCpp": {
+      "cases": 9,
+      "assertions": 295
+    },
+    "nativeOracle": "PASS full ordered JSON, nine-version binding changes, two local declaration/all-reference renames with stale handles, earlier/combine/later method edits",
+    "parserCounts": {
+      "schema": 1,
+      "observations": [
+        {
+          "step": 1,
+          "parentDelta": {
+            "mini-shape": 1
+          },
+          "additionalCompletionParses": {},
+          "active": true,
+          "accepted": 1,
+          "totalParentUnits": 12
+        },
+        {
+          "step": 2,
+          "parentDelta": {
+            "mini-shape": 1
+          },
+          "additionalCompletionParses": {},
+          "active": true,
+          "accepted": 2,
+          "totalParentUnits": 13
+        },
+        {
+          "step": 3,
+          "parentDelta": {
+            "mini-shape": 1
+          },
+          "additionalCompletionParses": {},
+          "active": true,
+          "accepted": 3,
+          "totalParentUnits": 14
+        },
+        {
+          "step": 4,
+          "parentDelta": {
+            "mini-shape": 1
+          },
+          "additionalCompletionParses": {},
+          "active": true,
+          "accepted": 4,
+          "totalParentUnits": 15
+        },
+        {
+          "step": 5,
+          "parentDelta": {
+            "mini-shape": 1
+          },
+          "additionalCompletionParses": {},
+          "active": true,
+          "accepted": 5,
+          "totalParentUnits": 16
+        },
+        {
+          "step": 6,
+          "parentDelta": {
+            "mini-shape": 1
+          },
+          "additionalCompletionParses": {},
+          "active": true,
+          "accepted": 6,
+          "totalParentUnits": 17
+        },
+        {
+          "step": 7,
+          "parentDelta": {
+            "mini-shape": 1
+          },
+          "additionalCompletionParses": {},
+          "active": true,
+          "accepted": 7,
+          "totalParentUnits": 18
+        },
+        {
+          "step": 8,
+          "parentDelta": {
+            "mini-shape": 1
+          },
+          "additionalCompletionParses": {},
+          "active": true,
+          "accepted": 8,
+          "totalParentUnits": 19
+        },
+        {
+          "step": 9,
+          "parentDelta": {
+            "other": 1
+          },
+          "additionalCompletionParses": {},
+          "active": false,
+          "accepted": 0,
+          "totalParentUnits": 20
+        }
+      ],
+      "fallbacks": [
+        {
+          "reason": "dependency-bytes",
+          "parentDelta": {
+            "other": 1
+          },
+          "active": false,
+          "decline": "method context/version/bound changed",
+          "nativeError": null
+        },
+        {
+          "reason": "repeated-target",
+          "parentDelta": {
+            "other": 2
+          },
+          "active": false,
+          "decline": "repeated target include",
+          "nativeError": -32803
+        }
+      ],
+      "note": "mini-shape is the exact single-package/single-class/single-method fixture shape; the native fixture has three source roots, 500 sibling classes and seven include edges. Private diagnostic children are excluded by PID."
+    },
+    "heldDiagnostics": {
+      "schema": 1,
+      "heldGeneration": 1,
+      "foreground": [
+        {
+          "version": 2,
+          "active": true,
+          "definition": [
+            {
+              "targetUri": "file:///tmp/slang-method-held-0x8t7q5_/item.svh",
+              "targetRange": {
+                "start": {
+                  "line": 8,
+                  "character": 8
+                },
+                "end": {
+                  "line": 8,
+                  "character": 15
+                }
+              },
+              "targetSelectionRange": {
+                "start": {
+                  "line": 8,
+                  "character": 8
+                },
+                "end": {
+                  "line": 8,
+                  "character": 15
+                }
+              }
+            }
+          ]
+        },
+        {
+          "version": 3,
+          "active": true,
+          "definition": [
+            {
+              "targetUri": "file:///tmp/slang-method-held-0x8t7q5_/item.svh",
+              "targetRange": {
+                "start": {
+                  "line": 9,
+                  "character": 8
+                },
+                "end": {
+                  "line": 9,
+                  "character": 15
+                }
+              },
+              "targetSelectionRange": {
+                "start": {
+                  "line": 9,
+                  "character": 8
+                },
+                "end": {
+                  "line": 9,
+                  "character": 15
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "publishedVersion": 3,
+      "staleAutomaticHandleUnresolved": true,
+      "obsoletePublications": []
+    },
+    "staticChecks": "clang-format 20.1.8 dry run, ruff 0.13.0 lint and format check passed"
+  },
+  "binaries": {
+    "slang-server": {
+      "bytes": 16423616,
+      "sha256": "42a119452e07bfa4c8fb77bf144ac628c8b6b071850d606822671a4356feb326"
+    },
+    "slang_server_counted": {
+      "bytes": 16423736,
+      "sha256": "c2cb70818e3e9bf1472bc48cb6c6af003df363757036af4a8165e11d23454a05"
+    },
+    "diagnostic_test_server": {
+      "bytes": 16424024,
+      "sha256": "eeca6b06dee37cf38de47baad2dda232d2d82c0322cc36b1d52a4f6f613cff9c"
+    }
+  },
+  "normalBinaryHasParserInstrumentation": false,
+  "performance": {
+    "workload": "500 classes in five headers, one nested include, target class with three methods, two packages and three ordered roots; only target open",
+    "freshProcesses": 24,
+    "samplesPerArmPerStep": 6,
+    "requests": 216,
+    "allOutcomesSuccessful": true,
+    "seed": 20261018,
+    "metric": "before pre-encoded batch write to matching complete response-body receipt, before JSON decode",
+    "summary": {
+      "completion/native": {
+        "outcomes": {
+          "cancelled": 0,
+          "crash": 0,
+          "error": 0,
+          "success": 54,
+          "timeout": 0
+        },
+        "steps": {
+          "1": {
+            "n": 6,
+            "medianMs": 1.8416395
+          },
+          "2": {
+            "n": 6,
+            "medianMs": 1.564801
+          },
+          "3": {
+            "n": 6,
+            "medianMs": 1.6066799999999999
+          },
+          "4": {
+            "n": 6,
+            "medianMs": 1.5818465
+          },
+          "5": {
+            "n": 6,
+            "medianMs": 1.6247265
+          },
+          "6": {
+            "n": 6,
+            "medianMs": 1.6904659999999998
+          },
+          "7": {
+            "n": 6,
+            "medianMs": 1.5216105
+          },
+          "8": {
+            "n": 6,
+            "medianMs": 1.598617
+          },
+          "9": {
+            "n": 6,
+            "medianMs": 1.5937565
+          }
+        }
+      },
+      "completion/method": {
+        "outcomes": {
+          "cancelled": 0,
+          "crash": 0,
+          "error": 0,
+          "success": 54,
+          "timeout": 0
+        },
+        "steps": {
+          "1": {
+            "n": 6,
+            "medianMs": 6.2694805
+          },
+          "2": {
+            "n": 6,
+            "medianMs": 0.8420185
+          },
+          "3": {
+            "n": 6,
+            "medianMs": 0.773575
+          },
+          "4": {
+            "n": 6,
+            "medianMs": 0.7431335
+          },
+          "5": {
+            "n": 6,
+            "medianMs": 0.716199
+          },
+          "6": {
+            "n": 6,
+            "medianMs": 0.7120175
+          },
+          "7": {
+            "n": 6,
+            "medianMs": 0.7941155
+          },
+          "8": {
+            "n": 6,
+            "medianMs": 0.748762
+          },
+          "9": {
+            "n": 6,
+            "medianMs": 1.9425975
+          }
+        }
+      },
+      "definition/native": {
+        "outcomes": {
+          "cancelled": 0,
+          "crash": 0,
+          "error": 0,
+          "success": 54,
+          "timeout": 0
+        },
+        "steps": {
+          "1": {
+            "n": 6,
+            "medianMs": 1.7447975
+          },
+          "2": {
+            "n": 6,
+            "medianMs": 1.4556515
+          },
+          "3": {
+            "n": 6,
+            "medianMs": 1.5131995
+          },
+          "4": {
+            "n": 6,
+            "medianMs": 1.470144
+          },
+          "5": {
+            "n": 6,
+            "medianMs": 1.4691625
+          },
+          "6": {
+            "n": 6,
+            "medianMs": 1.4267435
+          },
+          "7": {
+            "n": 6,
+            "medianMs": 1.4518865
+          },
+          "8": {
+            "n": 6,
+            "medianMs": 1.384054
+          },
+          "9": {
+            "n": 6,
+            "medianMs": 1.469273
+          }
+        }
+      },
+      "definition/method": {
+        "outcomes": {
+          "cancelled": 0,
+          "crash": 0,
+          "error": 0,
+          "success": 54,
+          "timeout": 0
+        },
+        "steps": {
+          "1": {
+            "n": 6,
+            "medianMs": 6.2805685
+          },
+          "2": {
+            "n": 6,
+            "medianMs": 0.7868204999999999
+          },
+          "3": {
+            "n": 6,
+            "medianMs": 0.6671435
+          },
+          "4": {
+            "n": 6,
+            "medianMs": 0.6570145000000001
+          },
+          "5": {
+            "n": 6,
+            "medianMs": 0.718658
+          },
+          "6": {
+            "n": 6,
+            "medianMs": 0.6603395000000001
+          },
+          "7": {
+            "n": 6,
+            "medianMs": 0.6634145
+          },
+          "8": {
+            "n": 6,
+            "medianMs": 0.6826925
+          },
+          "9": {
+            "n": 6,
+            "medianMs": 1.778195
+          }
+        }
+      }
+    },
+    "interpretation": "In this synthetic class/package/multi-include fixture, accepted edits 2-8 have lower overlay medians; first certification and ninth native fallback are slower. Whole-sequence measurements include diagnostics and do not consistently improve. Small n, not UVM or a historical F1/F2 replica; no general performance claim."
+  },
+  "defaults": {
+    "experimentalMethodScopeOverlay": false,
+    "fastCwdSnapshotChecks": false
+  },
+  "cleanCheckout": {
+    "commit": "ca5eb2e",
+    "isolatedSourceCheckout": true,
+    "sdk708AndDependencies1296Verified": true,
+    "cmakeConfigurationPassed": true,
+    "fullBuildInThatDirectory": false,
+    "notes": "Initial local reflect-cpp history clone failed on a missing object; a fresh public upstream clone at the exact gitlink succeeded. SDK patch was applied to a pristine independent SDK checkout. Test runtime and pinned dependency directories were reused; uv sync was not repeated."
+  },
+  "editor": {
+    "luaContractPassed": true,
+    "actualNeovimOrLazyVimSession": false
+  },
+  "limits": [
+    "No production UVM execution",
+    "GCC 13 not available / untested",
+    "Linux arm64 untested",
+    "No interactive Neovim/LazyVim session",
+    "Variable-length edits and new/deleted locals remain native fallback"
+  ],
+  "rawEvidence": {
+    "acceptance-CMakeCache.txt": {
+      "bytes": 41881,
+      "sha256": "f7d872a043ecdf8b191cf7915a709ebc888ca1494ab0b15bf84069997cc3238e"
+    },
+    "acceptance-benchmark-plan.json": {
+      "bytes": 3930,
+      "sha256": "f6309e407f9c5c39b09285a7af40b1055821c9864231179df3b6379de54a5aaf"
+    },
+    "acceptance-benchmark.json": {
+      "bytes": 63010,
+      "sha256": "0f11f60c669f3d7c33e3493bee47655fe8bd3f206621e0224358d6d012494b89"
+    },
+    "acceptance-benchmark.log": {
+      "bytes": 3178,
+      "sha256": "9cd7ac8d4978509e552ef98e7ba390dfce4e2fb2715d58fd1e6af7fbbf7bbcef"
+    },
+    "acceptance-build-info.json": {
+      "bytes": 1923,
+      "sha256": "7ad4394192b46d8e64d21bafe7163259607e399e1df605d3f82795fc6e618a01"
+    },
+    "acceptance-build.log": {
+      "bytes": 1934,
+      "sha256": "d4d33721befedfdaa7731320463ae735d825beaf0a3c8ea5b046f7692f39f757"
+    },
+    "acceptance-configure.log": {
+      "bytes": 847,
+      "sha256": "3a0bf307295ca92f7967cea617d3be957f11b64a9beb7343494d4d8034222110"
+    },
+    "acceptance-counted-instrumentation.txt": {
+      "bytes": 75,
+      "sha256": "0c1366cb33a3a3eb879e7aaebbcb45aac5a7bd05f8c94e034b82c014bcaade0c"
+    },
+    "acceptance-counts.json": {
+      "bytes": 2472,
+      "sha256": "6a169c0c147c0e080fc1db787789a27175337db790fdf8e2dfb3588602a3cd1b"
+    },
+    "acceptance-counts.log": {
+      "bytes": 89,
+      "sha256": "c0162f39bf47283253f2f88545370fc60294a7efd23d0667595c39111fc7cc28"
+    },
+    "acceptance-ctest-inventory.json": {
+      "bytes": 299570,
+      "sha256": "582ba0024d9632d6e0a16b33cf3d853a6dda15d21ca99fd9ac3de1d6782b4785"
+    },
+    "acceptance-ctest.log": {
+      "bytes": 132353,
+      "sha256": "dee77b1e734cea1c6b83a5a9fd2b07d7807a208de375cfc8aecf1dcca5030353"
+    },
+    "acceptance-held.json": {
+      "bytes": 1422,
+      "sha256": "1d0acd5c2a93d4d60ce11c734e416eac20426433efff658cfbd42a35d9e3b5cb"
+    },
+    "acceptance-held.log": {
+      "bytes": 99,
+      "sha256": "020db2f257aea3ffd5ecad3d3ed575da25d8f24ada8b01ba3459e4d8be0785fa"
+    },
+    "acceptance-normal-instrumentation.txt": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "acceptance-oracle.json": {
+      "bytes": 7595049,
+      "sha256": "888c4afaf5e4f6e2e6142b6e1227ce82d37d23d43baac61e069366ff118e0c3c"
+    },
+    "acceptance-oracle.log": {
+      "bytes": 96,
+      "sha256": "facc2cb2f6382d4abd543df45cffb65e212e11ca0aa6c1fb8e41ca5c333d48e6"
+    },
+    "acceptance-pytest.log": {
+      "bytes": 99,
+      "sha256": "02f55bf90d446fed0235e787c1a2f832cf4c6d616dfdc6d4820a20839aa8221d"
+    },
+    "acceptance-source-sha256.json": {
+      "bytes": 100132,
+      "sha256": "335ed34705210ac3f20886b0b83b016a977156ab7ffc9e9e07dde99a120a3ea2"
+    },
+    "acceptance-transport.log": {
+      "bytes": 1979,
+      "sha256": "08c86047690670661de67d966d25e4ab139bd21db89902003e46855630416199"
+    },
+    "clean-checkout-configure.log": {
+      "bytes": 854,
+      "sha256": "e84f34968fbe917dc2cd2c7437aa82c484ac0538756ba884d8b8513a858b516a"
+    },
+    "multi-include-cpp-final.log": {
+      "bytes": 89625,
+      "sha256": "9fd3e948f8a6107070b9429c4bae782a4993908ad8418593c57f69a8f72712ab"
+    }
+  }
+}

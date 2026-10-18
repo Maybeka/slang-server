@@ -69,3 +69,10 @@ The 2026-10-17 Linux rebuild passed its recorded correctness checks, but its
 synthetic timing medians were slower at every measured step for both query
 kinds. See [the validation record](https://github.com/Maybeka/slang-server/blob/main/validation/linux-2026-10-17.json). The
 experiment remains default off.
+
+The 2026-10-18 extension certifies multi-include contexts and adds declaration
+rename / actual method-selection oracle cases. Its new class/package fixture
+showed lower medians for accepted edits 2–8 and higher medians for first-edit
+certification and ninth-edit fallback (n=6 per arm per step). This is a separate
+synthetic experiment, not a historical F1/F2 reproduction or UVM result. See
+[the current validation record](https://github.com/Maybeka/slang-server/blob/main/validation/linux-2026-10-18.json).
