@@ -2,6 +2,26 @@
 
 The current capability acceptance is in [capability-acceptance.md](capability-acceptance.md),
 with executed results in [linux-2026-10-18.json](linux-2026-10-18.json).
+The follow-up [independent clean-checkout report](clean-checkout-2026-10-18.json)
+closes the earlier configuration-only limitation: commit `9dfd335` was actually
+compiled from zero product object/library files in a separate checkout and build
+directory (887 build steps, 576 seconds). It passed CTest 607/607, Python 11/11,
+transport 32/32, all oracle/count/held-diagnostic checks and static checks, plus a
+fresh execution of the documented 216-request benchmark recipe. SDK/dependency
+integrity and unchanged source state were checked again afterward.
+
+That build reused the installed GCC/CMake/Ninja/Python tools, existing frozen-version
+Python test packages and four hash-verified dependency source directories. It
+reused no prior product objects, libraries or binaries. It was not a fresh OS/tool
+installation or a new `uv sync`. No existing Neovim executable was available, so
+real headless LSP attach/initialize/query smoke was not run; the Lua configuration
+contract passed and interactive LazyVim remains unverified. See the report's exact
+paths, versions, commands and limitations.
+
+The [independent raw evidence archive](artifacts/clean-checkout-2026-10-18-9dfd335.tar.gz)
+is retained in Git (400,026 bytes, SHA256
+`b0ad3cf7e47d2d3a0094738e6729e69bee21c3cbe575a8b0add44a120a2dfd7b`).
+
 The compact [raw evidence archive](artifacts/linux-2026-10-18-b194c8a.tar.gz)
 is retained in Git (480,843 bytes, SHA256
 `53633240ed8561e4ffaa1042e9f1d7b62830b05b9dba7574dfc9381f064fa502`).
@@ -9,9 +29,9 @@ is retained in Git (480,843 bytes, SHA256
 and the Library upload's network blocker. No Library success was returned.
 The `b194c8a` binary passed CTest 607/607, Python 11/11 (including the shipped
 Lua configuration contract), transport 32/32, the native oracle, parser counts,
-and held diagnostics on the multi-header fixture. The independent checkout
-verified SDK/dependency bytes and configured successfully; it was not separately
-fully compiled. No actual interactive Neovim/LazyVim session was run.
+and held diagnostics on the multi-header fixture. At the time of that earlier
+report, the independent checkout had only configured successfully. The separate
+follow-up report above records its actual full build and acceptance.
 
 The 500-class experiment uses five class headers, a nested include, two packages
 and three ordered roots. Each cell below is a median in milliseconds, n=6 per

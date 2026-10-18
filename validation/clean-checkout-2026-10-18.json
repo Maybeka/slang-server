@@ -1,0 +1,880 @@
+{
+  "schema": 1,
+  "dateUtc": "2026-10-18",
+  "testedCommit": "9dfd3359d0bcf9062b12aa0d8cfa60403926fcb0",
+  "scope": "Actual independent checkout full build and complete documented Linux acceptance; this is not configuration-only evidence.",
+  "environment": {
+    "checkout": "/workspace/slang-clean-ca5eb2e",
+    "commit": "9dfd3359d0bcf9062b12aa0d8cfa60403926fcb0",
+    "platform": "Linux-6.18.55-x86_64-with-glibc2.41",
+    "architecture": "x86_64",
+    "reusedSourceDependencies": {
+      "root": "/workspace/slang-deps",
+      "validation": "1296 file hashes checked by prepare-main-sdk.py; no prebuilt objects reused"
+    },
+    "submoduleWorktrees": {
+      "slang": "Independent checkout at 151a801 plus verified 708-file SDK patch; cloned Git objects locally",
+      "ctre": "Independent checkout at pinned gitlink; cloned Git objects locally",
+      "reflect-cpp": "Fresh public upstream clone at pinned gitlink; original local history clone had a missing Git object"
+    },
+    "reusedTools": {
+      "compiler": "/usr/bin/g++-14",
+      "cmake": "/workspace/slang-tools/bin/cmake",
+      "ninja": "/workspace/slang-tools/bin/ninja",
+      "cmakeGenerationPython": "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/bin/python3",
+      "lspTestPython": "/workspace/slang-python/cpython-3.12.6-linux-x86_64-gnu/bin/python3",
+      "pythonPackages": "/workspace/slang-tools (existing frozen-version test packages; no new venv or uv sync)"
+    },
+    "compilerLauncherCacheEntries": [],
+    "neovim": {
+      "pathLookup": null,
+      "checkedStandardExecutables": [
+        "/usr/bin/nvim",
+        "/usr/local/bin/nvim",
+        "/opt/nvim/bin/nvim",
+        "/opt/nvim-linux-x86_64/bin/nvim"
+      ],
+      "scopedToolSearch": "No executable in workspace tool/cache directories",
+      "realHeadlessLspSmoke": "not run: no installed executable",
+      "interactiveLazyVim": "unverified"
+    },
+    "noInstallationPerformed": true,
+    "noUserSettingsChanged": true,
+    "toolVersions": {
+      "compiler": "g++-14 (Debian 14.2.0-19) 14.2.0",
+      "cmake": "cmake version 4.4.4",
+      "ninja": "1.13.2.git.kitware.jobserver-pipe-1",
+      "cmakeGenerationPython": "3.12.14 (main, Aug 25 2026, 14:00:49) [Clang 22.1.3 ]"
+    },
+    "cgroupLimits": {
+      "/sys/fs/cgroup/cpu.max": "400000 100000",
+      "/sys/fs/cgroup/memory.max": "17179869184"
+    }
+  },
+  "pythonEnvironment": {
+    "pythonExecutable": "/workspace/slang-python/cpython-3.12.6-linux-x86_64-gnu/bin/python3",
+    "pythonVersion": "3.12.6 (main, Sep  9 2024, 22:11:19) [Clang 18.1.8 ]",
+    "packageVersions": {
+      "pytest": "8.4.1",
+      "pytest-asyncio": "1.1.0",
+      "pygls": "1.3.1",
+      "lsprotocol": "2023.0.1",
+      "attrs": "25.3.0",
+      "cattrs": "25.1.1",
+      "packaging": "25.0",
+      "pluggy": "1.6.0",
+      "iniconfig": "2.1.0",
+      "pygments": "2.19.2"
+    },
+    "versionsMatchUvLock": true,
+    "uvLockSha256": "7ac2ebb40d91df1b8ef942b8721018a853ce9b0c9edc6a097c4ea9ca907cfc5e",
+    "newVenvOrUvSyncPerformed": false
+  },
+  "build": {
+    "exitCode": 0,
+    "elapsedSeconds": 576.2987988040004,
+    "childUserCpuSeconds": 2190.836234,
+    "childSystemCpuSeconds": 102.135801,
+    "childMaxRssKiB": 4146148,
+    "command": [
+      "cmake",
+      "--build",
+      "build",
+      "-j4"
+    ]
+  },
+  "buildPlanIsolation": {
+    "checkedFiles": [
+      "/workspace/slang-clean-ca5eb2e/build/build.ninja",
+      "/workspace/slang-clean-ca5eb2e/build/CMakeFiles/rules.ninja",
+      "/workspace/slang-clean-ca5eb2e/build/CMakeCache.txt"
+    ],
+    "priorBuildDirectory": "/workspace/slang-server/build",
+    "filesReferencingPriorBuildDirectory": [],
+    "compilerLauncherCacheEntries": []
+  },
+  "preexistingObjectOrLibraryFiles": 0,
+  "binaryIdentity": {
+    "gitHead": "9dfd3359d0bcf9062b12aa0d8cfa60403926fcb0",
+    "version": "slang-server version 0.3.0+9dfd335",
+    "binaries": {
+      "slang-server": {
+        "path": "/workspace/slang-clean-ca5eb2e/build/bin/slang-server",
+        "bytes": 16423616,
+        "sha256": "64f225ca22419a5dce06525814c3ff88a8c8217383656912d190ef67acb82f5f"
+      },
+      "slang_server_counted": {
+        "path": "/workspace/slang-clean-ca5eb2e/build/bin/slang_server_counted",
+        "bytes": 16423736,
+        "sha256": "627e47c528cf55669d6e067c8f6682c37a07c97c0f9b39a2f3bf0f6bfb879baa"
+      },
+      "diagnostic_test_server": {
+        "path": "/workspace/slang-clean-ca5eb2e/build/bin/diagnostic_test_server",
+        "bytes": 16424024,
+        "sha256": "5e75d0603ffb1c5ec455d8b9e8cd0d3b418bbb7c76689b224f5e5fc3bdaf57db"
+      }
+    }
+  },
+  "sourceTreeUnchangedByBuildAndTests": true,
+  "sdkPatchedFilesVerifiedBeforeAndAfter": 708,
+  "offlineDependencyFilesVerifiedBeforeAndAfter": 1296,
+  "tests": {
+    "ctest": {
+      "registered": 607,
+      "passed": 607,
+      "includesSdkUnitAndTidy": true
+    },
+    "pytest": {
+      "passed": 11,
+      "skipped": 0,
+      "includesLuaContract": true
+    },
+    "transport": {
+      "passed": 32,
+      "failed": 0
+    },
+    "nativeOracle": "PASS full ordered completion JSON, binding changes, declaration/all-reference renames, stale handles and first/middle/last method selection",
+    "counts": {
+      "schema": 1,
+      "observations": [
+        {
+          "step": 1,
+          "parentDelta": {
+            "mini-shape": 1
+          },
+          "additionalCompletionParses": {},
+          "active": true,
+          "accepted": 1,
+          "totalParentUnits": 12
+        },
+        {
+          "step": 2,
+          "parentDelta": {
+            "mini-shape": 1
+          },
+          "additionalCompletionParses": {},
+          "active": true,
+          "accepted": 2,
+          "totalParentUnits": 13
+        },
+        {
+          "step": 3,
+          "parentDelta": {
+            "mini-shape": 1
+          },
+          "additionalCompletionParses": {},
+          "active": true,
+          "accepted": 3,
+          "totalParentUnits": 14
+        },
+        {
+          "step": 4,
+          "parentDelta": {
+            "mini-shape": 1
+          },
+          "additionalCompletionParses": {},
+          "active": true,
+          "accepted": 4,
+          "totalParentUnits": 15
+        },
+        {
+          "step": 5,
+          "parentDelta": {
+            "mini-shape": 1
+          },
+          "additionalCompletionParses": {},
+          "active": true,
+          "accepted": 5,
+          "totalParentUnits": 16
+        },
+        {
+          "step": 6,
+          "parentDelta": {
+            "mini-shape": 1
+          },
+          "additionalCompletionParses": {},
+          "active": true,
+          "accepted": 6,
+          "totalParentUnits": 17
+        },
+        {
+          "step": 7,
+          "parentDelta": {
+            "mini-shape": 1
+          },
+          "additionalCompletionParses": {},
+          "active": true,
+          "accepted": 7,
+          "totalParentUnits": 18
+        },
+        {
+          "step": 8,
+          "parentDelta": {
+            "mini-shape": 1
+          },
+          "additionalCompletionParses": {},
+          "active": true,
+          "accepted": 8,
+          "totalParentUnits": 19
+        },
+        {
+          "step": 9,
+          "parentDelta": {
+            "other": 1
+          },
+          "additionalCompletionParses": {},
+          "active": false,
+          "accepted": 0,
+          "totalParentUnits": 20
+        }
+      ],
+      "fallbacks": [
+        {
+          "reason": "dependency-bytes",
+          "parentDelta": {
+            "other": 1
+          },
+          "active": false,
+          "decline": "method context/version/bound changed",
+          "nativeError": null
+        },
+        {
+          "reason": "repeated-target",
+          "parentDelta": {
+            "other": 1
+          },
+          "active": false,
+          "decline": "repeated target include",
+          "nativeError": -32803
+        }
+      ],
+      "note": "mini-shape is the exact single-package/single-class/single-method fixture shape; the native fixture has three source roots, 500 sibling classes and seven include edges. Private diagnostic children are excluded by PID."
+    },
+    "heldDiagnostics": {
+      "schema": 1,
+      "heldGeneration": 1,
+      "foreground": [
+        {
+          "version": 2,
+          "active": true,
+          "definition": [
+            {
+              "targetUri": "file:///tmp/slang-method-held-1cjqj8xm/item.svh",
+              "targetRange": {
+                "start": {
+                  "line": 8,
+                  "character": 8
+                },
+                "end": {
+                  "line": 8,
+                  "character": 15
+                }
+              },
+              "targetSelectionRange": {
+                "start": {
+                  "line": 8,
+                  "character": 8
+                },
+                "end": {
+                  "line": 8,
+                  "character": 15
+                }
+              }
+            }
+          ]
+        },
+        {
+          "version": 3,
+          "active": true,
+          "definition": [
+            {
+              "targetUri": "file:///tmp/slang-method-held-1cjqj8xm/item.svh",
+              "targetRange": {
+                "start": {
+                  "line": 9,
+                  "character": 8
+                },
+                "end": {
+                  "line": 9,
+                  "character": 15
+                }
+              },
+              "targetSelectionRange": {
+                "start": {
+                  "line": 9,
+                  "character": 8
+                },
+                "end": {
+                  "line": 9,
+                  "character": 15
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "publishedVersion": 3,
+      "staleAutomaticHandleUnresolved": true,
+      "obsoletePublications": []
+    }
+  },
+  "performanceRecipeReplay": {
+    "processes": 24,
+    "requests": 216,
+    "allSuccessful": true,
+    "nPerArmPerStep": 6,
+    "summary": {
+      "completion/native": {
+        "outcomes": {
+          "cancelled": 0,
+          "crash": 0,
+          "error": 0,
+          "success": 54,
+          "timeout": 0
+        },
+        "steps": {
+          "1": {
+            "n": 6,
+            "medianMs": 1.9251645
+          },
+          "2": {
+            "n": 6,
+            "medianMs": 1.718366
+          },
+          "3": {
+            "n": 6,
+            "medianMs": 1.9853965
+          },
+          "4": {
+            "n": 6,
+            "medianMs": 1.8857
+          },
+          "5": {
+            "n": 6,
+            "medianMs": 1.9098095000000002
+          },
+          "6": {
+            "n": 6,
+            "medianMs": 1.8518025
+          },
+          "7": {
+            "n": 6,
+            "medianMs": 1.8166445
+          },
+          "8": {
+            "n": 6,
+            "medianMs": 1.7498535
+          },
+          "9": {
+            "n": 6,
+            "medianMs": 1.7515725
+          }
+        }
+      },
+      "completion/method": {
+        "outcomes": {
+          "cancelled": 0,
+          "crash": 0,
+          "error": 0,
+          "success": 54,
+          "timeout": 0
+        },
+        "steps": {
+          "1": {
+            "n": 6,
+            "medianMs": 6.528831
+          },
+          "2": {
+            "n": 6,
+            "medianMs": 0.9424755
+          },
+          "3": {
+            "n": 6,
+            "medianMs": 0.9363145
+          },
+          "4": {
+            "n": 6,
+            "medianMs": 0.8529005000000001
+          },
+          "5": {
+            "n": 6,
+            "medianMs": 0.8711485
+          },
+          "6": {
+            "n": 6,
+            "medianMs": 0.849078
+          },
+          "7": {
+            "n": 6,
+            "medianMs": 0.8220594999999999
+          },
+          "8": {
+            "n": 6,
+            "medianMs": 0.7736965
+          },
+          "9": {
+            "n": 6,
+            "medianMs": 2.017392
+          }
+        }
+      },
+      "definition/native": {
+        "outcomes": {
+          "cancelled": 0,
+          "crash": 0,
+          "error": 0,
+          "success": 54,
+          "timeout": 0
+        },
+        "steps": {
+          "1": {
+            "n": 6,
+            "medianMs": 2.061675
+          },
+          "2": {
+            "n": 6,
+            "medianMs": 1.9958185
+          },
+          "3": {
+            "n": 6,
+            "medianMs": 1.8213564999999998
+          },
+          "4": {
+            "n": 6,
+            "medianMs": 1.8063635
+          },
+          "5": {
+            "n": 6,
+            "medianMs": 1.722993
+          },
+          "6": {
+            "n": 6,
+            "medianMs": 1.6835105000000001
+          },
+          "7": {
+            "n": 6,
+            "medianMs": 1.8552110000000002
+          },
+          "8": {
+            "n": 6,
+            "medianMs": 1.847671
+          },
+          "9": {
+            "n": 6,
+            "medianMs": 1.7482805
+          }
+        }
+      },
+      "definition/method": {
+        "outcomes": {
+          "cancelled": 0,
+          "crash": 0,
+          "error": 0,
+          "success": 54,
+          "timeout": 0
+        },
+        "steps": {
+          "1": {
+            "n": 6,
+            "medianMs": 6.466914
+          },
+          "2": {
+            "n": 6,
+            "medianMs": 0.86157
+          },
+          "3": {
+            "n": 6,
+            "medianMs": 0.7670475
+          },
+          "4": {
+            "n": 6,
+            "medianMs": 0.7915595
+          },
+          "5": {
+            "n": 6,
+            "medianMs": 0.7944534999999999
+          },
+          "6": {
+            "n": 6,
+            "medianMs": 0.787614
+          },
+          "7": {
+            "n": 6,
+            "medianMs": 0.9171995
+          },
+          "8": {
+            "n": 6,
+            "medianMs": 0.8566054999999999
+          },
+          "9": {
+            "n": 6,
+            "medianMs": 1.9811535
+          }
+        }
+      }
+    },
+    "interpretation": "Fresh replay of the documented preregistered synthetic recipe. Reused host/tool/dependency sources are explicitly recorded. Not a production UVM result or a basis to broaden performance claims."
+  },
+  "neovim": {
+    "pathLookup": null,
+    "checkedStandardExecutables": [
+      "/usr/bin/nvim",
+      "/usr/local/bin/nvim",
+      "/opt/nvim/bin/nvim",
+      "/opt/nvim-linux-x86_64/bin/nvim"
+    ],
+    "scopedToolSearch": "No executable in workspace tool/cache directories",
+    "realHeadlessLspSmoke": "not run: no installed executable",
+    "interactiveLazyVim": "unverified"
+  },
+  "guideCorrections": [
+    "Nix is a tool provider and must use the same pinned dependency/full acceptance recipe.",
+    "Upstream compiler support versions are not represented as validation results for this patched fork."
+  ],
+  "limits": [
+    "Existing compiler/CMake/Ninja/Python runtime and frozen-version Python packages reused.",
+    "Four hash-verified FetchContent source directories reused; no previous product objects, libraries or binaries reused.",
+    "No fresh uv sync or complete OS/tool installation replay.",
+    "No existing Neovim executable, so real headless LSP attach/initialize/query smoke was not executed. Lua API contract passed; interactive LazyVim remains unverified.",
+    "GCC 13, Linux arm64, production UVM and Nix environment unverified.",
+    "Source pins, patches and retrieval methods provide online recovery; fully offline Git/tool reconstruction is not established."
+  ],
+  "execution": [
+    {
+      "name": "ctest",
+      "command": [
+        "ctest",
+        "--test-dir",
+        "build",
+        "--output-on-failure",
+        "--no-tests=error",
+        "-j4"
+      ],
+      "cwd": "/workspace/slang-clean-ca5eb2e",
+      "exitCode": 0,
+      "elapsedSeconds": 3.074562285000866
+    },
+    {
+      "name": "pytest",
+      "command": [
+        "/workspace/slang-python/cpython-3.12.6-linux-x86_64-gnu/bin/python3",
+        "-m",
+        "pytest",
+        "tests/system",
+        "tests/method_scope",
+        "--binary",
+        "/workspace/slang-clean-ca5eb2e/build/bin/slang-server",
+        "-q"
+      ],
+      "cwd": "/workspace/slang-clean-ca5eb2e",
+      "exitCode": 0,
+      "elapsedSeconds": 0.6791207200003555
+    },
+    {
+      "name": "transport",
+      "command": [
+        "bash",
+        "tests/transport/run-diagnostic-transport-tests.sh"
+      ],
+      "cwd": "/workspace/slang-clean-ca5eb2e",
+      "exitCode": 0,
+      "elapsedSeconds": 3.379696039999544
+    },
+    {
+      "name": "oracle",
+      "command": [
+        "/workspace/slang-python/cpython-3.12.6-linux-x86_64-gnu/bin/python3",
+        "tests/method_scope/check.py",
+        "--binary",
+        "/workspace/slang-clean-ca5eb2e/build/bin/slang-server",
+        "--output",
+        "/workspace/clean-checkout-evidence/oracle.json"
+      ],
+      "cwd": "/workspace/slang-clean-ca5eb2e",
+      "exitCode": 0,
+      "elapsedSeconds": 0.9020295529990108
+    },
+    {
+      "name": "counts",
+      "command": [
+        "/workspace/slang-python/cpython-3.12.6-linux-x86_64-gnu/bin/python3",
+        "tests/method_scope/count.py",
+        "--binary",
+        "/workspace/slang-clean-ca5eb2e/build/bin/slang_server_counted",
+        "--output",
+        "/workspace/clean-checkout-evidence/counts.json"
+      ],
+      "cwd": "/workspace/slang-clean-ca5eb2e",
+      "exitCode": 0,
+      "elapsedSeconds": 0.09641872099746251
+    },
+    {
+      "name": "held",
+      "command": [
+        "/workspace/slang-python/cpython-3.12.6-linux-x86_64-gnu/bin/python3",
+        "tests/method_scope/held_diagnostics.py",
+        "--binary",
+        "/workspace/slang-clean-ca5eb2e/build/bin/diagnostic_test_server",
+        "--output",
+        "/workspace/clean-checkout-evidence/held.json"
+      ],
+      "cwd": "/workspace/slang-clean-ca5eb2e",
+      "exitCode": 0,
+      "elapsedSeconds": 0.05697533300190116
+    },
+    {
+      "name": "ctest-inventory",
+      "command": [
+        "ctest",
+        "--test-dir",
+        "build",
+        "--show-only=json-v1"
+      ],
+      "cwd": "/workspace/slang-clean-ca5eb2e",
+      "exitCode": 0,
+      "elapsedSeconds": 0.07703653999851667
+    },
+    {
+      "name": "clang-format",
+      "command": [
+        "clang-format",
+        "--dry-run",
+        "--Werror",
+        "src/document/MethodScopeOverlay.cpp",
+        "tests/cpp/MethodScopeOverlayTests.cpp"
+      ],
+      "cwd": "/workspace/slang-clean-ca5eb2e",
+      "exitCode": 0,
+      "elapsedSeconds": 0.04258186000151909
+    },
+    {
+      "name": "ruff-lint",
+      "command": [
+        "ruff",
+        "check",
+        "tests/method_scope",
+        "restoration/checkout-dependencies.py"
+      ],
+      "cwd": "/workspace/slang-clean-ca5eb2e",
+      "exitCode": 0,
+      "elapsedSeconds": 0.020494997999776388
+    },
+    {
+      "name": "ruff-format",
+      "command": [
+        "ruff",
+        "format",
+        "--check",
+        "tests/method_scope",
+        "restoration/checkout-dependencies.py"
+      ],
+      "cwd": "/workspace/slang-clean-ca5eb2e",
+      "exitCode": 0,
+      "elapsedSeconds": 0.015039026999147609
+    },
+    {
+      "name": "post-build-integrity",
+      "command": [
+        "python3",
+        "restoration/prepare-main-sdk.py",
+        "--deps-root",
+        "/workspace/slang-deps"
+      ],
+      "cwd": "/workspace/slang-clean-ca5eb2e",
+      "exitCode": 0,
+      "elapsedSeconds": 0.11417916799837258
+    },
+    {
+      "name": "benchmark-plan",
+      "command": [
+        "/workspace/slang-python/cpython-3.12.6-linux-x86_64-gnu/bin/python3",
+        "tests/method_scope/benchmark.py",
+        "--binary",
+        "/workspace/slang-clean-ca5eb2e/build/bin/slang-server",
+        "--plan",
+        "/workspace/clean-checkout-evidence/benchmark-plan.json",
+        "--output",
+        "/workspace/clean-checkout-evidence/benchmark.json",
+        "--seed",
+        "20261018",
+        "--blocks",
+        "3",
+        "--plan-only"
+      ],
+      "cwd": "/workspace/slang-clean-ca5eb2e",
+      "exitCode": 0,
+      "elapsedSeconds": 0.04347632200006046
+    },
+    {
+      "name": "benchmark",
+      "command": [
+        "/workspace/slang-python/cpython-3.12.6-linux-x86_64-gnu/bin/python3",
+        "tests/method_scope/benchmark.py",
+        "--binary",
+        "/workspace/slang-clean-ca5eb2e/build/bin/slang-server",
+        "--plan",
+        "/workspace/clean-checkout-evidence/benchmark-plan.json",
+        "--output",
+        "/workspace/clean-checkout-evidence/benchmark.json"
+      ],
+      "cwd": "/workspace/slang-clean-ca5eb2e",
+      "exitCode": 0,
+      "elapsedSeconds": 2.8554153379991476
+    }
+  ],
+  "artifact": {
+    "path": "validation/artifacts/clean-checkout-2026-10-18-9dfd335.tar.gz",
+    "bytes": 400026,
+    "sha256": "b0ad3cf7e47d2d3a0094738e6729e69bee21c3cbe575a8b0add44a120a2dfd7b",
+    "rawFiles": {
+      "CMakeCache.txt": {
+        "bytes": 42007,
+        "sha256": "6fe642ad05396f6260a8034024ab3dd589e32a815848400d01f61ac5dd667b4c"
+      },
+      "acceptance-runner.log": {
+        "bytes": 222,
+        "sha256": "1c87269544e1b9327c122ba2985da41807a6746fa4ea755c4950bf0253663f49"
+      },
+      "benchmark-plan.json": {
+        "bytes": 3930,
+        "sha256": "7828d76a358a3c67ac018c988c618ff59a8062b5fa7783fdf995c8429d40379a"
+      },
+      "benchmark-plan.log": {
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "benchmark.json": {
+        "bytes": 63045,
+        "sha256": "b7f97955e1b8e3dab586b20bc7265350db8e581dc0a8ba1331fb5a38024c3c29"
+      },
+      "benchmark.log": {
+        "bytes": 3201,
+        "sha256": "bfea4c5046d9dbedbfce173f1aab3f99b987e1322bc89aa23a6ddc22600ac422"
+      },
+      "binary-identity.json": {
+        "bytes": 791,
+        "sha256": "7f0c4a2704c1ca5ca7af590cbc889c3ba84cba7e41be6b417518a15eee46ccac"
+      },
+      "build-plan-isolation.json": {
+        "bytes": 350,
+        "sha256": "16305640dfd49691dc02401e260a1956a582412003afe405ab28adb1e08d4331"
+      },
+      "build-resources.json": {
+        "bytes": 236,
+        "sha256": "33cd75fd63e8bf6c8c1107326d1a4aa7d4155e8c96e9fcf2dfac822183d38f9b"
+      },
+      "build.log": {
+        "bytes": 645002,
+        "sha256": "8cdb602729f44a5745bedcdf2861b3c4ccf0e904c4232ba46834dab5c7a03762"
+      },
+      "clang-format.log": {
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "configure.log": {
+        "bytes": 854,
+        "sha256": "ae31aedcbe86d3d34580ec3d122b5d4a5746efa2f096e5780d2d7f9729762714"
+      },
+      "counts.json": {
+        "bytes": 2472,
+        "sha256": "34eda7965fc86bd50723be522cd9efde6908a6f40e05e504003fc089d7b33f9e"
+      },
+      "counts.log": {
+        "bytes": 89,
+        "sha256": "c0162f39bf47283253f2f88545370fc60294a7efd23d0667595c39111fc7cc28"
+      },
+      "ctest-inventory.log": {
+        "bytes": 308285,
+        "sha256": "350fd01690aa47d4a260e5ac5ac5e18914df7c44978207dfc6a349d9b69423de"
+      },
+      "ctest.log": {
+        "bytes": 132360,
+        "sha256": "e334806ec42fd43668f095cf2e61dc58618cd5e266e072c641d1812525f72d39"
+      },
+      "dependency-checkouts.log": {
+        "bytes": 204,
+        "sha256": "a83122a21f56089c5032eef5f6ad205ff1ab4dfd4851af49f41c1e65268eadd8"
+      },
+      "environment.json": {
+        "bytes": 2029,
+        "sha256": "cac77a03e08eb11d11a3208ba7ae545aba7c582a99e242ac12bf60ebb022c5c6"
+      },
+      "execution.json": {
+        "bytes": 4759,
+        "sha256": "e75c16d36ba1b690e544a8bcbbdaae36b06cc08f38624fb812510d502e14d3a4"
+      },
+      "held.json": {
+        "bytes": 1422,
+        "sha256": "0164ece7162e6d5cddb99e2eedf476d8be7951be955c476bdf55daf4b8b8e8c6"
+      },
+      "held.log": {
+        "bytes": 99,
+        "sha256": "020db2f257aea3ffd5ecad3d3ed575da25d8f24ada8b01ba3459e4d8be0785fa"
+      },
+      "no-preexisting-build-objects.json": {
+        "bytes": 94,
+        "sha256": "b105a161d596cf875d0ac2ef4adec3d609488f52cbe98d4ffb1cdb31ef46d190"
+      },
+      "oracle.json": {
+        "bytes": 7595051,
+        "sha256": "6a4bb54cbf27a09d1ef286e88b26597ec77fc03ca4400b8f8ec20c8fc6e90262"
+      },
+      "oracle.log": {
+        "bytes": 96,
+        "sha256": "facc2cb2f6382d4abd543df45cffb65e212e11ca0aa6c1fb8e41ca5c333d48e6"
+      },
+      "post-build-integrity.log": {
+        "bytes": 267,
+        "sha256": "5b99651a845eda6e362367312498c7a43f22b9474bdde781652b69860b0cec68"
+      },
+      "pytest.log": {
+        "bytes": 99,
+        "sha256": "3099ae9e7a795f828c85665c7c857af4fcb2bbd9342bc7946180a9327b0d0b76"
+      },
+      "python-environment.json": {
+        "bytes": 605,
+        "sha256": "b833cf1c965ca006716b25f58742d83063d6a3cfb8278b35f0dad47f42370013"
+      },
+      "record-clean-checkout.py": {
+        "bytes": 5291,
+        "sha256": "7e0aa570acc8bced970d0811679d6d7685cfdf34ee5713de3df17b41e5fdb4a3"
+      },
+      "revised-building-guide.md": {
+        "bytes": 4609,
+        "sha256": "632f1312a718f345fb2a175ace1ad4468980a68d2e67e40aa971dce208106486"
+      },
+      "ruff-format.log": {
+        "bytes": 26,
+        "sha256": "2ce9758b9f8abd876ec3e76c589e099e8b05377b1e7ea2331e81ee80f07bdff8"
+      },
+      "ruff-lint.log": {
+        "bytes": 19,
+        "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+      },
+      "run-clean-acceptance.py": {
+        "bytes": 3563,
+        "sha256": "ec3eae14b76a8ba55b983520ee87c98f35bd41ede62dc0169e59872c78cf942d"
+      },
+      "source-sha256.json": {
+        "bytes": 100617,
+        "sha256": "b64168da1f9f9df21ffa8b385222e8a61270a88702b9ede9ce74d239791c07f9"
+      },
+      "source-state-after.txt": {
+        "bytes": 18,
+        "sha256": "6c8ec7755c465fb03107bcf82c67bb3dfb4df322d15091c2a79f069ba912cb3b"
+      },
+      "source-state-before.txt": {
+        "bytes": 18,
+        "sha256": "6c8ec7755c465fb03107bcf82c67bb3dfb4df322d15091c2a79f069ba912cb3b"
+      },
+      "submodules-before.txt": {
+        "bytes": 206,
+        "sha256": "8a7ed820e0840ac929e09584a13b946a60b19b4372cd4d5ab615c7121d8ccc08"
+      },
+      "transport.log": {
+        "bytes": 2014,
+        "sha256": "6212571658a676dceb978c50cd0a22567be6e08a7b9c5f55a92df886ed274117"
+      }
+    }
+  }
+}

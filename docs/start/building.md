@@ -4,11 +4,10 @@
 `slang-server` requires the following tools in order to build:
 - [python 3](https://www.python.org/)
 - [CMake](https://cmake.org/) (3.28 or later)
-- C++20 compatible compiler. Minimum supported compiler versions:
-    - GCC 11
-    - clang 17
-    - Xcode 16
-    - MSVC support is tested only against the most recent update of VS 2022
+- C++20 compiler compatible with the pinned SDK. The fork's recorded Linux
+  builds use GCC 14.2.0. Other compiler/platform combinations need their own
+  validation; the upstream project's compiler support is not a test result for
+  this patched fork.
 
 
 ```bash
@@ -87,19 +86,24 @@ complete build and acceptance run. The current Linux evidence uses GCC 14.2.0.
 The protocol/oracle fixture is representative class/package/multi-include data,
 not a production UVM validation or a historical benchmark replica.
 
+The independent `9dfd335` checkout was fully built and tested using this pinned
+configuration, reusing installed tools and verified dependency sources but no
+previous product objects. Exact execution and recovery limits are recorded in
+[the clean-checkout report](https://github.com/Maybeka/slang-server/blob/main/validation/clean-checkout-2026-10-18.json).
+
 See [the fork's LazyVim setup](../editors/lazyvim-fork.md) for editor checks.
 
 ### Nix Development Shell
 
-If you use Nix with flakes enabled, the repository provides a development shell for x86-64 Linux, ARM64 Linux, and Apple Silicon macOS. It includes the compiler, CMake, Ninja, Python, `uv`, and build and test dependencies.
-
-After cloning the repository and initializing its submodules, run from the repository root:
+The repository's Nix development shell can supply tools. Enter it from the
+repository root:
 
 ```bash
 nix develop
-python3 restoration/prepare-main-sdk.py --apply
-cmake -B build -DCMAKE_BUILD_TYPE=Release -DSLANG_SERVER_INCLUDE_SDK_TESTS=ON
-cmake --build build -j8 --target slang_server
 ```
 
-The shell supplies the tools; the CMake commands build `build/bin/slang-server`. Use a separate build directory if an existing one was configured with a different compiler.
+Then follow the same pinned dependency, SDK preparation, full configuration and
+acceptance commands above, selecting a compiler available in that shell. Entering
+the shell does not replace those steps. Use a new build directory when switching
+compilers. Nix and its other platforms were not exercised in the recorded Linux
+GCC build.

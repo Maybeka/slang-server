@@ -4,6 +4,9 @@ This is a capability contract, not byte equivalence to a lost historical tree.
 The legal starting point for this round is `1f05b9e` with the verified SDK patch.
 Current execution results and raw-evidence hashes are in
 [`linux-2026-10-18.json`](linux-2026-10-18.json); older reports describe older runs.
+The follow-up [clean-checkout report](clean-checkout-2026-10-18.json) records an
+actual full independent build of `9dfd335` and every documented acceptance suite,
+including exact reused tools/source dependencies and the unavailable Neovim smoke.
 
 | Capability | Scope / implementation | Acceptance and evidence | Status in this round |
 |---|---|---|---|
@@ -17,7 +20,7 @@ Current execution results and raw-evidence hashes are in
 | Dependency/environment change fallback | Reject repeated target, macros, imports, recursive inputs; compare disk bytes with captured parse and before every reuse | C++ refusal/lifecycle cases; dependency-before-certificate and after-certificate tests; counted dependency/repeated-target fallback | Added certification checks; existing guards retained |
 | Equal-length declaration and all-reference rename | Rebuild mini bindings and method-owned completion DTOs; reject stale automatic handles | New two-local declaration+use rename oracle and C++ positive; compare current definition, ordered completion and resolved locals with native | Added positive coverage |
 | Select real edited method | First changed byte/range locates function; multiple input-int parameters and initialized locals | Native oracle edits earlier, combine and later independently | Added positive coverage |
-| Reproducible fork build and full suites | Fork URL, exact SDK patch and dependency hashes, frozen Python, SDK tests explicitly ON | `docs/start/building.md`, dependency helper, fresh-checkout SDK/configuration evidence | Added executable recipe; full fresh rebuild scope stated in report |
+| Reproducible fork build and full suites | Fork URL, exact SDK patch and dependency hashes, frozen Python, SDK tests explicitly ON | `docs/start/building.md`, dependency helper, independent clean checkout with zero initial product objects and all acceptance commands | Full independent build and suites passed; reused tools/dependency sources explicitly recorded |
 | Fork-specific LazyVim use | Absolute cmd, Mason install/activation exclusion, workspace markers, final resolve capabilities | Shipped plugin spec, executable Lua API contract test, editor verification instructions | Added; actual interactive LazyVim session remains unverified here |
 | Representative end-to-end timing | Same ordinary binary, preregistered balanced order, timestamp at complete response receipt, native correctness oracle first | 500 classes / five class headers / nested include / two packages / three roots; completion and definition separate; n and failures in JSON | New experiment; no historical F1/F2 equivalence claim |
 | Defaults | Both experimentalMethodScopeOverlay and fastCwdSnapshotChecks remain false | `include/Config.h`; baseline config/full suite | Preserved |
