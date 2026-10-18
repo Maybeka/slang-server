@@ -1,0 +1,2934 @@
+{
+  "schemaVersion": 1,
+  "scope": "Mac real UVM fallback measurements plus restricted synthetic method optimization; experimental flags remain default false",
+  "identity": {
+    "productCommit": "bd4cf37b0dc30acffec2f0f6642d22f616a6f2fa",
+    "baselineProductCommit": "719359b411d8bbe950efdaa7f10253cca4e12adc",
+    "baselinePublishedMain": "53f1e07698a586ebbce567191abf933f27481e57",
+    "platform": "macOS-27.0.1-arm64-arm-64bit",
+    "cpus": 10,
+    "environmentReference": "validation/macos-2026-10-19.json",
+    "binaries": {
+      "slang-server": {
+        "sha256": "83ee074544b350b523d4c2d63782d213312a8e46963e097f02e7f36390ffe44b",
+        "bytes": 17996160
+      },
+      "slang_server_counted": {
+        "sha256": "5a7a10874e78d650a45801cd392e8a110c40f8be002c19f1cb4c2cb2718307c7",
+        "bytes": 17996344
+      },
+      "diagnostic_test_server": {
+        "sha256": "8ca48007e1b1860fd2aac4207e5362129870bbcab60fb68b63b0336d5020a1ac",
+        "bytes": 17997480
+      },
+      "baseline-server": {
+        "sha256": "e5f1358238137bfde01a9b41c047de1acb8bd2fc677d933342e65b283e23211f",
+        "bytes": 17996976
+      }
+    },
+    "realProject": {
+      "kind": "local educational SPI/APB/AHB UVM laboratory, not production UVM",
+      "uvmRelease": "UVM_1_2_RELEASE",
+      "uvmCommit": "71f30a7473118b3cea582d7673c3af8e161fce71",
+      "inputInventoryFiles": 209,
+      "inputInventoryBytes": 2558949,
+      "inputInventoryLines": 77665,
+      "sourceManifestSha256": "214e20162ce2d49b14d448c342a8621b0b0b50de324a17ab3a0a1c0f18313c7e",
+      "staticCompile": "0 errors; 2 UVM library empty-body warnings; exact Makefile source order, includes and --timescale 1ns/1ps; no source changes or simulator run",
+      "sourcePublication": "project source files and oracle response bodies remain local; public evidence contains hashes, timings and equivalence summaries only"
+    }
+  },
+  "implementation": [
+    "Store only resolved fields, not a second CompletionItem and duplicate identity JSON",
+    "Immutable contiguous outer DTO vector and sorted method slot indices; accepted edits publish only replacement method DTOs",
+    "Reserve exact native item capacity; clear temporary symbol identity index before diagnostic snapshot; no AST or symbol sharing and no freshness check removed"
+  ],
+  "acceptance": [
+    {
+      "name": "ctest",
+      "command": [
+        "/opt/homebrew/bin/ctest",
+        "--test-dir",
+        "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/build",
+        "--output-on-failure",
+        "--no-tests=error",
+        "-j4"
+      ],
+      "exitCode": 0,
+      "elapsedSeconds": 11.774927374906838
+    },
+    {
+      "name": "pytest",
+      "command": [
+        "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/source/.venv/bin/python",
+        "-m",
+        "pytest",
+        "tests/system",
+        "tests/method_scope",
+        "--binary",
+        "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/build/bin/slang-server",
+        "-q"
+      ],
+      "exitCode": 0,
+      "elapsedSeconds": 1.57073491695337
+    },
+    {
+      "name": "transport",
+      "command": [
+        "bash",
+        "tests/transport/run-diagnostic-transport-tests.sh"
+      ],
+      "exitCode": 0,
+      "elapsedSeconds": 4.210728249978274
+    },
+    {
+      "name": "oracle-10000-final",
+      "command": [
+        "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/source/.venv/bin/python",
+        "tests/method_scope/check.py",
+        "--binary",
+        "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/build/bin/slang-server",
+        "--classes",
+        "10000",
+        "--output",
+        "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/uvm-round/oracle-10000-final.json"
+      ],
+      "exitCode": 0,
+      "elapsedSeconds": 7.165698583004996
+    },
+    {
+      "name": "counts-10000",
+      "command": [
+        "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/source/.venv/bin/python",
+        "tests/method_scope/count.py",
+        "--binary",
+        "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/build/bin/slang_server_counted",
+        "--classes",
+        "10000",
+        "--output",
+        "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/uvm-round/counts-10000.json"
+      ],
+      "exitCode": 0,
+      "elapsedSeconds": 1.200972415972501
+    },
+    {
+      "name": "held",
+      "command": [
+        "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/source/.venv/bin/python",
+        "tests/method_scope/held_diagnostics.py",
+        "--binary",
+        "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/build/bin/diagnostic_test_server",
+        "--output",
+        "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/uvm-round/held.json"
+      ],
+      "exitCode": 0,
+      "elapsedSeconds": 0.550586209166795
+    },
+    {
+      "name": "uvm-oracle",
+      "command": [
+        "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/source/.venv/bin/python",
+        "tests/method_scope/project_benchmark.py",
+        "--binary",
+        "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/build/bin/slang-server",
+        "--workspace",
+        "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/uvm-round/spi",
+        "--scenario",
+        "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/uvm-round/spi-scenario.json",
+        "--output",
+        "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/uvm-round/uvm-after-oracle.json",
+        "--blocks",
+        "1",
+        "--oracle"
+      ],
+      "exitCode": 0,
+      "elapsedSeconds": 54.46147112501785
+    },
+    {
+      "name": "integrity-after",
+      "command": [
+        "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/source/.venv/bin/python",
+        "restoration/prepare-main-sdk.py",
+        "--deps-root",
+        "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/dependencies"
+      ],
+      "exitCode": 0,
+      "elapsedSeconds": 0.3796854589600116
+    }
+  ],
+  "realProjectOracle": {
+    "scope": "full ordered completion JSON, every resolved item, definition and diagnostics, ten versions, both arms, baseline and product; physical source handles witnessed by bytes; unknown macro handles compared exactly; not a macro freshness certificate",
+    "checks": [
+      {
+        "method": "completion",
+        "freshProcesses": 8,
+        "versionsEach": 10,
+        "orderedBodiesAndAllResolvesSha256": "0709cf3d40bc2ec477f20f53e4ec929307fe65f0f95e441355b444724e90aae8",
+        "completionItemsPerVersion": [
+          678,
+          678,
+          678,
+          678,
+          678,
+          678,
+          678,
+          678,
+          678,
+          678
+        ],
+        "equalAcrossAllArmsAndBothVersions": true
+      },
+      {
+        "method": "definition",
+        "freshProcesses": 8,
+        "versionsEach": 10,
+        "orderedBodiesAndAllResolvesSha256": "93a566d5f8bb9d6d1115e3a8b8cae83a750ec67fc82d01681097d423b86024d3",
+        "completionItemsPerVersion": null,
+        "equalAcrossAllArmsAndBothVersions": true
+      }
+    ],
+    "localRawFiles": {
+      "uvm-baseline-oracle-v2.json": {
+        "sha256": "e98b2d436178c866bc2c7cfdf1fccc8c6f2f01b20f46a00c5114f0b4e812080c",
+        "bytes": 142961557,
+        "published": false
+      },
+      "uvm-after-oracle.json": {
+        "sha256": "de9bdb8c60bac5500e7d60f9acfc929cfc5d8373427b3142249d7f4619441389",
+        "bytes": 142961929,
+        "published": false
+      }
+    },
+    "reasonRawNotPublished": "resolved source fragments from a separate local educational project; project sources and response bodies remain local"
+  },
+  "realUvmParserCounts": [
+    {
+      "version": "before",
+      "rows": [
+        {
+          "step": 1,
+          "mainParseDelta": {
+            "other": 1
+          },
+          "decline": "unsupported source-loading flag"
+        },
+        {
+          "step": 2,
+          "mainParseDelta": {
+            "other": 1
+          },
+          "decline": "unsupported source-loading flag"
+        },
+        {
+          "step": 3,
+          "mainParseDelta": {
+            "other": 1
+          },
+          "decline": "unsupported source-loading flag"
+        },
+        {
+          "step": 4,
+          "mainParseDelta": {
+            "other": 1
+          },
+          "decline": "unsupported source-loading flag"
+        },
+        {
+          "step": 5,
+          "mainParseDelta": {
+            "other": 1
+          },
+          "decline": "unsupported source-loading flag"
+        },
+        {
+          "step": 6,
+          "mainParseDelta": {
+            "other": 1
+          },
+          "decline": "unsupported source-loading flag"
+        },
+        {
+          "step": 7,
+          "mainParseDelta": {
+            "other": 1
+          },
+          "decline": "unsupported source-loading flag"
+        },
+        {
+          "step": 8,
+          "mainParseDelta": {
+            "other": 1
+          },
+          "decline": "unsupported source-loading flag"
+        },
+        {
+          "step": 9,
+          "mainParseDelta": {
+            "other": 1
+          },
+          "decline": "unsupported source-loading flag"
+        }
+      ]
+    },
+    {
+      "version": "after",
+      "rows": [
+        {
+          "step": 1,
+          "mainParseDelta": {
+            "other": 1
+          },
+          "decline": "unsupported source-loading flag"
+        },
+        {
+          "step": 2,
+          "mainParseDelta": {
+            "other": 1
+          },
+          "decline": "unsupported source-loading flag"
+        },
+        {
+          "step": 3,
+          "mainParseDelta": {
+            "other": 1
+          },
+          "decline": "unsupported source-loading flag"
+        },
+        {
+          "step": 4,
+          "mainParseDelta": {
+            "other": 1
+          },
+          "decline": "unsupported source-loading flag"
+        },
+        {
+          "step": 5,
+          "mainParseDelta": {
+            "other": 1
+          },
+          "decline": "unsupported source-loading flag"
+        },
+        {
+          "step": 6,
+          "mainParseDelta": {
+            "other": 1
+          },
+          "decline": "unsupported source-loading flag"
+        },
+        {
+          "step": 7,
+          "mainParseDelta": {
+            "other": 1
+          },
+          "decline": "unsupported source-loading flag"
+        },
+        {
+          "step": 8,
+          "mainParseDelta": {
+            "other": 1
+          },
+          "decline": "unsupported source-loading flag"
+        },
+        {
+          "step": 9,
+          "mainParseDelta": {
+            "other": 1
+          },
+          "decline": "unsupported source-loading flag"
+        }
+      ]
+    }
+  ],
+  "synthetic": {
+    "processes": 320,
+    "timedRequests": 2880,
+    "observationsPerQueryVersionArmStep": 20,
+    "design": "20 complete randomized blocks per size/query; four cells per block (two binaries times two arms); fixed seven include edges with 5000 or 10000 synthetic classes; fresh process per cell; recorded plan before replay",
+    "summary": {
+      "5000/completion/before/native": {
+        "interactiveSumMs": {
+          "n": 20,
+          "medianMs": 129.46325000000002,
+          "empiricalP95Ms": null
+        },
+        "sequenceMs": {
+          "n": 20,
+          "medianMs": 842.8976250000001,
+          "empiricalP95Ms": null
+        },
+        "coldPreparationMs": {
+          "n": 20,
+          "medianMs": 116.95175,
+          "empiricalP95Ms": null
+        },
+        "steps": {
+          "1": {
+            "n": 20,
+            "medianMs": 15.0892085,
+            "empiricalP95Ms": null
+          },
+          "2": {
+            "n": 20,
+            "medianMs": 16.387625,
+            "empiricalP95Ms": null
+          },
+          "3": {
+            "n": 20,
+            "medianMs": 13.7176045,
+            "empiricalP95Ms": null
+          },
+          "4": {
+            "n": 20,
+            "medianMs": 13.927708500000001,
+            "empiricalP95Ms": null
+          },
+          "5": {
+            "n": 20,
+            "medianMs": 14.064833,
+            "empiricalP95Ms": null
+          },
+          "6": {
+            "n": 20,
+            "medianMs": 14.054187,
+            "empiricalP95Ms": null
+          },
+          "7": {
+            "n": 20,
+            "medianMs": 14.0175205,
+            "empiricalP95Ms": null
+          },
+          "8": {
+            "n": 20,
+            "medianMs": 14.001042,
+            "empiricalP95Ms": null
+          },
+          "9": {
+            "n": 20,
+            "medianMs": 14.119686999999999,
+            "empiricalP95Ms": null
+          }
+        }
+      },
+      "5000/completion/before/method": {
+        "interactiveSumMs": {
+          "n": 20,
+          "medianMs": 111.9892925,
+          "empiricalP95Ms": null
+        },
+        "sequenceMs": {
+          "n": 20,
+          "medianMs": 845.750417,
+          "empiricalP95Ms": null
+        },
+        "coldPreparationMs": {
+          "n": 20,
+          "medianMs": 117.724354,
+          "empiricalP95Ms": null
+        },
+        "steps": {
+          "1": {
+            "n": 20,
+            "medianMs": 44.123708500000006,
+            "empiricalP95Ms": null
+          },
+          "2": {
+            "n": 20,
+            "medianMs": 6.6050415000000005,
+            "empiricalP95Ms": null
+          },
+          "3": {
+            "n": 20,
+            "medianMs": 7.0490625,
+            "empiricalP95Ms": null
+          },
+          "4": {
+            "n": 20,
+            "medianMs": 7.1975415,
+            "empiricalP95Ms": null
+          },
+          "5": {
+            "n": 20,
+            "medianMs": 7.2457294999999995,
+            "empiricalP95Ms": null
+          },
+          "6": {
+            "n": 20,
+            "medianMs": 7.297479,
+            "empiricalP95Ms": null
+          },
+          "7": {
+            "n": 20,
+            "medianMs": 7.2533545,
+            "empiricalP95Ms": null
+          },
+          "8": {
+            "n": 20,
+            "medianMs": 7.312708499999999,
+            "empiricalP95Ms": null
+          },
+          "9": {
+            "n": 20,
+            "medianMs": 17.5571245,
+            "empiricalP95Ms": null
+          }
+        }
+      },
+      "5000/completion/after/native": {
+        "interactiveSumMs": {
+          "n": 20,
+          "medianMs": 127.1489775,
+          "empiricalP95Ms": null
+        },
+        "sequenceMs": {
+          "n": 20,
+          "medianMs": 838.971875,
+          "empiricalP95Ms": null
+        },
+        "coldPreparationMs": {
+          "n": 20,
+          "medianMs": 116.744584,
+          "empiricalP95Ms": null
+        },
+        "steps": {
+          "1": {
+            "n": 20,
+            "medianMs": 14.538958000000001,
+            "empiricalP95Ms": null
+          },
+          "2": {
+            "n": 20,
+            "medianMs": 15.8794585,
+            "empiricalP95Ms": null
+          },
+          "3": {
+            "n": 20,
+            "medianMs": 13.5401875,
+            "empiricalP95Ms": null
+          },
+          "4": {
+            "n": 20,
+            "medianMs": 13.7480835,
+            "empiricalP95Ms": null
+          },
+          "5": {
+            "n": 20,
+            "medianMs": 13.955874999999999,
+            "empiricalP95Ms": null
+          },
+          "6": {
+            "n": 20,
+            "medianMs": 13.8210835,
+            "empiricalP95Ms": null
+          },
+          "7": {
+            "n": 20,
+            "medianMs": 13.8894165,
+            "empiricalP95Ms": null
+          },
+          "8": {
+            "n": 20,
+            "medianMs": 13.755021,
+            "empiricalP95Ms": null
+          },
+          "9": {
+            "n": 20,
+            "medianMs": 13.883375000000001,
+            "empiricalP95Ms": null
+          }
+        }
+      },
+      "5000/completion/after/method": {
+        "interactiveSumMs": {
+          "n": 20,
+          "medianMs": 109.34439649999999,
+          "empiricalP95Ms": null
+        },
+        "sequenceMs": {
+          "n": 20,
+          "medianMs": 840.4930205000001,
+          "empiricalP95Ms": null
+        },
+        "coldPreparationMs": {
+          "n": 20,
+          "medianMs": 117.4171255,
+          "empiricalP95Ms": null
+        },
+        "steps": {
+          "1": {
+            "n": 20,
+            "medianMs": 42.306104500000004,
+            "empiricalP95Ms": null
+          },
+          "2": {
+            "n": 20,
+            "medianMs": 6.4269165,
+            "empiricalP95Ms": null
+          },
+          "3": {
+            "n": 20,
+            "medianMs": 6.8767084999999994,
+            "empiricalP95Ms": null
+          },
+          "4": {
+            "n": 20,
+            "medianMs": 7.1318335,
+            "empiricalP95Ms": null
+          },
+          "5": {
+            "n": 20,
+            "medianMs": 7.3294999999999995,
+            "empiricalP95Ms": null
+          },
+          "6": {
+            "n": 20,
+            "medianMs": 7.1947495,
+            "empiricalP95Ms": null
+          },
+          "7": {
+            "n": 20,
+            "medianMs": 7.2533335,
+            "empiricalP95Ms": null
+          },
+          "8": {
+            "n": 20,
+            "medianMs": 7.209125500000001,
+            "empiricalP95Ms": null
+          },
+          "9": {
+            "n": 20,
+            "medianMs": 17.4107085,
+            "empiricalP95Ms": null
+          }
+        }
+      },
+      "5000/definition/before/native": {
+        "interactiveSumMs": {
+          "n": 20,
+          "medianMs": 128.4614575,
+          "empiricalP95Ms": null
+        },
+        "sequenceMs": {
+          "n": 20,
+          "medianMs": 843.4599375,
+          "empiricalP95Ms": null
+        },
+        "coldPreparationMs": {
+          "n": 20,
+          "medianMs": 116.5037915,
+          "empiricalP95Ms": null
+        },
+        "steps": {
+          "1": {
+            "n": 20,
+            "medianMs": 14.6894375,
+            "empiricalP95Ms": null
+          },
+          "2": {
+            "n": 20,
+            "medianMs": 16.308229,
+            "empiricalP95Ms": null
+          },
+          "3": {
+            "n": 20,
+            "medianMs": 13.713353999999999,
+            "empiricalP95Ms": null
+          },
+          "4": {
+            "n": 20,
+            "medianMs": 13.8265625,
+            "empiricalP95Ms": null
+          },
+          "5": {
+            "n": 20,
+            "medianMs": 14.047415999999998,
+            "empiricalP95Ms": null
+          },
+          "6": {
+            "n": 20,
+            "medianMs": 14.039604,
+            "empiricalP95Ms": null
+          },
+          "7": {
+            "n": 20,
+            "medianMs": 14.105208000000001,
+            "empiricalP95Ms": null
+          },
+          "8": {
+            "n": 20,
+            "medianMs": 13.9317915,
+            "empiricalP95Ms": null
+          },
+          "9": {
+            "n": 20,
+            "medianMs": 13.9508125,
+            "empiricalP95Ms": null
+          }
+        }
+      },
+      "5000/definition/before/method": {
+        "interactiveSumMs": {
+          "n": 20,
+          "medianMs": 110.8194585,
+          "empiricalP95Ms": null
+        },
+        "sequenceMs": {
+          "n": 20,
+          "medianMs": 843.9140629999999,
+          "empiricalP95Ms": null
+        },
+        "coldPreparationMs": {
+          "n": 20,
+          "medianMs": 116.5459165,
+          "empiricalP95Ms": null
+        },
+        "steps": {
+          "1": {
+            "n": 20,
+            "medianMs": 44.081791499999994,
+            "empiricalP95Ms": null
+          },
+          "2": {
+            "n": 20,
+            "medianMs": 6.5187295,
+            "empiricalP95Ms": null
+          },
+          "3": {
+            "n": 20,
+            "medianMs": 6.889271,
+            "empiricalP95Ms": null
+          },
+          "4": {
+            "n": 20,
+            "medianMs": 7.1083545,
+            "empiricalP95Ms": null
+          },
+          "5": {
+            "n": 20,
+            "medianMs": 7.1806874999999994,
+            "empiricalP95Ms": null
+          },
+          "6": {
+            "n": 20,
+            "medianMs": 7.2201875,
+            "empiricalP95Ms": null
+          },
+          "7": {
+            "n": 20,
+            "medianMs": 7.2835625,
+            "empiricalP95Ms": null
+          },
+          "8": {
+            "n": 20,
+            "medianMs": 7.2268539999999994,
+            "empiricalP95Ms": null
+          },
+          "9": {
+            "n": 20,
+            "medianMs": 17.4421045,
+            "empiricalP95Ms": null
+          }
+        }
+      },
+      "5000/definition/after/native": {
+        "interactiveSumMs": {
+          "n": 20,
+          "medianMs": 126.724418,
+          "empiricalP95Ms": null
+        },
+        "sequenceMs": {
+          "n": 20,
+          "medianMs": 838.7766455,
+          "empiricalP95Ms": null
+        },
+        "coldPreparationMs": {
+          "n": 20,
+          "medianMs": 115.608146,
+          "empiricalP95Ms": null
+        },
+        "steps": {
+          "1": {
+            "n": 20,
+            "medianMs": 14.3449375,
+            "empiricalP95Ms": null
+          },
+          "2": {
+            "n": 20,
+            "medianMs": 15.879957999999998,
+            "empiricalP95Ms": null
+          },
+          "3": {
+            "n": 20,
+            "medianMs": 13.5241245,
+            "empiricalP95Ms": null
+          },
+          "4": {
+            "n": 20,
+            "medianMs": 13.7578745,
+            "empiricalP95Ms": null
+          },
+          "5": {
+            "n": 20,
+            "medianMs": 13.8040625,
+            "empiricalP95Ms": null
+          },
+          "6": {
+            "n": 20,
+            "medianMs": 13.8008335,
+            "empiricalP95Ms": null
+          },
+          "7": {
+            "n": 20,
+            "medianMs": 13.883042,
+            "empiricalP95Ms": null
+          },
+          "8": {
+            "n": 20,
+            "medianMs": 13.8201455,
+            "empiricalP95Ms": null
+          },
+          "9": {
+            "n": 20,
+            "medianMs": 13.9159795,
+            "empiricalP95Ms": null
+          }
+        }
+      },
+      "5000/definition/after/method": {
+        "interactiveSumMs": {
+          "n": 20,
+          "medianMs": 108.708979,
+          "empiricalP95Ms": null
+        },
+        "sequenceMs": {
+          "n": 20,
+          "medianMs": 841.5005209999999,
+          "empiricalP95Ms": null
+        },
+        "coldPreparationMs": {
+          "n": 20,
+          "medianMs": 115.8853955,
+          "empiricalP95Ms": null
+        },
+        "steps": {
+          "1": {
+            "n": 20,
+            "medianMs": 42.196396,
+            "empiricalP95Ms": null
+          },
+          "2": {
+            "n": 20,
+            "medianMs": 6.331853499999999,
+            "empiricalP95Ms": null
+          },
+          "3": {
+            "n": 20,
+            "medianMs": 6.838229,
+            "empiricalP95Ms": null
+          },
+          "4": {
+            "n": 20,
+            "medianMs": 7.179729,
+            "empiricalP95Ms": null
+          },
+          "5": {
+            "n": 20,
+            "medianMs": 7.0642715,
+            "empiricalP95Ms": null
+          },
+          "6": {
+            "n": 20,
+            "medianMs": 7.255229,
+            "empiricalP95Ms": null
+          },
+          "7": {
+            "n": 20,
+            "medianMs": 7.198958,
+            "empiricalP95Ms": null
+          },
+          "8": {
+            "n": 20,
+            "medianMs": 7.199125,
+            "empiricalP95Ms": null
+          },
+          "9": {
+            "n": 20,
+            "medianMs": 17.828353999999997,
+            "empiricalP95Ms": null
+          }
+        }
+      },
+      "10000/completion/before/native": {
+        "interactiveSumMs": {
+          "n": 20,
+          "medianMs": 233.969042,
+          "empiricalP95Ms": null
+        },
+        "sequenceMs": {
+          "n": 20,
+          "medianMs": 1094.4827500000001,
+          "empiricalP95Ms": null
+        },
+        "coldPreparationMs": {
+          "n": 20,
+          "medianMs": 165.0192295,
+          "empiricalP95Ms": null
+        },
+        "steps": {
+          "1": {
+            "n": 20,
+            "medianMs": 29.256188,
+            "empiricalP95Ms": null
+          },
+          "2": {
+            "n": 20,
+            "medianMs": 30.5890005,
+            "empiricalP95Ms": null
+          },
+          "3": {
+            "n": 20,
+            "medianMs": 24.813875,
+            "empiricalP95Ms": null
+          },
+          "4": {
+            "n": 20,
+            "medianMs": 24.734458,
+            "empiricalP95Ms": null
+          },
+          "5": {
+            "n": 20,
+            "medianMs": 24.923854,
+            "empiricalP95Ms": null
+          },
+          "6": {
+            "n": 20,
+            "medianMs": 24.8493335,
+            "empiricalP95Ms": null
+          },
+          "7": {
+            "n": 20,
+            "medianMs": 24.957125,
+            "empiricalP95Ms": null
+          },
+          "8": {
+            "n": 20,
+            "medianMs": 24.931791500000003,
+            "empiricalP95Ms": null
+          },
+          "9": {
+            "n": 20,
+            "medianMs": 24.951917,
+            "empiricalP95Ms": null
+          }
+        }
+      },
+      "10000/completion/before/method": {
+        "interactiveSumMs": {
+          "n": 20,
+          "medianMs": 187.8581455,
+          "empiricalP95Ms": null
+        },
+        "sequenceMs": {
+          "n": 20,
+          "medianMs": 1068.326229,
+          "empiricalP95Ms": null
+        },
+        "coldPreparationMs": {
+          "n": 20,
+          "medianMs": 164.33222849999999,
+          "empiricalP95Ms": null
+        },
+        "steps": {
+          "1": {
+            "n": 20,
+            "medianMs": 82.40968699999999,
+            "empiricalP95Ms": null
+          },
+          "2": {
+            "n": 20,
+            "medianMs": 10.696979500000001,
+            "empiricalP95Ms": null
+          },
+          "3": {
+            "n": 20,
+            "medianMs": 10.500292,
+            "empiricalP95Ms": null
+          },
+          "4": {
+            "n": 20,
+            "medianMs": 10.4019585,
+            "empiricalP95Ms": null
+          },
+          "5": {
+            "n": 20,
+            "medianMs": 10.483271,
+            "empiricalP95Ms": null
+          },
+          "6": {
+            "n": 20,
+            "medianMs": 10.4360625,
+            "empiricalP95Ms": null
+          },
+          "7": {
+            "n": 20,
+            "medianMs": 10.508812500000001,
+            "empiricalP95Ms": null
+          },
+          "8": {
+            "n": 20,
+            "medianMs": 10.472021,
+            "empiricalP95Ms": null
+          },
+          "9": {
+            "n": 20,
+            "medianMs": 31.681354499999998,
+            "empiricalP95Ms": null
+          }
+        }
+      },
+      "10000/completion/after/native": {
+        "interactiveSumMs": {
+          "n": 20,
+          "medianMs": 234.1636885,
+          "empiricalP95Ms": null
+        },
+        "sequenceMs": {
+          "n": 20,
+          "medianMs": 1090.5425624999998,
+          "empiricalP95Ms": null
+        },
+        "coldPreparationMs": {
+          "n": 20,
+          "medianMs": 163.4081875,
+          "empiricalP95Ms": null
+        },
+        "steps": {
+          "1": {
+            "n": 20,
+            "medianMs": 29.117896000000002,
+            "empiricalP95Ms": null
+          },
+          "2": {
+            "n": 20,
+            "medianMs": 30.1877085,
+            "empiricalP95Ms": null
+          },
+          "3": {
+            "n": 20,
+            "medianMs": 24.766125,
+            "empiricalP95Ms": null
+          },
+          "4": {
+            "n": 20,
+            "medianMs": 24.748479500000002,
+            "empiricalP95Ms": null
+          },
+          "5": {
+            "n": 20,
+            "medianMs": 24.838687,
+            "empiricalP95Ms": null
+          },
+          "6": {
+            "n": 20,
+            "medianMs": 24.705688,
+            "empiricalP95Ms": null
+          },
+          "7": {
+            "n": 20,
+            "medianMs": 24.809416499999998,
+            "empiricalP95Ms": null
+          },
+          "8": {
+            "n": 20,
+            "medianMs": 24.742895500000003,
+            "empiricalP95Ms": null
+          },
+          "9": {
+            "n": 20,
+            "medianMs": 24.6095415,
+            "empiricalP95Ms": null
+          }
+        }
+      },
+      "10000/completion/after/method": {
+        "interactiveSumMs": {
+          "n": 20,
+          "medianMs": 178.19158349999998,
+          "empiricalP95Ms": null
+        },
+        "sequenceMs": {
+          "n": 20,
+          "medianMs": 1054.667562,
+          "empiricalP95Ms": null
+        },
+        "coldPreparationMs": {
+          "n": 20,
+          "medianMs": 163.1487705,
+          "empiricalP95Ms": null
+        },
+        "steps": {
+          "1": {
+            "n": 20,
+            "medianMs": 78.2810415,
+            "empiricalP95Ms": null
+          },
+          "2": {
+            "n": 20,
+            "medianMs": 10.311542,
+            "empiricalP95Ms": null
+          },
+          "3": {
+            "n": 20,
+            "medianMs": 10.297333,
+            "empiricalP95Ms": null
+          },
+          "4": {
+            "n": 20,
+            "medianMs": 10.372625,
+            "empiricalP95Ms": null
+          },
+          "5": {
+            "n": 20,
+            "medianMs": 10.433437,
+            "empiricalP95Ms": null
+          },
+          "6": {
+            "n": 20,
+            "medianMs": 10.2759585,
+            "empiricalP95Ms": null
+          },
+          "7": {
+            "n": 20,
+            "medianMs": 10.3263125,
+            "empiricalP95Ms": null
+          },
+          "8": {
+            "n": 20,
+            "medianMs": 10.3699375,
+            "empiricalP95Ms": null
+          },
+          "9": {
+            "n": 20,
+            "medianMs": 27.4656665,
+            "empiricalP95Ms": null
+          }
+        }
+      },
+      "10000/definition/before/native": {
+        "interactiveSumMs": {
+          "n": 20,
+          "medianMs": 233.49708500000003,
+          "empiricalP95Ms": null
+        },
+        "sequenceMs": {
+          "n": 20,
+          "medianMs": 1094.0231665000001,
+          "empiricalP95Ms": null
+        },
+        "coldPreparationMs": {
+          "n": 20,
+          "medianMs": 163.88493749999998,
+          "empiricalP95Ms": null
+        },
+        "steps": {
+          "1": {
+            "n": 20,
+            "medianMs": 28.714229000000003,
+            "empiricalP95Ms": null
+          },
+          "2": {
+            "n": 20,
+            "medianMs": 29.724604,
+            "empiricalP95Ms": null
+          },
+          "3": {
+            "n": 20,
+            "medianMs": 24.858521,
+            "empiricalP95Ms": null
+          },
+          "4": {
+            "n": 20,
+            "medianMs": 24.7686255,
+            "empiricalP95Ms": null
+          },
+          "5": {
+            "n": 20,
+            "medianMs": 25.229583499999997,
+            "empiricalP95Ms": null
+          },
+          "6": {
+            "n": 20,
+            "medianMs": 24.8219585,
+            "empiricalP95Ms": null
+          },
+          "7": {
+            "n": 20,
+            "medianMs": 24.7947085,
+            "empiricalP95Ms": null
+          },
+          "8": {
+            "n": 20,
+            "medianMs": 25.180354,
+            "empiricalP95Ms": null
+          },
+          "9": {
+            "n": 20,
+            "medianMs": 24.977000500000003,
+            "empiricalP95Ms": null
+          }
+        }
+      },
+      "10000/definition/before/method": {
+        "interactiveSumMs": {
+          "n": 20,
+          "medianMs": 186.682145,
+          "empiricalP95Ms": null
+        },
+        "sequenceMs": {
+          "n": 20,
+          "medianMs": 1070.9759789999998,
+          "empiricalP95Ms": null
+        },
+        "coldPreparationMs": {
+          "n": 20,
+          "medianMs": 164.2254375,
+          "empiricalP95Ms": null
+        },
+        "steps": {
+          "1": {
+            "n": 20,
+            "medianMs": 82.0769585,
+            "empiricalP95Ms": null
+          },
+          "2": {
+            "n": 20,
+            "medianMs": 10.641292,
+            "empiricalP95Ms": null
+          },
+          "3": {
+            "n": 20,
+            "medianMs": 10.506208,
+            "empiricalP95Ms": null
+          },
+          "4": {
+            "n": 20,
+            "medianMs": 10.269124999999999,
+            "empiricalP95Ms": null
+          },
+          "5": {
+            "n": 20,
+            "medianMs": 10.4338955,
+            "empiricalP95Ms": null
+          },
+          "6": {
+            "n": 20,
+            "medianMs": 10.5504585,
+            "empiricalP95Ms": null
+          },
+          "7": {
+            "n": 20,
+            "medianMs": 10.4930625,
+            "empiricalP95Ms": null
+          },
+          "8": {
+            "n": 20,
+            "medianMs": 10.313749999999999,
+            "empiricalP95Ms": null
+          },
+          "9": {
+            "n": 20,
+            "medianMs": 31.505188,
+            "empiricalP95Ms": null
+          }
+        }
+      },
+      "10000/definition/after/native": {
+        "interactiveSumMs": {
+          "n": 20,
+          "medianMs": 229.777979,
+          "empiricalP95Ms": null
+        },
+        "sequenceMs": {
+          "n": 20,
+          "medianMs": 1085.4138750000002,
+          "empiricalP95Ms": null
+        },
+        "coldPreparationMs": {
+          "n": 20,
+          "medianMs": 162.94679150000002,
+          "empiricalP95Ms": null
+        },
+        "steps": {
+          "1": {
+            "n": 20,
+            "medianMs": 28.202125000000002,
+            "empiricalP95Ms": null
+          },
+          "2": {
+            "n": 20,
+            "medianMs": 29.4879795,
+            "empiricalP95Ms": null
+          },
+          "3": {
+            "n": 20,
+            "medianMs": 24.446333000000003,
+            "empiricalP95Ms": null
+          },
+          "4": {
+            "n": 20,
+            "medianMs": 24.442813,
+            "empiricalP95Ms": null
+          },
+          "5": {
+            "n": 20,
+            "medianMs": 24.679792,
+            "empiricalP95Ms": null
+          },
+          "6": {
+            "n": 20,
+            "medianMs": 24.323146,
+            "empiricalP95Ms": null
+          },
+          "7": {
+            "n": 20,
+            "medianMs": 24.745646,
+            "empiricalP95Ms": null
+          },
+          "8": {
+            "n": 20,
+            "medianMs": 24.7759165,
+            "empiricalP95Ms": null
+          },
+          "9": {
+            "n": 20,
+            "medianMs": 24.33575,
+            "empiricalP95Ms": null
+          }
+        }
+      },
+      "10000/definition/after/method": {
+        "interactiveSumMs": {
+          "n": 20,
+          "medianMs": 176.29164500000002,
+          "empiricalP95Ms": null
+        },
+        "sequenceMs": {
+          "n": 20,
+          "medianMs": 1052.5365000000002,
+          "empiricalP95Ms": null
+        },
+        "coldPreparationMs": {
+          "n": 20,
+          "medianMs": 163.080104,
+          "empiricalP95Ms": null
+        },
+        "steps": {
+          "1": {
+            "n": 20,
+            "medianMs": 77.5464375,
+            "empiricalP95Ms": null
+          },
+          "2": {
+            "n": 20,
+            "medianMs": 10.2985415,
+            "empiricalP95Ms": null
+          },
+          "3": {
+            "n": 20,
+            "medianMs": 10.241270499999999,
+            "empiricalP95Ms": null
+          },
+          "4": {
+            "n": 20,
+            "medianMs": 10.3060415,
+            "empiricalP95Ms": null
+          },
+          "5": {
+            "n": 20,
+            "medianMs": 10.245354500000001,
+            "empiricalP95Ms": null
+          },
+          "6": {
+            "n": 20,
+            "medianMs": 10.254271,
+            "empiricalP95Ms": null
+          },
+          "7": {
+            "n": 20,
+            "medianMs": 10.331792,
+            "empiricalP95Ms": null
+          },
+          "8": {
+            "n": 20,
+            "medianMs": 10.3070415,
+            "empiricalP95Ms": null
+          },
+          "9": {
+            "n": 20,
+            "medianMs": 26.924791499999998,
+            "empiricalP95Ms": null
+          }
+        }
+      }
+    },
+    "pairedMeanAnalysis": {
+      "5000/completion/interactiveSumMs/afterNativeMinusMethod": {
+        "blocks": 20,
+        "meanSavingsMs": 18.38662695,
+        "exploratoryPercentile95IntervalMs": [
+          16.9625396,
+          19.90375475
+        ],
+        "positiveBlocks": 20,
+        "scope": "complete blocks resampled; exploratory paired mean, not a median or tail confidence interval; no multiplicity correction"
+      },
+      "5000/completion/interactiveSumMs/beforeMethodMinusAfterMethod": {
+        "blocks": 20,
+        "meanSavingsMs": 3.633775,
+        "exploratoryPercentile95IntervalMs": [
+          1.9642541000000002,
+          5.712475499999999
+        ],
+        "positiveBlocks": 20,
+        "scope": "complete blocks resampled; exploratory paired mean, not a median or tail confidence interval; no multiplicity correction"
+      },
+      "5000/completion/interactiveSumMs/methodImprovementMinusNativeImprovement": {
+        "blocks": 20,
+        "meanSavingsMs": 1.2203351500000033,
+        "exploratoryPercentile95IntervalMs": [
+          -1.415969350000001,
+          3.904557900000003
+        ],
+        "positiveBlocks": 11,
+        "scope": "complete blocks resampled; exploratory paired mean, not a median or tail confidence interval; no multiplicity correction"
+      },
+      "5000/completion/sequenceMs/afterNativeMinusMethod": {
+        "blocks": 20,
+        "meanSavingsMs": 3.5551498999999867,
+        "exploratoryPercentile95IntervalMs": [
+          -1.8471396500000026,
+          10.919645649999978
+        ],
+        "positiveBlocks": 9,
+        "scope": "complete blocks resampled; exploratory paired mean, not a median or tail confidence interval; no multiplicity correction"
+      },
+      "5000/completion/sequenceMs/beforeMethodMinusAfterMethod": {
+        "blocks": 20,
+        "meanSavingsMs": 12.041064549999987,
+        "exploratoryPercentile95IntervalMs": [
+          5.568216799999993,
+          20.191072699999978
+        ],
+        "positiveBlocks": 18,
+        "scope": "complete blocks resampled; exploratory paired mean, not a median or tail confidence interval; no multiplicity correction"
+      },
+      "5000/completion/sequenceMs/methodImprovementMinusNativeImprovement": {
+        "blocks": 20,
+        "meanSavingsMs": 7.815445699999981,
+        "exploratoryPercentile95IntervalMs": [
+          -0.6279230000000269,
+          17.51982259999999
+        ],
+        "positiveBlocks": 13,
+        "scope": "complete blocks resampled; exploratory paired mean, not a median or tail confidence interval; no multiplicity correction"
+      },
+      "5000/completion/firstMs/afterNativeMinusMethod": {
+        "blocks": 20,
+        "meanSavingsMs": -27.747395700000002,
+        "exploratoryPercentile95IntervalMs": [
+          -28.2082165,
+          -27.33853115
+        ],
+        "positiveBlocks": 0,
+        "scope": "complete blocks resampled; exploratory paired mean, not a median or tail confidence interval; no multiplicity correction"
+      },
+      "5000/completion/firstMs/beforeMethodMinusAfterMethod": {
+        "blocks": 20,
+        "meanSavingsMs": 2.017333399999999,
+        "exploratoryPercentile95IntervalMs": [
+          1.5594001500000005,
+          2.46156255
+        ],
+        "positiveBlocks": 19,
+        "scope": "complete blocks resampled; exploratory paired mean, not a median or tail confidence interval; no multiplicity correction"
+      },
+      "5000/completion/firstMs/methodImprovementMinusNativeImprovement": {
+        "blocks": 20,
+        "meanSavingsMs": 1.6095249999999992,
+        "exploratoryPercentile95IntervalMs": [
+          1.0538767999999998,
+          2.1400522
+        ],
+        "positiveBlocks": 17,
+        "scope": "complete blocks resampled; exploratory paired mean, not a median or tail confidence interval; no multiplicity correction"
+      },
+      "5000/completion/acceptedSumMs/afterNativeMinusMethod": {
+        "blocks": 20,
+        "meanSavingsMs": 49.552764350000004,
+        "exploratoryPercentile95IntervalMs": [
+          48.306101500000004,
+          50.87196235
+        ],
+        "positiveBlocks": 20,
+        "scope": "complete blocks resampled; exploratory paired mean, not a median or tail confidence interval; no multiplicity correction"
+      },
+      "5000/completion/acceptedSumMs/beforeMethodMinusAfterMethod": {
+        "blocks": 20,
+        "meanSavingsMs": 0.5154437499999993,
+        "exploratoryPercentile95IntervalMs": [
+          -0.47634360000000164,
+          1.733794249999999
+        ],
+        "positiveBlocks": 9,
+        "scope": "complete blocks resampled; exploratory paired mean, not a median or tail confidence interval; no multiplicity correction"
+      },
+      "5000/completion/acceptedSumMs/methodImprovementMinusNativeImprovement": {
+        "blocks": 20,
+        "meanSavingsMs": -1.2974022999999988,
+        "exploratoryPercentile95IntervalMs": [
+          -3.4119481999999968,
+          0.8491025500000002
+        ],
+        "positiveBlocks": 7,
+        "scope": "complete blocks resampled; exploratory paired mean, not a median or tail confidence interval; no multiplicity correction"
+      },
+      "5000/completion/fallbackMs/afterNativeMinusMethod": {
+        "blocks": 20,
+        "meanSavingsMs": -3.4187417000000004,
+        "exploratoryPercentile95IntervalMs": [
+          -3.7393626000000006,
+          -3.1114457000000004
+        ],
+        "positiveBlocks": 0,
+        "scope": "complete blocks resampled; exploratory paired mean, not a median or tail confidence interval; no multiplicity correction"
+      },
+      "5000/completion/fallbackMs/beforeMethodMinusAfterMethod": {
+        "blocks": 20,
+        "meanSavingsMs": 1.100997849999999,
+        "exploratoryPercentile95IntervalMs": [
+          -0.04428540000000103,
+          2.871518849999999
+        ],
+        "positiveBlocks": 12,
+        "scope": "complete blocks resampled; exploratory paired mean, not a median or tail confidence interval; no multiplicity correction"
+      },
+      "5000/completion/fallbackMs/methodImprovementMinusNativeImprovement": {
+        "blocks": 20,
+        "meanSavingsMs": 0.9082124499999993,
+        "exploratoryPercentile95IntervalMs": [
+          -0.16638965000000122,
+          2.6349393999999995
+        ],
+        "positiveBlocks": 12,
+        "scope": "complete blocks resampled; exploratory paired mean, not a median or tail confidence interval; no multiplicity correction"
+      },
+      "5000/definition/interactiveSumMs/afterNativeMinusMethod": {
+        "blocks": 20,
+        "meanSavingsMs": 18.485907,
+        "exploratoryPercentile95IntervalMs": [
+          16.711096550000004,
+          20.3294114
+        ],
+        "positiveBlocks": 20,
+        "scope": "complete blocks resampled; exploratory paired mean, not a median or tail confidence interval; no multiplicity correction"
+      },
+      "5000/definition/interactiveSumMs/beforeMethodMinusAfterMethod": {
+        "blocks": 20,
+        "meanSavingsMs": 2.0840841000000006,
+        "exploratoryPercentile95IntervalMs": [
+          0.7049435499999973,
+          3.4984409500000035
+        ],
+        "positiveBlocks": 18,
+        "scope": "complete blocks resampled; exploratory paired mean, not a median or tail confidence interval; no multiplicity correction"
+      },
+      "5000/definition/interactiveSumMs/methodImprovementMinusNativeImprovement": {
+        "blocks": 20,
+        "meanSavingsMs": 0.5326799000000001,
+        "exploratoryPercentile95IntervalMs": [
+          -0.8753336000000033,
+          1.9937168499999998
+        ],
+        "positiveBlocks": 12,
+        "scope": "complete blocks resampled; exploratory paired mean, not a median or tail confidence interval; no multiplicity correction"
+      },
+      "5000/definition/sequenceMs/afterNativeMinusMethod": {
+        "blocks": 20,
+        "meanSavingsMs": -0.7871458500000017,
+        "exploratoryPercentile95IntervalMs": [
+          -2.984708399999994,
+          1.480581249999983
+        ],
+        "positiveBlocks": 9,
+        "scope": "complete blocks resampled; exploratory paired mean, not a median or tail confidence interval; no multiplicity correction"
+      },
+      "5000/definition/sequenceMs/beforeMethodMinusAfterMethod": {
+        "blocks": 20,
+        "meanSavingsMs": 3.016231300000004,
+        "exploratoryPercentile95IntervalMs": [
+          0.6697481000000096,
+          5.293252150000006
+        ],
+        "positiveBlocks": 14,
+        "scope": "complete blocks resampled; exploratory paired mean, not a median or tail confidence interval; no multiplicity correction"
+      },
+      "5000/definition/sequenceMs/methodImprovementMinusNativeImprovement": {
+        "blocks": 20,
+        "meanSavingsMs": -0.8314978999999993,
+        "exploratoryPercentile95IntervalMs": [
+          -4.279341550000003,
+          2.6190770499999756
+        ],
+        "positiveBlocks": 10,
+        "scope": "complete blocks resampled; exploratory paired mean, not a median or tail confidence interval; no multiplicity correction"
+      },
+      "5000/definition/firstMs/afterNativeMinusMethod": {
+        "blocks": 20,
+        "meanSavingsMs": -28.2158125,
+        "exploratoryPercentile95IntervalMs": [
+          -29.07127895,
+          -27.46175205
+        ],
+        "positiveBlocks": 0,
+        "scope": "complete blocks resampled; exploratory paired mean, not a median or tail confidence interval; no multiplicity correction"
+      },
+      "5000/definition/firstMs/beforeMethodMinusAfterMethod": {
+        "blocks": 20,
+        "meanSavingsMs": 1.7383457499999992,
+        "exploratoryPercentile95IntervalMs": [
+          0.8388770999999992,
+          2.4963331500000003
+        ],
+        "positiveBlocks": 18,
+        "scope": "complete blocks resampled; exploratory paired mean, not a median or tail confidence interval; no multiplicity correction"
+      },
+      "5000/definition/firstMs/methodImprovementMinusNativeImprovement": {
+        "blocks": 20,
+        "meanSavingsMs": 1.2966436999999988,
+        "exploratoryPercentile95IntervalMs": [
+          0.4484103499999981,
+          2.0031313000000006
+        ],
+        "positiveBlocks": 17,
+        "scope": "complete blocks resampled; exploratory paired mean, not a median or tail confidence interval; no multiplicity correction"
+      },
+      "5000/definition/acceptedSumMs/afterNativeMinusMethod": {
+        "blocks": 20,
+        "meanSavingsMs": 50.0991321,
+        "exploratoryPercentile95IntervalMs": [
+          49.1155465,
+          51.29211355
+        ],
+        "positiveBlocks": 20,
+        "scope": "complete blocks resampled; exploratory paired mean, not a median or tail confidence interval; no multiplicity correction"
+      },
+      "5000/definition/acceptedSumMs/beforeMethodMinusAfterMethod": {
+        "blocks": 20,
+        "meanSavingsMs": 0.5499884000000002,
+        "exploratoryPercentile95IntervalMs": [
+          -0.1781409500000013,
+          1.4037467500000005
+        ],
+        "positiveBlocks": 11,
+        "scope": "complete blocks resampled; exploratory paired mean, not a median or tail confidence interval; no multiplicity correction"
+      },
+      "5000/definition/acceptedSumMs/methodImprovementMinusNativeImprovement": {
+        "blocks": 20,
+        "meanSavingsMs": -0.6539447999999985,
+        "exploratoryPercentile95IntervalMs": [
+          -1.5152035499999996,
+          0.13610940000000085
+        ],
+        "positiveBlocks": 11,
+        "scope": "complete blocks resampled; exploratory paired mean, not a median or tail confidence interval; no multiplicity correction"
+      },
+      "5000/definition/fallbackMs/afterNativeMinusMethod": {
+        "blocks": 20,
+        "meanSavingsMs": -3.3974126,
+        "exploratoryPercentile95IntervalMs": [
+          -4.110360249999999,
+          -2.4198231
+        ],
+        "positiveBlocks": 1,
+        "scope": "complete blocks resampled; exploratory paired mean, not a median or tail confidence interval; no multiplicity correction"
+      },
+      "5000/definition/fallbackMs/beforeMethodMinusAfterMethod": {
+        "blocks": 20,
+        "meanSavingsMs": -0.20425004999999966,
+        "exploratoryPercentile95IntervalMs": [
+          -0.5780728999999997,
+          0.23278540000000011
+        ],
+        "positiveBlocks": 6,
+        "scope": "complete blocks resampled; exploratory paired mean, not a median or tail confidence interval; no multiplicity correction"
+      },
+      "5000/definition/fallbackMs/methodImprovementMinusNativeImprovement": {
+        "blocks": 20,
+        "meanSavingsMs": -0.1100189999999996,
+        "exploratoryPercentile95IntervalMs": [
+          -0.8534545999999998,
+          0.8606436000000005
+        ],
+        "positiveBlocks": 7,
+        "scope": "complete blocks resampled; exploratory paired mean, not a median or tail confidence interval; no multiplicity correction"
+      },
+      "10000/completion/interactiveSumMs/afterNativeMinusMethod": {
+        "blocks": 20,
+        "meanSavingsMs": 58.742758450000004,
+        "exploratoryPercentile95IntervalMs": [
+          51.125936100000004,
+          70.28134165
+        ],
+        "positiveBlocks": 20,
+        "scope": "complete blocks resampled; exploratory paired mean, not a median or tail confidence interval; no multiplicity correction"
+      },
+      "10000/completion/interactiveSumMs/beforeMethodMinusAfterMethod": {
+        "blocks": 20,
+        "meanSavingsMs": 9.57674605,
+        "exploratoryPercentile95IntervalMs": [
+          5.864485400000002,
+          13.534812750000004
+        ],
+        "positiveBlocks": 19,
+        "scope": "complete blocks resampled; exploratory paired mean, not a median or tail confidence interval; no multiplicity correction"
+      },
+      "10000/completion/interactiveSumMs/methodImprovementMinusNativeImprovement": {
+        "blocks": 20,
+        "meanSavingsMs": 12.634643950000005,
+        "exploratoryPercentile95IntervalMs": [
+          4.105410500000005,
+          24.84913755000001
+        ],
+        "positiveBlocks": 18,
+        "scope": "complete blocks resampled; exploratory paired mean, not a median or tail confidence interval; no multiplicity correction"
+      },
+      "10000/completion/sequenceMs/afterNativeMinusMethod": {
+        "blocks": 20,
+        "meanSavingsMs": 34.75251034999998,
+        "exploratoryPercentile95IntervalMs": [
+          18.882031199999993,
+          52.65470204999997
+        ],
+        "positiveBlocks": 18,
+        "scope": "complete blocks resampled; exploratory paired mean, not a median or tail confidence interval; no multiplicity correction"
+      },
+      "10000/completion/sequenceMs/beforeMethodMinusAfterMethod": {
+        "blocks": 20,
+        "meanSavingsMs": 13.920333200000005,
+        "exploratoryPercentile95IntervalMs": [
+          5.122791500000028,
+          25.419227000000014
+        ],
+        "positiveBlocks": 18,
+        "scope": "complete blocks resampled; exploratory paired mean, not a median or tail confidence interval; no multiplicity correction"
+      },
+      "10000/completion/sequenceMs/methodImprovementMinusNativeImprovement": {
+        "blocks": 20,
+        "meanSavingsMs": 8.968166749999977,
+        "exploratoryPercentile95IntervalMs": [
+          -8.430452200000058,
+          29.05541074999993
+        ],
+        "positiveBlocks": 13,
+        "scope": "complete blocks resampled; exploratory paired mean, not a median or tail confidence interval; no multiplicity correction"
+      },
+      "10000/completion/firstMs/afterNativeMinusMethod": {
+        "blocks": 20,
+        "meanSavingsMs": -49.6809541,
+        "exploratoryPercentile95IntervalMs": [
+          -50.60299785,
+          -48.8409561
+        ],
+        "positiveBlocks": 0,
+        "scope": "complete blocks resampled; exploratory paired mean, not a median or tail confidence interval; no multiplicity correction"
+      },
+      "10000/completion/firstMs/beforeMethodMinusAfterMethod": {
+        "blocks": 20,
+        "meanSavingsMs": 3.8942102500000004,
+        "exploratoryPercentile95IntervalMs": [
+          3.1817808500000027,
+          4.594460250000002
+        ],
+        "positiveBlocks": 20,
+        "scope": "complete blocks resampled; exploratory paired mean, not a median or tail confidence interval; no multiplicity correction"
+      },
+      "10000/completion/firstMs/methodImprovementMinusNativeImprovement": {
+        "blocks": 20,
+        "meanSavingsMs": 3.3167729000000006,
+        "exploratoryPercentile95IntervalMs": [
+          2.334376999999998,
+          4.27213555
+        ],
+        "positiveBlocks": 19,
+        "scope": "complete blocks resampled; exploratory paired mean, not a median or tail confidence interval; no multiplicity correction"
+      },
+      "10000/completion/acceptedSumMs/afterNativeMinusMethod": {
+        "blocks": 20,
+        "meanSavingsMs": 108.9678625,
+        "exploratoryPercentile95IntervalMs": [
+          105.81249375,
+          112.66531834999999
+        ],
+        "positiveBlocks": 20,
+        "scope": "complete blocks resampled; exploratory paired mean, not a median or tail confidence interval; no multiplicity correction"
+      },
+      "10000/completion/acceptedSumMs/beforeMethodMinusAfterMethod": {
+        "blocks": 20,
+        "meanSavingsMs": 2.508723249999999,
+        "exploratoryPercentile95IntervalMs": [
+          0.5796084499999985,
+          5.561269599999999
+        ],
+        "positiveBlocks": 15,
+        "scope": "complete blocks resampled; exploratory paired mean, not a median or tail confidence interval; no multiplicity correction"
+      },
+      "10000/completion/acceptedSumMs/methodImprovementMinusNativeImprovement": {
+        "blocks": 20,
+        "meanSavingsMs": 3.1495231999999964,
+        "exploratoryPercentile95IntervalMs": [
+          -1.0791242000000025,
+          8.571704549999994
+        ],
+        "positiveBlocks": 10,
+        "scope": "complete blocks resampled; exploratory paired mean, not a median or tail confidence interval; no multiplicity correction"
+      },
+      "10000/completion/fallbackMs/afterNativeMinusMethod": {
+        "blocks": 20,
+        "meanSavingsMs": -0.5441499499999999,
+        "exploratoryPercentile95IntervalMs": [
+          -6.0663708000000005,
+          7.52054585
+        ],
+        "positiveBlocks": 1,
+        "scope": "complete blocks resampled; exploratory paired mean, not a median or tail confidence interval; no multiplicity correction"
+      },
+      "10000/completion/fallbackMs/beforeMethodMinusAfterMethod": {
+        "blocks": 20,
+        "meanSavingsMs": 3.17381255,
+        "exploratoryPercentile95IntervalMs": [
+          0.7294167000000005,
+          4.6729104999999995
+        ],
+        "positiveBlocks": 19,
+        "scope": "complete blocks resampled; exploratory paired mean, not a median or tail confidence interval; no multiplicity correction"
+      },
+      "10000/completion/fallbackMs/methodImprovementMinusNativeImprovement": {
+        "blocks": 20,
+        "meanSavingsMs": 6.168347850000001,
+        "exploratoryPercentile95IntervalMs": [
+          0.6867144000000003,
+          14.248854050000002
+        ],
+        "positiveBlocks": 19,
+        "scope": "complete blocks resampled; exploratory paired mean, not a median or tail confidence interval; no multiplicity correction"
+      },
+      "10000/definition/interactiveSumMs/afterNativeMinusMethod": {
+        "blocks": 20,
+        "meanSavingsMs": 54.81122095,
+        "exploratoryPercentile95IntervalMs": [
+          51.1628461,
+          60.0712606
+        ],
+        "positiveBlocks": 20,
+        "scope": "complete blocks resampled; exploratory paired mean, not a median or tail confidence interval; no multiplicity correction"
+      },
+      "10000/definition/interactiveSumMs/beforeMethodMinusAfterMethod": {
+        "blocks": 20,
+        "meanSavingsMs": 12.062714599999998,
+        "exploratoryPercentile95IntervalMs": [
+          9.88432895,
+          14.557347800000006
+        ],
+        "positiveBlocks": 20,
+        "scope": "complete blocks resampled; exploratory paired mean, not a median or tail confidence interval; no multiplicity correction"
+      },
+      "10000/definition/interactiveSumMs/methodImprovementMinusNativeImprovement": {
+        "blocks": 20,
+        "meanSavingsMs": 5.556927099999996,
+        "exploratoryPercentile95IntervalMs": [
+          -5.63781845000001,
+          14.219514299999998
+        ],
+        "positiveBlocks": 16,
+        "scope": "complete blocks resampled; exploratory paired mean, not a median or tail confidence interval; no multiplicity correction"
+      },
+      "10000/definition/sequenceMs/afterNativeMinusMethod": {
+        "blocks": 20,
+        "meanSavingsMs": 37.934852000000014,
+        "exploratoryPercentile95IntervalMs": [
+          32.198497750000016,
+          44.672408300000015
+        ],
+        "positiveBlocks": 20,
+        "scope": "complete blocks resampled; exploratory paired mean, not a median or tail confidence interval; no multiplicity correction"
+      },
+      "10000/definition/sequenceMs/beforeMethodMinusAfterMethod": {
+        "blocks": 20,
+        "meanSavingsMs": 29.70540840000002,
+        "exploratoryPercentile95IntervalMs": [
+          19.63229810000005,
+          43.15218350000002
+        ],
+        "positiveBlocks": 20,
+        "scope": "complete blocks resampled; exploratory paired mean, not a median or tail confidence interval; no multiplicity correction"
+      },
+      "10000/definition/sequenceMs/methodImprovementMinusNativeImprovement": {
+        "blocks": 20,
+        "meanSavingsMs": 16.42044790000001,
+        "exploratoryPercentile95IntervalMs": [
+          -5.869997749999959,
+          34.87251665000001
+        ],
+        "positiveBlocks": 19,
+        "scope": "complete blocks resampled; exploratory paired mean, not a median or tail confidence interval; no multiplicity correction"
+      },
+      "10000/definition/firstMs/afterNativeMinusMethod": {
+        "blocks": 20,
+        "meanSavingsMs": -49.323052000000004,
+        "exploratoryPercentile95IntervalMs": [
+          -50.132139450000004,
+          -48.48900395
+        ],
+        "positiveBlocks": 0,
+        "scope": "complete blocks resampled; exploratory paired mean, not a median or tail confidence interval; no multiplicity correction"
+      },
+      "10000/definition/firstMs/beforeMethodMinusAfterMethod": {
+        "blocks": 20,
+        "meanSavingsMs": 5.2599499,
+        "exploratoryPercentile95IntervalMs": [
+          4.0395333,
+          6.828343549999998
+        ],
+        "positiveBlocks": 20,
+        "scope": "complete blocks resampled; exploratory paired mean, not a median or tail confidence interval; no multiplicity correction"
+      },
+      "10000/definition/firstMs/methodImprovementMinusNativeImprovement": {
+        "blocks": 20,
+        "meanSavingsMs": 2.6433352499999994,
+        "exploratoryPercentile95IntervalMs": [
+          -3.1223914499999985,
+          6.364858249999999
+        ],
+        "positiveBlocks": 19,
+        "scope": "complete blocks resampled; exploratory paired mean, not a median or tail confidence interval; no multiplicity correction"
+      },
+      "10000/definition/acceptedSumMs/afterNativeMinusMethod": {
+        "blocks": 20,
+        "meanSavingsMs": 106.8359541,
+        "exploratoryPercentile95IntervalMs": [
+          103.6339313,
+          111.6188961
+        ],
+        "positiveBlocks": 20,
+        "scope": "complete blocks resampled; exploratory paired mean, not a median or tail confidence interval; no multiplicity correction"
+      },
+      "10000/definition/acceptedSumMs/beforeMethodMinusAfterMethod": {
+        "blocks": 20,
+        "meanSavingsMs": 1.855199949999998,
+        "exploratoryPercentile95IntervalMs": [
+          0.7306914499999998,
+          3.1762414500000005
+        ],
+        "positiveBlocks": 17,
+        "scope": "complete blocks resampled; exploratory paired mean, not a median or tail confidence interval; no multiplicity correction"
+      },
+      "10000/definition/acceptedSumMs/methodImprovementMinusNativeImprovement": {
+        "blocks": 20,
+        "meanSavingsMs": -1.2167520499999995,
+        "exploratoryPercentile95IntervalMs": [
+          -6.523104599999994,
+          4.570822649999999
+        ],
+        "positiveBlocks": 9,
+        "scope": "complete blocks resampled; exploratory paired mean, not a median or tail confidence interval; no multiplicity correction"
+      },
+      "10000/definition/fallbackMs/afterNativeMinusMethod": {
+        "blocks": 20,
+        "meanSavingsMs": -2.7016811499999998,
+        "exploratoryPercentile95IntervalMs": [
+          -3.2731812,
+          -2.1379122500000003
+        ],
+        "positiveBlocks": 1,
+        "scope": "complete blocks resampled; exploratory paired mean, not a median or tail confidence interval; no multiplicity correction"
+      },
+      "10000/definition/fallbackMs/beforeMethodMinusAfterMethod": {
+        "blocks": 20,
+        "meanSavingsMs": 4.94756475,
+        "exploratoryPercentile95IntervalMs": [
+          4.37996275,
+          5.5573875
+        ],
+        "positiveBlocks": 20,
+        "scope": "complete blocks resampled; exploratory paired mean, not a median or tail confidence interval; no multiplicity correction"
+      },
+      "10000/definition/fallbackMs/methodImprovementMinusNativeImprovement": {
+        "blocks": 20,
+        "meanSavingsMs": 4.1303439,
+        "exploratoryPercentile95IntervalMs": [
+          3.09544,
+          5.2734939999999995
+        ],
+        "positiveBlocks": 20,
+        "scope": "complete blocks resampled; exploratory paired mean, not a median or tail confidence interval; no multiplicity correction"
+      }
+    }
+  },
+  "realUvm": {
+    "processes": 160,
+    "timedRequests": 1600,
+    "observationsPerQueryVersionArmStep": 20,
+    "design": "20 randomized complete blocks per query; two binaries times two arms; actual full local SPI/APB/AHB lab with pinned official UVM 1.2; no synthetic extra classes or planted certifiable method",
+    "summary": {
+      "completion/before/native": {
+        "editResponseSumMs": {
+          "n": 20,
+          "medianMs": 457.5350005,
+          "empiricalP95Ms": null
+        },
+        "sequenceWithDiagnosticsMs": {
+          "n": 20,
+          "medianMs": 1798.9378545,
+          "empiricalP95Ms": null
+        },
+        "steps": {
+          "0": {
+            "n": 20,
+            "medianMs": 13.1592295,
+            "empiricalP95Ms": null
+          },
+          "1": {
+            "n": 20,
+            "medianMs": 51.948583,
+            "empiricalP95Ms": null
+          },
+          "2": {
+            "n": 20,
+            "medianMs": 53.2006875,
+            "empiricalP95Ms": null
+          },
+          "3": {
+            "n": 20,
+            "medianMs": 50.386395500000006,
+            "empiricalP95Ms": null
+          },
+          "4": {
+            "n": 20,
+            "medianMs": 49.557083000000006,
+            "empiricalP95Ms": null
+          },
+          "5": {
+            "n": 20,
+            "medianMs": 50.4243955,
+            "empiricalP95Ms": null
+          },
+          "6": {
+            "n": 20,
+            "medianMs": 50.2147705,
+            "empiricalP95Ms": null
+          },
+          "7": {
+            "n": 20,
+            "medianMs": 49.907624999999996,
+            "empiricalP95Ms": null
+          },
+          "8": {
+            "n": 20,
+            "medianMs": 50.920041499999996,
+            "empiricalP95Ms": null
+          },
+          "9": {
+            "n": 20,
+            "medianMs": 51.040104,
+            "empiricalP95Ms": null
+          }
+        },
+        "startupThroughFirstResponseMs": {
+          "n": 20,
+          "medianMs": 102.2658125,
+          "empiricalP95Ms": null
+        }
+      },
+      "completion/before/method": {
+        "editResponseSumMs": {
+          "n": 20,
+          "medianMs": 461.66558399999997,
+          "empiricalP95Ms": null
+        },
+        "sequenceWithDiagnosticsMs": {
+          "n": 20,
+          "medianMs": 1802.009333,
+          "empiricalP95Ms": null
+        },
+        "steps": {
+          "0": {
+            "n": 20,
+            "medianMs": 13.211521,
+            "empiricalP95Ms": null
+          },
+          "1": {
+            "n": 20,
+            "medianMs": 51.2122915,
+            "empiricalP95Ms": null
+          },
+          "2": {
+            "n": 20,
+            "medianMs": 53.023521,
+            "empiricalP95Ms": null
+          },
+          "3": {
+            "n": 20,
+            "medianMs": 50.3314375,
+            "empiricalP95Ms": null
+          },
+          "4": {
+            "n": 20,
+            "medianMs": 50.0875415,
+            "empiricalP95Ms": null
+          },
+          "5": {
+            "n": 20,
+            "medianMs": 50.705479499999996,
+            "empiricalP95Ms": null
+          },
+          "6": {
+            "n": 20,
+            "medianMs": 50.6770205,
+            "empiricalP95Ms": null
+          },
+          "7": {
+            "n": 20,
+            "medianMs": 51.409354,
+            "empiricalP95Ms": null
+          },
+          "8": {
+            "n": 20,
+            "medianMs": 51.319333,
+            "empiricalP95Ms": null
+          },
+          "9": {
+            "n": 20,
+            "medianMs": 51.208687999999995,
+            "empiricalP95Ms": null
+          }
+        },
+        "startupThroughFirstResponseMs": {
+          "n": 20,
+          "medianMs": 101.09518750000001,
+          "empiricalP95Ms": null
+        }
+      },
+      "completion/after/native": {
+        "editResponseSumMs": {
+          "n": 20,
+          "medianMs": 456.3140825,
+          "empiricalP95Ms": null
+        },
+        "sequenceWithDiagnosticsMs": {
+          "n": 20,
+          "medianMs": 1795.371854,
+          "empiricalP95Ms": null
+        },
+        "steps": {
+          "0": {
+            "n": 20,
+            "medianMs": 13.120125,
+            "empiricalP95Ms": null
+          },
+          "1": {
+            "n": 20,
+            "medianMs": 51.8131665,
+            "empiricalP95Ms": null
+          },
+          "2": {
+            "n": 20,
+            "medianMs": 53.456312499999996,
+            "empiricalP95Ms": null
+          },
+          "3": {
+            "n": 20,
+            "medianMs": 50.533479,
+            "empiricalP95Ms": null
+          },
+          "4": {
+            "n": 20,
+            "medianMs": 49.351040999999995,
+            "empiricalP95Ms": null
+          },
+          "5": {
+            "n": 20,
+            "medianMs": 51.151188,
+            "empiricalP95Ms": null
+          },
+          "6": {
+            "n": 20,
+            "medianMs": 49.939667,
+            "empiricalP95Ms": null
+          },
+          "7": {
+            "n": 20,
+            "medianMs": 50.404624999999996,
+            "empiricalP95Ms": null
+          },
+          "8": {
+            "n": 20,
+            "medianMs": 50.128396,
+            "empiricalP95Ms": null
+          },
+          "9": {
+            "n": 20,
+            "medianMs": 49.839146,
+            "empiricalP95Ms": null
+          }
+        },
+        "startupThroughFirstResponseMs": {
+          "n": 20,
+          "medianMs": 103.97520850000001,
+          "empiricalP95Ms": null
+        }
+      },
+      "completion/after/method": {
+        "editResponseSumMs": {
+          "n": 20,
+          "medianMs": 461.5741875,
+          "empiricalP95Ms": null
+        },
+        "sequenceWithDiagnosticsMs": {
+          "n": 20,
+          "medianMs": 1801.8015209999999,
+          "empiricalP95Ms": null
+        },
+        "steps": {
+          "0": {
+            "n": 20,
+            "medianMs": 13.068896,
+            "empiricalP95Ms": null
+          },
+          "1": {
+            "n": 20,
+            "medianMs": 52.679041,
+            "empiricalP95Ms": null
+          },
+          "2": {
+            "n": 20,
+            "medianMs": 53.435458499999996,
+            "empiricalP95Ms": null
+          },
+          "3": {
+            "n": 20,
+            "medianMs": 51.707979,
+            "empiricalP95Ms": null
+          },
+          "4": {
+            "n": 20,
+            "medianMs": 50.0005415,
+            "empiricalP95Ms": null
+          },
+          "5": {
+            "n": 20,
+            "medianMs": 50.9928955,
+            "empiricalP95Ms": null
+          },
+          "6": {
+            "n": 20,
+            "medianMs": 51.266979,
+            "empiricalP95Ms": null
+          },
+          "7": {
+            "n": 20,
+            "medianMs": 50.862583,
+            "empiricalP95Ms": null
+          },
+          "8": {
+            "n": 20,
+            "medianMs": 51.052833,
+            "empiricalP95Ms": null
+          },
+          "9": {
+            "n": 20,
+            "medianMs": 50.3162705,
+            "empiricalP95Ms": null
+          }
+        },
+        "startupThroughFirstResponseMs": {
+          "n": 20,
+          "medianMs": 104.494,
+          "empiricalP95Ms": null
+        }
+      },
+      "definition/before/native": {
+        "editResponseSumMs": {
+          "n": 20,
+          "medianMs": 429.8560635,
+          "empiricalP95Ms": null
+        },
+        "sequenceWithDiagnosticsMs": {
+          "n": 20,
+          "medianMs": 1766.616375,
+          "empiricalP95Ms": null
+        },
+        "steps": {
+          "0": {
+            "n": 20,
+            "medianMs": 10.1429165,
+            "empiricalP95Ms": null
+          },
+          "1": {
+            "n": 20,
+            "medianMs": 49.611833000000004,
+            "empiricalP95Ms": null
+          },
+          "2": {
+            "n": 20,
+            "medianMs": 49.475187,
+            "empiricalP95Ms": null
+          },
+          "3": {
+            "n": 20,
+            "medianMs": 47.442792,
+            "empiricalP95Ms": null
+          },
+          "4": {
+            "n": 20,
+            "medianMs": 46.409938,
+            "empiricalP95Ms": null
+          },
+          "5": {
+            "n": 20,
+            "medianMs": 46.6724375,
+            "empiricalP95Ms": null
+          },
+          "6": {
+            "n": 20,
+            "medianMs": 45.963625,
+            "empiricalP95Ms": null
+          },
+          "7": {
+            "n": 20,
+            "medianMs": 46.681,
+            "empiricalP95Ms": null
+          },
+          "8": {
+            "n": 20,
+            "medianMs": 47.205292,
+            "empiricalP95Ms": null
+          },
+          "9": {
+            "n": 20,
+            "medianMs": 47.524041499999996,
+            "empiricalP95Ms": null
+          }
+        },
+        "startupThroughFirstResponseMs": {
+          "n": 20,
+          "medianMs": 97.8156455,
+          "empiricalP95Ms": null
+        }
+      },
+      "definition/before/method": {
+        "editResponseSumMs": {
+          "n": 20,
+          "medianMs": 427.311626,
+          "empiricalP95Ms": null
+        },
+        "sequenceWithDiagnosticsMs": {
+          "n": 20,
+          "medianMs": 1765.4471875,
+          "empiricalP95Ms": null
+        },
+        "steps": {
+          "0": {
+            "n": 20,
+            "medianMs": 10.196563000000001,
+            "empiricalP95Ms": null
+          },
+          "1": {
+            "n": 20,
+            "medianMs": 48.190458500000005,
+            "empiricalP95Ms": null
+          },
+          "2": {
+            "n": 20,
+            "medianMs": 49.056124999999994,
+            "empiricalP95Ms": null
+          },
+          "3": {
+            "n": 20,
+            "medianMs": 46.934604,
+            "empiricalP95Ms": null
+          },
+          "4": {
+            "n": 20,
+            "medianMs": 46.184708,
+            "empiricalP95Ms": null
+          },
+          "5": {
+            "n": 20,
+            "medianMs": 46.6725625,
+            "empiricalP95Ms": null
+          },
+          "6": {
+            "n": 20,
+            "medianMs": 46.8684795,
+            "empiricalP95Ms": null
+          },
+          "7": {
+            "n": 20,
+            "medianMs": 46.975770499999996,
+            "empiricalP95Ms": null
+          },
+          "8": {
+            "n": 20,
+            "medianMs": 47.386728500000004,
+            "empiricalP95Ms": null
+          },
+          "9": {
+            "n": 20,
+            "medianMs": 47.584250499999996,
+            "empiricalP95Ms": null
+          }
+        },
+        "startupThroughFirstResponseMs": {
+          "n": 20,
+          "medianMs": 95.2516875,
+          "empiricalP95Ms": null
+        }
+      },
+      "definition/after/native": {
+        "editResponseSumMs": {
+          "n": 20,
+          "medianMs": 434.984333,
+          "empiricalP95Ms": null
+        },
+        "sequenceWithDiagnosticsMs": {
+          "n": 20,
+          "medianMs": 1767.2679375,
+          "empiricalP95Ms": null
+        },
+        "steps": {
+          "0": {
+            "n": 20,
+            "medianMs": 10.195104,
+            "empiricalP95Ms": null
+          },
+          "1": {
+            "n": 20,
+            "medianMs": 48.504583,
+            "empiricalP95Ms": null
+          },
+          "2": {
+            "n": 20,
+            "medianMs": 49.663042,
+            "empiricalP95Ms": null
+          },
+          "3": {
+            "n": 20,
+            "medianMs": 47.2386455,
+            "empiricalP95Ms": null
+          },
+          "4": {
+            "n": 20,
+            "medianMs": 46.830875000000006,
+            "empiricalP95Ms": null
+          },
+          "5": {
+            "n": 20,
+            "medianMs": 46.869583,
+            "empiricalP95Ms": null
+          },
+          "6": {
+            "n": 20,
+            "medianMs": 47.988292,
+            "empiricalP95Ms": null
+          },
+          "7": {
+            "n": 20,
+            "medianMs": 47.951125000000005,
+            "empiricalP95Ms": null
+          },
+          "8": {
+            "n": 20,
+            "medianMs": 47.9518125,
+            "empiricalP95Ms": null
+          },
+          "9": {
+            "n": 20,
+            "medianMs": 48.4662915,
+            "empiricalP95Ms": null
+          }
+        },
+        "startupThroughFirstResponseMs": {
+          "n": 20,
+          "medianMs": 95.797458,
+          "empiricalP95Ms": null
+        }
+      },
+      "definition/after/method": {
+        "editResponseSumMs": {
+          "n": 20,
+          "medianMs": 427.12539549999997,
+          "empiricalP95Ms": null
+        },
+        "sequenceWithDiagnosticsMs": {
+          "n": 20,
+          "medianMs": 1758.5906875,
+          "empiricalP95Ms": null
+        },
+        "steps": {
+          "0": {
+            "n": 20,
+            "medianMs": 10.195042,
+            "empiricalP95Ms": null
+          },
+          "1": {
+            "n": 20,
+            "medianMs": 49.1296045,
+            "empiricalP95Ms": null
+          },
+          "2": {
+            "n": 20,
+            "medianMs": 49.8186665,
+            "empiricalP95Ms": null
+          },
+          "3": {
+            "n": 20,
+            "medianMs": 47.038270499999996,
+            "empiricalP95Ms": null
+          },
+          "4": {
+            "n": 20,
+            "medianMs": 47.006188,
+            "empiricalP95Ms": null
+          },
+          "5": {
+            "n": 20,
+            "medianMs": 47.0830625,
+            "empiricalP95Ms": null
+          },
+          "6": {
+            "n": 20,
+            "medianMs": 46.3032495,
+            "empiricalP95Ms": null
+          },
+          "7": {
+            "n": 20,
+            "medianMs": 46.4272085,
+            "empiricalP95Ms": null
+          },
+          "8": {
+            "n": 20,
+            "medianMs": 46.133624999999995,
+            "empiricalP95Ms": null
+          },
+          "9": {
+            "n": 20,
+            "medianMs": 46.262417,
+            "empiricalP95Ms": null
+          }
+        },
+        "startupThroughFirstResponseMs": {
+          "n": 20,
+          "medianMs": 97.8182715,
+          "empiricalP95Ms": null
+        }
+      }
+    },
+    "pairedMeanAnalysis": {
+      "completion/editResponseSumMs/afterNativeMinusMethod": {
+        "blocks": 20,
+        "meanSavingsMs": -27.105422400000002,
+        "exploratoryPercentile95IntervalMs": [
+          -59.1787283,
+          -4.503986949999998
+        ],
+        "positiveBlocks": 4,
+        "scope": "complete blocks resampled; exploratory paired mean, not a median or tail confidence interval; no multiplicity correction"
+      },
+      "completion/sequenceWithDiagnosticsMs/afterNativeMinusMethod": {
+        "blocks": 20,
+        "meanSavingsMs": -59.7500354,
+        "exploratoryPercentile95IntervalMs": [
+          -140.53458955,
+          -1.4318936500000177
+        ],
+        "positiveBlocks": 5,
+        "scope": "complete blocks resampled; exploratory paired mean, not a median or tail confidence interval; no multiplicity correction"
+      },
+      "definition/editResponseSumMs/afterNativeMinusMethod": {
+        "blocks": 20,
+        "meanSavingsMs": 3.8848877500000016,
+        "exploratoryPercentile95IntervalMs": [
+          -4.5377014999999945,
+          11.883108800000011
+        ],
+        "positiveBlocks": 13,
+        "scope": "complete blocks resampled; exploratory paired mean, not a median or tail confidence interval; no multiplicity correction"
+      },
+      "definition/sequenceWithDiagnosticsMs/afterNativeMinusMethod": {
+        "blocks": 20,
+        "meanSavingsMs": 4.347979200000009,
+        "exploratoryPercentile95IntervalMs": [
+          -7.426997749999975,
+          14.779981299999998
+        ],
+        "positiveBlocks": 13,
+        "scope": "complete blocks resampled; exploratory paired mean, not a median or tail confidence interval; no multiplicity correction"
+      }
+    },
+    "overlayAcceptedEdits": 0,
+    "decline": "unsupported source-loading flag (--timescale 1ns/1ps); macros/inheritance also remain outside certificate support",
+    "interpretation": "all nine edits take native fallback; no real UVM local speedup established; step 9 does not exercise reuse exhaustion",
+    "observedExperimentalCost": "new-binary completion nine-response paired mean penalty 27.105 ms (exploratory 95% interval 4.504..59.179 ms), with slow outliers retained; definition difference is uncertain. This is an observed enabled-experiment penalty, not proof that the new DTO changes cause it; their accepted path is never reached here",
+    "timingDefinitions": "step 0 includes didOpen and first query; startupThroughFirstResponse includes initialize; editResponseSum is steps 1..9; sequenceWithDiagnostics includes initial query and all versioned diagnostic waits; do not compare these directly to synthetic prewarmed first-edit metrics"
+  },
+  "memory": {
+    "metric": "Darwin os.wait4 child ru_maxrss bytes; per process maximum, not aggregate parent and diagnostic worker, not heap retained at a fixed version",
+    "scope": "3 independent observations per scenario/query/version/arm; timings discarded; test status command collected after timing is included in process peak; no population confidence claim",
+    "summary": {
+      "5000/completion/before/native": {
+        "n": 3,
+        "medianBytes": 83296256,
+        "rangeBytes": [
+          83247104,
+          83312640
+        ]
+      },
+      "5000/completion/before/method": {
+        "n": 3,
+        "medianBytes": 102907904,
+        "rangeBytes": [
+          102907904,
+          102973440
+        ]
+      },
+      "5000/completion/after/native": {
+        "n": 3,
+        "medianBytes": 83214336,
+        "rangeBytes": [
+          83165184,
+          83279872
+        ]
+      },
+      "5000/completion/after/method": {
+        "n": 3,
+        "medianBytes": 95272960,
+        "rangeBytes": [
+          95272960,
+          95322112
+        ]
+      },
+      "5000/definition/before/native": {
+        "n": 3,
+        "medianBytes": 83214336,
+        "rangeBytes": [
+          83148800,
+          83247104
+        ]
+      },
+      "5000/definition/before/method": {
+        "n": 3,
+        "medianBytes": 102891520,
+        "rangeBytes": [
+          102727680,
+          102924288
+        ]
+      },
+      "5000/definition/after/native": {
+        "n": 3,
+        "medianBytes": 83132416,
+        "rangeBytes": [
+          83099648,
+          83197952
+        ]
+      },
+      "5000/definition/after/method": {
+        "n": 3,
+        "medianBytes": 95256576,
+        "rangeBytes": [
+          95256576,
+          95305728
+        ]
+      },
+      "10000/completion/before/native": {
+        "n": 3,
+        "medianBytes": 147783680,
+        "rangeBytes": [
+          147783680,
+          147881984
+        ]
+      },
+      "10000/completion/before/method": {
+        "n": 3,
+        "medianBytes": 189186048,
+        "rangeBytes": [
+          189120512,
+          189186048
+        ]
+      },
+      "10000/completion/after/native": {
+        "n": 3,
+        "medianBytes": 147783680,
+        "rangeBytes": [
+          147767296,
+          147800064
+        ]
+      },
+      "10000/completion/after/method": {
+        "n": 3,
+        "medianBytes": 174211072,
+        "rangeBytes": [
+          174194688,
+          174260224
+        ]
+      },
+      "10000/definition/before/native": {
+        "n": 3,
+        "medianBytes": 147832832,
+        "rangeBytes": [
+          147816448,
+          147898368
+        ]
+      },
+      "10000/definition/before/method": {
+        "n": 3,
+        "medianBytes": 189317120,
+        "rangeBytes": [
+          189071360,
+          189382656
+        ]
+      },
+      "10000/definition/after/native": {
+        "n": 3,
+        "medianBytes": 147767296,
+        "rangeBytes": [
+          147750912,
+          147800064
+        ]
+      },
+      "10000/definition/after/method": {
+        "n": 3,
+        "medianBytes": 174276608,
+        "rangeBytes": [
+          174260224,
+          174292992
+        ]
+      },
+      "uvm/completion/before/native": {
+        "n": 3,
+        "medianBytes": 328105984,
+        "rangeBytes": [
+          315392000,
+          329121792
+        ]
+      },
+      "uvm/completion/before/method": {
+        "n": 3,
+        "medianBytes": 328220672,
+        "rangeBytes": [
+          315293696,
+          328253440
+        ]
+      },
+      "uvm/completion/after/native": {
+        "n": 3,
+        "medianBytes": 326762496,
+        "rangeBytes": [
+          326565888,
+          327745536
+        ]
+      },
+      "uvm/completion/after/method": {
+        "n": 3,
+        "medianBytes": 327942144,
+        "rangeBytes": [
+          326500352,
+          327958528
+        ]
+      },
+      "uvm/definition/before/native": {
+        "n": 3,
+        "medianBytes": 312819712,
+        "rangeBytes": [
+          312770560,
+          325484544
+        ]
+      },
+      "uvm/definition/before/method": {
+        "n": 3,
+        "medianBytes": 325697536,
+        "rangeBytes": [
+          325664768,
+          326860800
+        ]
+      },
+      "uvm/definition/after/native": {
+        "n": 3,
+        "medianBytes": 324075520,
+        "rangeBytes": [
+          324059136,
+          325222400
+        ]
+      },
+      "uvm/definition/after/method": {
+        "n": 3,
+        "medianBytes": 325369856,
+        "rangeBytes": [
+          325337088,
+          325419008
+        ]
+      }
+    }
+  },
+  "statisticsLimits": [
+    "n20 per timing cell: empirical p95 withheld; no production tail or population guarantee",
+    "Paired percentile bootstrap: 10000 resamples of complete blocks, exploratory mean savings; not median/tail confidence and no family-wise adjustment",
+    "No core affinity, fixed frequency, dedicated host, OS file-cache flushing or other-app shutdown; no concurrent build/test/memory workloads during recorded latency replays; fresh processes do not imply cold filesystem caches",
+    "Darwin wait4 server-child ru_maxrss includes the test status collection; it does not measure the simultaneous server + diagnostic worker + client total; three observations per cell, not retained heap instrumentation",
+    "Static server analysis on macOS; no Linux rerun or simulator/GUI editor acceptance",
+    "Local UVM lab is educational, not a production design; the restricted synthetic fixture is separate"
+  ],
+  "artifact": {
+    "path": "validation/artifacts/macos-uvm-2026-10-19-bd4cf37.tar.gz",
+    "bytes": 4240911,
+    "sha256": "f1b4b061f08c83b19f80faa9edbfe8419758ddb1ad8f34f5e85510871f3237ec",
+    "files": {
+      "identity.json": {
+        "sha256": "de3b7126e9b141abfed7bea78f522e1765ce1815400ac09d02386f8d7132b001",
+        "bytes": 1647
+      },
+      "acceptance.json": {
+        "sha256": "8c9cfea2befd9a04f6c78cc5105473f0be109926069f41f3aabae6cf97275daa",
+        "bytes": 3673
+      },
+      "ctest.log": {
+        "sha256": "f7318e3d3ce049e67b1197f07580a4974ce8b9dc3d1262d97179dd238250911e",
+        "bytes": 132871
+      },
+      "pytest.log": {
+        "sha256": "5d7a346f561b984c9a88eec17d5cd0552a18fd1d8f53c5bab363e29a4eeff852",
+        "bytes": 99
+      },
+      "transport.log": {
+        "sha256": "a40943fe30aaa97983e4cf88be24c682835498a51facf126b6fc734522d63da5",
+        "bytes": 3947
+      },
+      "oracle-10000-final.log": {
+        "sha256": "facc2cb2f6382d4abd543df45cffb65e212e11ca0aa6c1fb8e41ca5c333d48e6",
+        "bytes": 96
+      },
+      "oracle-10000-final.json": {
+        "sha256": "1d4790439120d0d78470f52a37420cf1e41f309e1d5672b7b1e843b1975e66b2",
+        "bytes": 131517138
+      },
+      "counts-10000.json": {
+        "sha256": "f633f34ecd6e8f96ef521c1d48636ffb5d69a1f9e40d3c14020f11876e52985a",
+        "bytes": 2494
+      },
+      "counts-10000.log": {
+        "sha256": "c0162f39bf47283253f2f88545370fc60294a7efd23d0667595c39111fc7cc28",
+        "bytes": 89
+      },
+      "held.json": {
+        "sha256": "6753d951e334738c658f02a4c65921114773e8dbcdc9ee478ea8adb852450795",
+        "bytes": 1568
+      },
+      "held.log": {
+        "sha256": "020db2f257aea3ffd5ecad3d3ed575da25d8f24ada8b01ba3459e4d8be0785fa",
+        "bytes": 99
+      },
+      "real-oracle-summary.json": {
+        "sha256": "ac4ab796174b16f6d8aef31b437f8fd4bd0e29a30236f13be3ad6e49de4cfd15",
+        "bytes": 1530
+      },
+      "uvm-counts.json": {
+        "sha256": "999483b703f171179bac1a7e5afacbcf3a44e67858d734db74a16822b1ae551c",
+        "bytes": 2790
+      },
+      "uvm-counts.log": {
+        "sha256": "0a36c33fda36dea5eab1a761ecd78369c0cd34a625ec26af102cdce39d87cfa8",
+        "bytes": 71
+      },
+      "uvm-parses-before.csv": {
+        "sha256": "b7038b7072612a44be7a8f7854d11a2b0249e2ebcb05a48676bb0e6cacaa2131",
+        "bytes": 3235
+      },
+      "uvm-parses-after.csv": {
+        "sha256": "4f6ef0b7fff6ac5bdfd449bec5a289a686c47aa00e0ffe7f8fe60e6f05db4b01",
+        "bytes": 3235
+      },
+      "integrity-before.log": {
+        "sha256": "5b99651a845eda6e362367312498c7a43f22b9474bdde781652b69860b0cec68",
+        "bytes": 267
+      },
+      "integrity-after.log": {
+        "sha256": "5b99651a845eda6e362367312498c7a43f22b9474bdde781652b69860b0cec68",
+        "bytes": 267
+      },
+      "comparison-plan.json": {
+        "sha256": "d6e4c271766bd8635a162146f1a30aeb576f8373e589efaac9383f5c81c92b32",
+        "bytes": 131624
+      },
+      "comparison-results.json": {
+        "sha256": "986ff7c55a4cc1cf946490e45f4a69956da67333f1764bb5da9f4c6d3f664665",
+        "bytes": 792068
+      },
+      "uvm-public-plan.json": {
+        "sha256": "b0f7e23fd131079dce11fe950a8aed9539a5f5d6d28d551f750cb3a56e09fcb6",
+        "bytes": 18510
+      },
+      "uvm-comparison-results.json": {
+        "sha256": "68b1ab27707f18017f877c5791844ef3d4681e5eedebc266db2735b63e47fee3",
+        "bytes": 244586
+      },
+      "paired-analysis.json": {
+        "sha256": "08b734cf56861efb323e30dad8b84c14aabbbf2a71c52b4c8ead8bfb7f46aee6",
+        "bytes": 26101
+      },
+      "memory-summary.json": {
+        "sha256": "5e28a0801d0d167db8c23155145c3c53988a6324401561089d40859b7ad721d0",
+        "bytes": 21005
+      },
+      "static-checks.log": {
+        "sha256": "29f20c3ee57f1f120dc768e38618eb81e56e89f005f4c1237d5b8be6d18d302b",
+        "bytes": 45
+      },
+      "spi-compile-timescale.log": {
+        "sha256": "ad3d9a84a16c5997d131e9bf413a6dbc51efd7852e143c73a9468bbc38931156",
+        "bytes": 955
+      },
+      "compare_versions.py": {
+        "sha256": "1e4635ac2b025ec1c9e8ec2673e16fc790c6bae7c4d065b22d0447df3bdef762",
+        "bytes": 3011
+      },
+      "uvm_timing_pair.py": {
+        "sha256": "1927d4cffeeb4a292b9b26b4a2e37755b5f87e0a042b9305974424e8622e0bc7",
+        "bytes": 2489
+      },
+      "measure_memory.py": {
+        "sha256": "f0eba1079c5207042cfd8690d1ada5458058bef5b744186a7ebd34eab3095a84",
+        "bytes": 2293
+      },
+      "memory-launch.py": {
+        "sha256": "12e53767515dca9e05234a8cde4cc700823ad281916923e1c69fbd61e4a41866",
+        "bytes": 564
+      },
+      "uvm_counts.py": {
+        "sha256": "8a212095527c9c008d9c41a9af2a39735dbbb5017d84e1036a4dd08a2ada7773",
+        "bytes": 2554
+      },
+      "analyze.py": {
+        "sha256": "c4fd45518ea61a2728d87eace7f91d975b4c031afc07a3503c429eea7f1fbceb",
+        "bytes": 2682
+      },
+      "finalize.py": {
+        "sha256": "451108d848185ec9912a16e16e0eca5e0a4d3381809bef168899935bfccc8e0b",
+        "bytes": 8993
+      }
+    },
+    "notPublished": [
+      "handoff.md",
+      "binaries and build objects",
+      "real project/UVM source trees",
+      "full real-project oracle response bodies"
+    ]
+  }
+}

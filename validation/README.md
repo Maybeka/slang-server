@@ -1,11 +1,104 @@
 # Validation records
 
-The macOS follow-up is recorded in [macos-2026-10-19.json](macos-2026-10-19.json).
-It covers the identity-index and immutable-DTO changes, the source-witness race
-regression, full static-SDK Mac acceptance and balanced multi-include timing.
-Its platform, binary and fixture limits are separate from the Linux records below.
+## macOS 2026-10-19: sparse method values and real UVM
 
-## macOS 2026-10-19 follow-up
+Product commit `bd4cf37` passed CTest **609/609**, Python **15/15**, and
+transport **35/35**. The 10,000-class full ordered native oracle, all resolves,
+definition rebinding, stale handles, eight-mini/ninth-full parser counts,
+held diagnostics, real-UVM oracle and SDK/dependency integrity also passed.
+See [the report](macos-uvm-2026-10-19.json) for hashes, exact commands,
+randomized schedules, paired block analysis and a verified raw archive.
+
+The change retains only the fields supplied by resolution and keeps outer
+completion values in one contiguous vector. Accepted edits publish a sparse
+replacement vector, preserving native order without copying/scanning the outer
+completion array. No source freshness check or unsupported-syntax guard was
+removed. Both experimental flags remain **default off**.
+
+New and previous binaries were interleaved in 20 randomized complete blocks per
+fixture/query, with native and method arms in every block. **n=20** per timing
+cell; p95 is withheld. All 480 fresh processes and 4,480 timed requests succeeded.
+The previous binary is tested product `719359b`; the new binary is `bd4cf37`.
+This comparison is separate from the earlier n=100 single-version experiment.
+
+The synthetic fixture retains the same seven include edges. Values are medians
+in ms. First-edit columns compare the **previous / new method** binaries; the
+other columns compare **new native / new method**. All nine response sums include
+first certification and ninth fallback. Whole sequence adds diagnostic waits.
+
+| Classes / query | First edit, previous / new method | Nine responses, native / method | Whole sequence, native / method |
+|---|---:|---:|---:|
+| 5,000 / completion | 44.124 / 42.306 | 127.149 / 109.344 | 838.972 / 840.493 |
+| 5,000 / definition | 44.082 / 42.196 | 126.724 / 108.709 | 838.777 / 841.501 |
+| 10,000 / completion | 82.410 / 78.281 | 234.164 / 178.192 | 1090.543 / 1054.668 |
+| 10,000 / definition | 82.077 / 77.546 | 229.778 / 176.292 | 1085.414 / 1052.537 |
+
+First certification improves modestly and remains slower than native. The
+10,000-class nine-response sums are about 23–24% below new native; whole sequences
+improve about 3%. The report includes complete-block bootstrap intervals for
+paired mean differences, including a comparison adjusted by the native-arm
+version difference. These exploratory intervals are not median or tail bounds.
+After adjusting by the native-arm version difference, the additional new-version
+nine-response saving has a positive exploratory interval only for 10,000-class
+completion; the other three intervals include zero. First-edit paired savings
+are positive in all four sampled cells. Full source validation and response
+construction still depend on project size.
+
+Separate memory runs provide three independent observations per cell. The table
+shows median Darwin `wait4` server-child `ru_maxrss` in MiB. This includes the test
+status collection and does not measure simultaneous server + diagnostic worker +
+client total, nor retained heap at a fixed version. Timings from these runs are
+discarded; exact values and ranges remain in the report.
+
+| Classes / query | Previous / new method peak | New native peak |
+|---|---:|---:|
+| 5,000 / completion | 98.14 / 90.86 | 79.36 |
+| 5,000 / definition | 98.12 / 90.84 | 79.28 |
+| 10,000 / completion | 180.42 / 166.14 | 140.94 |
+| 10,000 / definition | 180.55 / 166.20 | 140.92 |
+
+The real workload is the local educational SPI/APB/AHB UVM laboratory with the
+original Makefile order, include directories and timescale, plus official UVM
+1.2 commit `71f30a7473118b3cea582d7673c3af8e161fce71`. Its input inventory is
+209 files / 77,665 lines; this counts the source inventory, not only reached
+includes. Static compilation has 0 errors and 2 UVM-library warnings. No design
+source changes, synthetic extra classes or planted certifiable methods were used.
+This is an actual educational UVM project, not a production design or simulation
+acceptance.
+
+All ordered completion JSON, every resolve, definition and diagnostics match
+across ten versions, both arms and both binaries. Physical handles are checked
+against source-byte witnesses; unknown expansion handles remain exact opaque
+values, establishing deterministic equality rather than macro freshness.
+Project sources and full response bodies stay local; public evidence retains
+hashes, timings and equality summaries.
+
+The real-project table is **new native / new experiment**, n=20, medians in ms.
+The first request includes `didOpen`; startup additionally includes initialize.
+Its nine-edit sum is steps 1–9, so these first-query metrics differ from the
+synthetic driver's prewarmed first-edit metric above.
+
+| Query | First query response | Startup through first response | Nine edit responses |
+|---|---:|---:|---:|
+| completion | 13.120 / 13.069 | 103.975 / 104.494 | 456.314 / 461.574 |
+| definition | 10.195 / 10.195 | 95.797 / 97.818 | 434.984 / 427.125 |
+
+Every real-UVM edit declines at the configured source-loading flag and takes the
+native full parse, as independently confirmed by the counted executable. Macros
+and inheritance also remain outside the certificate contract. There is no
+consistent UVM speedup. New-binary completion actually has an observed paired
+mean nine-response **penalty of 27.105 ms** (exploratory 95% interval
+4.504–59.179 ms); slow outliers are retained. Definition's interval includes
+zero. This is an observed enabled-experiment cost, not proof that the new DTO
+changes cause it: their accepted path is never reached here. The ninth UVM edit
+is another ordinary fallback and does not test certificate reuse exhaustion. Keep the experiment default off.
+
+These Mac runs use fresh processes without flushing filesystem caches, CPU
+pinning or frequency controls. Builds, other tests and memory sampling were not
+concurrent with latency replays. Other applications were not stopped. New code
+has not been rerun on Linux or tested in a GUI editor.
+
+## Earlier macOS 2026-10-19 follow-up
 
 Product commit `719359b` passed CTest 609/609 (including SDK unit, tidy and
 regressions), Python 14/14 with no skips, transport 35/35, and the 10,000-class

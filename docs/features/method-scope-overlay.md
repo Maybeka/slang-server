@@ -139,3 +139,11 @@ flags or macro/inheritance environment falls outside the certificate contract.
 Their ninth edit is another fallback observation, not evidence that the eight-edit
 reuse limit was reached. Keep this evidence separate from accepted local-method
 measurements and do not interpret an unchanged fallback as a UVM speedup.
+
+The subsequent [real-UVM and sparse-value Mac report](../../validation/macos-uvm-2026-10-19.json)
+interleaves previous and new binaries in complete randomized blocks, separates
+first query from first edit, and records repeated process peak-RSS observations.
+It measures a modest further first-certificate reduction and tests the sparse
+replacement implementation against the same large synthetic fixture. The actual
+SPI UVM laboratory still takes full native fallback; it establishes no UVM
+local-edit speedup. Both experiments remain default off.
