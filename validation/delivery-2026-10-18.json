@@ -1,0 +1,37 @@
+{
+  "testedProductCommit": "b194c8a23a10ebfbc724fa37c59b49229f05821e",
+  "sourceSnapshotCommit": "f933b4f041b9537e787386171469502f90b52f9e",
+  "compactRawEvidence": {
+    "gitPath": "validation/artifacts/linux-2026-10-18-b194c8a.tar.gz",
+    "bytes": 480843,
+    "sha256": "53633240ed8561e4ffaa1042e9f1d7b62830b05b9dba7574dfc9381f064fa502",
+    "contents": "Raw native oracle responses and source witnesses, counted parser observations, held diagnostics, preregistered benchmark plan and all samples, complete suite/build logs, CMake cache, tool and binary identities, source inventory, build and editor documentation."
+  },
+  "library": {
+    "status": "blocked",
+    "workflow": "Current official Library prepared-upload helper with one ordered three-file batch",
+    "error": "hosted apps tools/list request failed: network",
+    "successOrLibraryFileIdReturned": false,
+    "fallback": "Compact raw evidence is committed in this repository; local source export and Git bundle remain available, with hashes below. No unsupported upload route was used."
+  },
+  "localBackups": {
+    "slang-server-main-f933b4f.bundle": {
+      "bytes": 40111866,
+      "sha256": "c6f40cf34e823b50899c7c57a3c9bd4163e5de2d014798d6a3095d3c253baf51",
+      "scope": "Root repository history through sourceSnapshotCommit; submodule source bytes are in the separate export."
+    },
+    "slang-server-source-f933b4f.tar.gz": {
+      "bytes": 62916354,
+      "sha256": "9be6f9a2036353b4bfbea432ff1d31a0362861108b59617ab7563a07f4299d9e",
+      "verifiedExportFiles": 4280,
+      "scope": "Tracked server sources, patched SDK, pinned reflect-cpp and ctre sources, exact offline dependency exports. No Git directories or executable binaries. Every exported regular file was checked after packing. SDK Git metadata must be restored from the public pin for the preparation helper; no fully offline Git reconstruction claim."
+    }
+  },
+  "recovery": [
+    "Use the published repository commit, or clone the matching root Git bundle; verify commit and bundle/archive SHA256 before use.",
+    "Follow docs/start/building.md to initialize pinned submodules and apply/verify the SDK patch. The expected patched SDK working tree is intentional.",
+    "Restore exact dependency directories from the source export, or use checkout-dependencies.py; verify all 708 SDK and 1296 dependency files before configuring.",
+    "Run the documented complete build and acceptance suites on the actual target platform. Old evidence does not establish a new platform pass.",
+    "Retain external copies of bundles/source exports and verify restoration independently. A cloud workspace or a local path is not guaranteed permanent storage."
+  ]
+}

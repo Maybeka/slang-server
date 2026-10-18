@@ -2,6 +2,11 @@
 
 The current capability acceptance is in [capability-acceptance.md](capability-acceptance.md),
 with executed results in [linux-2026-10-18.json](linux-2026-10-18.json).
+The compact [raw evidence archive](artifacts/linux-2026-10-18-b194c8a.tar.gz)
+is retained in Git (480,843 bytes, SHA256
+`53633240ed8561e4ffaa1042e9f1d7b62830b05b9dba7574dfc9381f064fa502`).
+[delivery-2026-10-18.json](delivery-2026-10-18.json) records source/bundle hashes
+and the Library upload's network blocker. No Library success was returned.
 The `b194c8a` binary passed CTest 607/607, Python 11/11 (including the shipped
 Lua configuration contract), transport 32/32, the native oracle, parser counts,
 and held diagnostics on the multi-header fixture. The independent checkout
