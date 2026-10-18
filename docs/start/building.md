@@ -93,6 +93,52 @@ previous product objects. Exact execution and recovery limits are recorded in
 
 See [the fork's LazyVim setup](../editors/lazyvim-fork.md) for editor checks.
 
+### Recorded macOS arm64 configuration
+
+The 2026-10-19 run used macOS 27.0.1 arm64, Homebrew Clang 23.1.3,
+CMake 4.4.4 and GNU Make 4.4.1. It used Python 3.12.6 for frozen tests;
+CMake selected the existing Python 3.15 installation for SDK code generation.
+These results do not extend the recorded Linux compiler/platform coverage.
+
+After the same direct-submodule, pinned-dependency and SDK preparation steps:
+
+```sh
+uv sync --frozen --python 3.12.6
+export PYTHON="$PWD/.venv/bin/python"
+export CXX=/opt/homebrew/opt/llvm/bin/clang++
+PYTHON="$PYTHON" bash restoration/configure-offline.sh "$DEPS_ROOT" "$PWD/build" \
+  -G "Unix Makefiles" -DCMAKE_CXX_COMPILER="$CXX" \
+  -DSLANG_SERVER_INCLUDE_SDK_TESTS=ON
+cmake --build build -j4
+```
+
+Run the full acceptance commands above with these tools. `CXX` must also be set
+for the separate transport test script. The shipped fixtures resolve temporary
+paths before building URIs, preserving the certificate's symlink rejection.
+The recorded run set `TMPDIR` to a real directory under its local evidence
+folder, keeping generated workloads within that workspace. The Lua contract
+can use an installed `lua` interpreter or a Lua 5.3/5.4 shared library; it is
+still separate from a real Neovim/LazyVim session.
+
+CMake keeps the static SDK's type identities visible on Apple so that option
+bags created by the SDK can be decoded by the server. It also permits only the
+specific optional weak parser-count import and avoids repeatedly appending
+libc++ flags during reconfiguration. The original 708-file SDK inventory is
+unchanged; no extra SDK source patch is needed for these build fixes.
+
+The dependency checkout helper encountered a Boost.Regex commit absent from
+the default clone's reachable history in this run. The exact pinned commit was
+fetched explicitly in that newly created checkout before rerunning the helper:
+
+```sh
+git -C "$DEPS_ROOT/boost_regex-src" fetch origin 2b3ac0834f31086c6e3c0e0ceb8516e427d5c39d
+git -C "$DEPS_ROOT/boost_regex-src" checkout --detach 2b3ac0834f31086c6e3c0e0ceb8516e427d5c39d
+"$PYTHON" restoration/checkout-dependencies.py "$DEPS_ROOT"
+```
+
+Do not reset a preexisting checkout with unrelated work. Verification of all
+1,296 dependency files remains mandatory after fetching.
+
 ### Nix Development Shell
 
 The repository's Nix development shell can supply tools. Enter it from the

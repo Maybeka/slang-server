@@ -8,6 +8,14 @@ The follow-up [clean-checkout report](clean-checkout-2026-10-18.json) records an
 actual full independent build of `9dfd335` and every documented acceptance suite,
 including exact reused tools/source dependencies and the unavailable Neovim smoke.
 
+The 2026-10-19 follow-up is in [the macOS report](macos-2026-10-19.json).
+It adds a constructor-local completion identity index, immutable value DTO sharing,
+and a deterministic regression against replacing a parsed-source witness with
+newer lookup bytes. Mac static-SDK option identity and parser-count hooks have
+separate platform fixes and tests. Both experimental defaults and the supported
+language subset stay unchanged. The table below records the earlier October 18
+round; new Mac results do not imply a fresh Linux or production UVM run.
+
 | Capability | Scope / implementation | Acceptance and evidence | Status in this round |
 |---|---|---|---|
 | Package/include owner and shared compilation | `SlangDoc`, `ServerDriver`, `ShallowCompilation`; preserve main's first-source selection and explicit picker | CTest `IncludedPackageTests`, explicit/source-context and recovery tests | Existing capability; rerun full suite |

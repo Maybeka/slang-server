@@ -1,0 +1,2083 @@
+{
+  "schema": 1,
+  "dateLocal": "2026-10-19",
+  "timezone": "Asia/Shanghai",
+  "testedProductCommit": "719359b411d8bbe950efdaa7f10253cca4e12adc",
+  "initialRemoteMain": "82281b2262238f6a88687b527df54143274a4d09",
+  "publication": {
+    "remoteMainBeforePublication": "82281b2262238f6a88687b527df54143274a4d09",
+    "performedAtReportCreation": false,
+    "policy": "fast-forward main only, no force, no new publishing branch; final evidence commit changes docs/report/archive only"
+  },
+  "environment": {
+    "commit": "719359b411d8bbe950efdaa7f10253cca4e12adc",
+    "platform": "macOS-27.0.1-arm64-arm-64bit",
+    "macVersion": [
+      "27.0.1",
+      [
+        "",
+        "",
+        ""
+      ],
+      "arm64"
+    ],
+    "cpus": 10,
+    "memoryBytes": 25769803776,
+    "compiler": "Homebrew clang version 23.1.3\nTarget: arm64-apple-darwin27.0.0\nThread model: posix\nInstalledDir: /opt/homebrew/Cellar/llvm/23.1.3_1/bin\nConfiguration file: /opt/homebrew/Cellar/llvm/23.1.3_1/etc/clang/arm64-apple-darwin27.cfg\n",
+    "binaries": {
+      "slang-server": {
+        "bytes": 17996976,
+        "sha256": "e5f1358238137bfde01a9b41c047de1acb8bd2fc677d933342e65b283e23211f"
+      },
+      "slang_server_counted": {
+        "bytes": 17997160,
+        "sha256": "65cc87830f0b6b0ebafce555d09187af0d69cfb47adc710d3ed61a3a7b7bad9d"
+      },
+      "diagnostic_test_server": {
+        "bytes": 17998328,
+        "sha256": "e36cb19fb139f2efc4e86a0177c7c61a7991ce144d505eda9d43e409ab517126"
+      },
+      "server_unittests": {
+        "bytes": 24197728,
+        "sha256": "143e3c980470bcaf62bf92a2b51ad3a9c43f8d8df77d744266e8b3dee57008bd"
+      }
+    },
+    "cmake": "4.4.4",
+    "make": "GNU Make 4.4.1",
+    "testPython": "3.12.6, frozen uv.lock",
+    "generationPython": "existing Homebrew Python 3.15 selected by CMake",
+    "clangFormat": "20.1.8",
+    "ruff": "0.13.0",
+    "buildType": "Release",
+    "mimalloc": false,
+    "workRoot": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include",
+    "initialCheckout": "fresh local Git clone and initially absent build directory; no earlier product objects/binaries copied; repair attempts reused this run's objects",
+    "hostIsolation": "other applications/VM not stopped; no CPU-frequency or affinity control",
+    "linuxRerun": false
+  },
+  "sourceIntegrity": {
+    "sdkBase": "151a801ceaf6faf23d79a42d210ff67e50eb4660",
+    "sdkPatchSha256": "96550dbfbfd65a0a986c0e6e2769a3f96857b0d70ec6bb728eeb612b41da4bbe",
+    "uvLockSha256": "7ac2ebb40d91df1b8ef942b8721018a853ce9b0c9edc6a097c4ea9ca907cfc5e",
+    "sdkFilesVerified": 708,
+    "dependencyFilesVerified": 1296,
+    "macFixesMutateSdkSources": false
+  },
+  "implementation": [
+    "Constructor-local ordered identity index replaces repeated scope-member scans; native completion order unchanged and no AST/symbol pointer retained",
+    "Immutable completion value DTOs shared across candidates; every method-owned DTO replaced before publication; pointer arrays and source validation still scale with input size",
+    "Repeated source/lookup/watch observations of one disk path must agree; deterministic before-fix regression reproduced active=true after dependency changed during certification",
+    "Apple static SDK default visibility preserves Bag type identity; optional weak counter import gets symbol-specific linker allowance; repeated configure no longer appends libc++ flags",
+    "Separate Darwin counted parser compiles a generated instrumented translation unit ahead of the static SDK archive; ordinary binary has no counter definition"
+  ],
+  "tests": {
+    "ctest": {
+      "passed": 609,
+      "failed": 0,
+      "includesSdkUnitTidyAndRegression": true
+    },
+    "pytest": {
+      "passed": 14,
+      "failed": 0,
+      "skipped": 0
+    },
+    "transport": {
+      "passed": 35,
+      "failed": 0
+    },
+    "nativeOracle": {
+      "classes": 10000,
+      "passed": true,
+      "scope": "full ordered completion JSON, all-item resolve, nine versions including fallback, changed binding targets, declaration/all-reference renames, stale handles, earlier/middle/later method selection"
+    },
+    "parserCounts": {
+      "schema": 1,
+      "classes": 10000,
+      "observations": [
+        {
+          "step": 1,
+          "parentDelta": {
+            "mini-shape": 1
+          },
+          "additionalCompletionParses": {},
+          "active": true,
+          "accepted": 1,
+          "totalParentUnits": 12
+        },
+        {
+          "step": 2,
+          "parentDelta": {
+            "mini-shape": 1
+          },
+          "additionalCompletionParses": {},
+          "active": true,
+          "accepted": 2,
+          "totalParentUnits": 13
+        },
+        {
+          "step": 3,
+          "parentDelta": {
+            "mini-shape": 1
+          },
+          "additionalCompletionParses": {},
+          "active": true,
+          "accepted": 3,
+          "totalParentUnits": 14
+        },
+        {
+          "step": 4,
+          "parentDelta": {
+            "mini-shape": 1
+          },
+          "additionalCompletionParses": {},
+          "active": true,
+          "accepted": 4,
+          "totalParentUnits": 15
+        },
+        {
+          "step": 5,
+          "parentDelta": {
+            "mini-shape": 1
+          },
+          "additionalCompletionParses": {},
+          "active": true,
+          "accepted": 5,
+          "totalParentUnits": 16
+        },
+        {
+          "step": 6,
+          "parentDelta": {
+            "mini-shape": 1
+          },
+          "additionalCompletionParses": {},
+          "active": true,
+          "accepted": 6,
+          "totalParentUnits": 17
+        },
+        {
+          "step": 7,
+          "parentDelta": {
+            "mini-shape": 1
+          },
+          "additionalCompletionParses": {},
+          "active": true,
+          "accepted": 7,
+          "totalParentUnits": 18
+        },
+        {
+          "step": 8,
+          "parentDelta": {
+            "mini-shape": 1
+          },
+          "additionalCompletionParses": {},
+          "active": true,
+          "accepted": 8,
+          "totalParentUnits": 19
+        },
+        {
+          "step": 9,
+          "parentDelta": {
+            "other": 1
+          },
+          "additionalCompletionParses": {},
+          "active": false,
+          "accepted": 0,
+          "totalParentUnits": 20
+        }
+      ],
+      "fallbacks": [
+        {
+          "reason": "dependency-bytes",
+          "parentDelta": {
+            "other": 1
+          },
+          "active": false,
+          "decline": "method context/version/bound changed",
+          "nativeError": null
+        },
+        {
+          "reason": "repeated-target",
+          "parentDelta": {
+            "other": 1
+          },
+          "active": false,
+          "decline": "repeated target include",
+          "nativeError": -32803
+        }
+      ],
+      "note": "mini-shape is the exact single-package/single-class/single-method fixture shape; the native fixture has three source roots, 10000 sibling classes and seven include edges. Private diagnostic children are excluded by PID."
+    },
+    "heldDiagnostics": {
+      "schema": 1,
+      "heldGeneration": 1,
+      "foreground": [
+        {
+          "version": 2,
+          "active": true,
+          "definition": [
+            {
+              "targetUri": "file:///Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/tmp/slang-method-held-cj2n9axt/item.svh",
+              "targetRange": {
+                "start": {
+                  "line": 8,
+                  "character": 8
+                },
+                "end": {
+                  "line": 8,
+                  "character": 15
+                }
+              },
+              "targetSelectionRange": {
+                "start": {
+                  "line": 8,
+                  "character": 8
+                },
+                "end": {
+                  "line": 8,
+                  "character": 15
+                }
+              }
+            }
+          ]
+        },
+        {
+          "version": 3,
+          "active": true,
+          "definition": [
+            {
+              "targetUri": "file:///Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/tmp/slang-method-held-cj2n9axt/item.svh",
+              "targetRange": {
+                "start": {
+                  "line": 9,
+                  "character": 8
+                },
+                "end": {
+                  "line": 9,
+                  "character": 15
+                }
+              },
+              "targetSelectionRange": {
+                "start": {
+                  "line": 9,
+                  "character": 8
+                },
+                "end": {
+                  "line": 9,
+                  "character": 15
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "publishedVersion": 3,
+      "staleAutomaticHandleUnresolved": true,
+      "obsoletePublications": []
+    },
+    "staticChecks": "clang-format 20.1.8, Ruff 0.13.0 lint/format and git diff --check passed",
+    "execution": [
+      {
+        "name": "release-ctest",
+        "command": [
+          "/opt/homebrew/bin/ctest",
+          "--test-dir",
+          "../build",
+          "--output-on-failure",
+          "--no-tests=error",
+          "-j4"
+        ],
+        "exitCode": 0,
+        "elapsedSeconds": 12.572843207977712
+      },
+      {
+        "name": "release-pytest",
+        "command": [
+          ".venv/bin/python",
+          "-m",
+          "pytest",
+          "tests/system",
+          "tests/method_scope",
+          "--binary",
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/build/bin/slang-server",
+          "-q"
+        ],
+        "exitCode": 0,
+        "elapsedSeconds": 1.6203564580064267
+      },
+      {
+        "name": "release-transport",
+        "command": [
+          "bash",
+          "tests/transport/run-diagnostic-transport-tests.sh"
+        ],
+        "exitCode": 0,
+        "elapsedSeconds": 4.2439535420853645
+      },
+      {
+        "name": "release-oracle-10000",
+        "command": [
+          ".venv/bin/python",
+          "tests/method_scope/check.py",
+          "--binary",
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/build/bin/slang-server",
+          "--classes",
+          "10000",
+          "--output",
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/release-oracle-10000.json"
+        ],
+        "exitCode": 0,
+        "elapsedSeconds": 7.335086999926716
+      },
+      {
+        "name": "release-counts-10000",
+        "command": [
+          ".venv/bin/python",
+          "tests/method_scope/count.py",
+          "--binary",
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/build/bin/slang_server_counted",
+          "--classes",
+          "10000",
+          "--output",
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/release-counts-10000.json"
+        ],
+        "exitCode": 0,
+        "elapsedSeconds": 1.2365457080304623
+      },
+      {
+        "name": "release-held",
+        "command": [
+          ".venv/bin/python",
+          "tests/method_scope/held_diagnostics.py",
+          "--binary",
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/build/bin/diagnostic_test_server",
+          "--output",
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/release-held.json"
+        ],
+        "exitCode": 0,
+        "elapsedSeconds": 0.5590283749625087
+      },
+      {
+        "name": "release-profile",
+        "command": [
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/build/bin/server_unittests",
+          "[.method-profile]"
+        ],
+        "exitCode": 0,
+        "elapsedSeconds": 0.6436479999683797
+      },
+      {
+        "name": "release-integrity",
+        "command": [
+          ".venv/bin/python",
+          "restoration/prepare-main-sdk.py",
+          "--deps-root",
+          "../dependencies"
+        ],
+        "exitCode": 0,
+        "elapsedSeconds": 0.30728333396837115
+      }
+    ],
+    "note": "Suites are nested; counts must not be summed as independent test totals."
+  },
+  "performance": {
+    "fixture": "500/5000/10000 unrelated classes, five class headers and nested include, target with three methods, two packages, three ordered roots, seven include edges; only target header open",
+    "metric": "pre-encoded didChange+query batch write start through matching complete response body receipt before JSON decode; no editor drawing",
+    "order": "seeded balanced ABBA/BAAB per query and block; same ordinary binary for native/method; a new hash-bound plan per size",
+    "validation": "full native oracle and parser counts are separate; timed definitions check exact URI/selection range, completions check nonempty, versioned diagnostics check empty; ordinary-counter state must be null",
+    "stages": {
+      "500": {
+        "runs": 24,
+        "requests": 216,
+        "nPerArmMethodStep": 6,
+        "seed": 20261019,
+        "binarySha256": "e5f1358238137bfde01a9b41c047de1acb8bd2fc677d933342e65b283e23211f",
+        "summary": {
+          "completion/native": {
+            "outcomes": {
+              "cancelled": 0,
+              "crash": 0,
+              "error": 0,
+              "success": 54,
+              "timeout": 0
+            },
+            "steps": {
+              "1": {
+                "n": 6,
+                "medianMs": 2.59,
+                "empiricalP95Ms": null
+              },
+              "2": {
+                "n": 6,
+                "medianMs": 2.8192295,
+                "empiricalP95Ms": null
+              },
+              "3": {
+                "n": 6,
+                "medianMs": 2.9127085,
+                "empiricalP95Ms": null
+              },
+              "4": {
+                "n": 6,
+                "medianMs": 3.024542,
+                "empiricalP95Ms": null
+              },
+              "5": {
+                "n": 6,
+                "medianMs": 3.1376875,
+                "empiricalP95Ms": null
+              },
+              "6": {
+                "n": 6,
+                "medianMs": 3.2952295,
+                "empiricalP95Ms": null
+              },
+              "7": {
+                "n": 6,
+                "medianMs": 3.187625,
+                "empiricalP95Ms": null
+              },
+              "8": {
+                "n": 6,
+                "medianMs": 2.8861665,
+                "empiricalP95Ms": null
+              },
+              "9": {
+                "n": 6,
+                "medianMs": 2.731021,
+                "empiricalP95Ms": null
+              }
+            },
+            "sequences": {
+              "coldPreparationMs": {
+                "n": 6,
+                "medianMs": 85.223917,
+                "empiricalP95Ms": null
+              },
+              "sequenceMs": {
+                "n": 6,
+                "medianMs": 614.2117920000001,
+                "empiricalP95Ms": null
+              },
+              "interactiveSumMs": {
+                "n": 6,
+                "medianMs": 26.836790999999998,
+                "empiricalP95Ms": null
+              }
+            }
+          },
+          "completion/method": {
+            "outcomes": {
+              "cancelled": 0,
+              "crash": 0,
+              "error": 0,
+              "success": 54,
+              "timeout": 0
+            },
+            "steps": {
+              "1": {
+                "n": 6,
+                "medianMs": 8.732437000000001,
+                "empiricalP95Ms": null
+              },
+              "2": {
+                "n": 6,
+                "medianMs": 3.0932505,
+                "empiricalP95Ms": null
+              },
+              "3": {
+                "n": 6,
+                "medianMs": 3.3756880000000002,
+                "empiricalP95Ms": null
+              },
+              "4": {
+                "n": 6,
+                "medianMs": 3.559396,
+                "empiricalP95Ms": null
+              },
+              "5": {
+                "n": 6,
+                "medianMs": 3.2499375,
+                "empiricalP95Ms": null
+              },
+              "6": {
+                "n": 6,
+                "medianMs": 3.2334375,
+                "empiricalP95Ms": null
+              },
+              "7": {
+                "n": 6,
+                "medianMs": 3.0518125,
+                "empiricalP95Ms": null
+              },
+              "8": {
+                "n": 6,
+                "medianMs": 3.5592295,
+                "empiricalP95Ms": null
+              },
+              "9": {
+                "n": 6,
+                "medianMs": 3.8994375000000003,
+                "empiricalP95Ms": null
+              }
+            },
+            "sequences": {
+              "coldPreparationMs": {
+                "n": 6,
+                "medianMs": 83.3391045,
+                "empiricalP95Ms": null
+              },
+              "sequenceMs": {
+                "n": 6,
+                "medianMs": 622.354187,
+                "empiricalP95Ms": null
+              },
+              "interactiveSumMs": {
+                "n": 6,
+                "medianMs": 37.3049385,
+                "empiricalP95Ms": null
+              }
+            }
+          },
+          "definition/native": {
+            "outcomes": {
+              "cancelled": 0,
+              "crash": 0,
+              "error": 0,
+              "success": 54,
+              "timeout": 0
+            },
+            "steps": {
+              "1": {
+                "n": 6,
+                "medianMs": 2.855375,
+                "empiricalP95Ms": null
+              },
+              "2": {
+                "n": 6,
+                "medianMs": 3.076583,
+                "empiricalP95Ms": null
+              },
+              "3": {
+                "n": 6,
+                "medianMs": 3.2800205,
+                "empiricalP95Ms": null
+              },
+              "4": {
+                "n": 6,
+                "medianMs": 3.6129795,
+                "empiricalP95Ms": null
+              },
+              "5": {
+                "n": 6,
+                "medianMs": 3.5345625,
+                "empiricalP95Ms": null
+              },
+              "6": {
+                "n": 6,
+                "medianMs": 3.590021,
+                "empiricalP95Ms": null
+              },
+              "7": {
+                "n": 6,
+                "medianMs": 3.507688,
+                "empiricalP95Ms": null
+              },
+              "8": {
+                "n": 6,
+                "medianMs": 3.5487919999999997,
+                "empiricalP95Ms": null
+              },
+              "9": {
+                "n": 6,
+                "medianMs": 3.536896,
+                "empiricalP95Ms": null
+              }
+            },
+            "sequences": {
+              "coldPreparationMs": {
+                "n": 6,
+                "medianMs": 88.38331199999999,
+                "empiricalP95Ms": null
+              },
+              "sequenceMs": {
+                "n": 6,
+                "medianMs": 631.0792295,
+                "empiricalP95Ms": null
+              },
+              "interactiveSumMs": {
+                "n": 6,
+                "medianMs": 30.038584,
+                "empiricalP95Ms": null
+              }
+            }
+          },
+          "definition/method": {
+            "outcomes": {
+              "cancelled": 0,
+              "crash": 0,
+              "error": 0,
+              "success": 54,
+              "timeout": 0
+            },
+            "steps": {
+              "1": {
+                "n": 6,
+                "medianMs": 9.9938755,
+                "empiricalP95Ms": null
+              },
+              "2": {
+                "n": 6,
+                "medianMs": 3.461625,
+                "empiricalP95Ms": null
+              },
+              "3": {
+                "n": 6,
+                "medianMs": 3.9850415000000003,
+                "empiricalP95Ms": null
+              },
+              "4": {
+                "n": 6,
+                "medianMs": 4.2276255,
+                "empiricalP95Ms": null
+              },
+              "5": {
+                "n": 6,
+                "medianMs": 4.1223335,
+                "empiricalP95Ms": null
+              },
+              "6": {
+                "n": 6,
+                "medianMs": 4.381292,
+                "empiricalP95Ms": null
+              },
+              "7": {
+                "n": 6,
+                "medianMs": 4.489292,
+                "empiricalP95Ms": null
+              },
+              "8": {
+                "n": 6,
+                "medianMs": 4.5753335,
+                "empiricalP95Ms": null
+              },
+              "9": {
+                "n": 6,
+                "medianMs": 4.835875,
+                "empiricalP95Ms": null
+              }
+            },
+            "sequences": {
+              "coldPreparationMs": {
+                "n": 6,
+                "medianMs": 87.79193699999999,
+                "empiricalP95Ms": null
+              },
+              "sequenceMs": {
+                "n": 6,
+                "medianMs": 649.445833,
+                "empiricalP95Ms": null
+              },
+              "interactiveSumMs": {
+                "n": 6,
+                "medianMs": 44.1821875,
+                "empiricalP95Ms": null
+              }
+            }
+          }
+        }
+      },
+      "5000": {
+        "runs": 400,
+        "requests": 3600,
+        "nPerArmMethodStep": 100,
+        "seed": 20261019,
+        "binarySha256": "e5f1358238137bfde01a9b41c047de1acb8bd2fc677d933342e65b283e23211f",
+        "summary": {
+          "completion/native": {
+            "outcomes": {
+              "cancelled": 0,
+              "crash": 0,
+              "error": 0,
+              "success": 900,
+              "timeout": 0
+            },
+            "steps": {
+              "1": {
+                "n": 100,
+                "medianMs": 15.384771,
+                "empiricalP95Ms": 18.649083
+              },
+              "2": {
+                "n": 100,
+                "medianMs": 16.5761875,
+                "empiricalP95Ms": 19.288584
+              },
+              "3": {
+                "n": 100,
+                "medianMs": 13.8840205,
+                "empiricalP95Ms": 16.383541
+              },
+              "4": {
+                "n": 100,
+                "medianMs": 14.200208,
+                "empiricalP95Ms": 16.698792
+              },
+              "5": {
+                "n": 100,
+                "medianMs": 14.2957285,
+                "empiricalP95Ms": 17.429
+              },
+              "6": {
+                "n": 100,
+                "medianMs": 14.29175,
+                "empiricalP95Ms": 16.842458
+              },
+              "7": {
+                "n": 100,
+                "medianMs": 14.296375,
+                "empiricalP95Ms": 16.795583
+              },
+              "8": {
+                "n": 100,
+                "medianMs": 14.3437085,
+                "empiricalP95Ms": 16.169625
+              },
+              "9": {
+                "n": 100,
+                "medianMs": 14.3164585,
+                "empiricalP95Ms": 17.131708
+              }
+            },
+            "sequences": {
+              "coldPreparationMs": {
+                "n": 100,
+                "medianMs": 118.2029585,
+                "empiricalP95Ms": 128.3385
+              },
+              "sequenceMs": {
+                "n": 100,
+                "medianMs": 854.447583,
+                "empiricalP95Ms": 925.637375
+              },
+              "interactiveSumMs": {
+                "n": 100,
+                "medianMs": 132.5149995,
+                "empiricalP95Ms": 154.41125
+              }
+            }
+          },
+          "completion/method": {
+            "outcomes": {
+              "cancelled": 0,
+              "crash": 0,
+              "error": 0,
+              "success": 900,
+              "timeout": 0
+            },
+            "steps": {
+              "1": {
+                "n": 100,
+                "medianMs": 45.121583,
+                "empiricalP95Ms": 53.256542
+              },
+              "2": {
+                "n": 100,
+                "medianMs": 6.706687499999999,
+                "empiricalP95Ms": 7.497291
+              },
+              "3": {
+                "n": 100,
+                "medianMs": 7.029,
+                "empiricalP95Ms": 7.928417
+              },
+              "4": {
+                "n": 100,
+                "medianMs": 7.2199375,
+                "empiricalP95Ms": 8.568083
+              },
+              "5": {
+                "n": 100,
+                "medianMs": 7.2858335,
+                "empiricalP95Ms": 8.353
+              },
+              "6": {
+                "n": 100,
+                "medianMs": 7.24525,
+                "empiricalP95Ms": 8.256458
+              },
+              "7": {
+                "n": 100,
+                "medianMs": 7.272042,
+                "empiricalP95Ms": 8.267542
+              },
+              "8": {
+                "n": 100,
+                "medianMs": 7.243083,
+                "empiricalP95Ms": 8.053166
+              },
+              "9": {
+                "n": 100,
+                "medianMs": 17.737021,
+                "empiricalP95Ms": 19.407875
+              }
+            },
+            "sequences": {
+              "coldPreparationMs": {
+                "n": 100,
+                "medianMs": 119.2098335,
+                "empiricalP95Ms": 132.464834
+              },
+              "sequenceMs": {
+                "n": 100,
+                "medianMs": 856.7343965,
+                "empiricalP95Ms": 926.564792
+              },
+              "interactiveSumMs": {
+                "n": 100,
+                "medianMs": 113.3184995,
+                "empiricalP95Ms": 126.56321
+              }
+            }
+          },
+          "definition/native": {
+            "outcomes": {
+              "cancelled": 0,
+              "crash": 0,
+              "error": 0,
+              "success": 900,
+              "timeout": 0
+            },
+            "steps": {
+              "1": {
+                "n": 100,
+                "medianMs": 14.990791999999999,
+                "empiricalP95Ms": 16.289625
+              },
+              "2": {
+                "n": 100,
+                "medianMs": 16.262396,
+                "empiricalP95Ms": 19.744167
+              },
+              "3": {
+                "n": 100,
+                "medianMs": 13.6668755,
+                "empiricalP95Ms": 15.4185
+              },
+              "4": {
+                "n": 100,
+                "medianMs": 13.862103999999999,
+                "empiricalP95Ms": 15.620292
+              },
+              "5": {
+                "n": 100,
+                "medianMs": 13.9454995,
+                "empiricalP95Ms": 15.704334
+              },
+              "6": {
+                "n": 100,
+                "medianMs": 13.957625,
+                "empiricalP95Ms": 15.247833
+              },
+              "7": {
+                "n": 100,
+                "medianMs": 13.949729,
+                "empiricalP95Ms": 15.325708
+              },
+              "8": {
+                "n": 100,
+                "medianMs": 13.995687499999999,
+                "empiricalP95Ms": 15.287584
+              },
+              "9": {
+                "n": 100,
+                "medianMs": 13.9224165,
+                "empiricalP95Ms": 15.6155
+              }
+            },
+            "sequences": {
+              "coldPreparationMs": {
+                "n": 100,
+                "medianMs": 116.1323955,
+                "empiricalP95Ms": 124.90575
+              },
+              "sequenceMs": {
+                "n": 100,
+                "medianMs": 847.070021,
+                "empiricalP95Ms": 893.916167
+              },
+              "interactiveSumMs": {
+                "n": 100,
+                "medianMs": 128.9296885,
+                "empiricalP95Ms": 144.552789
+              }
+            }
+          },
+          "definition/method": {
+            "outcomes": {
+              "cancelled": 0,
+              "crash": 0,
+              "error": 0,
+              "success": 900,
+              "timeout": 0
+            },
+            "steps": {
+              "1": {
+                "n": 100,
+                "medianMs": 44.4035415,
+                "empiricalP95Ms": 48.423125
+              },
+              "2": {
+                "n": 100,
+                "medianMs": 6.5755,
+                "empiricalP95Ms": 7.164458
+              },
+              "3": {
+                "n": 100,
+                "medianMs": 6.952229000000001,
+                "empiricalP95Ms": 7.410125
+              },
+              "4": {
+                "n": 100,
+                "medianMs": 7.1577705,
+                "empiricalP95Ms": 7.667667
+              },
+              "5": {
+                "n": 100,
+                "medianMs": 7.2819375,
+                "empiricalP95Ms": 7.966
+              },
+              "6": {
+                "n": 100,
+                "medianMs": 7.3561045,
+                "empiricalP95Ms": 7.898333
+              },
+              "7": {
+                "n": 100,
+                "medianMs": 7.297499500000001,
+                "empiricalP95Ms": 7.910291
+              },
+              "8": {
+                "n": 100,
+                "medianMs": 7.318875,
+                "empiricalP95Ms": 7.958292
+              },
+              "9": {
+                "n": 100,
+                "medianMs": 17.641666999999998,
+                "empiricalP95Ms": 19.907959
+              }
+            },
+            "sequences": {
+              "coldPreparationMs": {
+                "n": 100,
+                "medianMs": 116.1831665,
+                "empiricalP95Ms": 125.457709
+              },
+              "sequenceMs": {
+                "n": 100,
+                "medianMs": 847.784,
+                "empiricalP95Ms": 875.808209
+              },
+              "interactiveSumMs": {
+                "n": 100,
+                "medianMs": 112.365062,
+                "empiricalP95Ms": 121.655627
+              }
+            }
+          }
+        },
+        "pairedBlockAnalysis": {
+          "inputSha256": "1aa6c20dc662c70a3a707c23c690992cb5759a1016b709443924b98feb3ac511",
+          "classes": 5000,
+          "bootstrapSeed": 20261019,
+          "replicates": 10000,
+          "note": "Percentile bootstrap CI for paired mean differences (native minus method), resampling complete balanced blocks; empirical p95 is separate, no tail CI or production guarantee.",
+          "comparisons": {
+            "completion/first": {
+              "blocks": 50,
+              "samplesPerArm": 100,
+              "pairedMeanSavingsMs": -31.52814999,
+              "bootstrap95PercentCI": [
+                -33.3863309,
+                -30.08583253
+              ],
+              "blocksWithPositiveSavings": 0
+            },
+            "completion/accepted2to8": {
+              "blocks": 50,
+              "samplesPerArm": 100,
+              "pairedMeanSavingsMs": 7.778387494285714,
+              "bootstrap95PercentCI": [
+                7.546340575714285,
+                8.049254754285714
+              ],
+              "blocksWithPositiveSavings": 50
+            },
+            "completion/fallback": {
+              "blocks": 50,
+              "samplesPerArm": 100,
+              "pairedMeanSavingsMs": -2.61055584,
+              "bootstrap95PercentCI": [
+                -3.26292713,
+                -1.73674376
+              ],
+              "blocksWithPositiveSavings": 3
+            },
+            "completion/interactiveSumMs": {
+              "blocks": 50,
+              "samplesPerArm": 100,
+              "pairedMeanSavingsMs": 20.31000663,
+              "bootstrap95PercentCI": [
+                17.49456163,
+                22.988562940000005
+              ],
+              "blocksWithPositiveSavings": 48
+            },
+            "completion/sequenceMs": {
+              "blocks": 50,
+              "samplesPerArm": 100,
+              "pairedMeanSavingsMs": 0.29743707999998376,
+              "bootstrap95PercentCI": [
+                -7.485932019999991,
+                7.929710399999997
+              ],
+              "blocksWithPositiveSavings": 27
+            },
+            "completion/coldPreparationMs": {
+              "blocks": 50,
+              "samplesPerArm": 100,
+              "pairedMeanSavingsMs": -0.7605904999999982,
+              "bootstrap95PercentCI": [
+                -3.0906776499999977,
+                1.3872811600000015
+              ],
+              "blocksWithPositiveSavings": 21
+            },
+            "definition/first": {
+              "blocks": 50,
+              "samplesPerArm": 100,
+              "pairedMeanSavingsMs": -29.65618914,
+              "bootstrap95PercentCI": [
+                -30.160251249999998,
+                -29.13868329
+              ],
+              "blocksWithPositiveSavings": 0
+            },
+            "definition/accepted2to8": {
+              "blocks": 50,
+              "samplesPerArm": 100,
+              "pairedMeanSavingsMs": 7.541191824285714,
+              "bootstrap95PercentCI": [
+                7.172275722857142,
+                8.000706234285714
+              ],
+              "blocksWithPositiveSavings": 50
+            },
+            "definition/fallback": {
+              "blocks": 50,
+              "samplesPerArm": 100,
+              "pairedMeanSavingsMs": -3.73221503,
+              "bootstrap95PercentCI": [
+                -4.67911807,
+                -3.06760628
+              ],
+              "blocksWithPositiveSavings": 1
+            },
+            "definition/interactiveSumMs": {
+              "blocks": 50,
+              "samplesPerArm": 100,
+              "pairedMeanSavingsMs": 19.3999386,
+              "bootstrap95PercentCI": [
+                17.0591683,
+                22.30301974
+              ],
+              "blocksWithPositiveSavings": 50
+            },
+            "definition/sequenceMs": {
+              "blocks": 50,
+              "samplesPerArm": 100,
+              "pairedMeanSavingsMs": 7.447202420000014,
+              "bootstrap95PercentCI": [
+                0.5146804100000258,
+                16.08000699000001
+              ],
+              "blocksWithPositiveSavings": 28
+            },
+            "definition/coldPreparationMs": {
+              "blocks": 50,
+              "samplesPerArm": 100,
+              "pairedMeanSavingsMs": -0.4362370799999994,
+              "bootstrap95PercentCI": [
+                -1.9859991400000008,
+                0.7935221100000013
+              ],
+              "blocksWithPositiveSavings": 27
+            }
+          }
+        }
+      },
+      "10000": {
+        "runs": 400,
+        "requests": 3600,
+        "nPerArmMethodStep": 100,
+        "seed": 20261019,
+        "binarySha256": "e5f1358238137bfde01a9b41c047de1acb8bd2fc677d933342e65b283e23211f",
+        "summary": {
+          "completion/native": {
+            "outcomes": {
+              "cancelled": 0,
+              "crash": 0,
+              "error": 0,
+              "success": 900,
+              "timeout": 0
+            },
+            "steps": {
+              "1": {
+                "n": 100,
+                "medianMs": 29.685875,
+                "empiricalP95Ms": 31.353042
+              },
+              "2": {
+                "n": 100,
+                "medianMs": 30.420021,
+                "empiricalP95Ms": 32.100625
+              },
+              "3": {
+                "n": 100,
+                "medianMs": 25.0237915,
+                "empiricalP95Ms": 25.920292
+              },
+              "4": {
+                "n": 100,
+                "medianMs": 25.00675,
+                "empiricalP95Ms": 26.042917
+              },
+              "5": {
+                "n": 100,
+                "medianMs": 25.0710835,
+                "empiricalP95Ms": 26.400583
+              },
+              "6": {
+                "n": 100,
+                "medianMs": 25.045,
+                "empiricalP95Ms": 25.9805
+              },
+              "7": {
+                "n": 100,
+                "medianMs": 24.983833500000003,
+                "empiricalP95Ms": 26.356083
+              },
+              "8": {
+                "n": 100,
+                "medianMs": 24.965,
+                "empiricalP95Ms": 26.083208
+              },
+              "9": {
+                "n": 100,
+                "medianMs": 25.097333499999998,
+                "empiricalP95Ms": 26.10825
+              }
+            },
+            "sequences": {
+              "coldPreparationMs": {
+                "n": 100,
+                "medianMs": 164.31508350000001,
+                "empiricalP95Ms": 167.3655
+              },
+              "sequenceMs": {
+                "n": 100,
+                "medianMs": 1098.015916,
+                "empiricalP95Ms": 1120.675209
+              },
+              "interactiveSumMs": {
+                "n": 100,
+                "medianMs": 235.8711855,
+                "empiricalP95Ms": 243.582042
+              }
+            }
+          },
+          "completion/method": {
+            "outcomes": {
+              "cancelled": 0,
+              "crash": 0,
+              "error": 0,
+              "success": 900,
+              "timeout": 0
+            },
+            "steps": {
+              "1": {
+                "n": 100,
+                "medianMs": 83.1971875,
+                "empiricalP95Ms": 85.706833
+              },
+              "2": {
+                "n": 100,
+                "medianMs": 10.6877915,
+                "empiricalP95Ms": 11.200875
+              },
+              "3": {
+                "n": 100,
+                "medianMs": 10.591896,
+                "empiricalP95Ms": 11.031041
+              },
+              "4": {
+                "n": 100,
+                "medianMs": 10.595521000000002,
+                "empiricalP95Ms": 11.018166
+              },
+              "5": {
+                "n": 100,
+                "medianMs": 10.5643745,
+                "empiricalP95Ms": 11.049042
+              },
+              "6": {
+                "n": 100,
+                "medianMs": 10.588187000000001,
+                "empiricalP95Ms": 11.080417
+              },
+              "7": {
+                "n": 100,
+                "medianMs": 10.595896,
+                "empiricalP95Ms": 11.034042
+              },
+              "8": {
+                "n": 100,
+                "medianMs": 10.588771,
+                "empiricalP95Ms": 10.999291
+              },
+              "9": {
+                "n": 100,
+                "medianMs": 32.2619375,
+                "empiricalP95Ms": 33.95125
+              }
+            },
+            "sequences": {
+              "coldPreparationMs": {
+                "n": 100,
+                "medianMs": 164.386458,
+                "empiricalP95Ms": 167.791334
+              },
+              "sequenceMs": {
+                "n": 100,
+                "medianMs": 1073.9278960000001,
+                "empiricalP95Ms": 1095.79525
+              },
+              "interactiveSumMs": {
+                "n": 100,
+                "medianMs": 189.3318965,
+                "empiricalP95Ms": 193.703544
+              }
+            }
+          },
+          "definition/native": {
+            "outcomes": {
+              "cancelled": 0,
+              "crash": 0,
+              "error": 0,
+              "success": 900,
+              "timeout": 0
+            },
+            "steps": {
+              "1": {
+                "n": 100,
+                "medianMs": 29.556542,
+                "empiricalP95Ms": 31.69325
+              },
+              "2": {
+                "n": 100,
+                "medianMs": 30.341250000000002,
+                "empiricalP95Ms": 32.153458
+              },
+              "3": {
+                "n": 100,
+                "medianMs": 24.823125,
+                "empiricalP95Ms": 26.261209
+              },
+              "4": {
+                "n": 100,
+                "medianMs": 25.01025,
+                "empiricalP95Ms": 26.295708
+              },
+              "5": {
+                "n": 100,
+                "medianMs": 24.781458,
+                "empiricalP95Ms": 25.913084
+              },
+              "6": {
+                "n": 100,
+                "medianMs": 24.8955835,
+                "empiricalP95Ms": 26.479708
+              },
+              "7": {
+                "n": 100,
+                "medianMs": 24.947000000000003,
+                "empiricalP95Ms": 26.918542
+              },
+              "8": {
+                "n": 100,
+                "medianMs": 24.8540835,
+                "empiricalP95Ms": 26.407917
+              },
+              "9": {
+                "n": 100,
+                "medianMs": 24.970125,
+                "empiricalP95Ms": 26.294792
+              }
+            },
+            "sequences": {
+              "coldPreparationMs": {
+                "n": 100,
+                "medianMs": 163.896479,
+                "empiricalP95Ms": 170.796416
+              },
+              "sequenceMs": {
+                "n": 100,
+                "medianMs": 1097.2530004999999,
+                "empiricalP95Ms": 1124.430125
+              },
+              "interactiveSumMs": {
+                "n": 100,
+                "medianMs": 234.409062,
+                "empiricalP95Ms": 244.517584
+              }
+            }
+          },
+          "definition/method": {
+            "outcomes": {
+              "cancelled": 0,
+              "crash": 0,
+              "error": 0,
+              "success": 900,
+              "timeout": 0
+            },
+            "steps": {
+              "1": {
+                "n": 100,
+                "medianMs": 83.2423125,
+                "empiricalP95Ms": 86.599209
+              },
+              "2": {
+                "n": 100,
+                "medianMs": 10.6304585,
+                "empiricalP95Ms": 11.057375
+              },
+              "3": {
+                "n": 100,
+                "medianMs": 10.5130205,
+                "empiricalP95Ms": 10.976416
+              },
+              "4": {
+                "n": 100,
+                "medianMs": 10.4958335,
+                "empiricalP95Ms": 11.007125
+              },
+              "5": {
+                "n": 100,
+                "medianMs": 10.430041,
+                "empiricalP95Ms": 11.034209
+              },
+              "6": {
+                "n": 100,
+                "medianMs": 10.489625,
+                "empiricalP95Ms": 10.948084
+              },
+              "7": {
+                "n": 100,
+                "medianMs": 10.5239795,
+                "empiricalP95Ms": 10.979208
+              },
+              "8": {
+                "n": 100,
+                "medianMs": 10.5466035,
+                "empiricalP95Ms": 10.884625
+              },
+              "9": {
+                "n": 100,
+                "medianMs": 31.85875,
+                "empiricalP95Ms": 33.434417
+              }
+            },
+            "sequences": {
+              "coldPreparationMs": {
+                "n": 100,
+                "medianMs": 164.2625,
+                "empiricalP95Ms": 169.48725
+              },
+              "sequenceMs": {
+                "n": 100,
+                "medianMs": 1074.1998745,
+                "empiricalP95Ms": 1091.008916
+              },
+              "interactiveSumMs": {
+                "n": 100,
+                "medianMs": 188.18954300000001,
+                "empiricalP95Ms": 192.542667
+              }
+            }
+          }
+        },
+        "pairedBlockAnalysis": {
+          "inputSha256": "03c5b2be36ba967753c4e3ba45977abd1acb5680a3b9689e8c7017eb1d6a1c86",
+          "classes": 10000,
+          "bootstrapSeed": 20261019,
+          "replicates": 10000,
+          "note": "Percentile bootstrap CI for paired mean differences (native minus method), resampling complete balanced blocks; empirical p95 is separate, no tail CI or production guarantee.",
+          "comparisons": {
+            "completion/first": {
+              "blocks": 50,
+              "samplesPerArm": 100,
+              "pairedMeanSavingsMs": -53.67062296,
+              "bootstrap95PercentCI": [
+                -53.983348,
+                -53.375563
+              ],
+              "blocksWithPositiveSavings": 0
+            },
+            "completion/accepted2to8": {
+              "blocks": 50,
+              "samplesPerArm": 100,
+              "pairedMeanSavingsMs": 15.44011677142857,
+              "bootstrap95PercentCI": [
+                15.288864055714285,
+                15.586965942857143
+              ],
+              "blocksWithPositiveSavings": 50
+            },
+            "completion/fallback": {
+              "blocks": 50,
+              "samplesPerArm": 100,
+              "pairedMeanSavingsMs": -7.26880467,
+              "bootstrap95PercentCI": [
+                -7.472185979999999,
+                -7.06133139
+              ],
+              "blocksWithPositiveSavings": 0
+            },
+            "completion/interactiveSumMs": {
+              "blocks": 50,
+              "samplesPerArm": 100,
+              "pairedMeanSavingsMs": 47.14138977,
+              "bootstrap95PercentCI": [
+                46.06243992,
+                48.181669490000004
+              ],
+              "blocksWithPositiveSavings": 50
+            },
+            "completion/sequenceMs": {
+              "blocks": 50,
+              "samplesPerArm": 100,
+              "pairedMeanSavingsMs": 24.532595890000028,
+              "bootstrap95PercentCI": [
+                21.08846927000005,
+                28.135067170000024
+              ],
+              "blocksWithPositiveSavings": 48
+            },
+            "completion/coldPreparationMs": {
+              "blocks": 50,
+              "samplesPerArm": 100,
+              "pairedMeanSavingsMs": -1.0327200000000005,
+              "bootstrap95PercentCI": [
+                -2.6447457999999995,
+                0.2183775200000008
+              ],
+              "blocksWithPositiveSavings": 28
+            },
+            "definition/first": {
+              "blocks": 50,
+              "samplesPerArm": 100,
+              "pairedMeanSavingsMs": -53.81034707,
+              "bootstrap95PercentCI": [
+                -54.46282378,
+                -53.26618749
+              ],
+              "blocksWithPositiveSavings": 0
+            },
+            "definition/accepted2to8": {
+              "blocks": 50,
+              "samplesPerArm": 100,
+              "pairedMeanSavingsMs": 15.412849352857142,
+              "bootstrap95PercentCI": [
+                15.217428067142857,
+                15.62129914857143
+              ],
+              "blocksWithPositiveSavings": 50
+            },
+            "definition/fallback": {
+              "blocks": 50,
+              "samplesPerArm": 100,
+              "pairedMeanSavingsMs": -6.94250922,
+              "bootstrap95PercentCI": [
+                -7.2082580499999995,
+                -6.67680211
+              ],
+              "blocksWithPositiveSavings": 0
+            },
+            "definition/interactiveSumMs": {
+              "blocks": 50,
+              "samplesPerArm": 100,
+              "pairedMeanSavingsMs": 47.13708918,
+              "bootstrap95PercentCI": [
+                45.64637445,
+                48.66408237
+              ],
+              "blocksWithPositiveSavings": 50
+            },
+            "definition/sequenceMs": {
+              "blocks": 50,
+              "samplesPerArm": 100,
+              "pairedMeanSavingsMs": 24.34848215,
+              "bootstrap95PercentCI": [
+                21.885838390000032,
+                26.93108006999998
+              ],
+              "blocksWithPositiveSavings": 49
+            },
+            "definition/coldPreparationMs": {
+              "blocks": 50,
+              "samplesPerArm": 100,
+              "pairedMeanSavingsMs": -0.27905881000000077,
+              "bootstrap95PercentCI": [
+                -1.3377608799999985,
+                0.6668336599999969
+              ],
+              "blocksWithPositiveSavings": 21
+            }
+          }
+        }
+      }
+    },
+    "phaseAttribution": {
+      "samplesPerSizeVersion": 3,
+      "note": "explicit C++ observer adds syntax-traversal work; mechanism attribution only, not LSP latency or a stable p95; sequential versions, not paired binary comparison",
+      "values": {
+        "portedBaseline": {
+          "500": {
+            "n": 3,
+            "medianPhaseMs": {
+              "method certificate begin": 0.001542,
+              "method certificate recipe ready": 0.050208,
+              "method certificate graph ready": 0.035041,
+              "method certificate semantics ready": 0.003875,
+              "method certificate method ready": 0.35525,
+              "method certificate completions ready": 3.370208,
+              "method certificate snapshot ready": 0.083834,
+              "after method certificate": 2.102208
+            }
+          },
+          "5000": {
+            "n": 3,
+            "medianPhaseMs": {
+              "method certificate begin": 0.002083,
+              "method certificate recipe ready": 0.095667,
+              "method certificate graph ready": 0.204333,
+              "method certificate semantics ready": 0.004042,
+              "method certificate method ready": 3.347,
+              "method certificate completions ready": 208.911042,
+              "method certificate snapshot ready": 0.279833,
+              "after method certificate": 4.994375
+            }
+          },
+          "10000": {
+            "n": 3,
+            "medianPhaseMs": {
+              "method certificate begin": 0.002125,
+              "method certificate recipe ready": 0.112584,
+              "method certificate graph ready": 0.374375,
+              "method certificate semantics ready": 0.004167,
+              "method certificate method ready": 7.125708,
+              "method certificate completions ready": 884.723667,
+              "method certificate snapshot ready": 0.437417,
+              "after method certificate": 8.791917
+            }
+          }
+        },
+        "finalProduct": {
+          "500": {
+            "n": 3,
+            "medianPhaseMs": {
+              "method certificate begin": 0.001125,
+              "method certificate recipe ready": 0.052125,
+              "method certificate graph ready": 0.034875,
+              "method certificate semantics ready": 0.004083,
+              "method certificate method ready": 0.341125,
+              "method certificate completions ready": 2.023375,
+              "method certificate snapshot ready": 0.062667,
+              "after method certificate": 2.083833
+            }
+          },
+          "5000": {
+            "n": 3,
+            "medianPhaseMs": {
+              "method certificate begin": 0.001458,
+              "method certificate recipe ready": 0.118292,
+              "method certificate graph ready": 0.213875,
+              "method certificate semantics ready": 0.004334,
+              "method certificate method ready": 3.353084,
+              "method certificate completions ready": 21.584541,
+              "method certificate snapshot ready": 0.2785,
+              "after method certificate": 5.329917
+            }
+          },
+          "10000": {
+            "n": 3,
+            "medianPhaseMs": {
+              "method certificate begin": 0.002375,
+              "method certificate recipe ready": 0.121084,
+              "method certificate graph ready": 0.391625,
+              "method certificate semantics ready": 0.0045,
+              "method certificate method ready": 7.256875,
+              "method certificate completions ready": 41.818125,
+              "method certificate snapshot ready": 0.440083,
+              "after method certificate": 8.699917
+            }
+          }
+        }
+      }
+    },
+    "exploratoryHistory": {
+      "portedBaseline": {
+        "commit": "82281b2 plus Mac build repairs/checkpoints; not pristine upstream binary",
+        "binarySha256": "f9339c5a195c3f30ad7caa41f2d4e2fe39d45d0b4e20c1c795abe96c996960b9",
+        "samplesPerArmStep": 6
+      },
+      "indexOnlyPilot": {
+        "commit": "6c8f3c0213cdf46e805b29dc3464fdb38026efc8",
+        "binarySha256": "cbc1ee3f95ad3eba6a671084776bc214a8893e29487361be436e25cd76197fa8",
+        "samplesPerArmStep": 6
+      },
+      "rawRunsRetained": true
+    },
+    "memory": {
+      "metric": "Darwin os.wait4 child ru_maxrss in bytes; not simultaneous aggregate parent/worker/client RSS",
+      "scope": "one separate observation per fixture/query/arm, no confidence claim; response timings from these wrapper runs are discarded",
+      "rows": [
+        {
+          "classes": 5000,
+          "method": "completion",
+          "arm": "native",
+          "childExitCode": 0,
+          "maximumResidentSetSizeBytes": 83099648,
+          "userCpuSeconds": 0.37082099999999996,
+          "systemCpuSeconds": 0.10145699999999999
+        },
+        {
+          "classes": 5000,
+          "method": "completion",
+          "arm": "method",
+          "childExitCode": 0,
+          "maximumResidentSetSizeBytes": 102678528,
+          "userCpuSeconds": 0.339535,
+          "systemCpuSeconds": 0.12028499999999999
+        },
+        {
+          "classes": 5000,
+          "method": "definition",
+          "arm": "native",
+          "childExitCode": 0,
+          "maximumResidentSetSizeBytes": 83017728,
+          "userCpuSeconds": 0.33891099999999996,
+          "systemCpuSeconds": 0.09854199999999999
+        },
+        {
+          "classes": 5000,
+          "method": "definition",
+          "arm": "method",
+          "childExitCode": 0,
+          "maximumResidentSetSizeBytes": 102793216,
+          "userCpuSeconds": 0.34223699999999996,
+          "systemCpuSeconds": 0.124417
+        },
+        {
+          "classes": 10000,
+          "method": "completion",
+          "arm": "native",
+          "childExitCode": 0,
+          "maximumResidentSetSizeBytes": 147668992,
+          "userCpuSeconds": 0.607424,
+          "systemCpuSeconds": 0.13968899999999998
+        },
+        {
+          "classes": 10000,
+          "method": "completion",
+          "arm": "method",
+          "childExitCode": 0,
+          "maximumResidentSetSizeBytes": 189005824,
+          "userCpuSeconds": 0.563619,
+          "systemCpuSeconds": 0.15464
+        },
+        {
+          "classes": 10000,
+          "method": "definition",
+          "arm": "native",
+          "childExitCode": 0,
+          "maximumResidentSetSizeBytes": 147718144,
+          "userCpuSeconds": 0.605205,
+          "systemCpuSeconds": 0.13597399999999998
+        },
+        {
+          "classes": 10000,
+          "method": "definition",
+          "arm": "method",
+          "childExitCode": 0,
+          "maximumResidentSetSizeBytes": 189136896,
+          "userCpuSeconds": 0.5640569999999999,
+          "systemCpuSeconds": 0.152089
+        }
+      ]
+    },
+    "limits": [
+      "No production UVM or large include-edge-count experiment; class count varies in a fixed seven-edge graph",
+      "Empirical p95 at n=100 is not a tail confidence bound or portability guarantee",
+      "Block bootstrap intervals are exploratory paired mean contrasts, not a preregistered confirmatory test or simultaneous familywise confidence statement",
+      "interactiveSumMs includes first certification and ninth fallback; sequenceMs additionally includes diagnostic waits and must be reported separately",
+      "No cross-platform comparison with old Linux timing"
+    ]
+  },
+  "conclusions": {
+    "nineResponseSumPaired95CIPositiveForAllLargeCases": true,
+    "tenThousandWholeSequencePaired95CIPositiveForBothQueries": true,
+    "firstEditBeatsNative": false,
+    "productionOrGeneralPerformanceClaim": false
+  },
+  "defaults": {
+    "experimentalMethodScopeOverlay": false,
+    "fastCwdSnapshotChecks": false
+  },
+  "unresolved": [
+    "First edit remains slower than native; certificate construction still snapshots a large visible interface and validates full inputs",
+    "500-class query sequences do not show a net gain; do not enable the experiment by default",
+    "5,000-class sequence including diagnostics has no consistent median gain; 10,000-class total improvement is only about two percent",
+    "Separate n=1 RSS observations are higher for the method arm; no aggregate concurrent-memory or statistical-memory claim",
+    "Variable-length edits, local additions/deletions and wider semantics remain outside the implemented subset",
+    "New code has not been rebuilt on Linux/GCC13/Linux arm64, real UVM, Nix or a real Neovim/LazyVim session"
+  ],
+  "failuresAndRepairs": [
+    "Pinned Boost.Regex commit needed an explicit SHA fetch after default clone",
+    "Initial Mac linking rejected unresolved optional counter hook",
+    "Initial Mac SDK hidden type identities caused unrecognized Bag options; two-TU reproducer and cross-SDK regression retained",
+    "Initial /var alias temporary fixtures were rejected by strict source path witnesses; fixtures now resolve paths",
+    "New driver-option regression initially omitted argv program name, skipping its first flag; corrected and rerun",
+    "Deterministic source/lookup witness-overwrite test failed before consistency guard and passed afterward"
+  ],
+  "artifact": {
+    "path": "validation/artifacts/macos-2026-10-19-719359b.tar.gz",
+    "bytes": 4395475,
+    "sha256": "eed2952c60a41dff7bc53a56df26f281ef80f0d738c767a19a35d1ef3ace5345",
+    "rawFiles": {
+      "release-identity.json": {
+        "bytes": 1079,
+        "sha256": "5ad5e5d9f930199bf4a239bff3d78a871bd0d33328b3652c22a034c0991a53cd"
+      },
+      "release-acceptance.json": {
+        "bytes": 2678,
+        "sha256": "9455f0f3fd0b243b1a6f530d71ee69a0bcebd2564b04f6253d61066ed49e3021"
+      },
+      "release-CMakeCache.txt": {
+        "bytes": 44004,
+        "sha256": "e0f7a3c77c97118c8a1124d145989088d70c514fa253b9a34de348753d701df0"
+      },
+      "release-ctest.log": {
+        "bytes": 132871,
+        "sha256": "68e7db7cfb553e40f7df842414c60aeb5c2724ae8942d8594a7aaed8cfd3046e"
+      },
+      "release-pytest.log": {
+        "bytes": 99,
+        "sha256": "37106cb802a75a8621f661b5df2b15b12a2c0d7f826bc5f62e3c9c005a5c8ae7"
+      },
+      "release-transport.log": {
+        "bytes": 3947,
+        "sha256": "ac135b7c236483e2423e82b856ab16ad21ad1b2d8a3bd8e04eefb717725e3f13"
+      },
+      "release-oracle-10000.json": {
+        "bytes": 131517140,
+        "sha256": "82df14ca4fb9f83e640d8d8fe159530b91473cf3f5a98fed7756457357cc59ec"
+      },
+      "release-oracle-10000.log": {
+        "bytes": 96,
+        "sha256": "facc2cb2f6382d4abd543df45cffb65e212e11ca0aa6c1fb8e41ca5c333d48e6"
+      },
+      "release-counts-10000.json": {
+        "bytes": 2494,
+        "sha256": "f633f34ecd6e8f96ef521c1d48636ffb5d69a1f9e40d3c14020f11876e52985a"
+      },
+      "release-counts-10000.log": {
+        "bytes": 89,
+        "sha256": "c0162f39bf47283253f2f88545370fc60294a7efd23d0667595c39111fc7cc28"
+      },
+      "release-held.json": {
+        "bytes": 1568,
+        "sha256": "6d945c92df237368c0d034c863843e92a85bb6dcd1d6edc69802c00410cbf01a"
+      },
+      "release-held.log": {
+        "bytes": 99,
+        "sha256": "020db2f257aea3ffd5ecad3d3ed575da25d8f24ada8b01ba3459e4d8be0785fa"
+      },
+      "release-profile.log": {
+        "bytes": 39733,
+        "sha256": "3273762890b955015df5732e17f602037e20060dbd096a861af87fd0170cccfe"
+      },
+      "release-integrity.log": {
+        "bytes": 267,
+        "sha256": "5b99651a845eda6e362367312498c7a43f22b9474bdde781652b69860b0cec68"
+      },
+      "release-static.log": {
+        "bytes": 624,
+        "sha256": "dde74ad26f43a9b8455bc7997aedcf1da0f2e6dd9af206c15bbe411a817ff2db"
+      },
+      "release-counter-symbols.txt": {
+        "bytes": 237,
+        "sha256": "a9fb8c70509f687797892b42d12c824b5e2b91851edc5d440db18728db671d8e"
+      },
+      "shared-product-build.log": {
+        "bytes": 1094,
+        "sha256": "baa871b123734d444ade70933a3bfcfec249c98bb73c115074faaa72fa17d545"
+      },
+      "shared-product-configure.log": {
+        "bytes": 678,
+        "sha256": "0a105d7dbda98a8962e271d52e9972706a9413cba522e002e4cca1957a2bb122"
+      },
+      "baseline-profile.log": {
+        "bytes": 39736,
+        "sha256": "0b4b00c9a7f5e74d7d6a06e66cd41ecab1ec069584af90f8f09477c4102bf89f"
+      },
+      "baseline-final-source.patch": {
+        "bytes": 34329,
+        "sha256": "71ec2c7bbf4f2c4c4e29da62dca475c0bf57e2efd739b8db4c7c438864b79daa"
+      },
+      "baseline-build.log": {
+        "bytes": 140803,
+        "sha256": "024b475013af4674c4a30b205ffa3c31a6020bb4635a9b9a343a92ac6e3a9dfd"
+      },
+      "baseline-build-retry.log": {
+        "bytes": 6024,
+        "sha256": "3337b1f8f1d93fc88c60564e311c9a802862c44172ae03013630327264d5b675"
+      },
+      "baseline-build-final.log": {
+        "bytes": 140554,
+        "sha256": "3bf8c1b926148c0251d5e109019508731a90b298970e5d50b32e97892d437de2"
+      },
+      "baseline-build-visibility.log": {
+        "bytes": 16459,
+        "sha256": "02f61b74eaea1a402f3e4af8b7ecc9bf80d9cd25e54841f7d2a9f00d6dd064e7"
+      },
+      "baseline-method-cpp.log": {
+        "bytes": 135794,
+        "sha256": "fbe743d77eb1118f10e839f07c11743bc5f9857e9ef12f595e9b019da57989d9"
+      },
+      "baseline-ctest.log": {
+        "bytes": 133792,
+        "sha256": "0a60882c0028d850c8a97c3cb01ccc0aa9275c0a644f6b88e0bcb90e5342102b"
+      },
+      "bag-visibility-reproducer.json": {
+        "bytes": 520,
+        "sha256": "5f048158a7b72badd0fa295fa068abf1b763036ea506d6e0c2553b307dcdbcab"
+      },
+      "bag-producer.cpp": {
+        "bytes": 140,
+        "sha256": "337fab55bad2eb1d6a3756eca6d4effdfd9b32c2cd437589e82e40a4f3aa72d8"
+      },
+      "bag-consumer.cpp": {
+        "bytes": 252,
+        "sha256": "aa1f75c88600dbab29729748f91d82684300a5aa51d5155009c3af56b9f01237"
+      },
+      "witness-race-before.log": {
+        "bytes": 4847,
+        "sha256": "e170fa3c2a6ef9d354d9e10249262c54136def06a53a39fd3cdb4eecb4e5392f"
+      },
+      "option-identity-after.log": {
+        "bytes": 234,
+        "sha256": "9c631c4a9ab3151c379835aabb2f64b024e4f03c62fedf94cab5931c0c5f022b"
+      },
+      "dependency-checkout.log": {
+        "bytes": 1341,
+        "sha256": "508f0137851a1989972c57331e8897d93e1912c20326e1ecac271d44043c4085"
+      },
+      "dependency-checkout-retry.log": {
+        "bytes": 346,
+        "sha256": "38244990aa633e5cf3d48400a26342a57047f8e9029a9245b9584b612ef44335"
+      },
+      "reconfigure-incremental.json": {
+        "bytes": 186,
+        "sha256": "66390a0b712d2375582d2772198c226a273a6c55967d6ee6366b0c663de08d06"
+      },
+      "evidence-audit.json": {
+        "bytes": 2485,
+        "sha256": "25d69390a68eb098d5cc9230b706f38f8fa455489fe778db08cb2e716bfe990e"
+      },
+      "analyze_results.py": {
+        "bytes": 2282,
+        "sha256": "6f57d45f9d2ecd1f923f9aafc4ac7218083f06c2272f1a65f39a50a2c651e757"
+      },
+      "measure_memory.py": {
+        "bytes": 1523,
+        "sha256": "d9b5dc20184b11ab4fe07671ecace672d7f8ba2eae49ea0a2772a561cf5925e8"
+      },
+      "memory-launch.py": {
+        "bytes": 629,
+        "sha256": "3e4687c4b49fe4eafb3bafa86032699322aa9ac08b68f2e64c31da95b7fc56e6"
+      },
+      "memory-summary.json": {
+        "bytes": 2221,
+        "sha256": "c77ff7ef030c943f34f1146a229fa1dd609cb1161584bb86a0b745dfeb612e05"
+      },
+      "memory-run.log": {
+        "bytes": 322,
+        "sha256": "e75b9154fd0525f1a0ae7751650054c33d552a5c5b9884c8f72b0c0fa75435a6"
+      },
+      "analysis-selftest.json": {
+        "bytes": 164,
+        "sha256": "f60e67a0f11ecf36b93aefc42494b190567be118568b3b098572b3d5586377eb"
+      },
+      "baseline-500.json": {
+        "bytes": 67043,
+        "sha256": "518227910e92d7580406803681c77bc2e1d6ea2e05466dbf6f960c593a3a848a"
+      },
+      "baseline-500-plan.json": {
+        "bytes": 3948,
+        "sha256": "388bb4d60e1d7b4ab897cf7443a2196729fdab8828395c40adfe62a4a3d3529d"
+      },
+      "baseline-500.log": {
+        "bytes": 5918,
+        "sha256": "aa2329a48f890302bdef20599965e92cb5f09ad3db08a97652465030d15b7f5e"
+      },
+      "pilot-500.json": {
+        "bytes": 66954,
+        "sha256": "937d3ff90bf004ed67f81a4776cf7c8dff346b1db5fbb4484adbd771618d9289"
+      },
+      "pilot-500-plan.json": {
+        "bytes": 3948,
+        "sha256": "bd6b0ea042a11bca966ff7d08da6e044589378732d98d4e346f7eeb7707c6166"
+      },
+      "pilot-500.log": {
+        "bytes": 5838,
+        "sha256": "fbb82409b3aa132cdf4f4270dffa3bc79551574fa9cc60486b7e95c151c2b48d"
+      },
+      "release-500.json": {
+        "bytes": 66941,
+        "sha256": "491f26443d198b13fb2ca4a738098fd9240d3fcd828e71cff5f72679cedcb2ee"
+      },
+      "release-500-plan.json": {
+        "bytes": 3948,
+        "sha256": "fb8bad4de6f9811c7fcde5427837c24ef56ded023dae059231366eef12ee0768"
+      },
+      "release-500.log": {
+        "bytes": 5821,
+        "sha256": "d89e16edfebb027f9b9ea076a42597b49c2ef94695330eb34559e064070749ef"
+      },
+      "baseline-5000.json": {
+        "bytes": 67207,
+        "sha256": "cdf17a2d025d2b67f090479284a19d947d609e8453a269978add2fe3fc973abc"
+      },
+      "baseline-5000-plan.json": {
+        "bytes": 3950,
+        "sha256": "c5ef1f4ffba9526fc76d836c103d36c2aa792fca8ed87042458a511e501c156a"
+      },
+      "baseline-5000.log": {
+        "bytes": 5880,
+        "sha256": "b3c51c6fe3e9de98320b47abc37083bc3024fce02840edd2219f6074caf4e25b"
+      },
+      "pilot-5000.json": {
+        "bytes": 67213,
+        "sha256": "6ca27622eab6fc6c5ca4f097b9abef43ba079ad8aa83f0d58e763b8abbe9b35a"
+      },
+      "pilot-5000-plan.json": {
+        "bytes": 3950,
+        "sha256": "8ac748a124b1e251da1565a10f1e49cdbca7e7a1bdefadf8b329247ed6bbf655"
+      },
+      "pilot-5000.log": {
+        "bytes": 5901,
+        "sha256": "6a82235ad8d0a09d97ee6239420ac8d62ce52bcbdb4e603869df5378a1c22089"
+      },
+      "release-5000.json": {
+        "bytes": 986424,
+        "sha256": "1aa6c20dc662c70a3a707c23c690992cb5759a1016b709443924b98feb3ac511"
+      },
+      "release-5000-plan.json": {
+        "bytes": 35478,
+        "sha256": "67a307a8df329eb1a77e2401ae48cf9190de9b0154241181ae422d2af6c81e9a"
+      },
+      "release-5000.log": {
+        "bytes": 6148,
+        "sha256": "6a4fde55b98bfeb98f2047fb8cf7813dcf6dad7f0171352cbfb3b3bb1d4e457a"
+      },
+      "baseline-10000.json": {
+        "bytes": 67347,
+        "sha256": "11b53f7e2693c66553ad71ff8f95c509822a14bd1dff26d13099e7c4f6e86941"
+      },
+      "baseline-10000-plan.json": {
+        "bytes": 3952,
+        "sha256": "1c87ab22b86511afad3b64930efae31a095bd0ebfe0c9d675cc67d6694208887"
+      },
+      "baseline-10000.log": {
+        "bytes": 5907,
+        "sha256": "bd30c1f12d6c69219813330e1a71b2d1c4396589d134a1e09cfe9fe5d06060a2"
+      },
+      "pilot-10000.json": {
+        "bytes": 67277,
+        "sha256": "2b23b4c1232c14bd3c33e04fb11e01a30cb523364da8fa81d6a63779e0a50e8f"
+      },
+      "pilot-10000-plan.json": {
+        "bytes": 3952,
+        "sha256": "926b3d3464530f3451978480d7366bc7a2fc3a9c9f60da274789888037661997"
+      },
+      "pilot-10000.log": {
+        "bytes": 5922,
+        "sha256": "d092f17a1bf9e6e8cf6385cadcc9251e744ad3c01a6eec652613174d8d04e06a"
+      },
+      "release-10000.json": {
+        "bytes": 988071,
+        "sha256": "03c5b2be36ba967753c4e3ba45977abd1acb5680a3b9689e8c7017eb1d6a1c86"
+      },
+      "release-10000-plan.json": {
+        "bytes": 35480,
+        "sha256": "0dfd960b47946d581c33a3b1b340729f812607f82a8a898f21520ab5893f4a10"
+      },
+      "release-10000.log": {
+        "bytes": 6208,
+        "sha256": "97149e6839140dc701b9beaace39b8adc498b47ed35d7d74d1f1921f0d3a1254"
+      },
+      "release-5000-paired.json": {
+        "bytes": 3497,
+        "sha256": "1c3d06c72af98e24f7547ee51ae8132102011602bf7a23fc1faa977abb0aaf42"
+      },
+      "release-10000-paired.json": {
+        "bytes": 3503,
+        "sha256": "0247479cc630ebe4da8d1bcfab543045a25c73c13b97b489440300bec1dbd4d3"
+      },
+      "memory-10000-completion-method.json": {
+        "bytes": 130,
+        "sha256": "e718658ae5b678f707b359472f00a6f59440d31b24c38d7462be51b87cd97ad5"
+      },
+      "memory-10000-completion-native.json": {
+        "bytes": 142,
+        "sha256": "165d40338ee388c0c85f5ed388ece1e21a333abda138dcd2a99b5eed454330e7"
+      },
+      "memory-10000-definition-method.json": {
+        "bytes": 141,
+        "sha256": "9128223933f36744944e98f74e63acdeabf490c5979c16184a00c8fd2664fd1e"
+      },
+      "memory-10000-definition-native.json": {
+        "bytes": 142,
+        "sha256": "0fe94a2ec9c482d1f6dc6c45996ea078c3546bbab611fcaa3873c4f1a7ac321a"
+      },
+      "memory-5000-completion-method.json": {
+        "bytes": 142,
+        "sha256": "3ef2813421bc6c8e460562a34f89d9af75cb84ae5de6990a5a9a568b94f5a801"
+      },
+      "memory-5000-completion-native.json": {
+        "bytes": 152,
+        "sha256": "067c91512661c62156cedd6b0f9fde952261131a47ef1296230a8a4c31a2a26f"
+      },
+      "memory-5000-definition-method.json": {
+        "bytes": 142,
+        "sha256": "1305b8461d71a24dd4d07b6c61af74479728dbde27445bd59ea0c28f4d1ace51"
+      },
+      "memory-5000-definition-native.json": {
+        "bytes": 152,
+        "sha256": "bd1540339762fd9cef4d99cc12151a6a14e9ca13457d8807d085041171b05a93"
+      }
+    },
+    "excluded": "handoff.md, local session notes, binaries, objects and redundant intermediate oracle payloads; user handoff remains untracked outside repository"
+  }
+}

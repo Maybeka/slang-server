@@ -1,6 +1,53 @@
-# Linux validation records
+# Validation records
 
-The current capability acceptance is in [capability-acceptance.md](capability-acceptance.md),
+The macOS follow-up is recorded in [macos-2026-10-19.json](macos-2026-10-19.json).
+It covers the identity-index and immutable-DTO changes, the source-witness race
+regression, full static-SDK Mac acceptance and balanced multi-include timing.
+Its platform, binary and fixture limits are separate from the Linux records below.
+
+## macOS 2026-10-19 follow-up
+
+Product commit `719359b` passed CTest 609/609 (including SDK unit, tidy and
+regressions), Python 14/14 with no skips, transport 35/35, and the 10,000-class
+full native oracle, parser counts and held-diagnostic checks. The ordinary
+binary hash, exact commands, environment, raw archive and paired block analysis
+are in [the report](macos-2026-10-19.json). New code has not been rerun on Linux.
+
+The table gives medians in ms, **native / method**, n=100 per arm/query/step.
+Each nine-response sum is computed within a run and includes the first
+certificate and ninth native fallback. Whole sequence additionally includes
+versioned diagnostic waits. Two scales together contain 800 fresh processes
+and 7,200 successful timed requests; no timeout, cancellation, crash or error.
+
+| Classes / query | First response | All nine response latencies | Whole sequence with diagnostics |
+|---|---:|---:|---:|
+| 5,000 / completion | 15.385 / 45.122 | 132.515 / 113.318 | 854.448 / 856.734 |
+| 5,000 / definition | 14.991 / 44.404 | 128.930 / 112.365 | 847.070 / 847.784 |
+| 10,000 / completion | 29.686 / 83.197 | 235.871 / 189.332 | 1098.016 / 1073.928 |
+| 10,000 / definition | 29.557 / 83.242 | 234.409 / 188.190 | 1097.253 / 1074.200 |
+
+Nine-response median sums are 13–20% lower in these two synthetic fixtures.
+Paired balanced-block mean savings have positive exploratory 95% bootstrap
+intervals for both queries at both scales (50 blocks each). These intervals
+refer to paired mean differences, not to the medians above or a tail bound.
+At 5,000 classes the whole-sequence medians are effectively unchanged;
+at 10,000 classes they improve only about 2%. First responses and fallback
+remain slower. The separate 500-class n=6 experiment has no net response-sum
+gain. Separate n=1 child-RSS observations are higher for the method arm; these
+are not aggregate simultaneous parent/worker/client memory measurements.
+Both experimental flags remain default off. A fixed seven-edge include graph
+with synthetic classes is not production UVM or arbitrary large-graph evidence.
+
+The first-edit hotspot was per-item repeated scope scanning. The implementation
+now indexes identities once and shares immutable outer completion values across
+edits, replacing all method-owned values before publication. It also rejects
+inconsistent repeated disk witnesses; the new deterministic race failed before
+the fix and passes afterward. Raw before/pilot samples remain separate and do
+not establish a paired binary-version speedup or a Linux comparison.
+
+## Earlier Linux records
+
+The October 18 capability acceptance is in [capability-acceptance.md](capability-acceptance.md),
 with executed results in [linux-2026-10-18.json](linux-2026-10-18.json).
 The follow-up [independent clean-checkout report](clean-checkout-2026-10-18.json)
 closes the earlier configuration-only limitation: commit `9dfd335` was actually
@@ -59,7 +106,7 @@ including `SLANG_SERVER_INCLUDE_SDK_TESTS=ON`, for new environments.
 commit may contain the report and additional executed test drivers. No historical
 pass or performance sample is included as a current result.
 
-The method experiment remains default off. Its synthetic Linux measurement had slower medians
+The method experiment remains default off. The October 17 synthetic Linux measurement had slower medians
 at every recorded step for completion and definition. The first edit and
 the ninth-edit native fallback are recorded separately from edits 2–8. Each arm
 has six samples per step; this is not production or UVM performance evidence.

@@ -26,7 +26,9 @@ certificate. Unknown cases take the native path.
 Every include edge, root and source buffer is accounted for. Repeated unrelated
 headers are allowed, but recursive physical paths, system includes and unexplained
 buffers are rejected. Non-editor source bytes must match the captured parse at
-certification, and every frozen source/lookup is checked again before reuse.
+certification, repeated observations of the same disk path must agree, and every
+frozen source/lookup is checked again before reuse. A later lookup cannot replace
+a source witness that was already compared with the parsed bytes.
 An external dependency edit invalidates reuse even without a watcher notification.
 Equal-length local declaration renames together with all references are supported;
 function signatures, variable-length renames and added/removed locals remain outside
@@ -44,7 +46,12 @@ current source snapshot in the isolated worker.
 
 The source manager and AST for a mini compilation have a separate lifetime.
 Preparation retains completion values and source witnesses, rather than base
-AST or symbol pointers. Cancellation discards an unpublished candidate; editor
+AST or symbol pointers. A constructor-local symbol identity index avoids scanning
+all visible scopes again for each completion item. Completion ordering still
+comes from the native queries. Accepted generations share immutable outer DTO
+values and allocate new method-owned DTOs before publication; they do not share
+mini-compilation symbols or ASTs. Copying the pointer arrays, scanning slots and
+validating full source witnesses still scale with the certified environment. Cancellation discards an unpublished candidate; editor
 text synchronization still occurs exactly once. Once synchronization starts,
 an exception cannot replay the same incremental range.
 
@@ -53,15 +60,26 @@ an exception cannot replay the same incremental range.
 `tests/method_scope/check.py` compares full ordered JSON against native queries,
 including binding changes and source-generation checks. `tests/cpp/MethodScopeOverlayTests.cpp`
 checks cancellation, publication failure, fallback, and lifecycle invalidation.
-On Linux, `slang_server_counted` wraps the parser entry point for count evidence;
-it must never supply performance samples. The ordinary `slang-server` executable
-has no parser wrapper.
+On Linux, `slang_server_counted` wraps the parser entry point for count evidence.
+On macOS with a static SDK, it compiles an instrumented generated copy of the
+parser translation unit ahead of the SDK archive, without changing SDK sources
+or ordinary objects. Neither counted executable may supply performance samples.
+The ordinary `slang-server` executable has no parser counter definition.
+
+`server_unittests "[.method-profile]"` explicitly runs a phase observer at 500,
+5,000 and 10,000 classes (three samples each). This attributes mechanism costs
+and adds observer work during syntax traversal; its times are not the LSP metric.
 
 `tests/method_scope/benchmark.py` records a plan before measurement and applies
 one framing/timestamp protocol to both arms of the same ordinary binary. It
 reports completion and definition separately, keeps cold preparation, whole
 sequence and diagnostic waits separate, and reports the ninth edit separately
-from the eight accepted edits. Measurements from another build are not current
+from the eight accepted edits. Use `--classes` when recording a plan to bind a
+new scale; replay uses that saved scale. The oracle and count drivers accept the
+same option. `interactiveSumMs` sums all nine response latencies, including
+certification and fallback. `sequenceMs` also includes diagnostic waits. An
+empirical p95 is shown only with at least 100 successful samples in a cell and
+is not a confidence interval or a production tail guarantee. Measurements from another build are not current
 validation. This experiment does not establish general responsiveness gains or
 UVM support.
 
@@ -76,3 +94,16 @@ showed lower medians for accepted edits 2–8 and higher medians for first-edit
 certification and ninth-edit fallback (n=6 per arm per step). This is a separate
 synthetic experiment, not a historical F1/F2 reproduction or UVM result. See
 [the current validation record](https://github.com/Maybeka/slang-server/blob/main/validation/linux-2026-10-18.json).
+
+
+The 2026-10-19 macOS follow-up removes the per-item repeated scope scan and
+shares immutable completion DTO values across accepted edits. Its 5,000- and
+10,000-class fixtures use 100 samples per arm/query/step, balanced by block.
+Nine-response median sums (including first certification and ninth fallback)
+are 13–20% lower; first responses and fallback remain slower than native.
+The 5,000-class diagnostic-including sequence is essentially unchanged; the
+10,000-class sequence improves about 2%. Separate one-observation-per-case RSS
+measurements are higher in the method arm. The small 500-class fixture still
+has no net response-sum gain. See [the Mac report](../../validation/macos-2026-10-19.json)
+for empirical p95, paired mean intervals, exact hashes and platform limits.
+This remains a restricted synthetic result and the experiment stays default off.
