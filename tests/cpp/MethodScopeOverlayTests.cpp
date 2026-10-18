@@ -271,3 +271,54 @@ TEST_CASE("Method overlay refuses shadowing macro and repeated include environme
         }
     }
 }
+
+TEST_CASE("Method overlay certifies sibling nested and repeated unrelated includes",
+          "[method-overlay]") {
+    Workspace workspace;
+    workspace.write("sibling.svh", "class Sibling; int field; endclass\n");
+    workspace.write("nested.svh", "`include \"sibling.svh\"\n");
+    workspace.write("owner.sv", "package owner;\n`include \"nested.svh\"\n"
+                                "`include \"item.svh\"\nendpackage\n"
+                                "package another;\n`include \"sibling.svh\"\nendpackage\n");
+    ServerHarness server(workspace.params());
+    auto document = server.openFile("item.svh", header);
+    document.doc->getAnalysis();
+    change(server, document.m_uri, 2, edited());
+    REQUIRE(state(server).active);
+    // Every dependency byte is a witness, even if no watcher event arrives.
+    workspace.write("sibling.svh", "class Sibling; int other; endclass\n");
+    change(server, document.m_uri, 3, header);
+    CHECK_FALSE(state(server).active);
+    CHECK(document.doc->getVersion() == 3);
+    CHECK(document.doc->getText() == header + '\0');
+}
+
+TEST_CASE("Method overlay certifies same length local declaration renames", "[method-overlay]") {
+    Workspace workspace;
+    ServerHarness server(workspace.params());
+    auto document = server.openFile("item.svh", header);
+    document.doc->getAnalysis();
+    auto text = header;
+    for (size_t at = 0; (at = text.find("local_0", at)) != std::string::npos; at += 7)
+        text.replace(at, 7, "value_0");
+    change(server, document.m_uri, 2, text);
+    REQUIRE(state(server).active);
+    CHECK(state(server).accepted == 1);
+    CHECK(document.doc->getText() == text + '\0');
+}
+
+TEST_CASE("Method overlay refuses dependency changes before certification", "[method-overlay]") {
+    Workspace workspace;
+    workspace.write("sibling.svh", "class Sibling; int field; endclass\n");
+    workspace.write("owner.sv", "package owner;\n`include \"sibling.svh\"\n"
+                                "`include \"item.svh\"\nendpackage\n");
+    ServerHarness server(workspace.params());
+    auto document = server.openFile("item.svh", header);
+    document.doc->getAnalysis();
+    workspace.write("sibling.svh", "class Sibling; int other; endclass\n");
+    change(server, document.m_uri, 2, edited());
+    auto status = state(server);
+    CHECK_FALSE(status.active);
+    CHECK(status.decline == "source changed before certification");
+    CHECK(document.doc->getText() == edited() + '\0');
+}

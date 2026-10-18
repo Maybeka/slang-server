@@ -1,6 +1,6 @@
 """Strict native oracle for the default-off closed-method experiment.
 
-Run with --binary and optionally --counted-binary. Every run creates fresh
+Run with --binary. Every run creates fresh
 processes over one absolute fixture directory. Buffer identity is normalized
 only when the server test command proves the URI and current source generation.
 """
@@ -18,7 +18,7 @@ from fixture import HEADER, change, open_document, position, prepare, query
 from protocol import Client
 
 
-def normalize(value, state, uri):
+def normalize(value, state, uri, expected_text=None):
     value = copy.deepcopy(value)
     sources = {d["buffer"]: d for d in state["sources"]}
     documents = {d["uri"]: d for d in state["documents"]}
@@ -33,8 +33,12 @@ def normalize(value, state, uri):
                 if witness["uri"] in documents:
                     assert witness["uri"] == uri
                     version = documents[uri]["version"]
-                    expected = edited(version - 1) if version > 1 else HEADER
-                    if version == 10:
+                    expected = (
+                        expected_text
+                        if expected_text is not None
+                        else (edited(version - 1) if version > 1 else HEADER)
+                    )
+                    if version == 10 and expected_text is None:
                         expected = expected.replace("alpha * bravo", "alpha + bravo")
                 else:
                     expected = source_path.read_text()
@@ -120,7 +124,7 @@ def sequence(binary, root, enabled, resolve_all=False, steps=9):
                 }
             )
             references = []
-            body = text.index(" = ")
+            body = text.index("int local_0 =") + len("int local_0 =")
             for match in re.finditer(r"\b(alpha|bravo|charl|local_[01])\b", text):
                 if match.start() < body or text[match.end() :].lstrip().startswith("="):
                     continue
@@ -166,6 +170,63 @@ def sequence(binary, root, enabled, resolve_all=False, steps=9):
         client.close()
 
 
+def focused(binary, root, enabled, scenario):
+    """Real first/middle/last method selection and declaration+all-use rename."""
+    uri = prepare(root, enabled)
+    client = Client(binary, root)
+    try:
+        open_document(client, uri)
+        old_items = client.request("textDocument/completion", query(uri, HEADER))[0]
+        old_locals = [i for i in old_items if i["label"] in ("local_0", "local_1")]
+        text = HEADER
+        if scenario == "rename":
+            text = text.replace("local_0", "value_0").replace("local_1", "value_1")
+            needle, names = "value_1 +", ("value_0", "value_1")
+        else:
+            prefix, arg = (
+                ("early", "other") if scenario == "earlier" else ("later", "extra")
+            )
+            text = text.replace(prefix + "_1 + " + arg, prefix + "_0 + " + arg)
+            needle, names = prefix + "_0 +", (prefix + "_0", prefix + "_1")
+        params = query(uri, text, needle)
+        links = client.request(
+            "textDocument/definition", params, [change(uri, 2, text)]
+        )[0]
+        name = needle.split()[0]
+        at = text.index(name + " =")
+        target = {"start": position(text, at), "end": position(text, at + len(name))}
+        assert links == [
+            {"targetUri": uri, "targetRange": target, "targetSelectionRange": target}
+        ]
+        items = client.request("textDocument/completion", params)[0]
+        current = client.state()
+        if enabled:
+            assert (
+                current["active"]
+                and current["accepted"] == 1
+                and current["version"] == 2
+            ), current
+        canonical = normalize(items, current, uri, text)
+        selected = [i for i in items if i["label"] in names]
+        assert len(selected) == 2
+        resolved = [client.request("completionItem/resolve", i)[0] for i in selected]
+        resolved = normalize(resolved, client.state(), uri, text)
+        if scenario == "rename":
+            assert not any(i["label"] in ("local_0", "local_1") for i in items)
+            for old in old_locals:
+                stale = client.request("completionItem/resolve", old)[0]
+                assert "documentation" not in stale, stale
+        return {
+            "scenario": scenario,
+            "definition": links,
+            "items": canonical,
+            "resolvedLocals": resolved,
+            "oldRenamedHandlesUnresolved": scenario == "rename",
+        }
+    finally:
+        client.close()
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--binary", type=Path, required=True)
@@ -187,9 +248,20 @@ def main():
         all_native = sequence(binary, root, False, True, 1)
         all_overlay = sequence(binary, root, True, True, 1)
         assert all_native["rows"][-1]["resolved"] == all_overlay["rows"][-1]["resolved"]
+        focused_rows = []
+        for scenario in ("rename", "earlier", "later"):
+            left = focused(binary, root, False, scenario)
+            right = focused(binary, root, True, scenario)
+            assert left == right, scenario
+            focused_rows.append(right)
         args.output.write_text(
             json.dumps(
-                {"native": native, "overlay": overlay, "allResolved": all_overlay},
+                {
+                    "native": native,
+                    "overlay": overlay,
+                    "allResolved": all_overlay,
+                    "focused": focused_rows,
+                },
                 indent=2,
             )
             + "\n"

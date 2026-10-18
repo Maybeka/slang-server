@@ -10,6 +10,10 @@ Install from your editor, or download from the [OpenVSX Marketplace](https://ope
 
 ### Neovim
 
+For this fork's reviewed binary, use the explicit
+[LazyVim fork configuration](../editors/lazyvim-fork.md). The generic Mason
+installation below obtains the upstream package and does not select this fork.
+
 `slang-server` is available in [nvim-lspconfig](https://github.com/neovim/nvim-lspconfig) as `slang_server` (note the underscore) and in the [mason.nvim](https://github.com/mason-org/mason.nvim) package registry as `slang-server`, so no additional configuration is required in most cases. The default configuration shipped with nvim-lspconfig can be found [here](https://github.com/neovim/nvim-lspconfig/blob/master/lsp/slang_server.lua).
 
 Install the binary via `:MasonInstall slang-server` (or otherwise place it on `PATH`), then enable the server with `vim.lsp.enable("slang_server")`, or follow your own Neovim configuration's convention for enabling servers.

@@ -77,13 +77,64 @@ def main():
                 before = after_query
         finally:
             client.close()
+        fallbacks = []
+        for reason in ("dependency-bytes", "repeated-target"):
+            uri = prepare(root, True)
+            if reason == "repeated-target":
+                owner = root / "owner.sv"
+                owner.write_text(
+                    owner.read_text()
+                    + '\npackage another;\n`include "item.svh"\nendpackage\n'
+                )
+            log.unlink(missing_ok=True)
+            client = Client(
+                args.binary.resolve(), root, {"SLANG_SERVER_PARSE_COUNT_LOG": str(log)}
+            )
+            try:
+                open_document(client, uri)
+                if reason == "dependency-bytes":
+                    client.request(
+                        "textDocument/definition",
+                        query(uri, edited(1), "local_0 +"),
+                        [change(uri, 2, edited(1))],
+                    )
+                    assert client.state()["active"]
+                    sibling = root / "classes_0.svh"
+                    sibling.write_text(
+                        sibling.read_text() + "\n// external edit, no watcher\n"
+                    )
+                before = counts()
+                client.request(
+                    "textDocument/definition",
+                    query(uri, edited(2), "local_1 +"),
+                    [change(uri, 3, edited(2))],
+                )
+                delta = counts() - before
+                status = client.state()
+                assert not status["active"] and delta["other"] >= 1, (
+                    reason,
+                    delta,
+                    status["decline"],
+                )
+                fallbacks.append(
+                    {
+                        "reason": reason,
+                        "parentDelta": dict(delta),
+                        "active": status["active"],
+                        "decline": status["decline"],
+                    }
+                )
+            finally:
+                client.close()
         args.output.write_text(
             json.dumps(
                 {
                     "schema": 1,
                     "observations": evidence,
+                    "fallbacks": fallbacks,
                     "note": "mini-shape is the exact single-package/single-class/single-method fixture shape; "
-                    "the native fixture has three source roots. Private diagnostic children are excluded by PID.",
+                    "the native fixture has three source roots, 500 sibling classes and seven include edges. "
+                    "Private diagnostic children are excluded by PID.",
                 },
                 indent=2,
             )

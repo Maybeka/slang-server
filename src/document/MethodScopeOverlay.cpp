@@ -244,16 +244,36 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
          "ordered recipe mismatch");
     auto tree = unit->getSyntaxTree(ctx);
     auto& pp = tree->getPreprocessorMetadata();
-    need(pp.includeDirectives.size() == 1 && pp.sourceBufferIds.size() == roots.size() + 1 &&
+    need(pp.sourceBufferIds.size() == roots.size() + pp.includeDirectives.size() &&
              pp.macroRefs.empty() && pp.predefineBufferIds.empty() && !tree->getSourceLibrary() &&
              !tree->isLibraryUnit,
-         "one include, no user macro environment");
+         "complete include graph without user macro environment");
     for (auto* macro : pp.definedMacros)
         need(macro->name.location() == SourceLocation::NoLocation, "user macro definition");
-    const auto& inclusion = pp.includeDirectives.front();
-    auto occurrence = inclusion.buffer.id;
-    need(!inclusion.isSystem && URI::fromFile(d.sm.getFullPath(occurrence)) == uri,
-         "unique included target");
+    // Certify every occurrence, not just the edited header. Each non-root buffer
+    // must have exactly one literal include edge and reach a configured root.
+    // Repeated physical files are allowed outside the target, but recursive
+    // physical paths and unexplained preprocessing inputs are not.
+    std::set<BufferID> buffers(pp.sourceBufferIds.begin(), pp.sourceBufferIds.end());
+    need(buffers.size() == pp.sourceBufferIds.size(), "duplicate source buffer identity");
+    std::map<BufferID, BufferID> parents;
+    std::map<BufferID, std::vector<std::pair<size_t, size_t>>> directives;
+    BufferID occurrence;
+    for (const auto& include : pp.includeDirectives) {
+        need(include.syntax && include.buffer && !include.isSystem, "unsupported include");
+        auto range = include.syntax->sourceRange();
+        auto parent = range.start().buffer();
+        auto child = include.buffer.id;
+        need(buffers.contains(parent) && buffers.contains(child) &&
+                 range.end().buffer() == parent && parents.emplace(child, parent).second,
+             "ambiguous include graph");
+        directives[parent].emplace_back(range.start().offset(), range.end().offset());
+        if (URI::fromFile(d.sm.getFullPath(child)) == uri) {
+            need(!occurrence.valid(), "repeated target include");
+            occurrence = child;
+        }
+    }
+    need(occurrence.valid(), "target must be included");
     need(std::count_if(pp.sourceBufferIds.begin(), pp.sourceBufferIds.end(),
                        [&](auto id) {
                            return d.sm.getFullPath(id) == d.sm.getFullPath(occurrence);
@@ -266,12 +286,31 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
          "preprocessor override");
     for (auto id : pp.sourceBufferIds) {
         std::string bytes(d.sm.getSourceText(id));
-        auto includeRange = inclusion.syntax->sourceRange();
-        if (includeRange.start().buffer() == id)
-            bytes.erase(includeRange.start().offset(),
-                        includeRange.end().offset() - includeRange.start().offset());
+        auto& ranges = directives[id];
+        std::sort(ranges.begin(), ranges.end());
+        size_t previousEnd = 0;
+        for (auto [begin, end] : ranges) {
+            need(begin >= previousEnd && begin < end && end <= bytes.size(),
+                 "invalid include directive range");
+            std::fill(bytes.begin() + begin, bytes.begin() + end, ' ');
+            previousEnd = end;
+        }
         need(bytes.find('`') == std::string::npos, "other directive");
+        std::set<fs::path> ancestors;
+        auto current = id;
+        while (true) {
+            need(ancestors.insert(d.sm.getFullPath(current)).second, "recursive include graph");
+            auto parent = parents.find(current);
+            if (parent == parents.end())
+                break;
+            current = parent->second;
+        }
     }
+    std::multiset<fs::path> actualRoots, expectedRoots(roots.begin(), roots.end());
+    for (auto id : buffers)
+        if (!parents.contains(id))
+            actualRoots.insert(d.sm.getFullPath(id));
+    need(actualRoots == expectedRoots, "include graph root mismatch");
     auto document = d.getDocument(uri);
     auto graph = document->getAnalysisInputs(ctx);
     need(graph.tree == tree && graph.buffer == occurrence && graph.trees.size() == 1,
@@ -456,7 +495,15 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
         }
     for (auto& file : frozen.input->sources.files) {
         need(!file.generated, "generated input");
-        disk[file.fullPath] = read(file.fullPath);
+        auto bytes = read(file.fullPath);
+        if (URI::fromFile(file.fullPath) != uri) {
+            need(bool(bytes), "missing source witness");
+            auto source = *bytes;
+            if (source.empty() || source.back() != '\0')
+                source.push_back('\0');
+            need(source == file.bytes, "source changed before certification");
+        }
+        disk[file.fullPath] = std::move(bytes);
     }
     for (auto& lookup : frozen.input->sources.lookups) {
         need(lookup.fileId || lookup.errorValue == int(std::errc::no_such_file_or_directory),

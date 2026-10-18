@@ -156,7 +156,7 @@ def summarize(runs):
 def fixture_hashes(root):
     return {
         name: hashlib.sha256((root / name).read_bytes()).hexdigest()
-        for name in ("design.f", "prelude.sv", "owner.sv", "tail.sv", "item.svh")
+        for name in sorted([p.name for p in root.glob("*.sv*")] + ["design.f"])
     }
 
 
@@ -204,6 +204,7 @@ def main():
             json.dumps(
                 {
                     "schema": 1,
+                    "workload": "500 classes in five headers, one nested include, target class with three methods, two packages and three ordered roots; only target open",
                     "seed": args.seed,
                     "metric": "before pre-encoded batch write to matching complete response-body receipt, before JSON decode",
                     "fixtureSha256": fixture,

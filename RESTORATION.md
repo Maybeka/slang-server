@@ -15,7 +15,12 @@ insufficient. The helper performs no build or runtime validation.
 
 # Historical recovered Linux source baseline
 
-This branch restores the supplied tested Linux fast-CWD candidate onto server
+**Historical provenance only. These commands are not the current main build
+recipe. Use [the complete fork recipe](docs/start/building.md), with
+`prepare-main-sdk.py`, for integrated main. `restore.py` describes a different
+SDK pin and whole-server inventory; do not apply it to integrated main.**
+
+The historical restoration branch restored the Linux fast-CWD candidate onto server
 commit `a85abe34a802816f7dfded6e90d173c69ffc3364`. It is **not** a rebase onto
 current `main`, and it does not merge or replace `main`.
 
@@ -31,7 +36,7 @@ The submodule records upstream Slang commit
 The patch includes the snapshot, macro/workspace-source, compilation-context,
 and CWD-coordination changes present in the archive.
 
-From a fresh clone of this branch:
+Only in a checkout of that historical restoration branch:
 
 ```sh
 git submodule update --init --recursive

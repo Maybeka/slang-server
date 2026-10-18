@@ -26,7 +26,10 @@ cmake --build build -j --target server_unittests
 build/bin/server_unittests
 ```
 
-The `unittests` target is also buildable and runnable, to ensure any temporary upstream commits are also passing slang's test suite.
+Configure with `-DSLANG_SERVER_INCLUDE_SDK_TESTS=ON` to enable SDK unit and tidy
+tests. Build all enabled targets, then run CTest. The complete fork-specific
+SDK, pinned dependency, Python, transport and native-oracle acceptance recipe is
+in [docs/start/building.md](docs/start/building.md).
 
 ## Vscode Testing
 

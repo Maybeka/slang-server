@@ -3,14 +3,22 @@ from pathlib import Path
 
 HEADER = """class Accumulator;
   int marker;
-  function int earlier(input int value); return value; endfunction
+  function int earlier(input int first, input int other);
+    int early_0 = first + other;
+    int early_1 = early_0 * other;
+    return (early_1 + other);
+  endfunction
   function int combine(input int alpha, input int bravo, input int charl);
     int local_0 = alpha + bravo;
     int local_1 = local_0 * charl;
     return (local_1 + charl);
   endfunction
   int tail_field;
-  function int later(input int value); return value; endfunction
+  function int later(input int omega, input int extra);
+    int later_0 = omega + extra;
+    int later_1 = later_0 * extra;
+    return (later_1 + extra);
+  endfunction
 endclass
 """
 
@@ -29,11 +37,24 @@ def prepare(root: Path, enabled: bool, noise=500, header=HEADER):
         )
     )
     (root / "design.f").write_text("+incdir+.\nprelude.sv\nowner.sv\ntail.sv\n")
-    (root / "prelude.sv").write_text("package prelude; int value; endpackage\n")
+    (root / "prelude.sv").write_text(
+        "package prelude; class Prelude; int value; endclass endpackage\n"
+    )
+    # Five independent class headers plus one nested include exercise a complete
+    # multi-header package, rather than inflating a package with scalar fields.
+    for chunk in range(5):
+        (root / f"classes_{chunk}.svh").write_text(
+            "".join(
+                f"class Noise_{i}; int field; function int value(input int arg); "
+                "return arg; endfunction endclass\n"
+                for i in range(chunk, noise, 5)
+            )
+        )
+    (root / "nested.svh").write_text('`include "classes_2.svh"\n')
     (root / "owner.sv").write_text(
-        'package owner;\n`include "item.svh"\n'
-        + "".join(f"int noise_{i};\n" for i in range(noise))
-        + "endpackage\n"
+        'package owner;\n`include "classes_0.svh"\n`include "classes_1.svh"\n'
+        '`include "nested.svh"\n`include "item.svh"\n'
+        '`include "classes_3.svh"\n`include "classes_4.svh"\nendpackage\n'
     )
     (root / "tail.sv").write_text("module tail; int value; endmodule\n")
     (root / "item.svh").write_text(header)

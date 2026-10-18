@@ -2,7 +2,9 @@
 
 `experimentalMethodScopeOverlay` defaults to `false`. It is an experiment for
 package exploration using a literal complete `compilationFilelist`,
-`--single-unit --threads 1`, and one included class header. It preserves the
+`--single-unit --threads 1`, and a uniquely included target class header. Other
+sibling and nested includes are supported when their complete occurrence graph
+reaches the configured roots and contains no unsupported preprocessing. It preserves the
 native full analysis path for unsupported edits and queries.
 
 The first implementation accepts one change per notification, at most eight
@@ -13,13 +15,23 @@ instance function must have explicit scalar `input int` arguments, a scalar
 use those locals and arguments, integer literals, parentheses, unary `+`/`-`,
 and binary `+`/`-`/`*`. A mini compilation verifies the new bindings and types.
 
-Only the target header may be open. Macro environments, repeated includes,
+Only the target header may be open. Macro environments, repeated target includes,
 imports in the containing package, inheritance, local names shadowing enclosing-scope
 members, nonlocal expressions, interface changes, variable-length edits,
 line-layout changes, and local additions/removals are outside this first slice.
 Configuration, command files, source bytes, successful and failed lookups,
 source generations, and index revisions must still match the preparation
 certificate. Unknown cases take the native path.
+
+Every include edge, root and source buffer is accounted for. Repeated unrelated
+headers are allowed, but recursive physical paths, system includes and unexplained
+buffers are rejected. Non-editor source bytes must match the captured parse at
+certification, and every frozen source/lookup is checked again before reuse.
+An external dependency edit invalidates reuse even without a watcher notification.
+Equal-length local declaration renames together with all references are supported;
+function signatures, variable-length renames and added/removed locals remain outside
+the certificate. The first actual changed byte selects the method; there is no
+hard-coded method index.
 
 Completion and definition responses cover current argument/local reference
 sites. Completion preserves the full native item order and field values, using
