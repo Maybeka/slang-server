@@ -70,7 +70,10 @@ private:
     std::unordered_map<URI, DocumentWitness> documents;
     ServerDriver::DiagnosticSnapshot frozen;
     std::unique_ptr<diagnostic_snapshot::ReconstructedOptions> treeOptions, compilationOptions;
-    std::array<std::vector<DTO>, 2> lexical;
+    // Immutable values only: candidates share unchanged interface DTOs while
+    // replacing every method-owned DTO before publication.
+    using DTOList = std::vector<std::shared_ptr<const DTO>>;
+    std::array<DTOList, 2> lexical;
     std::vector<Site> sites;
     std::unique_ptr<slang::SourceManager> miniManager;
     std::shared_ptr<slang::syntax::SyntaxTree> miniTree;

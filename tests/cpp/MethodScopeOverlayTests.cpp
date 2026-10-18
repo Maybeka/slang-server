@@ -27,7 +27,7 @@ struct Workspace {
     std::filesystem::path root, previous = std::filesystem::current_path();
     Workspace() {
         static std::atomic_uint64_t serial{0};
-        root = std::filesystem::temp_directory_path() /
+        root = std::filesystem::canonical(std::filesystem::temp_directory_path()) /
                ("slang-method-" +
                 std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()) + "-" +
                 std::to_string(serial++));
