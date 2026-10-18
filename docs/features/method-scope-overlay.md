@@ -48,10 +48,16 @@ The source manager and AST for a mini compilation have a separate lifetime.
 Preparation retains completion values and source witnesses, rather than base
 AST or symbol pointers. A constructor-local symbol identity index avoids scanning
 all visible scopes again for each completion item. Completion ordering still
-comes from the native queries. Accepted generations share immutable outer DTO
-values and allocate new method-owned DTOs before publication; they do not share
-mini-compilation symbols or ASTs. Copying the pointer arrays, scanning slots and
-validating full source witnesses still scale with the certified environment. Cancellation discards an unpublished candidate; editor
+comes from the native queries. The outer DTO vector remains unchanged after
+certification. Sorted method slot indices select a separate replacement vector,
+so an accepted edit builds and publishes only method-owned completion values;
+it no longer copies or scans the outer DTO array. Resolution retains only the
+fields that native resolution supplies, rather than a second complete item and
+identity JSON. The constructor reserves exact native item capacity and releases
+its temporary symbol index before capturing the diagnostic snapshot. Mini
+compilations do not share symbols or ASTs. Full source witness validation and
+completion response construction still scale with the certified environment.
+Cancellation discards an unpublished candidate; editor
 text synchronization still occurs exactly once. Once synchronization starts,
 an exception cannot replay the same incremental range.
 
@@ -107,3 +113,29 @@ measurements are higher in the method arm. The small 500-class fixture still
 has no net response-sum gain. See [the Mac report](../../validation/macos-2026-10-19.json)
 for empirical p95, paired mean intervals, exact hashes and platform limits.
 This remains a restricted synthetic result and the experiment stays default off.
+
+### External real-project measurements
+
+`tests/method_scope/project_benchmark.py` consumes an existing workspace and a
+scenario JSON containing `files` (relative source/filelist SHA-256 map), `target`,
+`before`, `after`, `query`, and `queryDelta`. It never generates replacement
+classes or edits the source files on disk. The workspace must already contain a
+complete compilation filelist and `.slang/server.json`. The driver alternates
+one exact text replacement for nine edits in fresh native/experimental processes,
+with balanced ABBA/BAAB blocks and a fixed seed. The initial request includes
+`didOpen`; its startup and response metrics differ from the synthetic driver's
+prewarmed first-edit metric. All configured inputs are checked before each run.
+
+Use `--oracle --blocks 1` separately to compare the ordered response, every
+completion resolve, definition, and diagnostics across all ten versions. Physical
+source handles are normalized only with source-byte witnesses. Macro expansion
+handles remain exact opaque values: equality checks native determinism and does
+not establish macro freshness. These oracle runs are excluded from latency
+measurements. An ordinary binary is required. `--blocks 10` gives 20 observations
+per query/arm; empirical p95 is withheld below 100 observations.
+
+Real UVM classes currently use the native fallback, including when the configured
+flags or macro/inheritance environment falls outside the certificate contract.
+Their ninth edit is another fallback observation, not evidence that the eight-edit
+reuse limit was reached. Keep this evidence separate from accepted local-method
+measurements and do not interpret an unchanged fallback as a UVM speedup.

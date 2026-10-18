@@ -42,7 +42,12 @@ public:
 
 private:
     struct DTO {
-        lsp::CompletionItem item, resolved;
+        lsp::CompletionItem item;
+        // Resolution only supplies these fields. Retaining a second complete
+        // CompletionItem duplicates identity JSON and all insertion metadata.
+        decltype(lsp::CompletionItem::documentation) documentation;
+        decltype(lsp::CompletionItem::insertText) insertText;
+        decltype(lsp::CompletionItem::insertTextFormat) insertTextFormat;
         bool methodOwned = false;
         bool changedDocumentation = false;
     };
@@ -70,10 +75,12 @@ private:
     std::unordered_map<URI, DocumentWitness> documents;
     ServerDriver::DiagnosticSnapshot frozen;
     std::unique_ptr<diagnostic_snapshot::ReconstructedOptions> treeOptions, compilationOptions;
-    // Immutable values only: candidates share unchanged interface DTOs while
-    // replacing every method-owned DTO before publication.
-    using DTOList = std::vector<std::shared_ptr<const DTO>>;
+    // Immutable outer values and sparse method slots preserve native order.
+    // Candidates only rebuild method values, independent of outer item count.
+    using DTOList = std::vector<DTO>;
     std::array<DTOList, 2> lexical;
+    std::array<std::vector<size_t>, 2> methodSlots;
+    std::array<DTOList, 2> methodValues;
     std::vector<Site> sites;
     std::unique_ptr<slang::SourceManager> miniManager;
     std::shared_ptr<slang::syntax::SyntaxTree> miniTree;
@@ -82,6 +89,7 @@ private:
     static std::optional<std::string> read(const std::string&);
     static std::string plain(const SlangDoc&);
     static void require(bool, const char*);
+    const DTO& completion(size_t context, size_t index) const;
     const Site* site(const lsp::Position&) const;
     lsp::Range range(size_t begin, size_t end) const;
     lsp::CompletionItem rebase(lsp::CompletionItem) const;

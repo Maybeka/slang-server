@@ -135,3 +135,14 @@ def test_benchmark_rejects_empty_experiments(tmp_path, monkeypatch, option):
         benchmark.main()
     assert error.value.code == 2
     assert not (tmp_path / "plan.json").exists()
+
+
+def test_real_project_oracle_preserves_unknown_macro_handles():
+    from project_benchmark import normalize_project
+
+    item = {"bufferId": 123, "documentUri": "file:///item.svh", "symbolName": "factory"}
+    actual = normalize_project([item], {"sources": []}, "file:///item.svh", "")
+    assert actual == [item]
+    assert actual[0] is not item
+    other = {**item, "bufferId": 124}
+    assert normalize_project([other], {"sources": []}, "file:///item.svh", "") != actual

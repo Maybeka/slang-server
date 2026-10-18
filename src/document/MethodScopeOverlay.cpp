@@ -461,18 +461,21 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
         context.kind = kind ? CompletionContextKind::Expression : CompletionContextKind::Procedural;
         completions::InstanceCompletionQuery::addCompletions(items, d.m_indexer, context);
         Formatting::addCompletions(items, &fn, context.kind, &fn, uri.str(), false, false);
+        lexical[kind].reserve(items.size());
         for (auto& item : items) {
-            DTO dto{item, item};
-            if (item.data) {
-                auto data = rfl::from_generic<Data, rfl::UnderlyingEnums>(*item.data);
+            DTO dto{.item = std::move(item)};
+            lsp::CompletionItem resolved;
+            if (!dto.item.data)
+                resolved = dto.item;
+            if (dto.item.data) {
+                auto data = rfl::from_generic<Data, rfl::UnderlyingEnums>(*dto.item.data);
                 need(bool(data), "completion identity");
                 auto symbol = symbols.find(
                     Identity{data->symbolKind, data->symbolName, data->symbolPath});
                 need(symbol != symbols.end(), "unaccounted completion symbol");
                 const auto* found = symbol->second;
                 dto.methodOwned = found->getParentScope() == &fn;
-                dto.resolved.data.reset();
-                completions::MemberCompletionQuery::resolve(*found, dto.resolved, false);
+                completions::MemberCompletionQuery::resolve(*found, resolved, false);
                 if (!dto.methodOwned && found->getSyntax()) {
                     auto span = found->getSyntax()->sourceRange();
                     dto.changedDocumentation = span.start().buffer() == occurrence &&
@@ -480,13 +483,20 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
                                                span.end().offset() > bodyBegin;
                 }
             }
-            else if (item.kind == lsp::CompletionItemKind::Module) {
-                completions::InstanceCompletionQuery::resolve(*tree, item.label, dto.resolved);
-                need(bool(dto.resolved.documentation), "global module outside frozen tree");
+            else if (dto.item.kind == lsp::CompletionItemKind::Module) {
+                completions::InstanceCompletionQuery::resolve(*tree, dto.item.label, resolved);
+                need(bool(resolved.documentation), "global module outside frozen tree");
             }
-            lexical[kind].push_back(std::make_shared<const DTO>(std::move(dto)));
+            dto.documentation = std::move(resolved.documentation);
+            dto.insertText = std::move(resolved.insertText);
+            dto.insertTextFormat = resolved.insertTextFormat;
+            if (dto.methodOwned)
+                methodSlots[kind].push_back(lexical[kind].size());
+            lexical[kind].push_back(std::move(dto));
         }
     }
+    // No AST-backed lookup is needed while capturing the diagnostic snapshot.
+    symbols.clear();
     ctx.checkpoint("method certificate completions ready");
     treeOptions = std::make_unique<diagnostic_snapshot::ReconstructedOptions>(
         diagnostic_snapshot::captureOptions(tree->options()));
@@ -645,7 +655,7 @@ bool MethodScopeOverlay::apply(const lsp::DidChangeTextDocumentParams& p, const 
     need(currentShape.locals == localCount, "local additions/removals are a later slice");
     verify(fn, outerNames);
     need(compilation.getAllDiagnostics().empty(), "method semantic diagnostics");
-    std::array<DTOList, 2> fresh = lexical;
+    std::array<DTOList, 2> fresh;
     for (size_t kind = 0; kind < 2; ++kind) {
         std::vector<lsp::CompletionItem> items;
         Formatting::addCompletions(items, &fn,
@@ -653,6 +663,7 @@ bool MethodScopeOverlay::apply(const lsp::DidChangeTextDocumentParams& p, const 
                                         : CompletionContextKind::Procedural,
                                    &fn, uri.str(), false, false);
         DTOList owned;
+        owned.reserve(methodSlots[kind].size());
         for (auto& item : items) {
             if (!item.data)
                 continue;
@@ -668,39 +679,37 @@ bool MethodScopeOverlay::apply(const lsp::DidChangeTextDocumentParams& p, const 
                 }
             if (!symbol || symbol->getParentScope() != &fn)
                 continue;
-            DTO dto{item, item, true, false};
-            dto.resolved.data.reset();
-            completions::MemberCompletionQuery::resolve(*symbol, dto.resolved, false);
+            DTO dto{.item = std::move(item), .methodOwned = true};
+            lsp::CompletionItem resolved;
+            completions::MemberCompletionQuery::resolve(*symbol, resolved, false);
+            dto.documentation = std::move(resolved.documentation);
             if (data->offset >= prefix.size() &&
                 data->offset < prefix.size() + functionEnd - functionBegin)
                 data->offset = functionBegin + data->offset - prefix.size();
             else {
                 // `this` denotes the unchanged containing class, outside the method slice.
-                auto it =
-                    std::find_if(lexical[kind].begin(), lexical[kind].end(), [&](const auto& old) {
-                        if (!old->methodOwned || !old->item.data)
+                auto it = std::find_if(
+                    methodSlots[kind].begin(), methodSlots[kind].end(), [&](auto slot) {
+                        const auto& old = lexical[kind][slot];
+                        if (!old.item.data)
                             return false;
                         auto oldData = rfl::from_generic<Data, rfl::UnderlyingEnums>(
-                            *old->item.data);
+                            *old.item.data);
                         return oldData && oldData->symbolName == data->symbolName &&
                                oldData->symbolPath == data->symbolPath &&
                                oldData->symbolKind == data->symbolKind;
                     });
-                need(it != lexical[kind].end(), "mini source outside certified method");
-                data->offset =
-                    rfl::from_generic<Data, rfl::UnderlyingEnums>(*(*it)->item.data)->offset;
+                need(it != methodSlots[kind].end(), "mini source outside certified method");
+                data->offset = rfl::from_generic<Data, rfl::UnderlyingEnums>(
+                                   *lexical[kind][*it].item.data)
+                                   ->offset;
             }
             data->bufferId = originalBuffer;
             dto.item.data = rfl::to_generic<rfl::UnderlyingEnums>(*data);
-            owned.push_back(std::make_shared<const DTO>(std::move(dto)));
+            owned.push_back(std::move(dto));
         }
-        size_t index = 0;
-        for (auto& dto : fresh[kind])
-            if (dto->methodOwned) {
-                need(index < owned.size(), "method member slot mismatch");
-                dto = std::move(owned[index++]);
-            }
-        need(index == owned.size(), "method member coverage mismatch");
+        need(methodSlots[kind].size() == owned.size(), "method member coverage mismatch");
+        fresh[kind] = std::move(owned);
     }
     std::vector<Site> freshSites;
     auto collect = ast::makeVisitor([&](auto&, const ast::NamedValueExpression& value) {
@@ -749,7 +758,7 @@ bool MethodScopeOverlay::apply(const lsp::DidChangeTextDocumentParams& p, const 
     miniManager = std::move(manager);
     miniTree = std::move(tree);
     miniAnalysis = std::move(analysis);
-    lexical = std::move(fresh);
+    methodValues = std::move(fresh);
     sites = std::move(freshSites);
     text = std::move(next);
     version = p.textDocument.version;
@@ -787,6 +796,13 @@ lsp::CompletionItem MethodScopeOverlay::rebase(lsp::CompletionItem item) const {
     }
     return item;
 }
+const MethodScopeOverlay::DTO& MethodScopeOverlay::completion(size_t context, size_t index) const {
+    const auto& slots = methodSlots[context];
+    auto slot = std::lower_bound(slots.begin(), slots.end(), index);
+    if (!methodValues[context].empty() && slot != slots.end() && *slot == index)
+        return methodValues[context][size_t(slot - slots.begin())];
+    return lexical[context][index];
+}
 std::optional<std::vector<lsp::CompletionItem>> MethodScopeOverlay::complete(
     const lsp::CompletionParams& p, const Config& config, const lsp::RequestContext& ctx) const {
     if (!accepted || p.textDocument.uri != uri || !valid(config, ctx) ||
@@ -798,8 +814,8 @@ std::optional<std::vector<lsp::CompletionItem>> MethodScopeOverlay::complete(
     auto edit = completions::MemberCompletionQuery::createLexical(range(where->begin, where->end),
                                                                   false, false);
     std::vector<lsp::CompletionItem> out;
-    for (auto& entry : lexical[where->context]) {
-        const auto& dto = *entry;
+    for (size_t i = 0; i < lexical[where->context].size(); ++i) {
+        const auto& dto = completion(where->context, i);
         if (dto.item.documentation && dto.changedDocumentation)
             return {};
         auto item = rebase(dto.item);
@@ -848,9 +864,9 @@ std::optional<lsp::CompletionItem> MethodScopeOverlay::resolve(
         // their exact frozen identity and must match the complete DTO below.
         if (std::find(handles.begin(), handles.end(), data->bufferId) != handles.end())
             data->bufferId = originalBuffer;
-        for (auto& list : lexical)
-            for (auto& entry : list) {
-                const auto& dto = *entry;
+        for (size_t kind = 0; kind < lexical.size(); ++kind)
+            for (size_t i = 0; i < lexical[kind].size(); ++i) {
+                const auto& dto = completion(kind, i);
                 if (dto.item.data) {
                     auto expected = rfl::from_generic<Data, rfl::UnderlyingEnums>(*dto.item.data);
                     if (expected && *data == *expected && item.label == dto.item.label &&
@@ -859,7 +875,7 @@ std::optional<lsp::CompletionItem> MethodScopeOverlay::resolve(
                             return {};
                         auto out = item;
                         out.data.reset();
-                        out.documentation = dto.resolved.documentation;
+                        out.documentation = dto.documentation;
                         Formatting::updateCompletionEditText(out);
                         ctx.checkpoint("before method resolve response");
                         return out;
@@ -868,16 +884,16 @@ std::optional<lsp::CompletionItem> MethodScopeOverlay::resolve(
             }
     }
     else
-        for (auto& list : lexical)
-            for (auto& entry : list) {
-                const auto& dto = *entry;
+        for (size_t kind = 0; kind < lexical.size(); ++kind)
+            for (size_t i = 0; i < lexical[kind].size(); ++i) {
+                const auto& dto = completion(kind, i);
                 if (!dto.item.data && item.label == dto.item.label && item.kind == dto.item.kind) {
                     if (dto.changedDocumentation)
                         return {};
                     auto out = item;
-                    out.documentation = dto.resolved.documentation;
-                    out.insertText = dto.resolved.insertText;
-                    out.insertTextFormat = dto.resolved.insertTextFormat;
+                    out.documentation = dto.documentation;
+                    out.insertText = dto.insertText;
+                    out.insertTextFormat = dto.insertTextFormat;
                     Formatting::updateCompletionEditText(out);
                     return out;
                 }
