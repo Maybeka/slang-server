@@ -1,5 +1,15 @@
 # Validation records
 
+## macOS 2026-10-19: official upstream completion reproduction and fixes
+
+The [completion and macro-warning report](macos-completion-2026-10-19.md) pins an
+independent official upstream build and reproduces the method-kind and member
+ordering problems there. The fixes pass 620 CTest tests, 2,563 SDK cases, 15
+Python tests, 56 real-project processes and three headless LazyVim checks. The
+opt-in library macro warning filter retains explicit caller evidence; it does
+not classify all semantic relevance. This is functional acceptance, with no new
+performance claim. The UVM prefix experiment remains default off.
+
 ## macOS 2026-10-19: worker and retirement follow-up
 
 The [follow-up acceptance report](macos-uvm-followup-2026-10-19.md) and

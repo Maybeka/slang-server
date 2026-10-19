@@ -58,6 +58,33 @@ The server uses eager completion edits in this configuration. Advertising lazy
 method certificate, so the final per-server setup intentionally narrows that
 capability. This does not enable the experiment; it remains default off.
 
+Class-handle `.` completions distinguish methods (including inherited and extern
+prototypes) from properties. Their `sortText` groups the class's own members
+before its direct base, then more distant bases. The shipped optional nvim-cmp
+configuration applies this group priority before fuzzy score, usage history and
+kind; normal client ranking is preserved within each group and for other servers.
+Only class member access gets these ranks. Struct, package and global completion
+behavior is otherwise retained. Parameterized inherited members keep the receiver
+needed for exact specialization during resolve.
+
+For UVM macro warning noise, append a path-specific flag to personal project
+configuration, using the project's actual library directory:
+
+```json
+{
+  "flags": "--suppress-macro-warnings /absolute/path/to/uvm/src/**"
+}
+```
+
+This flag is independent of prefix caching. It suppresses macro-body warnings
+originating in that library, while retaining warnings whose locations or ranges
+identify caller macro arguments, and warnings with related notes outside the
+filtered paths. Actual compiler errors remain. Direct user code and user-defined
+macros outside that directory remain visible. This is conservative source-based
+filtering, not a general proof of semantic relevance: ambiguous user-field width
+conversions can remain. Avoid a workspace-wide suppression pattern or globally
+turning off width / signedness warning categories merely to hide library noise.
+
 Exercise completion and `gd` after editing a local, save/reopen, and inspect
 `:LspLog` for the actual launched command and configuration/context errors.
 Check diagnostics eventually reflect the current document version. Restart

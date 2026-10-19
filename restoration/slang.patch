@@ -1,5 +1,5 @@
 diff --git a/docs/command-line-ref.dox b/docs/command-line-ref.dox
-index 153bb54e1..3dc00ddb3 100644
+index 153bb54e1b1ba9c278a844e004f3099f4cdce6f4..e752fcbacf6a5ab9c46c8e73f12a3f8c70101999 100644
 --- a/docs/command-line-ref.dox
 +++ b/docs/command-line-ref.dox
 @@ -576,8 +576,11 @@ permit this, but some tools allow it anyway so this flag can be used for compati
@@ -16,8 +16,20 @@ index 153bb54e1..3dc00ddb3 100644
  
  `--allow-dup-initial-drivers`
  
+@@ -804,6 +807,11 @@ One or more paths in which to suppress warnings that originate from macro expans
+ warnings inside of macros that are defined within these paths will be suppressed, even if the macros are
+ expanded into files that are not within these paths.
+ 
++Warnings with source ranges that identify caller macro arguments, or related notes outside the
++filtered paths, are retained. This preserves caller narrowing and type diagnostics through nested
++macros. The filter uses source provenance; it cannot establish arbitrary semantic relevance for
++all warnings whose location and ranges remain entirely inside a macro body.
++
+ `--error-limit`
+ 
+ Set a limit on the number of errors that will be printed. Setting this to zero will
 diff --git a/include/slang/ast/Compilation.h b/include/slang/ast/Compilation.h
-index b7ddc64e4..b6ca1f791 100644
+index b7ddc64e46b08cf082b7e7ffec12ffe769afc693..b6ca1f791d306069279b5cf8792be0d705849e9c 100644
 --- a/include/slang/ast/Compilation.h
 +++ b/include/slang/ast/Compilation.h
 @@ -88,7 +88,8 @@ enum class SLANG_EXPORT CompilationFlags {
@@ -50,7 +62,7 @@ index b7ddc64e4..b6ca1f791 100644
  /// Contains various options that can control compilation behavior.
  struct SLANG_EXPORT CompilationOptions {
 diff --git a/include/slang/ast/types/TypePrinter.h b/include/slang/ast/types/TypePrinter.h
-index 9b2fe5cb9..26d2b1b67 100644
+index 9b2fe5cb9b06ede36a1a8e39427e5a035c010fdb..26d2b1b6788df71f901bce71a48ee6dde9f738d2 100644
 --- a/include/slang/ast/types/TypePrinter.h
 +++ b/include/slang/ast/types/TypePrinter.h
 @@ -133,12 +133,19 @@ public:
@@ -75,7 +87,7 @@ index 9b2fe5cb9..26d2b1b67 100644
      flat_hash_set<const Type*> seenTypes;
      flat_hash_set<const Type*> typesToDisambiguate;
 diff --git a/include/slang/diagnostics/DiagnosticEngine.h b/include/slang/diagnostics/DiagnosticEngine.h
-index bc43d0037..0354fae61 100644
+index bc43d0037063e9e47d7c4fbd85473077d953a4a4..0354fae611098e36f7d52216b5b98888357c0bd1 100644
 --- a/include/slang/diagnostics/DiagnosticEngine.h
 +++ b/include/slang/diagnostics/DiagnosticEngine.h
 @@ -21,6 +21,7 @@
@@ -195,7 +207,7 @@ index bc43d0037..0354fae61 100644
  
  } // namespace slang
 diff --git a/include/slang/driver/Driver.h b/include/slang/driver/Driver.h
-index 0f9cff2a3..96f711462 100644
+index 0f9cff2a3c5865d20a9f6c570e07ab640a1b0f69..96f711462f4e4a7a500bbf6899a6baea330a82e9 100644
 --- a/include/slang/driver/Driver.h
 +++ b/include/slang/driver/Driver.h
 @@ -18,6 +18,7 @@
@@ -225,7 +237,7 @@ index 0f9cff2a3..96f711462 100644
              issueCommandLineErrors(cmdLine);
              return false;
 diff --git a/include/slang/driver/SourceLoader.h b/include/slang/driver/SourceLoader.h
-index 0913e369e..eef399de4 100644
+index 0913e369e9dfcbcc41ca5dc07b1892631b767833..eef399de445fb2fd607b48bce09d6adf52f8deb9 100644
 --- a/include/slang/driver/SourceLoader.h
 +++ b/include/slang/driver/SourceLoader.h
 @@ -151,6 +151,13 @@ public:
@@ -270,7 +282,7 @@ index 0913e369e..eef399de4 100644
  
      static constexpr int MinFilesForThreading = 4;
 diff --git a/include/slang/parsing/Preprocessor.h b/include/slang/parsing/Preprocessor.h
-index 88d571c1a..844c1b0b6 100644
+index 88d571c1a80cd25fdc86c49f3663bbfc57fd3d69..844c1b0b6de52a67a2366a99bda5e9c39005c77a 100644
 --- a/include/slang/parsing/Preprocessor.h
 +++ b/include/slang/parsing/Preprocessor.h
 @@ -22,6 +22,7 @@
@@ -310,7 +322,7 @@ index 88d571c1a..844c1b0b6 100644
  
      // Special handling for pulling directives when in an ifdef condition expr.
 diff --git a/include/slang/parsing/PreprocessorMetadata.h b/include/slang/parsing/PreprocessorMetadata.h
-index fc3236bf1..ce4f76927 100644
+index fc3236bf12bc3f64d131decc19c66be949bda1a4..ce4f769274e44cc1acb2229f52c1435eb76fddf3 100644
 --- a/include/slang/parsing/PreprocessorMetadata.h
 +++ b/include/slang/parsing/PreprocessorMetadata.h
 @@ -45,6 +45,9 @@ struct SLANG_EXPORT PreprocessorMetadata {
@@ -324,7 +336,7 @@ index fc3236bf1..ce4f76927 100644
  
  } // namespace slang::parsing
 diff --git a/include/slang/syntax/SyntaxTree.h b/include/slang/syntax/SyntaxTree.h
-index a8d51f774..638de5071 100644
+index a8d51f7746b0d8d0b2d5baf9c3dd9ef6477b4154..638de5071b369befab194767150f153f3ffdd7f7 100644
 --- a/include/slang/syntax/SyntaxTree.h
 +++ b/include/slang/syntax/SyntaxTree.h
 @@ -9,6 +9,7 @@
@@ -404,7 +416,7 @@ index a8d51f774..638de5071 100644
      SyntaxNode* rootNode;
      const SourceLibrary* library;
 diff --git a/include/slang/text/SourceManager.h b/include/slang/text/SourceManager.h
-index de1d1c271..3d655fd5c 100644
+index de1d1c27195b364570eab007408f2aac14f86a17..3d655fd5c7e7fca1e1619672c35d4ba7b99117a6 100644
 --- a/include/slang/text/SourceManager.h
 +++ b/include/slang/text/SourceManager.h
 @@ -16,11 +16,13 @@
@@ -615,7 +627,7 @@ index de1d1c271..3d655fd5c 100644
      bool disableProximatePaths = false;
      bool disableLocalIncludes = false;
 diff --git a/include/slang/util/Bag.h b/include/slang/util/Bag.h
-index 989512211..9998e942d 100644
+index 989512211f988a20c626534386bcf9c817c380ff..9998e942d0f4886b556712d85db657a6e87d6ba9 100644
 --- a/include/slang/util/Bag.h
 +++ b/include/slang/util/Bag.h
 @@ -36,6 +36,9 @@ public:
@@ -629,7 +641,7 @@ index 989512211..9998e942d 100644
      /// (making a copy in the process).
      template<typename T>
 diff --git a/source/CMakeLists.txt b/source/CMakeLists.txt
-index ce1415ffd..ab8affba5 100644
+index ce1415ffde4d4ad8d37542cec33691a79ed56a2b..ab8affba575e4aff3b538e34ff67d9a31da0b162 100644
 --- a/source/CMakeLists.txt
 +++ b/source/CMakeLists.txt
 @@ -117,6 +117,7 @@ add_library(
@@ -641,7 +653,7 @@ index ce1415ffd..ab8affba5 100644
    util/IntervalMap.cpp
    util/OS.cpp
 diff --git a/source/ast/Compilation.cpp b/source/ast/Compilation.cpp
-index ed7528f2c..200af8071 100644
+index ed7528f2c63e43df29c59538afa58b94099e6df0..200af8071476f6939ffd3ae2c6b21037e18e3a0b 100644
 --- a/source/ast/Compilation.cpp
 +++ b/source/ast/Compilation.cpp
 @@ -14,7 +14,6 @@
@@ -699,7 +711,7 @@ index ed7528f2c..200af8071 100644
  
      // Report any lingering name conflicts.
 diff --git a/source/ast/ElabVisitors.h b/source/ast/ElabVisitors.h
-index 2f346fa60..1ac0db2f3 100644
+index 2f346fa600e460dd4df92866801bf263296174c7..1ac0db2f31e0247218e226cdb4e9def98817ef3a 100644
 --- a/source/ast/ElabVisitors.h
 +++ b/source/ast/ElabVisitors.h
 @@ -314,7 +314,7 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
@@ -746,7 +758,7 @@ index 2f346fa60..1ac0db2f3 100644
                  compilation.checkVirtualIfaceInstance(*inst);
              }
 diff --git a/source/ast/builtins/MiscSystemFuncs.cpp b/source/ast/builtins/MiscSystemFuncs.cpp
-index fcdb3f436..1e4ab3f97 100644
+index fcdb3f43617be3c20b8a3f6d9e8b2bcfd37dced4..1e4ab3f975c0eae196060e6a3f7e9b0d853a36cc 100644
 --- a/source/ast/builtins/MiscSystemFuncs.cpp
 +++ b/source/ast/builtins/MiscSystemFuncs.cpp
 @@ -141,7 +141,7 @@ public:
@@ -771,7 +783,7 @@ index fcdb3f436..1e4ab3f97 100644
                  return comp.getErrorType();
              }
 diff --git a/source/ast/expressions/OperatorExpressions.cpp b/source/ast/expressions/OperatorExpressions.cpp
-index e51460a5c..0f4ee0c8c 100644
+index e51460a5ccaad10cdffb74b8f7b965f705e25673..0f4ee0c8c00db997acd0367bbc746542e5d26920 100644
 --- a/source/ast/expressions/OperatorExpressions.cpp
 +++ b/source/ast/expressions/OperatorExpressions.cpp
 @@ -1985,8 +1985,11 @@ Expression& ConcatenationExpression::fromSyntax(Compilation& comp,
@@ -788,7 +800,7 @@ index e51460a5c..0f4ee0c8c 100644
                      expr = &ConversionExpression::makeImplicit(context, comp.getStringType(),
                                                                 ConversionKind::Explicit, *expr,
 diff --git a/source/diagnostics/DiagnosticEngine.cpp b/source/diagnostics/DiagnosticEngine.cpp
-index 3fa297e9c..97f78013d 100644
+index 3fa297e9c399e3143a30eeebacbcd569f3f30159..0eb352284b87411bfd3576392b14b0948d61f655 100644
 --- a/source/diagnostics/DiagnosticEngine.cpp
 +++ b/source/diagnostics/DiagnosticEngine.cpp
 @@ -9,7 +9,10 @@
@@ -855,8 +867,8 @@ index 3fa297e9c..97f78013d 100644
 +
 +void DiagnosticEngine::validateSettingsForSnapshot() const {
 +    if (waiverManager) {
-+        SLANG_THROW(std::runtime_error(
-+            "Diagnostic settings snapshot does not support waiver managers"));
++        SLANG_THROW(
++            std::runtime_error("Diagnostic settings snapshot does not support waiver managers"));
 +    }
 +    if (!perBufferSeverity.empty()) {
 +        SLANG_THROW(std::runtime_error(
@@ -934,7 +946,38 @@ index 3fa297e9c..97f78013d 100644
  void DiagnosticEngine::addClient(const std::shared_ptr<DiagnosticClient>& client) {
      client->setEngine(*this);
      clients.push_back(client);
-@@ -328,8 +448,10 @@ std::optional<ReportedDiagnosticInfo> DiagnosticEngine::getReportedDiag(
+@@ -307,7 +427,29 @@ std::optional<ReportedDiagnosticInfo> DiagnosticEngine::getReportedDiag(
+             if (!expansionLocs.empty() && !ignoreMacroWarnPatterns.empty()) {
+                 auto originalLoc = sourceManager.getFullyOriginalLoc(expansionLocs.front());
+ 
+-                if (checkSuppressed(ignoreMacroWarnPatterns, originalLoc))
++                // A warning in a library macro can still describe a caller's value
++                // (for example a narrowing conversion). Preserve explicit evidence
++                // of user arguments instead of hiding everything at the definition.
++                auto userArgument = [&](SourceLocation location) {
++                    while (sourceManager.isMacroLoc(location)) {
++                        if (sourceManager.isMacroArgLoc(location) &&
++                            !checkSuppressed(ignoreMacroWarnPatterns,
++                                             sourceManager.getFullyOriginalLoc(location)))
++                            return true;
++                        location = sourceManager.getOriginalLoc(location);
++                    }
++                    return false;
++                };
++                bool involvesUser = userArgument(diagnostic.location);
++                for (auto range : diagnostic.ranges)
++                    involvesUser |= userArgument(range.start()) || userArgument(range.end());
++                for (const auto& note : diagnostic.notes) {
++                    auto location = sourceManager.getFullyOriginalLoc(note.location);
++                    if (location.valid() && location != SourceLocation::NoLocation &&
++                        !checkSuppressed(ignoreMacroWarnPatterns, location))
++                        involvesUser = true;
++                }
++                if (!involvesUser && checkSuppressed(ignoreMacroWarnPatterns, originalLoc))
+                     return std::nullopt;
+             }
+         }
+@@ -328,8 +470,10 @@ std::optional<ReportedDiagnosticInfo> DiagnosticEngine::getReportedDiag(
  }
  
  const DiagnosticEngine::FormatterMap& DiagnosticEngine::getFormatters() const {
@@ -946,7 +989,7 @@ index 3fa297e9c..97f78013d 100644
      return formatters;
  }
  
-@@ -339,8 +461,7 @@ std::string DiagnosticEngine::formatMessage(const Diagnostic& diag) const {
+@@ -339,8 +483,7 @@ std::string DiagnosticEngine::formatMessage(const Diagnostic& diag) const {
          return std::string(getMessage(diag.code));
  
      // Let each formatter have a look at the diagnostic before we begin.
@@ -957,7 +1000,7 @@ index 3fa297e9c..97f78013d 100644
      for (auto& [key, formatter] : formatters)
          formatter->startMessage(diag);
 diff --git a/source/driver/Driver.cpp b/source/driver/Driver.cpp
-index d049078b0..22b3fb988 100644
+index d049078b09193791a4dfbc2e7dd89db458bf61f6..22b3fb988eec5a064ec2e765b8a2203df36a24f0 100644
 --- a/source/driver/Driver.cpp
 +++ b/source/driver/Driver.cpp
 @@ -26,6 +26,7 @@
@@ -1070,7 +1113,7 @@ index d049078b0..22b3fb988 100644
      ppoptions.undefines = options.undefines;
      ppoptions.predefineSource = "<command-line>";
 diff --git a/source/driver/SourceLoader.cpp b/source/driver/SourceLoader.cpp
-index 99b853be7..c1711074d 100644
+index 99b853be78fe889077b3cd38965417c5955788e7..c1711074d5f288d631f3eaae9b32a934e041b98e 100644
 --- a/source/driver/SourceLoader.cpp
 +++ b/source/driver/SourceLoader.cpp
 @@ -14,6 +14,7 @@
@@ -1202,7 +1245,7 @@ index 99b853be7..c1711074d 100644
          return;
      }
 diff --git a/source/parsing/Lexer.cpp b/source/parsing/Lexer.cpp
-index a91519cb4..56f6b9ac1 100644
+index a91519cb4e865e7b578b6f3f458e13cd7a67963e..56f6b9ac1f1e1c6d9963efde55cc46bb3de5f377 100644
 --- a/source/parsing/Lexer.cpp
 +++ b/source/parsing/Lexer.cpp
 @@ -1426,16 +1426,16 @@ bool Lexer::tryApplyCommentHandler() {
@@ -1227,7 +1270,7 @@ index a91519cb4..56f6b9ac1 100644
      }
      SLANG_UNREACHABLE;
 diff --git a/source/parsing/Preprocessor.cpp b/source/parsing/Preprocessor.cpp
-index 5601d7e73..747dfc7d7 100644
+index 5601d7e738142d8a7906fef416c07b9f927543d0..747dfc7d7b3686e90b20598a16efd45675ac47e1 100644
 --- a/source/parsing/Preprocessor.cpp
 +++ b/source/parsing/Preprocessor.cpp
 @@ -99,7 +99,7 @@ void Preprocessor::pushSource(std::string_view source, std::string_view name) {
@@ -1273,7 +1316,7 @@ index 5601d7e73..747dfc7d7 100644
      }
      return Trivia(TriviaKind::Directive, result);
 diff --git a/source/parsing/Preprocessor_pragmas.cpp b/source/parsing/Preprocessor_pragmas.cpp
-index e86c15c68..b426ae04e 100644
+index e86c15c68a361c3168d7948e294e33fdbd0b9b92..b426ae04e2afb57532572913f65b51714ab4218d 100644
 --- a/source/parsing/Preprocessor_pragmas.cpp
 +++ b/source/parsing/Preprocessor_pragmas.cpp
 @@ -257,11 +257,11 @@ void Preprocessor::applyDiagnosticPragma(const PragmaDirectiveSyntax& pragma) {
@@ -1300,7 +1343,7 @@ index e86c15c68..b426ae04e 100644
                      else {
                          addDiag(diag::ExpectedDiagPragmaArg, simple.value.range());
 diff --git a/source/syntax/SyntaxTree.cpp b/source/syntax/SyntaxTree.cpp
-index ac681a4db..5c9645f32 100644
+index ac681a4db5f9b15af26152781d4260c8db59d68f..5c9645f323c0f52f072a430032984a8b84ee50e4 100644
 --- a/source/syntax/SyntaxTree.cpp
 +++ b/source/syntax/SyntaxTree.cpp
 @@ -7,16 +7,90 @@
@@ -1880,7 +1923,7 @@ index ac681a4db..5c9645f32 100644
      auto text = SyntaxPrinter(sourceManager())
                      .setIncludeDirectives(true)
 diff --git a/source/text/SourceManager.cpp b/source/text/SourceManager.cpp
-index 386684b5a..7a627296b 100644
+index 386684b5adada5a55d10eb0152211b4ce63be7e4..7a627296b322b0604ca409b52e2cd2260e39fc5e 100644
 --- a/source/text/SourceManager.cpp
 +++ b/source/text/SourceManager.cpp
 @@ -7,6 +7,9 @@
@@ -2647,8 +2690,23 @@ index 386684b5a..7a627296b 100644
  }
  
  template<IsLock TLock>
+diff --git a/tests/regression/driver/suppress-macro-warnings.sv b/tests/regression/driver/suppress-macro-warnings.sv
+index 33564b4e0e712145af6e0e1b617c03a55da197f4..5afd755904228e0e926cd6c9820e55e2f2afc480 100644
+--- a/tests/regression/driver/suppress-macro-warnings.sv
++++ b/tests/regression/driver/suppress-macro-warnings.sv
+@@ -2,7 +2,9 @@
+ // SPDX-License-Identifier: MIT
+ 
+ // RUN: %slang %s -Wwidth-trunc --suppress-macro-warnings %data/nested/ -I %data 2>&1
+-// CHECK: Build succeeded: 0 errors, 0 warnings
++// The library assignment narrows the caller's value, so its warning remains.
++// CHECK: warning: implicit conversion truncates from 4 to 3 bits
++// CHECK: Build succeeded: 0 errors, 1 warning
+ 
+ `include "nested/macro.svh"
+ 
 diff --git a/tests/unittests/CMakeLists.txt b/tests/unittests/CMakeLists.txt
-index f1b0a80f7..d51707507 100644
+index f1b0a80f7ac9be510a57709c2f92953be448d534..d51707507c2bf8cb3c8db6373b194abc96164801 100644
 --- a/tests/unittests/CMakeLists.txt
 +++ b/tests/unittests/CMakeLists.txt
 @@ -25,6 +25,7 @@ add_executable(
@@ -2668,7 +2726,7 @@ index f1b0a80f7..d51707507 100644
    Test.cpp)
  
 diff --git a/tests/unittests/DriverTests.cpp b/tests/unittests/DriverTests.cpp
-index b4f6b728e..bb5841a2c 100644
+index b4f6b728ec76e88401c81479159b7cc702b4e74a..bb5841a2c93fcb25f132c463fc3adc6aa3b08b28 100644
 --- a/tests/unittests/DriverTests.cpp
 +++ b/tests/unittests/DriverTests.cpp
 @@ -41,6 +41,33 @@ TEST_CASE("Driver processOptions can skip input file check") {
@@ -3015,7 +3073,7 @@ index b4f6b728e..bb5841a2c 100644
  #endif
  
 diff --git a/tests/unittests/FileTests.cpp b/tests/unittests/FileTests.cpp
-index d3e9fbb31..1668b07cd 100644
+index d3e9fbb31e44cdb6bac0817c03e01b3f83e52fe4..1668b07cdfbe4e7e1f93b50c06692c6fd18a5e5d 100644
 --- a/tests/unittests/FileTests.cpp
 +++ b/tests/unittests/FileTests.cpp
 @@ -3,6 +3,7 @@
@@ -3125,7 +3183,7 @@ index d3e9fbb31..1668b07cd 100644
      SourceManager manager;
  
 diff --git a/tests/unittests/ast/ClassTests.cpp b/tests/unittests/ast/ClassTests.cpp
-index 2353d2143..72709888e 100644
+index 2353d21435f167a21bb448971b690d482d541bf5..72709888ec652c537fcd6ed9d2314d9092a147a9 100644
 --- a/tests/unittests/ast/ClassTests.cpp
 +++ b/tests/unittests/ast/ClassTests.cpp
 @@ -2199,6 +2199,105 @@ endclass
@@ -3235,7 +3293,7 @@ index 2353d2143..72709888e 100644
      auto tree = SyntaxTree::fromText(R"(
  module m;
 diff --git a/tests/unittests/ast/ExpressionTests.cpp b/tests/unittests/ast/ExpressionTests.cpp
-index 444eb7a05..6b3c4b868 100644
+index 444eb7a0567e5a4db447035d4cb7d9b886b8e6df..6b3c4b8683fd0fad3f76d66785d10671bb2b4fdd 100644
 --- a/tests/unittests/ast/ExpressionTests.cpp
 +++ b/tests/unittests/ast/ExpressionTests.cpp
 @@ -4262,6 +4262,82 @@ endmodule
@@ -3322,7 +3380,7 @@ index 444eb7a05..6b3c4b868 100644
      auto tree = SyntaxTree::fromText(R"(
  module m;
 diff --git a/tests/unittests/parsing/DiagnosticTests.cpp b/tests/unittests/parsing/DiagnosticTests.cpp
-index 322dabb6a..25e9c71a1 100644
+index 322dabb6a2b6442a0a22db9e3e46fce53ab16dfd..45e78f42e2b747c1cf6b56cb5fe70c8bf6f16211 100644
 --- a/tests/unittests/parsing/DiagnosticTests.cpp
 +++ b/tests/unittests/parsing/DiagnosticTests.cpp
 @@ -3,6 +3,7 @@
@@ -3333,7 +3391,7 @@ index 322dabb6a..25e9c71a1 100644
  #include "slang/diagnostics/DiagnosticClient.h"
  #include "slang/diagnostics/JsonDiagnosticClient.h"
  #include "slang/diagnostics/TextDiagnosticClient.h"
-@@ -1043,3 +1044,140 @@ TEST_CASE("DiagnosticEngine::setBaselineSeverity -- per-unit path") {
+@@ -1043,3 +1044,205 @@ TEST_CASE("DiagnosticEngine::setBaselineSeverity -- per-unit path") {
      CHECK(diags2.empty());
      CHECK(engine2.getSeverity(diag::UnknownSystemName, loc) == DiagnosticSeverity::Ignored);
  }
@@ -3474,9 +3532,74 @@ index 322dabb6a..25e9c71a1 100644
 +    replay.applySettings(snapshot);
 +    CHECK(replay.getSeverity(diag::EmptyMember, location) == DiagnosticSeverity::Warning);
 +}
++
++TEST_CASE("Macro warning path filters preserve caller arguments and errors") {
++    SourceManager sm;
++    std::array buffers{sm.assignText("vendor/macros.svh", R"(
++`define LIB_CASE begin int fixed_value; case(fixed_value) 1: ; endcase end
++`define LIB_USER_BOOL(value) if (value) begin end
++`define LIB_NARROW(value) begin byte narrow; narrow = value; end
++`define LIB_NESTED(value) `LIB_NARROW(value)
++`define LIB_ERROR(value) value.missing_member = 1;
++)"),
++                       sm.assignText("caller.sv", R"(
++`define USER_CASE begin int user_value; case(user_value) 1: ; endcase end
++module top;
++    struct { int good_member; } user_object;
++    int user_value;
++    initial begin
++        `LIB_CASE
++        `LIB_USER_BOOL(user_value)
++        `LIB_NARROW(user_value)
++        `LIB_NESTED(user_value)
++        `USER_CASE
++        if (user_value) begin end
++        `LIB_ERROR(user_object)
++    end
++endmodule
++)")};
++    auto tree = SyntaxTree::fromBuffers(buffers, sm);
++    Compilation compilation;
++    compilation.addSyntaxTree(tree);
++    const auto& diags = compilation.getAllDiagnostics();
++    struct Collector : DiagnosticClient {
++        std::vector<DiagCode> codes;
++        void report(const ReportedDiagnostic& diagnostic) override {
++            codes.push_back(diagnostic.originalDiagnostic.code);
++        }
++    };
++    auto run = [&](bool suppress, bool replay) {
++        DiagnosticEngine engine(sm);
++        auto client = std::make_shared<Collector>();
++        engine.setSeverity(diag::CaseDefault, DiagnosticSeverity::Warning);
++        engine.setSeverity(diag::IntBoolConv, DiagnosticSeverity::Warning);
++        engine.setSeverity(diag::WidthTruncate, DiagnosticSeverity::Warning);
++        if (suppress)
++            REQUIRE(!engine.addIgnoreMacroPaths(".../vendor/..."));
++        if (replay) {
++            DiagnosticEngine restored(sm);
++            restored.applySettings(engine.captureSettings());
++            restored.addClient(client);
++            restored.issue(diags);
++        }
++        else {
++            engine.addClient(client);
++            engine.issue(diags);
++        }
++        return client->codes;
++    };
++    auto original = run(false, false);
++    auto filtered = run(true, false);
++    CHECK(std::count(original.begin(), original.end(), diag::CaseDefault) == 2);
++    CHECK(std::count(filtered.begin(), filtered.end(), diag::CaseDefault) == 1);
++    CHECK(std::count(filtered.begin(), filtered.end(), diag::WidthTruncate) == 2);
++    CHECK(std::count(filtered.begin(), filtered.end(), diag::IntBoolConv) == 2);
++    CHECK(std::count(filtered.begin(), filtered.end(), diag::UnknownMember) == 1);
++    CHECK(run(true, true) == filtered);
++}
 diff --git a/include/slang/util/CwdCoordinator.h b/include/slang/util/CwdCoordinator.h
 new file mode 100644
-index 000000000..9e2d67cfc
+index 0000000000000000000000000000000000000000..9e2d67cfc61d06f5bbe33ce83e43ae566efd7555
 --- /dev/null
 +++ b/include/slang/util/CwdCoordinator.h
 @@ -0,0 +1,33 @@
@@ -3515,7 +3638,7 @@ index 000000000..9e2d67cfc
 +} // namespace slang
 diff --git a/source/util/CwdCoordinator.cpp b/source/util/CwdCoordinator.cpp
 new file mode 100644
-index 000000000..f5fd85238
+index 0000000000000000000000000000000000000000..f5fd85238ecea8f0ea25dc2a58b622c00b6c9745
 --- /dev/null
 +++ b/source/util/CwdCoordinator.cpp
 @@ -0,0 +1,34 @@
@@ -3555,7 +3678,7 @@ index 000000000..f5fd85238
 +} // namespace slang
 diff --git a/tests/unittests/SourceSnapshotTests.cpp b/tests/unittests/SourceSnapshotTests.cpp
 new file mode 100644
-index 000000000..0a1ffe93e
+index 0000000000000000000000000000000000000000..0a1ffe93e8e10e30600c887fe21a567580a043e1
 --- /dev/null
 +++ b/tests/unittests/SourceSnapshotTests.cpp
 @@ -0,0 +1,491 @@
@@ -4052,7 +4175,7 @@ index 000000000..0a1ffe93e
 +}
 diff --git a/tests/unittests/ast/PackageAnalysisTests.cpp b/tests/unittests/ast/PackageAnalysisTests.cpp
 new file mode 100644
-index 000000000..0243e36ea
+index 0000000000000000000000000000000000000000..0243e36ea4091617b7b471e13c507f875b14eda4
 --- /dev/null
 +++ b/tests/unittests/ast/PackageAnalysisTests.cpp
 @@ -0,0 +1,282 @@

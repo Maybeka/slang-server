@@ -2067,3 +2067,173 @@ TEST_CASE("LocalparamKeywordInheritance") {
     CHECK(insertText.find("lp1") == std::string::npos);
     CHECK(insertText.find("lp2") == std::string::npos);
 }
+
+TEST_CASE("Class member completion kinds and inheritance priorities", "[class-members]") {
+    const bool deferred = GENERATE(false, true);
+    auto params = makeCompletionResolveParams(
+        deferred ? std::vector<std::string>{"documentation", "detail", "insertText",
+                                            "insertTextFormat", "textEdit"}
+                 : std::vector<std::string>{"documentation", "detail"});
+    ServerHarness server(params);
+    auto doc = server.openFile("class_members.sv", R"(
+package members;
+virtual class grandparent;
+    int aaa_base;
+    extern function int external_base(int value);
+    pure virtual task abstract_task(int value);
+    function int inherited_method(); return 1; endfunction
+endclass
+class parent extends grandparent;
+    int bbb_parent;
+    task abstract_task(int value); endtask
+endclass
+class child extends parent;
+    int zzz_local;
+    extern function int external_local(int value);
+    function int local_method(); return 2; endfunction
+endclass
+function int grandparent::external_base(int value); return value; endfunction
+function int child::external_local(int value); return value; endfunction
+function int free_function(); return 1; endfunction
+endpackage
+module top;
+    members::child handle;
+    members::grandparent abstract_handle;
+    initial begin
+        handle.;
+        abstract_handle.;
+        members::free_function();
+    end
+endmodule
+)");
+    auto cursor = doc.after("handle.");
+    auto items = cursor.getCompletions(".");
+    auto get = [&](std::string_view label) -> CompletionHandle& {
+        auto it = std::ranges::find_if(items,
+                                       [&](const auto& h) { return h.m_item.label == label; });
+        REQUIRE(it != items.end());
+        return *it;
+    };
+    auto stale = get("external_base");
+    for (const auto* name :
+         {"external_local", "local_method", "abstract_task", "external_base", "inherited_method"}) {
+        auto& item = get(name);
+        INFO(name);
+        CHECK(item.m_item.kind == lsp::CompletionItemKind::Method);
+        CHECK(item.m_item.labelDetails->detail->find(std::string_view(name) == "abstract_task"
+                                                         ? "task"
+                                                         : "function") != std::string::npos);
+        auto rank = item.m_item.sortText;
+        item.resolve();
+        CHECK(item.m_item.kind == lsp::CompletionItemKind::Method);
+        CHECK(item.m_item.sortText == rank);
+        REQUIRE(item.m_item.documentation);
+        CHECK(rfl::get<lsp::MarkupContent>(*item.m_item.documentation).value.find(name) !=
+              std::string::npos);
+        CHECK(getCompletionTextEdit(item.m_item).newText.find(std::string(name) + "(") !=
+              std::string::npos);
+    }
+    CHECK(get("zzz_local").m_item.kind == lsp::CompletionItemKind::Property);
+    CHECK(get("aaa_base").m_item.kind == lsp::CompletionItemKind::Property);
+    CHECK(get("zzz_local").m_item.sortText < get("bbb_parent").m_item.sortText);
+    CHECK(get("bbb_parent").m_item.sortText < get("aaa_base").m_item.sortText);
+    CHECK(std::ranges::is_sorted(items, {}, [](const auto& h) { return h.m_item.sortText; }));
+
+    auto abstractItems = doc.after("abstract_handle.").getCompletions(".");
+    auto prototype = std::ranges::find_if(abstractItems, [](const auto& h) {
+        return h.m_item.label == "abstract_task";
+    });
+    REQUIRE(prototype != abstractItems.end());
+    CHECK(prototype->m_item.kind == lsp::CompletionItemKind::Method);
+    prototype->resolve();
+    REQUIRE(prototype->m_item.documentation);
+    CHECK(rfl::get<lsp::MarkupContent>(*prototype->m_item.documentation)
+              .value.find("abstract_task") != std::string::npos);
+    doc.append("\n// ordinary edit\n");
+    doc.publishChanges();
+    stale.resolve();
+    REQUIRE(stale.m_item.documentation);
+    CHECK(rfl::get<lsp::MarkupContent>(*stale.m_item.documentation).value.find("external_base") !=
+          std::string::npos);
+}
+
+TEST_CASE("Parameterized class member priorities and overrides", "[class-members]") {
+    auto findCompletion = [](auto& items, std::string_view label) {
+        return std::ranges::find_if(items,
+                                    [label](const auto& h) { return h.m_item.label == label; });
+    };
+    ServerHarness server("repo1");
+    auto doc = server.openFile("parameterized_members.sv", R"(
+package members;
+class base #(type T = int);
+    T aaa_inherited;
+    virtual function T overridden(); return 1; endfunction
+endclass
+class child extends base #(byte);
+    int zzz_own;
+    function byte overridden(); return 2; endfunction
+endclass
+function int free_function(); return 3; endfunction
+endpackage
+module top;
+    members::child handle;
+    struct { int field; } payload;
+    initial begin handle.; payload.; members::free_function(); end
+endmodule
+)");
+    auto items = doc.after("handle.").getCompletions(".");
+    auto own = findCompletion(items, "zzz_own");
+    auto inherited = findCompletion(items, "aaa_inherited");
+    auto override = findCompletion(items, "overridden");
+    REQUIRE(own != items.end());
+    REQUIRE(inherited != items.end());
+    REQUIRE(override != items.end());
+    CHECK(own->m_item.sortText < inherited->m_item.sortText);
+    CHECK(override->m_item.sortText->starts_with("slang-member:0000000000:"));
+    CHECK(override->m_item.kind == lsp::CompletionItemKind::Method);
+    CHECK(std::ranges::count_if(items,
+                                [](const auto& h) { return h.m_item.label == "overridden"; }) == 1);
+    auto fields = doc.after("payload.").getCompletions(".");
+    auto field = findCompletion(fields, "field");
+    REQUIRE(field != fields.end());
+    CHECK(field->m_item.kind == lsp::CompletionItemKind::Property);
+    CHECK_FALSE(field->m_item.sortText);
+    auto scoped = doc.after("payload.; members::").getCompletions(":");
+    auto free = findCompletion(scoped, "free_function");
+    REQUIRE(free != scoped.end());
+    CHECK(free->m_item.kind == lsp::CompletionItemKind::Function);
+}
+
+TEST_CASE("Inherited method resolve retains the receiver specialization", "[class-members]") {
+    auto params = makeCompletionResolveParams(
+        {"documentation", "detail", "insertText", "insertTextFormat", "textEdit"});
+    params.capabilities.textDocument->completion->completionItem->snippetSupport = true;
+    ServerHarness server(params);
+    auto doc = server.openFile("specialized_methods.sv", R"(
+package members;
+class base #(int W = 8);
+    extern function void consume(bit [W-1:0] value);
+endclass
+function void base::consume(bit [W-1:0] value); endfunction
+class narrow extends base #(8); endclass
+class wide extends base #(64); endclass
+endpackage
+module top;
+    members::narrow narrow_handle;
+    members::wide wide_handle;
+    initial begin narrow_handle.; wide_handle.; end
+endmodule
+)");
+    for (auto [receiver, type] :
+         {std::pair{"narrow_handle.", "bit[7:0]"}, {"wide_handle.", "bit[63:0]"}}) {
+        auto items = doc.after(receiver).getCompletions(".");
+        auto method = std::ranges::find_if(items, [](const auto& h) {
+            return h.m_item.label == "consume";
+        });
+        REQUIRE(method != items.end());
+        REQUIRE(method->m_item.kind == lsp::CompletionItemKind::Method);
+        method->resolve();
+        REQUIRE(method->m_item.documentation);
+        CHECK(getCompletionTextEdit(method->m_item).newText.find(type) != std::string::npos);
+    }
+}

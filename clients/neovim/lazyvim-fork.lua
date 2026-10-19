@@ -49,4 +49,28 @@ return {
       end, opts.ensure_installed or {})
     end,
   },
+  {
+    "hrsh7th/nvim-cmp",
+    optional = true,
+    opts = function(_, opts)
+      opts.sorting = opts.sorting or {}
+      local comparators = opts.sorting.comparators or require("cmp.config.default")().sorting.comparators
+      local function class_members_first(a, b)
+        local function depth(entry)
+          local text = entry.completion_item.sortText
+          return text and tonumber(text:match("^slang%-member:(%d+):"))
+        end
+        local left, right = depth(a), depth(b)
+        if left and right and left ~= right then
+          return left < right
+        end
+      end
+      -- Restrict the override to ranked slang class members. Keep the client's
+      -- existing scoring and ordering within one inheritance level.
+      opts.sorting.comparators = { class_members_first }
+      for _, compare in ipairs(comparators) do
+        table.insert(opts.sorting.comparators, compare)
+      end
+    end,
+  },
 }

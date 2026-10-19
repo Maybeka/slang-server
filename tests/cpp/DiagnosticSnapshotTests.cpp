@@ -4,6 +4,7 @@
 #include "diagnostics/DiagnosticWorker.h"
 #include "utils/ServerHarness.h"
 #include <algorithm>
+#include <catch2/generators/catch_generators.hpp>
 #include <chrono>
 #include <fstream>
 #include <rfl/json.hpp>
@@ -1284,4 +1285,77 @@ TEST_CASE("Fast cwd synchronous failures report again after configuration reload
     server.m_diagnosticFallbackReason = "unrelated diagnostic worker failure";
     server.useFastMode();
     CHECK(server.m_diagnosticFallbackReason == "unrelated diagnostic worker failure");
+}
+
+TEST_CASE("Library macro warning filters survive diagnostic snapshot reuse", "[macro-warnings]") {
+    namespace fs = std::filesystem;
+    const bool suppress = GENERATE(false, true);
+    auto root = fs::temp_directory_path() /
+                ("slang-macro-warnings-" +
+                 std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    fs::create_directories(root / ".slang");
+    fs::create_directories(root / "uvm");
+    auto cleanup = slang::ScopeGuard([&] { fs::remove_all(root); });
+    std::ofstream(root / ".slang/server.json")
+        << "{\"compilationFilelist\":\"files.f\",\"experimentalUvmPrefixCache\":true,"
+           "\"flags\":\"--single-unit --threads 1 -Wcase-default -Wwidth-trunc -Wint-bool-conv"
+        << (suppress ? " --suppress-macro-warnings " + (root / "uvm/**").generic_string() : "")
+        << "\"}";
+    std::ofstream(root / "files.f") << "uvm/uvm_pkg.sv\nowner.sv\n";
+    std::ofstream(root / "uvm/macros.svh")
+        << "`define LIB_CASE begin int fixed_value; case(fixed_value) 1: ; endcase end\n"
+           "`define LIB_NARROW(value) begin byte narrow; narrow = value; end\n"
+           "`define LIB_ERROR(value) value.missing_member = 1;\n";
+    std::ofstream(root / "uvm/uvm_pkg.sv")
+        << "`include \"macros.svh\"\npackage uvm_pkg; class base; endclass endpackage\n";
+    std::ofstream(root / "owner.sv") << "package app;\n`include \"item.svh\"\nendpackage\n";
+    const std::string text = R"(
+class item extends uvm_pkg::base;
+    task run();
+        int user_value;
+        `LIB_CASE
+        `LIB_NARROW(user_value)
+        if (user_value) begin end
+        // ERROR_MARK
+    endtask
+endclass
+)";
+    std::ofstream(root / "item.svh") << text;
+    ServerHarness server(lsp::InitializeParams{
+        .workspaceFolders = {{lsp::WorkspaceFolder{.uri = URI::fromFile(root), .name = "test"}}}});
+    auto uri = URI::fromFile(root / "item.svh");
+    server.m_driver->openDocument(uri, text, 1, true);
+    server::DiagnosticJobSession session;
+    server::DiagnosticJobStatistics statistics;
+    for (int version = 1; version <= 3; ++version) {
+        std::string current = text;
+        if (version == 2)
+            current.replace(current.find("// ERROR_MARK"), std::string("// ERROR_MARK").size(),
+                            "`LIB_ERROR(this)");
+        if (version > 1)
+            changeWithoutDiagnostics(server, uri, version, current);
+        auto snapshot = server.m_driver->captureDiagnosticSnapshot({});
+        REQUIRE(snapshot);
+        auto input = server::encodeDiagnosticJob(snapshot->metadata, *snapshot->input);
+        auto native = server::executeDiagnosticJob(input);
+        auto reused = session.execute(input, {}, &statistics);
+        REQUIRE(native.documents.size() == 1);
+        REQUIRE(reused.documents.size() == 1);
+        CHECK(diagnosticObjects(native.documents[0].diagnostics) ==
+              diagnosticObjects(reused.documents[0].diagnostics));
+        CHECK(reused.documents[0].version == version);
+        auto& diagnostics = reused.documents[0].diagnostics;
+        auto count = [&](std::string_view message) {
+            return std::ranges::count_if(diagnostics, [&](const auto& d) {
+                return d.message.find(message) != std::string::npos;
+            });
+        };
+        CHECK(count("missing 'default'") == (suppress ? 0 : 1));
+        CHECK(count("truncates from 32 to 8") == 1);
+        CHECK(count("to boolean value") == 1);
+        CHECK(std::ranges::count_if(diagnostics, [](const auto& d) {
+                  return d.severity == lsp::DiagnosticSeverity::Error;
+              }) == (version == 2 ? 1 : 0));
+    }
+    CHECK(statistics.reusedPrefixes >= 1);
 }

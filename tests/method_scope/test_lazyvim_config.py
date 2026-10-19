@@ -48,6 +48,22 @@ assert(#packages.ensure_installed == 1 and packages.ensure_installed[1] == "styl
 local servers = { ensure_installed = { "slang_server", "lua_ls" } }
 specs[3].opts(nil, servers)
 assert(#servers.ensure_installed == 1 and servers.ensure_installed[1] == "lua_ls")
+local original_compare = function() return nil end
+local old_comparators = { original_compare }
+local cmp_opts = { sorting = { comparators = old_comparators } }
+specs[4].opts(nil, cmp_opts)
+assert(#cmp_opts.sorting.comparators == 2 and #old_comparators == 1)
+assert(cmp_opts.sorting.comparators[2] == original_compare)
+local rank = cmp_opts.sorting.comparators[1]
+local function entry(text) return { completion_item = { sortText = text } } end
+local own = entry("slang-member:0000000000:zzz_local")
+local parent = entry("slang-member:0000000001:aaa_parent")
+local grandparent = entry("slang-member:0000000002:aaa_base")
+assert(rank(own, parent) == true and rank(parent, own) == false)
+assert(rank(parent, grandparent) == true)
+assert(rank(own, entry("slang-member:0000000000:another")) == nil)
+assert(rank(entry(nil), own) == nil and rank(own, entry("ordinary")) == nil)
+assert(rank(entry("ordinary"), entry("another")) == nil)
 for _, bad in ipairs({ "relative/slang-server", "/missing/slang-server" }) do
   vim.env.SLANG_SERVER_FORK_BIN = bad
   assert(not pcall(specs[1].opts, nil, { servers = {}, setup = {} }))

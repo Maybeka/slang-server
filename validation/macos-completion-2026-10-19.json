@@ -1,0 +1,708 @@
+{
+  "date": "2026-10-19",
+  "platform": "macOS arm64",
+  "parentProduct": "ee34d439fefdc40db9f6a9673bb268fda63aaca5",
+  "officialUpstream": {
+    "repository": "https://github.com/hudson-trading/slang-server",
+    "commit": "d5116cc1ed305ffcd49c2500dc97a48563678f4d",
+    "submodules": {
+      "slang": "151a801ceaf6faf23d79a42d210ff67e50eb4660",
+      "reflect-cpp": "a26047a4d3bdbd5cf6b65995cbc5e7862e241c57",
+      "ctre": "6225211806c48230e5d17a1e555ef69e7325051c"
+    },
+    "policy": "Unmodified git archive of official main and its exact pinned dependencies, independent of restored SDK patches",
+    "binarySha256": "e48088b3b9f4ea5e5e28442e04c3df7e7197c1e6c1f18d1927b757f304b55b57",
+    "buildOptions": {
+      "buildType": "Release",
+      "mimalloc": false,
+      "compiler": "Homebrew LLVM",
+      "sourcePatches": false
+    }
+  },
+  "candidateSha256": "562725e1f803430ae458308de84b358f7b25fffbd2d3ae13bed9cf71959be38e",
+  "tests": {
+    "ctest": [
+      620,
+      620
+    ],
+    "sdkCases": 2563,
+    "sdkAssertions": 23731,
+    "python": [
+      15,
+      15
+    ],
+    "focusedAssertions": 220,
+    "realProcesses": 56,
+    "realPairs": 28,
+    "editorProjects": [
+      "spi",
+      "pss",
+      "ubus"
+    ]
+  },
+  "testCommands": [
+    {
+      "name": "ctest",
+      "command": [
+        "/opt/homebrew/bin/ctest",
+        "--test-dir",
+        "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/build-uvm",
+        "--output-on-failure",
+        "--no-tests=error",
+        "-j2"
+      ],
+      "returncode": 0,
+      "seconds": 18.646222208160907
+    },
+    {
+      "name": "sdk",
+      "command": [
+        "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/build-uvm/bin/unittests"
+      ],
+      "returncode": 0,
+      "seconds": 1.5699233340565115
+    },
+    {
+      "name": "python",
+      "command": [
+        "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/source/.venv/bin/python",
+        "-m",
+        "pytest",
+        "tests/system",
+        "tests/method_scope",
+        "--binary",
+        "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/build-uvm/bin/slang-server",
+        "-q"
+      ],
+      "returncode": 0,
+      "seconds": 1.6186142079532146
+    }
+  ],
+  "realResults": [
+    {
+      "case": "W01-compare",
+      "suppress": false,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 2034,
+      "warningCounts": [
+        0,
+        0,
+        0
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "7452df848f6f33a58919225b187c17f18dad82c7a78df28d546b2f44f0eb2ce3"
+    },
+    {
+      "case": "W01-compare",
+      "suppress": true,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 2034,
+      "warningCounts": [
+        0,
+        0,
+        0
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "7452df848f6f33a58919225b187c17f18dad82c7a78df28d546b2f44f0eb2ce3"
+    },
+    {
+      "case": "W02-local-rename",
+      "suppress": false,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 369,
+      "warningCounts": [
+        0,
+        0,
+        0
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "537ebbc0b8722eab3e03571aab660a4bf31a70b178d3871c7e9041d02008a2cd"
+    },
+    {
+      "case": "W02-local-rename",
+      "suppress": true,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 369,
+      "warningCounts": [
+        0,
+        0,
+        0
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "537ebbc0b8722eab3e03571aab660a4bf31a70b178d3871c7e9041d02008a2cd"
+    },
+    {
+      "case": "W03-local-add-remove",
+      "suppress": false,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 2377,
+      "warningCounts": [
+        0,
+        1,
+        0
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "68072b90f2ebbe2cb631b979449b775cc54ac0ee41efbd479acf1c90873d3ccd"
+    },
+    {
+      "case": "W03-local-add-remove",
+      "suppress": true,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 2377,
+      "warningCounts": [
+        0,
+        1,
+        0
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "68072b90f2ebbe2cb631b979449b775cc54ac0ee41efbd479acf1c90873d3ccd"
+    },
+    {
+      "case": "W04-ral-ref",
+      "suppress": false,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 18,
+      "warningCounts": [
+        5,
+        5,
+        5
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "b45f03ca56bee48b2f821b6ad19021843a6716e07ac675cf3d5e1e7c41f1a5d3"
+    },
+    {
+      "case": "W04-ral-ref",
+      "suppress": true,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 18,
+      "warningCounts": [
+        4,
+        4,
+        4
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "0afe2a07882e92d179e307b44ae175a815a0ad021a481175920d68f3c658f086"
+    },
+    {
+      "case": "W05-macro-argument",
+      "suppress": false,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 369,
+      "warningCounts": [
+        3,
+        3,
+        3
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "840bf70c9c1e7020287dc52897b7dd1d62866e658f69e07b2024ea1232c61e12"
+    },
+    {
+      "case": "W05-macro-argument",
+      "suppress": true,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 369,
+      "warningCounts": [
+        1,
+        1,
+        1
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "df348de4da1b1493afaa0e57d2a6dbff738199cae20cc55efec0677a366ccb98"
+    },
+    {
+      "case": "W06-sequence-local",
+      "suppress": false,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 2281,
+      "warningCounts": [
+        2,
+        2,
+        2
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "e733cfaba8cede5df493229a7cf01601d35d04a8dc3b3cbfc2f7a8da51219c66"
+    },
+    {
+      "case": "W06-sequence-local",
+      "suppress": true,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 2281,
+      "warningCounts": [
+        0,
+        0,
+        0
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "61673f0e24a2bc1ef5a8dbea51df2330c4af7ad048bfd15c30c092cfba40a412"
+    },
+    {
+      "case": "W07-pss-multidoc",
+      "suppress": false,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 171,
+      "warningCounts": [
+        1,
+        1,
+        1
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "aa3bff61bf63b58181bd23c58d1597e67b20613bdc9161fddadca015481907b4"
+    },
+    {
+      "case": "W07-pss-multidoc",
+      "suppress": true,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 171,
+      "warningCounts": [
+        0,
+        0,
+        0
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "ded2d42dd53d33d8a2c86b2d30a22b03385e97affcc2a6b0fb6b33ec0617c2f2"
+    },
+    {
+      "case": "W08-ubus-task",
+      "suppress": false,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 393,
+      "warningCounts": [
+        24,
+        24,
+        24
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "9a1be469a15970e6cbbd9c332d7bbd79fe269f61d9fa544971ee48ce8b8a7048"
+    },
+    {
+      "case": "W08-ubus-task",
+      "suppress": true,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 393,
+      "warningCounts": [
+        19,
+        19,
+        19
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "900e7c54a5aa28f656eada7a39cd859dc357c445f754f853fecec892526ad36a"
+    },
+    {
+      "case": "W09-ubus-config",
+      "suppress": false,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 2379,
+      "warningCounts": [
+        24,
+        24,
+        24
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "588cfd78a298040eae56caabd35f30b12c825ed8c5dcb5252d96df557c5dd861"
+    },
+    {
+      "case": "W09-ubus-config",
+      "suppress": true,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 2379,
+      "warningCounts": [
+        19,
+        19,
+        19
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "aa0eabe7e8abfe8e2934f8051244eb07ed881f00f477695d0b5c7ca3b615884c"
+    },
+    {
+      "case": "W10-incomplete-recover",
+      "suppress": false,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 2034,
+      "warningCounts": [
+        0,
+        0,
+        0
+      ],
+      "errorCounts": [
+        0,
+        1,
+        0
+      ],
+      "publicSha256": "d20f5add5aa058121d305b9db44520e42c09d118d690d881ba874a310418d444"
+    },
+    {
+      "case": "W10-incomplete-recover",
+      "suppress": true,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 2034,
+      "warningCounts": [
+        0,
+        0,
+        0
+      ],
+      "errorCounts": [
+        0,
+        1,
+        0
+      ],
+      "publicSha256": "d20f5add5aa058121d305b9db44520e42c09d118d690d881ba874a310418d444"
+    },
+    {
+      "case": "W11-local-rebind",
+      "suppress": false,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 2376,
+      "warningCounts": [
+        3,
+        3,
+        3
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "6bc267aec4e9ce3234bcfdcfe1fa6f89c08d9813ea4ad45d60fbbe1296286152"
+    },
+    {
+      "case": "W11-local-rebind",
+      "suppress": true,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 2376,
+      "warningCounts": [
+        1,
+        1,
+        1
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "87de7d2c8c24f99a75eb0e2fdd9077f29fbd3540353cb53e5afc2700e56ccc5d"
+    },
+    {
+      "case": "W13-continuous",
+      "suppress": false,
+      "equal": true,
+      "staleEqual": true,
+      "states": 11,
+      "resolvedItems": 7458,
+      "warningCounts": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "34e59d554b4bf72066bc2968d9721b2a98d3f1ee6a4296375df963ab9bfc2197"
+    },
+    {
+      "case": "W13-continuous",
+      "suppress": true,
+      "equal": true,
+      "staleEqual": true,
+      "states": 11,
+      "resolvedItems": 7458,
+      "warningCounts": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "34e59d554b4bf72066bc2968d9721b2a98d3f1ee6a4296375df963ab9bfc2197"
+    },
+    {
+      "case": "W14-negotiated-utf8",
+      "suppress": false,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 2034,
+      "warningCounts": [
+        0,
+        0,
+        0
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "270f28a6e6745c6f2824b8aa8ebdcb093fdccfa1992e8e9521ca400454dccd4c"
+    },
+    {
+      "case": "W14-negotiated-utf8",
+      "suppress": true,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 2034,
+      "warningCounts": [
+        0,
+        0,
+        0
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "270f28a6e6745c6f2824b8aa8ebdcb093fdccfa1992e8e9521ca400454dccd4c"
+    },
+    {
+      "case": "W15-crlf-only",
+      "suppress": false,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 2034,
+      "warningCounts": [
+        0,
+        0,
+        0
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "284c8be3c86cf90dcf18a8c2e9eadf3670609820b1f4a812604377679252ffd4"
+    },
+    {
+      "case": "W15-crlf-only",
+      "suppress": true,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 2034,
+      "warningCounts": [
+        0,
+        0,
+        0
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "284c8be3c86cf90dcf18a8c2e9eadf3670609820b1f4a812604377679252ffd4"
+    }
+  ],
+  "sdkRestoration": {
+    "base": "151a801ceaf6faf23d79a42d210ff67e50eb4660",
+    "patchSha256": "29bf2f8d6ae72b8840762a517605124c3ed4e00122f7ffc5f006a723e5a75eb4",
+    "filesVerified": 708,
+    "preservedAddedFiles": [
+      "include/slang/util/CwdCoordinator.h",
+      "source/util/CwdCoordinator.cpp",
+      "tests/unittests/SourceSnapshotTests.cpp",
+      "tests/unittests/ast/PackageAnalysisTests.cpp"
+    ]
+  },
+  "experimentalUvmPrefixCacheDefault": false,
+  "macroFilterDefault": "disabled; opt in with --suppress-macro-warnings <library-path-glob>",
+  "limitations": [
+    "Functional validation only; no new latency or memory claims.",
+    "Known existing W12 UTF-16 case excluded; W14 negotiated UTF-8 and W15 CRLF included.",
+    "Outer diagnostics canonicalized for equal-location/code UBUS entry ordering; relatedInformation order and duplicate counts retained.",
+    "Macro relevance inferred conservatively from source locations, argument ranges and related notes; ambiguous warnings remain.",
+    "Native suppression semantics for warnings promoted via -Werror unchanged.",
+    "Headless LazyVim validates LSP attach and loaded nvim-cmp comparator, not visual GUI interaction.",
+    "Independent official build disables mimalloc, with unmodified product and pinned dependency sources.",
+    "Raw scripts retain local paths and reference earlier private workload/oracle helpers; source corpora and build trees are excluded."
+  ],
+  "evidence": {
+    "archive": "artifacts/macos-completion-2026-10-19.tar.gz",
+    "bytes": 33779,
+    "sha256": "22744884333571f3f74b1192376cac9ddf8a800f5811af70c0163dfabc9dee61",
+    "manifest": {
+      "upstream-source.json": "c93822539f6fff060f053c50345107c925450fa29d2ac42af07c69f0f856fe3c",
+      "official-upstream.json": "99a64bd141af347d1bea666b768f149038f4debeb7bc0185a0cbf159e0de98d9",
+      "candidate.json": "e90a1e405047e785efdc34c4d8c3658c971066ddb931c108a924eefd2b2178bb",
+      "full-tests.json": "73d9f389c6bb03ccc1c0a542cdd794caa4922dad0488bef2ce738ff78fad3ccd",
+      "ctest.log": "f1017c1d3e041b8d854a37b9842b550d6ab4f43957c43697cb6c0fd583f23108",
+      "sdk.log": "9ddaed08bbdc5e023ba7d7e962121640618a2cc52cb25ed60d49eb836c3678eb",
+      "python.log": "a3c5a19a49c07097aae859f5ab532a65fed8296c214056971cdc74be55ab6743",
+      "full-tests-final.log": "09a78bb0ce2639a51b68720d45d80b37df8b13dd9fc129052d3c2c62d53072ac",
+      "focused-reviewed.log": "2e7ad00e4fd953c21d3c96996e5ca6e4a34e5de4e2653a3b7444fddd5109ee70",
+      "real-oracles.json": "8ec061934cc817f4cf59c3a8b1885a7ff144445060a43571033595e881daa119",
+      "real-oracles.log": "b53df2e503b4b3f100cac5d6fd52bef411cc948cf9326f0c59902aebac66ac4b",
+      "sdk-restoration.json": "76457c9b56d987c279803b2e1f385269529962fe34195fd49d49cfffab7f2eb2",
+      "editor-spi.log": "54cbedec949bc4fe08c47406ec517c14507c9ea75d5a64d4e2212ca89449cec0",
+      "editor-pss.log": "0167d36f2637c1f60684ce5c1a33cf6640e44916a22350b7689153fc135c77af",
+      "editor-ubus.log": "aa0aee04f3fbbc9e610cc3a197db9dc179f8ed060704d5f8a7c3d5b9663aa9f4",
+      "full_tests.py": "9f3505458a9fb1afbda84f847052438f8eba39ab497624aefb06d560f94bb888",
+      "real_oracles.py": "100f14dc21e2b6d8dac87b1454b2bcd22f26a89aca79dc5c242c872bf710da3f",
+      "probe_upstream.py": "182188d5407540cf73f9f27007dfbdb98c34b2a87449013a74ba7171d20b62ed",
+      "probe_fixed.py": "6c82fd37714efc7a03351b12f7668579332ec7b76bbf8dae7fdda90481e34824",
+      "check_editor.lua": "5db3de2839856f6fca6da6307426a1d002b01968e8590646a8bd9800276cff4e",
+      "configure-upstream-2.log": "9fb6575b6688e77cbfa1b4fff845c7522191057e8aa8f0cf86bba843d01a0e71",
+      "build-upstream-2.log": "098869b5674b200f96fe0f194a2bebfdb9c408939a0de9ae8d8ee36d0ee2678c"
+    }
+  },
+  "sourceSha256": {
+    "src/completions/MemberCompletions.cpp": "77d9d6cda61ba15261d956045724b43ea8b5b2498951141b1cf680f4008820c8",
+    "clients/neovim/lazyvim-fork.lua": "fedf3cc9f6685b01c8f9fb172b3b69bc70ba726a43d1483cf5ee3657b2f80bc0",
+    "tests/cpp/CompletionTests.cpp": "a761a6ee2c72ec62d44bb9bfd69c6a965b0bac81da7ca4b9dc847341a5b8506f",
+    "tests/cpp/DiagnosticSnapshotTests.cpp": "cc7cf55f1acf019c0cd884e8dce30cd67c52eb0b6ef379a151ef97c13c77b085",
+    "tests/method_scope/test_lazyvim_config.py": "974ec23931aebb5c5dd3006759e81a76af1dd1ce6858eaf73d4a8fc66cea87fb",
+    "restoration/slang.patch": "29bf2f8d6ae72b8840762a517605124c3ed4e00122f7ffc5f006a723e5a75eb4",
+    "restoration/main-sdk.json": "136fdbf58ed6b864b94f3391418d57eec63e56448c337764aa27c64bdefcef58"
+  }
+}

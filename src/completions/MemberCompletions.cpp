@@ -18,16 +18,19 @@
 #include "util/Formatting.h"
 #include "util/Logging.h"
 #include "util/SlangExtensions.h"
+#include <algorithm>
 #include <fmt/format.h>
 #include <rfl/UnderlyingEnums.hpp>
 #include <rfl/from_generic.hpp>
 #include <rfl/to_generic.hpp>
+#include <unordered_map>
 #include <unordered_set>
 
 #include "slang/ast/ASTVisitor.h"
 #include "slang/ast/Compilation.h"
 #include "slang/ast/Lookup.h"
 #include "slang/ast/SemanticFacts.h"
+#include "slang/ast/symbols/ClassSymbols.h"
 #include "slang/ast/symbols/CompilationUnitSymbols.h"
 #include "slang/ast/symbols/InstanceSymbols.h"
 #include "slang/ast/symbols/MemberSymbols.h"
@@ -49,6 +52,13 @@ namespace server::completions {
 using namespace slang;
 
 namespace {
+
+const ast::Symbol& unwrapCompletionMember(const ast::Symbol& symbol) {
+    auto* result = &symbol;
+    while (auto* member = result->as_if<ast::TransparentMemberSymbol>())
+        result = &member->wrapped;
+    return *result;
+}
 
 bool hasSourceLocation(const ast::Symbol& symbol) {
     return symbol.location && symbol.location != SourceLocation::NoLocation;
@@ -227,6 +237,17 @@ public:
 
         INFO("Getting hierarchical completions for symbol {} in scope {}", symbol->name,
              symbol->getHierarchicalPath());
+        // Slang hoists inherited members into the derived scope. Preserve their
+        // declaring scope so clients can rank the receiver's own members first.
+        std::unordered_map<const ast::Scope*, size_t> classDepths;
+        auto* classType = targetScope->asSymbol().as_if<ast::ClassType>();
+        for (auto* type = classType; type;) {
+            if (!classDepths.emplace(type, classDepths.size()).second)
+                break;
+            auto* base = type->getBaseClass();
+            type = base ? base->getCanonicalType().as_if<ast::ClassType>() : nullptr;
+        }
+        const auto firstMember = results.size();
         std::string_view previousLabel;
         for (auto& member : targetScope->members()) {
             if (member.name.empty() || member.name == previousLabel)
@@ -235,7 +256,17 @@ public:
             results.push_back(
                 getHierarchicalCompletion(*symbol, member, doc->getURI().str(), followedByCall,
                                           resolvesCompletionEdits(dispatch), {}, receiverToken));
+            if (classType) {
+                auto* declaringScope = unwrapCompletionMember(member).getParentScope();
+                auto found = classDepths.find(declaringScope);
+                auto depth = found == classDepths.end() ? classDepths.size() : found->second;
+                results.back().sortText = fmt::format("slang-member:{:010}:{}", depth,
+                                                      results.back().label);
+            }
         }
+        if (classType)
+            std::stable_sort(results.begin() + firstMember, results.end(),
+                             [](const auto& a, const auto& b) { return a.sortText < b.sortText; });
 
         auto* targetType = targetScope->asSymbol().as_if<ast::Type>();
         if (!targetType || !targetType->isStruct())
@@ -358,7 +389,12 @@ lsp::CompletionItemKind MemberCompletionQuery::getCompletionKind(const slang::as
         case slang::ast::SymbolKind::GenericClassDef:
             return lsp::CompletionItemKind::Class;
         case slang::ast::SymbolKind::Subroutine:
+            if (auto* parent = symbol.getParentScope();
+                parent && parent->asSymbol().kind == ast::SymbolKind::ClassType)
+                return lsp::CompletionItemKind::Method;
             return lsp::CompletionItemKind::Function;
+        case slang::ast::SymbolKind::MethodPrototype:
+            return lsp::CompletionItemKind::Method;
         case slang::ast::SymbolKind::Port:
         case slang::ast::SymbolKind::InterfacePort:
             return lsp::CompletionItemKind::Interface;
@@ -404,6 +440,9 @@ std::string getMemberCompletionDetail(const slang::ast::Symbol& symbol) {
     if (slang::ast::SubroutineSymbol::isKind(symbol.kind)) {
         auto& subroutine = symbol.as<slang::ast::SubroutineSymbol>();
         detailStr = subroutineString(subroutine.subroutineKind);
+    }
+    else if (auto* prototype = symbol.as_if<ast::MethodPrototypeSymbol>()) {
+        detailStr = subroutineString(prototype->subroutineKind);
     }
     else if (symbol.kind == slang::ast::SymbolKind::TypeAlias) {
         auto& typeAlias = symbol.as<slang::ast::TypeAliasType>();
@@ -484,11 +523,23 @@ lsp::CompletionItem MemberCompletionQuery::getHierarchicalCompletion(
     auto retainReceiver = [&](lsp::CompletionItem item) {
         auto* value = parentSymbol.as_if<ast::ValueSymbol>();
         auto* receiverType = value ? &value->getType() : parentSymbol.as_if<ast::Type>();
+        while (receiverType && unwrapErrorType(*receiverType).isArray())
+            receiverType = unwrapErrorType(*receiverType).getArrayElementType();
+        auto* receiverClass = receiverType ? unwrapErrorType(*receiverType).as_if<ast::ClassType>()
+                                           : nullptr;
+        auto* declaringScope = unwrapCompletionMember(symbol).getParentScope();
+        auto* declaringClass = declaringScope ? declaringScope->asSymbol().as_if<ast::ClassType>()
+                                              : nullptr;
+        bool specializedClass = (receiverClass && receiverClass->genericClass) ||
+                                (declaringClass && declaringClass->genericClass);
         if (receiver && receiverType && item.data &&
-            unwrapErrorType(*receiverType).kind == ast::SymbolKind::VirtualInterfaceType) {
+            (unwrapErrorType(*receiverType).kind == ast::SymbolKind::VirtualInterfaceType ||
+             specializedClass)) {
             // A bound virtual interface is not necessarily reachable by a root
             // hierarchy path. Retain the caller's receiver so resolve uses this
             // exact parameterized instance and modport, not a default instance.
+            // Class specializations likewise need the receiver: their inherited
+            // methods can share a logical path but have different argument types.
             auto data = rfl::from_generic<CompletionData, rfl::UnderlyingEnums>(*item.data);
             if (data) {
                 data->receiverBufferId = receiver->location().buffer().getId();
@@ -540,8 +591,8 @@ lsp::CompletionItem MemberCompletionQuery::getHierarchicalCompletion(
     }
 }
 
-static void setSubroutineCompletionEdit(const slang::ast::SubroutineSymbol& subroutine,
-                                        lsp::CompletionItem& item) {
+template<typename Callable>
+static void setSubroutineCompletionEdit(const Callable& subroutine, lsp::CompletionItem& item) {
     SnippetString toInsert(subroutine.name);
     toInsert.appendText("(");
     auto args = subroutine.getArguments();
@@ -565,11 +616,12 @@ static void setSubroutineCompletionEdit(const slang::ast::SubroutineSymbol& subr
     item.insertTextFormat = lsp::InsertTextFormat::Snippet;
 }
 
-lsp::CompletionItem MemberCompletionQuery::getCompletion(const slang::ast::Symbol& symbol,
+lsp::CompletionItem MemberCompletionQuery::getCompletion(const slang::ast::Symbol& rawSymbol,
                                                          const slang::ast::Scope* currentScope,
                                                          std::string_view documentUri,
                                                          bool labelOnly, bool deferCallableEdit) {
 
+    const auto& symbol = unwrapCompletionMember(rawSymbol);
     auto detailStr = getMemberCompletionDetail(symbol);
 
     // Check if symbol is from a different scope and add lexical path
@@ -603,6 +655,9 @@ lsp::CompletionItem MemberCompletionQuery::getCompletion(const slang::ast::Symbo
     if (slang::ast::SubroutineSymbol::isKind(symbol.kind) &&
         (!deferCallableEdit || !hasSourceLocation(symbol)))
         setSubroutineCompletionEdit(symbol.as<slang::ast::SubroutineSymbol>(), item);
+    else if (auto* prototype = symbol.as_if<ast::MethodPrototypeSymbol>();
+             prototype && (!deferCallableEdit || !hasSourceLocation(symbol)))
+        setSubroutineCompletionEdit(*prototype, item);
 
     if (!hasSourceLocation(symbol)) {
         resolve(symbol, item, true);
@@ -611,8 +666,9 @@ lsp::CompletionItem MemberCompletionQuery::getCompletion(const slang::ast::Symbo
     return item;
 }
 
-void MemberCompletionQuery::resolve(const slang::ast::Symbol& symbol, lsp::CompletionItem& item,
+void MemberCompletionQuery::resolve(const slang::ast::Symbol& rawSymbol, lsp::CompletionItem& item,
                                     bool resolveCallableEdit) {
+    const auto& symbol = unwrapCompletionMember(rawSymbol);
     const syntax::SyntaxNode* symSyntax = nullptr;
     std::string docStr;
 
@@ -626,6 +682,11 @@ void MemberCompletionQuery::resolve(const slang::ast::Symbol& symbol, lsp::Compl
         else {
             docStr = fmt::format("{} {}(...)", subroutine.getReturnType().toString(), symbol.name);
         }
+    }
+    else if (auto* prototype = symbol.as_if<ast::MethodPrototypeSymbol>()) {
+        if (resolveCallableEdit)
+            setSubroutineCompletionEdit(*prototype, item);
+        symSyntax = symbol.getSyntax();
     }
     else if (symbol.kind == slang::ast::SymbolKind::TypeAlias) {
         symSyntax = symbol.getSyntax();
@@ -807,7 +868,11 @@ void MemberCompletionQuery::resolve(CompletionDispatch& dispatch, lsp::Completio
         auto* receiver = analysis->getSymbolAtToken(token);
         auto* scope = analysis->getScopeFromSym(receiver);
         symbol = scope ? scope->find(data->symbolName) : nullptr;
-        if (!symbol || symbol->kind != data->symbolKind)
+        if (symbol)
+            symbol = &unwrapCompletionMember(*symbol);
+        if (!symbol || (symbol->kind != data->symbolKind &&
+                        !(data->symbolKind == ast::SymbolKind::MethodPrototype &&
+                          symbol->kind == ast::SymbolKind::Subroutine)))
             return;
     }
     if (!symbol && data->bufferId && data->bufferId == analysis->getBuffer().getId()) {
