@@ -34,6 +34,17 @@
             "type": "string"
           }
         },
+        "uvm": {
+          "description": "Explicit UVM library inputs. No library is injected unless configured. Source loading is independent of experimentalUvmPrefixCache.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Config__UvmConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "fastCwdSnapshotChecks": {
           "description": "Opt-in fast snapshot cwd checks (default false = strict). Requires the process working directory and its ancestors not to be moved, deleted or renamed during analysis. Ordinary source edits remain allowed. Checks phase boundaries; transient changes restored between checks are undetected. A changed/unavailable cwd discards the result and requires configuration reload. Filesystem lookup rules are unchanged.",
           "type": "boolean"
@@ -246,6 +257,27 @@
         "macroArgNames": {
           "type": "integer",
           "description": "Macro argument hints: 0=off, N=only calls with >=N args"
+        }
+      },
+      "required": []
+    },
+    "Config__UvmConfig": {
+      "type": "object",
+      "properties": {
+        "sourceDirectory": {
+          "type": "string",
+          "description": "UVM source directory or distribution root, relative to the workspace. An existing project UVM is validated and retained; another version is never silently substituted."
+        },
+        "entryFile": {
+          "description": "Optional UVM entry file, relative to sourceDirectory unless absolute. Otherwise locate uvm_pkg.sv directly or under src.",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": []

@@ -1,0 +1,1197 @@
+{
+  "milestone": "Phase 1: explicit UVM source selection and compatible preparation",
+  "overallGoal": "active; generic frozen regions, hover modes, bundled-library decision and integrated performance remain",
+  "date": "2026-10-20",
+  "platform": "macOS arm64",
+  "baseline": "f79fdb98515207efae5975729b5da55883eb6c86",
+  "binarySha256": "8ee6e5d00c3b95c672779d24d5038866ec39a80ad6398d6e37acbe012dc68cac",
+  "sourceHashes": {
+    "CMakeLists.txt": "670bb5cb1313390ad5d3b6c36c0be98a1baf5a4ee3781778bb4a7a0fce9efde5",
+    "clients/vscode/resources/config.schema.json": "189c92b4ef18fc2679ebb2be92f5e2e94551f8ed2b7bbcebb84fc755681c20a8",
+    "docs/development/frozen-analysis-plan.md": "92f257503590b9eca442cd9538a2789b4e49f9bd63a687c75423b0b1b7a558ec",
+    "docs/features/uvm-prefix-cache.md": "40e40cfba531c105bc51e531bc385741f182284de4adb140a31655f2cebb1715",
+    "docs/start/config.md": "3d2ea1668920cbe6a636b0b11845890456d2dbd313fbb82e1a3718de1c84fb95",
+    "include/Config.h": "835f34b7d55d846a5966ee986e3c11e30159e8f3dddf48a7de9e39ee46595b5d",
+    "include/ServerDriver.h": "7f8b65928edf66d43c473b5febd46d298b10a7d71d9d0e6f1fe46d14a6aeec20",
+    "include/diagnostics/DiagnosticSnapshotCodec.h": "98d0158b7f7e4733e5b20c2f78fed4b48c34a07a29ce0d6134ab4c19a727b9ee",
+    "restoration/main-sdk.json": "11713ba29b7f902396388e2b1660ac08b20b0a63edb56a42c50ba305d3b18230",
+    "restoration/slang.patch": "73d8e764f724f02c5697f12aa3fac2819a4e6948c085f7190711ff061fd83c5f",
+    "src/ExplicitContexts.cpp": "78cd68252ec753c21da9d67351489931a2d8a2e3f1837fc77c03b04dd8600084",
+    "src/ServerDriver.cpp": "2a9ebf5aa768cb0baed415e99a08be3b1792b5c7063e82dea0a9201b201cacc7",
+    "src/SlangServer.cpp": "e97d2e07eef3ff2cc48d9f8ab3f2efd4698d2745ff9294694f7ce7d40c1322ff",
+    "src/diagnostics/DiagnosticSnapshotCodec.cpp": "336737b6d29c1a220d4553908b2f56b90e9ef7714ad87b4b8d5da8b52efb8f76",
+    "src/diagnostics/DiagnosticWorker.cpp": "d3656a9e753b8410cf0450516e9c282a5a57e73d19cb07863f212d2a1f51287b",
+    "src/document/SlangDoc.cpp": "6e1c1b645d877ac4d0a5a37c9f74cbcb2509447e5afc5f267763bf56f0fe24c4",
+    "tests/cpp/ConfigTests.cpp": "cdff88f4d45ddd69b0cbb672f4589244fd03261864595da9f55e5cb4706ef638",
+    "tests/cpp/DiagnosticSnapshotTests.cpp": "acdffae90287d144cdad8827d3d040a2aa53496eadb6d0ef0af8d188cd121f70",
+    "src/UvmLibrary.cpp": "e0122c8de491d903d15e5f572beefa07c266b3f9031b9622e0715b0a3202f91b",
+    "tests/cpp/UvmLibraryTests.cpp": "eb1504b3a0288d90d85ea6f0ab7370c72ca46e50b8682007bfbfc4143991e1de"
+  },
+  "focused": {
+    "cases": 9,
+    "assertions": 314,
+    "passed": true
+  },
+  "ctest": [
+    632,
+    632
+  ],
+  "python": [
+    15,
+    15
+  ],
+  "transport": [
+    43,
+    43
+  ],
+  "checks": [
+    {
+      "name": "ctest",
+      "returncode": 0,
+      "seconds": 17.781535833142698,
+      "command": [
+        "/opt/homebrew/bin/ctest",
+        "--test-dir",
+        "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/build-uvm",
+        "--output-on-failure",
+        "--no-tests=error",
+        "-j2"
+      ]
+    },
+    {
+      "name": "python",
+      "returncode": 0,
+      "seconds": 1.38091995799914,
+      "command": [
+        "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/source/.venv/bin/python",
+        "-m",
+        "pytest",
+        "tests/system",
+        "tests/method_scope",
+        "--binary",
+        "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/build-uvm/bin/slang-server",
+        "-q"
+      ]
+    },
+    {
+      "name": "transport",
+      "returncode": 0,
+      "seconds": 5.148736834060401,
+      "command": [
+        "tests/transport/run-diagnostic-transport-tests.sh"
+      ]
+    }
+  ],
+  "realProcesses": 106,
+  "realPairs": [
+    {
+      "case": "W01-compare",
+      "suppress": false,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 2034,
+      "warningCounts": [
+        0,
+        0,
+        0
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "971ea245d96997b960d0e74ac3e2f290b341438ec4b739ef47993da89487af9e"
+    },
+    {
+      "case": "W01-compare",
+      "suppress": true,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 2034,
+      "warningCounts": [
+        0,
+        0,
+        0
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "971ea245d96997b960d0e74ac3e2f290b341438ec4b739ef47993da89487af9e"
+    },
+    {
+      "case": "W02-local-rename",
+      "suppress": false,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 369,
+      "warningCounts": [
+        0,
+        0,
+        0
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "8a899eed2b0864e9316d1c33a1c5d14dacb6deb1035f07fe76a94eee39c249ae"
+    },
+    {
+      "case": "W02-local-rename",
+      "suppress": true,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 369,
+      "warningCounts": [
+        0,
+        0,
+        0
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "8a899eed2b0864e9316d1c33a1c5d14dacb6deb1035f07fe76a94eee39c249ae"
+    },
+    {
+      "case": "W03-local-add-remove",
+      "suppress": false,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 2377,
+      "warningCounts": [
+        0,
+        1,
+        0
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "1e50bc2daa89832abfb4ca72a31d3e4b75a4a091be67674f46d360e1b07d9e3d"
+    },
+    {
+      "case": "W03-local-add-remove",
+      "suppress": true,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 2377,
+      "warningCounts": [
+        0,
+        1,
+        0
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "1e50bc2daa89832abfb4ca72a31d3e4b75a4a091be67674f46d360e1b07d9e3d"
+    },
+    {
+      "case": "W04-ral-ref",
+      "suppress": false,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 18,
+      "warningCounts": [
+        5,
+        5,
+        5
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "c25b639b9e59906ac4ba1f79be92fe58ac237a19a933a7ff9b80c3a4a6673e83"
+    },
+    {
+      "case": "W04-ral-ref",
+      "suppress": true,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 18,
+      "warningCounts": [
+        4,
+        4,
+        4
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "15661bfc1d6ded16113c7646b4f01fc4589704077974c7622d9094f62ec30cdf"
+    },
+    {
+      "case": "W05-macro-argument",
+      "suppress": false,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 369,
+      "warningCounts": [
+        3,
+        3,
+        3
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "e2381ca12ef766399d1132489138785dd4a01f5564dc0011badf0d697eedc105"
+    },
+    {
+      "case": "W05-macro-argument",
+      "suppress": true,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 369,
+      "warningCounts": [
+        1,
+        1,
+        1
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "04572884c758295477d98ac1a42c76c4bb8fa28e092cc671535307b3cbef6426"
+    },
+    {
+      "case": "W06-sequence-local",
+      "suppress": false,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 2281,
+      "warningCounts": [
+        2,
+        2,
+        2
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "a83af537d50944db247a87c366b76718e0946a5abf69b25d9841a6b714d98d65"
+    },
+    {
+      "case": "W06-sequence-local",
+      "suppress": true,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 2281,
+      "warningCounts": [
+        0,
+        0,
+        0
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "76d1f5898d129b2edad14e442862132a4a630a66ef7ef349f089f0c7edac4233"
+    },
+    {
+      "case": "W07-pss-multidoc",
+      "suppress": false,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 171,
+      "warningCounts": [
+        1,
+        1,
+        1
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "83146cb90bd0d505143cb3fd8955ac99cec59ee3dde1936f1e9d2e727c1f72b0"
+    },
+    {
+      "case": "W07-pss-multidoc",
+      "suppress": true,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 171,
+      "warningCounts": [
+        0,
+        0,
+        0
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "e0b5744bc4da920f175db99bb7c1c18b6471e05d51b42f257ff6b7aadefd36ad"
+    },
+    {
+      "case": "W08-ubus-task",
+      "suppress": false,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 393,
+      "warningCounts": [
+        24,
+        24,
+        24
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "8a066847fbb225da7e61bfb1e2b550ccbcdb1dda43d232ad5d61ca4535572a5f"
+    },
+    {
+      "case": "W08-ubus-task",
+      "suppress": true,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 393,
+      "warningCounts": [
+        19,
+        19,
+        19
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "2fc5ba5a27956d63e91684f2b23ca26820e70f90255331eaa64349f22d1f654d"
+    },
+    {
+      "case": "W09-ubus-config",
+      "suppress": false,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 2379,
+      "warningCounts": [
+        24,
+        24,
+        24
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "393de81dd0c1c33d1d894fa53322170e2a060687bc8415489c39fe7b1f54120e"
+    },
+    {
+      "case": "W09-ubus-config",
+      "suppress": true,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 2379,
+      "warningCounts": [
+        19,
+        19,
+        19
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "f90acbe217e3a3f61cf2744a356c0a00a0d9d17e46168328e341bfb1d85d614d"
+    },
+    {
+      "case": "W10-incomplete-recover",
+      "suppress": false,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 2034,
+      "warningCounts": [
+        0,
+        0,
+        0
+      ],
+      "errorCounts": [
+        0,
+        1,
+        0
+      ],
+      "publicSha256": "51f65c0b1fcd932c1a67a194b098ca2296fa637dc262e28fc3146c0ea71facfc"
+    },
+    {
+      "case": "W10-incomplete-recover",
+      "suppress": true,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 2034,
+      "warningCounts": [
+        0,
+        0,
+        0
+      ],
+      "errorCounts": [
+        0,
+        1,
+        0
+      ],
+      "publicSha256": "51f65c0b1fcd932c1a67a194b098ca2296fa637dc262e28fc3146c0ea71facfc"
+    },
+    {
+      "case": "W11-local-rebind",
+      "suppress": false,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 2376,
+      "warningCounts": [
+        3,
+        3,
+        3
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "55726cc6a2648bc6369eaa620fb9023a2bbdab618a023422ad56dbd89ebce760"
+    },
+    {
+      "case": "W11-local-rebind",
+      "suppress": true,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 2376,
+      "warningCounts": [
+        1,
+        1,
+        1
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "e1ae71c41efc0de6ee873ddaf5947a15604070a6d05acdcbab34e4fc78e6e8f6"
+    },
+    {
+      "case": "W13-continuous",
+      "suppress": false,
+      "equal": true,
+      "staleEqual": true,
+      "states": 11,
+      "resolvedItems": 7458,
+      "warningCounts": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "b5021214a3aa5f0dac9896c67e660e745ae0fdc3d7ca9feabbc0f8324931fb25"
+    },
+    {
+      "case": "W13-continuous",
+      "suppress": true,
+      "equal": true,
+      "staleEqual": true,
+      "states": 11,
+      "resolvedItems": 7458,
+      "warningCounts": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "b5021214a3aa5f0dac9896c67e660e745ae0fdc3d7ca9feabbc0f8324931fb25"
+    },
+    {
+      "case": "W14-negotiated-utf8",
+      "suppress": false,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 2034,
+      "warningCounts": [
+        0,
+        0,
+        0
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "b189935b00ccc709d317b47d187a9a6d91cd6ae4862e448f0d411919e3ac7f0f"
+    },
+    {
+      "case": "W14-negotiated-utf8",
+      "suppress": true,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 2034,
+      "warningCounts": [
+        0,
+        0,
+        0
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "b189935b00ccc709d317b47d187a9a6d91cd6ae4862e448f0d411919e3ac7f0f"
+    },
+    {
+      "case": "W15-crlf-only",
+      "suppress": false,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 2034,
+      "warningCounts": [
+        0,
+        0,
+        0
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "219bf624569fc5d928ec66cce63c194a41b37ace6f6868d9e9fd47ef05caf3a4"
+    },
+    {
+      "case": "W15-crlf-only",
+      "suppress": true,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 2034,
+      "warningCounts": [
+        0,
+        0,
+        0
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "219bf624569fc5d928ec66cce63c194a41b37ace6f6868d9e9fd47ef05caf3a4"
+    }
+  ],
+  "entryComparisons": [
+    {
+      "case": "W01-compare",
+      "modes": [
+        {
+          "mode": "native",
+          "cache": false
+        },
+        {
+          "mode": "explicit",
+          "cache": false
+        },
+        {
+          "mode": "injected",
+          "cache": true
+        }
+      ],
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 2034
+    },
+    {
+      "case": "W02-local-rename",
+      "modes": [
+        {
+          "mode": "native",
+          "cache": false
+        },
+        {
+          "mode": "explicit",
+          "cache": false
+        },
+        {
+          "mode": "injected",
+          "cache": true
+        }
+      ],
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 369
+    },
+    {
+      "case": "W03-local-add-remove",
+      "modes": [
+        {
+          "mode": "native",
+          "cache": false
+        },
+        {
+          "mode": "explicit",
+          "cache": false
+        },
+        {
+          "mode": "injected",
+          "cache": true
+        }
+      ],
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 2377
+    },
+    {
+      "case": "W04-ral-ref",
+      "modes": [
+        {
+          "mode": "native",
+          "cache": false
+        },
+        {
+          "mode": "explicit",
+          "cache": false
+        },
+        {
+          "mode": "injected",
+          "cache": true
+        }
+      ],
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 18
+    },
+    {
+      "case": "W05-macro-argument",
+      "modes": [
+        {
+          "mode": "native",
+          "cache": false
+        },
+        {
+          "mode": "explicit",
+          "cache": false
+        },
+        {
+          "mode": "injected",
+          "cache": true
+        }
+      ],
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 369
+    },
+    {
+      "case": "W06-sequence-local",
+      "modes": [
+        {
+          "mode": "native",
+          "cache": false
+        },
+        {
+          "mode": "explicit",
+          "cache": false
+        },
+        {
+          "mode": "injected",
+          "cache": true
+        }
+      ],
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 2281
+    },
+    {
+      "case": "W07-pss-multidoc",
+      "modes": [
+        {
+          "mode": "native",
+          "cache": false
+        },
+        {
+          "mode": "explicit",
+          "cache": false
+        },
+        {
+          "mode": "injected",
+          "cache": true
+        }
+      ],
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 171
+    },
+    {
+      "case": "W08-ubus-task",
+      "modes": [
+        {
+          "mode": "native",
+          "cache": false
+        },
+        {
+          "mode": "explicit",
+          "cache": false
+        },
+        {
+          "mode": "injected",
+          "cache": true
+        },
+        {
+          "mode": "auto",
+          "cache": false
+        },
+        {
+          "mode": "auto",
+          "cache": true
+        }
+      ],
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 393
+    },
+    {
+      "case": "W09-ubus-config",
+      "modes": [
+        {
+          "mode": "native",
+          "cache": false
+        },
+        {
+          "mode": "explicit",
+          "cache": false
+        },
+        {
+          "mode": "injected",
+          "cache": true
+        }
+      ],
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 2379
+    },
+    {
+      "case": "W10-incomplete-recover",
+      "modes": [
+        {
+          "mode": "native",
+          "cache": false
+        },
+        {
+          "mode": "explicit",
+          "cache": false
+        },
+        {
+          "mode": "injected",
+          "cache": true
+        }
+      ],
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 2034
+    },
+    {
+      "case": "W11-local-rebind",
+      "modes": [
+        {
+          "mode": "native",
+          "cache": false
+        },
+        {
+          "mode": "explicit",
+          "cache": false
+        },
+        {
+          "mode": "injected",
+          "cache": true
+        }
+      ],
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 2376
+    },
+    {
+      "case": "W13-continuous",
+      "modes": [
+        {
+          "mode": "native",
+          "cache": false
+        },
+        {
+          "mode": "explicit",
+          "cache": false
+        },
+        {
+          "mode": "injected",
+          "cache": true
+        }
+      ],
+      "equal": true,
+      "staleEqual": true,
+      "states": 11,
+      "resolvedItems": 7458
+    },
+    {
+      "case": "W14-negotiated-utf8",
+      "modes": [
+        {
+          "mode": "native",
+          "cache": false
+        },
+        {
+          "mode": "explicit",
+          "cache": false
+        },
+        {
+          "mode": "injected",
+          "cache": true
+        }
+      ],
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 2034
+    },
+    {
+      "case": "W15-crlf-only",
+      "modes": [
+        {
+          "mode": "native",
+          "cache": false
+        },
+        {
+          "mode": "explicit",
+          "cache": false
+        },
+        {
+          "mode": "injected",
+          "cache": true
+        }
+      ],
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 2034
+    }
+  ],
+  "forcedRetirementComparisons": [
+    {
+      "case": "W01-compare",
+      "modes": [
+        {
+          "mode": "native",
+          "cache": false
+        },
+        {
+          "mode": "explicit",
+          "cache": true
+        }
+      ],
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 2034,
+      "retirements": 1
+    },
+    {
+      "case": "W07-pss-multidoc",
+      "modes": [
+        {
+          "mode": "native",
+          "cache": false
+        },
+        {
+          "mode": "explicit",
+          "cache": true
+        }
+      ],
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 171,
+      "retirements": 1
+    },
+    {
+      "case": "W08-ubus-task",
+      "modes": [
+        {
+          "mode": "native",
+          "cache": false
+        },
+        {
+          "mode": "explicit",
+          "cache": true
+        }
+      ],
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 393,
+      "retirements": 1
+    }
+  ],
+  "reuseTraces": [
+    {
+      "case": "W01-compare-True-cache.tsv",
+      "events": {
+        "prefix-captured": 2,
+        "prefix-built": 2,
+        "prefix-reused": 4
+      }
+    },
+    {
+      "case": "W02-local-rename-True-cache.tsv",
+      "events": {
+        "prefix-captured": 2,
+        "prefix-built": 2,
+        "prefix-reused": 4
+      }
+    },
+    {
+      "case": "W03-local-add-remove-True-cache.tsv",
+      "events": {
+        "prefix-captured": 2,
+        "prefix-built": 2,
+        "prefix-reused": 4
+      }
+    },
+    {
+      "case": "W04-ral-ref-True-cache.tsv",
+      "events": {
+        "prefix-captured": 2,
+        "prefix-built": 2,
+        "prefix-reused": 4
+      }
+    },
+    {
+      "case": "W05-macro-argument-True-cache.tsv",
+      "events": {
+        "prefix-captured": 2,
+        "prefix-built": 2,
+        "prefix-reused": 4
+      }
+    },
+    {
+      "case": "W06-sequence-local-True-cache.tsv",
+      "events": {
+        "prefix-captured": 2,
+        "prefix-built": 2,
+        "prefix-reused": 4
+      }
+    },
+    {
+      "case": "W07-pss-multidoc-True-cache.tsv",
+      "events": {
+        "prefix-captured": 2,
+        "prefix-built": 2,
+        "prefix-reused": 4
+      }
+    },
+    {
+      "case": "W08-ubus-task-True-cache.tsv",
+      "events": {
+        "prefix-captured": 2,
+        "prefix-built": 2,
+        "prefix-reused": 4
+      }
+    },
+    {
+      "case": "W09-ubus-config-True-cache.tsv",
+      "events": {
+        "prefix-captured": 2,
+        "prefix-built": 2,
+        "prefix-reused": 4
+      }
+    },
+    {
+      "case": "W10-incomplete-recover-True-cache.tsv",
+      "events": {
+        "prefix-captured": 2,
+        "prefix-built": 2,
+        "prefix-reused": 4
+      }
+    },
+    {
+      "case": "W11-local-rebind-True-cache.tsv",
+      "events": {
+        "prefix-captured": 2,
+        "prefix-built": 2,
+        "prefix-reused": 4
+      }
+    },
+    {
+      "case": "W13-continuous-True-cache.tsv",
+      "events": {
+        "prefix-captured": 2,
+        "prefix-built": 2,
+        "prefix-reused": 20
+      }
+    },
+    {
+      "case": "W14-negotiated-utf8-True-cache.tsv",
+      "events": {
+        "prefix-captured": 2,
+        "prefix-built": 2,
+        "prefix-reused": 4
+      }
+    },
+    {
+      "case": "W15-crlf-only-True-cache.tsv",
+      "events": {
+        "prefix-captured": 2,
+        "prefix-built": 2,
+        "prefix-reused": 4
+      }
+    }
+  ],
+  "headlessEditor": [
+    {
+      "project": "spi",
+      "passed": true
+    },
+    {
+      "project": "pss",
+      "passed": true
+    },
+    {
+      "project": "ubus",
+      "passed": true
+    }
+  ],
+  "sdkRestoration": {
+    "base": "151a801ceaf6faf23d79a42d210ff67e50eb4660",
+    "patchSha256": "73d8e764f724f02c5697f12aa3fac2819a4e6948c085f7190711ff061fd83c5f",
+    "filesVerified": 708,
+    "preservedAddedFiles": [
+      "include/slang/util/CwdCoordinator.h",
+      "source/util/CwdCoordinator.cpp",
+      "tests/unittests/SourceSnapshotTests.cpp",
+      "tests/unittests/ast/PackageAnalysisTests.cpp"
+    ]
+  },
+  "newPerformanceClaim": false,
+  "experimentsDefaultOff": true,
+  "limitations": [
+    "Known native W12 UTF-16 case excluded; negotiated UTF-8 and CRLF included",
+    "Only outer diagnostic order normalized; duplicates and ordered relatedInformation preserved",
+    "Syntax/macro checkpoint reuse, not semantic or portable disk cache",
+    "Configured wrapper or nonprefix roots can decline reuse; original source order retained",
+    "Injection may parse initial inputs before adding missing entry; no new latency/memory claim",
+    "Private scripts depend on preserved workload/oracle helpers; sources and binaries excluded from archive"
+  ],
+  "evidence": {
+    "archive": "artifacts/macos-uvm-path-2026-10-20.tar.gz",
+    "bytes": 34664,
+    "sha256": "7c10a213492c811405568ed9a67609a12567249c269055e8bed0e4041ae2bc8a",
+    "manifest": {
+      "run_acceptance.py": "09d7fc89218ed86e1692e249450559c22e7c0cbe1864d4dbc527657f69003cbe",
+      "real_oracles.py": "ac0ad513e2c43af4e1b14a1dea56563ba1309fdf2260316ff2a57896c2478cd1",
+      "entry_oracles.py": "0f31255a06390337440e43f45fc43008919512c1364b1594b25a6d9bb0c195e9",
+      "forced_oracles.py": "c1a807a980d74a6fdef40f1e709922675c84f31b27d994da51e709b379e099ff",
+      "run_editor.py": "89cb94a37a1e940c991d5075a500f5134ebbf76d65a6f1d8db32825b2e12d745",
+      "refresh_sdk.py": "3d3b122c92a77df63cea35a49ed847e0b4d8a6ae6490febdbdd4ffac5fca70e6",
+      "publish.py": "c23d02eb2078c966f5e0fec0a85946ecee816c1348bdf0d9584d1feff88534eb",
+      "acceptance.json": "3cbacecf5bcd4882efe2abe9b9c1749b48df09c41f059a2a210f014c073bb319",
+      "ctest-final.log": "403720c371ff9a7a71d1412d28c813a09e471c8d4d1f895fce26c0b787ce3521",
+      "python-final.log": "da11eab271f7b6b5d5a9a7e2adabe5fb2d3824af0373c826aeb35527da663c9c",
+      "transport-final.log": "6dc49c0eeb528dfe65eadc6a2550372ec47e7db55a0ce4c371ce3b378c13548c",
+      "focused-watch.log": "4d313e4670a7ce8349733423285997437437147ef08470f64735ec72cfed6b9a",
+      "real-oracles.json": "482a0fba605982e278c2311ddd0692d796d043adf57589618048a3d3f43ebb56",
+      "entry-oracles.json": "f96f27815dc15c34c44d30c7dbb521faa069b56fdf9deb0d9039c0fd42ff6796",
+      "forced-oracles.json": "2a0b39502c31597b7efa3974eb1e17179e298b95ea5a1dee1bb7ac4b062866b8",
+      "reuse-traces.json": "dde16699eada73906fc68c67a10dfb1493c90fcf9fd98ed22f3714d1e5a69b7b",
+      "real-oracles.log": "9fed4b1d1bbf477c6ad947017bec16700aba195e77a9393332a277c029ec0dd7",
+      "entry-oracles.log": "619e89e3de3d4861f59575d5b782c1935a603f9367294142013674236936937b",
+      "forced-oracles.log": "a6c239f9a49fa5eee065c4d3f8de0986ab00611b9ea796287a034d426134cfe8",
+      "sdk-restoration.json": "ec9aff66bb227655bf1d6532682c05074c9a69c973b203413fa897cf9a65cc95",
+      "editor-checks.json": "368efdd6545f38986303a148c13a4fe9bca77221f1d161ca44855489f6b2e6ba",
+      "editor-spi.log": "eb2e8833e17caf395f99be2ad548245d06d6e3b89e00c41125b5e1fbdb02f63e",
+      "editor-pss.log": "9de08c184bf99a614f3f5d1d5e98b66b60ad2ac3d6118258fc07b9f0bf2d6121",
+      "editor-ubus.log": "de8094aca0d433dcc61c8dd28ce85db3c1aa7e8e7dd2a5ec05be55b23c4ca345",
+      "forced-W01-compare.tsv": "280617a16e24ae5ab4af0188a9bfd8ad6c8fa444532c1a1a09e2be63acb0d216",
+      "forced-W07-pss-multidoc.tsv": "3c119a42c48ba62d4fd526886a4da38ad527d75e335bbb852f730bb841f71e98",
+      "forced-W08-ubus-task.tsv": "ed3c9b7707d8a767e182bf6e5eddb3baabf40bd1c35b8365af52a1b65efbb136",
+      "format.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "format-existing.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  }
+}

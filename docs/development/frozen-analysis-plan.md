@@ -52,7 +52,8 @@ Configuration names will be finalized with schema and round-trip tests before
 release. Required concepts are:
 
 - A UVM source directory, optional explicit entry file, and an independent cache
-  enable switch. Directory and entry resolve relative to the workspace.
+  enable switch. The directory resolves relative to the workspace; the entry
+  resolves relative to that directory. Absolute paths are also supported.
 - Separate selectors for package name, module definition name and exact RTL
   instance path, plus a bounded cache budget. No overloaded string that guesses
   which selector the user intended.
@@ -168,6 +169,16 @@ After acceptance use a normal push to main under the standing user instruction.
   real-project off/on processes and three headless LazyVim checks pass. See the
   [milestone report](../../validation/macos-frozen-foundation-2026-10-20.md).
   No new cache speedup is claimed.
-- Next implementation: explicit UVM path/entry configuration and source-loading
-  integration, followed by reuse and invalidation coverage for that configuration.
-- No new cache/configuration is claimed implemented by this plan.
+- Phase 1 implemented: `uvm.sourceDirectory` and optional `uvm.entryFile` select
+  literal library inputs independently of the default-off experiment. Matching
+  project roots/wrappers retain their original order; an absent library is added
+  once, and conflicts are reported. The selected entry participates in parsing,
+  snapshot/worker identity and prefix eligibility. Missing-entry repair and disk
+  updates preserve editor overlays. Standalone library preparation reuses its
+  native tree. See the [milestone report](../../validation/macos-uvm-path-2026-10-20.md)
+  for acceptance and remaining restrictions. This is in-memory syntax reuse;
+  generic scope selection and semantic reuse remain pending.
+- Next implementation: the general frozen-source registry and package selection,
+  with dependency/preprocessing identity, bounded retention and observable status;
+  then module definitions and instance-subtree selection. Macro-hover work can
+  proceed independently within the ordered plan.

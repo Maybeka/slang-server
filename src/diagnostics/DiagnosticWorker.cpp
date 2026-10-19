@@ -117,7 +117,9 @@ static DiagnosticJobOutput executeJob(std::string_view bytes,
         if (root.file && root.file <= input.sources.files.size()) {
             rootPath = input.sources.files[root.file - 1].fullPath;
             auto filename = std::filesystem::path(rootPath).filename();
-            eligible = filename == "uvm.sv" || filename == "uvm_pkg.sv";
+            auto& explicitRoot = input.treeOptions[0].preprocessor->uvmPrefixRoot;
+            eligible = explicitRoot.empty() ? filename == "uvm.sv" || filename == "uvm_pkg.sv"
+                                            : rootPath == explicitRoot;
             sortKey = root.sortKey;
         }
         if (eligible)

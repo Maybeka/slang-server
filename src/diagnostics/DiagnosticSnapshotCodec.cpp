@@ -137,6 +137,7 @@ void validateOptions(const OwnedOptions& options, const Limits& limits) {
         const auto& value = *options.preprocessor;
         languageOk(value.languageVersion);
         stringOk(value.predefineSource, limits);
+        stringOk(value.uvmPrefixRoot, limits);
         stringsOk(value.predefines, limits);
         stringsOk(value.undefines, limits);
         stringsOk(value.additionalIncludePaths, limits, true);
@@ -579,6 +580,7 @@ OwnedOptions captureOptions(const slang::Bag& options, const Limits& limits) {
             out.keywordMapping.push_back({pattern, static_cast<uint32_t>(version)});
         out.allowMissingProtectedScopeEnd = input->allowMissingProtectedScopeEnd;
         out.captureUvmPrefix = input->captureUvmPrefix;
+        out.uvmPrefixRoot = input->uvmPrefixRoot;
     }
     if (auto* input = options.get<slang::parsing::ParserOptions>()) {
         ++count;
@@ -675,6 +677,7 @@ ReconstructedOptions::ReconstructedOptions(OwnedOptions options, const Limits& l
                 entry.pattern, static_cast<slang::parsing::KeywordVersion>(entry.version));
         out.allowMissingProtectedScopeEnd = input.allowMissingProtectedScopeEnd;
         out.captureUvmPrefix = input.captureUvmPrefix;
+        out.uvmPrefixRoot = input.uvmPrefixRoot;
         bag_.set(std::move(out));
     }
     if (owned_.parser) {

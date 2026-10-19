@@ -1792,6 +1792,17 @@ void SlangServer::onDocDidClose(const lsp::DidCloseTextDocumentParams& params) {
 
 void SlangServer::onWorkspaceDidChangeWatchedFiles(const lsp::DidChangeWatchedFilesParams& params) {
     m_methodScope.reset();
+    auto openOverlay = [&](const URI& uri, const fs::path& path) {
+        if (m_driver->isDocumentOpen(uri))
+            return true;
+        for (const auto& [openUri, document] : m_driver->docs) {
+            if (m_driver->isDocumentOpen(openUri) &&
+                (normalizeWatchedPath(fs::path(openUri.getPath())) == path ||
+                 normalizeWatchedPath(m_driver->sm.getFullPath(document->getBuffer())) == path))
+                return true;
+        }
+        return false;
+    };
     // Check if any config or active build files changed
     bool needsReload = m_configReloadPending;
     for (const auto& change : params.changes) {
@@ -1805,6 +1816,8 @@ void SlangServer::onWorkspaceDidChangeWatchedFiles(const lsp::DidChangeWatchedFi
         if (const char* home = std::getenv("HOME"); home && !std::getenv("SLANG_SERVER_TESTS"))
             needsReload |= changedPath ==
                            normalizeWatchedPath(fs::path(home) / ".slang" / "server.json");
+        if (m_driver->isUvmConfigurationInput(changedPath) && !openOverlay(change.uri, changedPath))
+            needsReload = true;
         if (needsReload)
             break;
         for (const auto& [commandPath, _] : m_driver->driver.getCommandFileMetadata()) {
@@ -1836,19 +1849,7 @@ void SlangServer::onWorkspaceDidChangeWatchedFiles(const lsp::DidChangeWatchedFi
     lsp::DidChangeWatchedFilesParams sourceChanges;
     for (const auto& change : params.changes) {
         const auto changedPath = normalizeWatchedPath(fs::path(change.uri.getPath()));
-        bool openOverlay = m_driver->isDocumentOpen(change.uri);
-        if (!openOverlay) {
-            for (const auto& [uri, document] : m_driver->docs) {
-                if (m_driver->isDocumentOpen(uri) &&
-                    (normalizeWatchedPath(fs::path(uri.getPath())) == changedPath ||
-                     normalizeWatchedPath(m_driver->sm.getFullPath(document->getBuffer())) ==
-                         changedPath)) {
-                    openOverlay = true;
-                    break;
-                }
-            }
-        }
-        if (!openOverlay)
+        if (!openOverlay(change.uri, changedPath))
             sourceChanges.changes.push_back(change);
     }
     if (sourceChanges.changes.empty())

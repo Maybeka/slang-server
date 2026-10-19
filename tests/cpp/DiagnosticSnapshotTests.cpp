@@ -307,6 +307,7 @@ TEST_CASE("SDK driver option identities survive server snapshot capture") {
     REQUIRE(driver.parseCommandLine("slang --single-unit --threads 1"));
     REQUIRE(driver.processOptions(false));
     driver.options.captureUvmPrefix = true;
+    driver.options.uvmPrefixRoot = "/explicit/library/custom-entry.sv";
     auto options = driver.createOptionBag();
     options.set(driver.getAnalysisOptions());
     REQUIRE(options.size() == 6);
@@ -318,6 +319,7 @@ TEST_CASE("SDK driver option identities survive server snapshot capture") {
     CHECK(captured.parser);
     REQUIRE(captured.preprocessor);
     CHECK(captured.preprocessor->captureUvmPrefix);
+    CHECK(captured.preprocessor->uvmPrefixRoot == driver.options.uvmPrefixRoot);
     CHECK(captured.compilation);
     CHECK(captured.analysis);
     server::diagnostic_snapshot::ReconstructedOptions restored(captured);

@@ -78,6 +78,23 @@ All configuration options are optional and have sensible defaults. In VSCode, th
     Directories from `flags` and build files are searched before this list. File-local lookup follows slang's normal rules, including `--incdir-first`. Lists from workspace, user, and local configuration are appended in that order. System includes (`<...>`) continue to use system include directories.
 
     **Example:** `"incdirs": ["rtl/include", "verification/include"]`
+
+### `uvm`
+
+:   **Type:** `{"sourceDirectory": string, "entryFile"?: string} | null`
+
+    **Default:** `null`
+
+    Select a UVM source directory or distribution root. Relative directories resolve
+    from the workspace; a relative entry resolves from that directory. The server
+    validates matching existing project inputs before adding a missing library.
+    Conflicting library versions are reported. Source loading works with the
+    experimental cache disabled; no UVM is injected without this setting.
+
+    For example: `"uvm": {"sourceDirectory": "vendor/uvm/src", "entryFile": "uvm_pkg.sv"}`.
+    See [UVM library selection and prefix reuse](../features/uvm-prefix-cache.md)
+    for entry discovery, editor overrides and reuse limits.
+
 ### `explorePreincludeFiles`
 
 :   **Type:** `string[]`

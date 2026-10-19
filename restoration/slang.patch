@@ -207,7 +207,7 @@ index bc43d0037063e9e47d7c4fbd85473077d953a4a4..0354fae611098e36f7d52216b5b98888
  
  } // namespace slang
 diff --git a/include/slang/driver/Driver.h b/include/slang/driver/Driver.h
-index 0f9cff2a3c5865d20a9f6c570e07ab640a1b0f69..96f711462f4e4a7a500bbf6899a6baea330a82e9 100644
+index 0f9cff2a3c5865d20a9f6c570e07ab640a1b0f69..b5d388e9300321f36e97f7ebae243476628347aa 100644
 --- a/include/slang/driver/Driver.h
 +++ b/include/slang/driver/Driver.h
 @@ -18,6 +18,7 @@
@@ -218,17 +218,18 @@ index 0f9cff2a3c5865d20a9f6c570e07ab640a1b0f69..96f711462f4e4a7a500bbf6899a6baea
  #include "slang/util/Function.h"
  #include "slang/util/LanguageVersion.h"
  #include "slang/util/OS.h"
-@@ -372,6 +373,9 @@ public:
+@@ -372,6 +373,10 @@ public:
  
          /// Returns true if the lintMode option is provided.
          bool lintMode() const;
 +
 +        /// Embedder-only prefix capture policy; never enabled by command-line defaults.
 +        bool captureUvmPrefix = false;
++        std::string uvmPrefixRoot;
      } options;
  
      /// Constructs a new instance of the @a Driver class.
-@@ -391,6 +395,7 @@ public:
+@@ -391,6 +396,7 @@ public:
      template<typename TArgs>
      [[nodiscard]] bool parseCommandLine(int argc, TArgs argv,
                                          const CommandLine::ParseOptions& parseOptions = {}) {
@@ -237,10 +238,21 @@ index 0f9cff2a3c5865d20a9f6c570e07ab640a1b0f69..96f711462f4e4a7a500bbf6899a6baea
              issueCommandLineErrors(cmdLine);
              return false;
 diff --git a/include/slang/driver/SourceLoader.h b/include/slang/driver/SourceLoader.h
-index 0913e369e9dfcbcc41ca5dc07b1892631b767833..eef399de445fb2fd607b48bce09d6adf52f8deb9 100644
+index 0913e369e9dfcbcc41ca5dc07b1892631b767833..7d3f2140f8533e868283da26351a20c1e84ea40c 100644
 --- a/include/slang/driver/SourceLoader.h
 +++ b/include/slang/driver/SourceLoader.h
-@@ -151,6 +151,13 @@ public:
+@@ -78,6 +78,10 @@ public:
+     /// an error will be issued.
+     void addFiles(std::string_view pattern);
+ 
++    /// Prepend one canonical absolute literal primary source if not already listed.
++    /// Existing sources retain their order and compilation-unit metadata. No globbing.
++    void prependFile(std::filesystem::path path);
++
+     /// @brief Adds library files to be loaded, specified via the given @a pattern.
+     ///
+     /// All of the files that match the pattern will be added for loading.
+@@ -151,6 +155,13 @@ public:
      /// Returns the source paths that have been loaded.
      std::vector<std::filesystem::path> getFilePaths() const;
  
@@ -254,7 +266,7 @@ index 0913e369e9dfcbcc41ca5dc07b1892631b767833..eef399de445fb2fd607b48bce09d6adf
      /// Loads all of the sources that have been added to the loader,
      /// but does not parse them. Returns the loaded buffers.
      std::vector<SourceBuffer> loadSources();
-@@ -172,7 +179,8 @@ public:
+@@ -172,7 +183,8 @@ public:
      /// it does not exist. Returns nullptr if @a name is empty.
      SourceLibrary* getOrAddLibrary(std::string_view name);
  
@@ -264,7 +276,7 @@ index 0913e369e9dfcbcc41ca5dc07b1892631b767833..eef399de445fb2fd607b48bce09d6adf
      SourceBuffer findBuffer(std::string_view name) const;
  
      /// Load trees using a custom buffer finder function
-@@ -256,6 +264,8 @@ private:
+@@ -256,6 +268,8 @@ private:
                         const std::filesystem::path& basePath);
      LoadResult loadAndParse(const FileEntry& fileEntry, const Bag& optionBag,
                              const SourceOptions& srcOptions, uint64_t fileSortKey = UINT64_MAX);
@@ -273,7 +285,7 @@ index 0913e369e9dfcbcc41ca5dc07b1892631b767833..eef399de445fb2fd607b48bce09d6adf
      void addError(const std::filesystem::path& path, std::error_code ec);
  
      SourceManager& sourceManager;
-@@ -270,6 +280,7 @@ private:
+@@ -270,6 +284,7 @@ private:
      flat_hash_set<std::string> uniqueExtensions;
      flat_hash_map<BufferID, std::vector<std::string>> bufferWarningOptions;
      std::vector<std::string> errors;
@@ -282,7 +294,7 @@ index 0913e369e9dfcbcc41ca5dc07b1892631b767833..eef399de445fb2fd607b48bce09d6adf
  
      static constexpr int MinFilesForThreading = 4;
 diff --git a/include/slang/parsing/Preprocessor.h b/include/slang/parsing/Preprocessor.h
-index 88d571c1a80cd25fdc86c49f3663bbfc57fd3d69..844c1b0b6de52a67a2366a99bda5e9c39005c77a 100644
+index 88d571c1a80cd25fdc86c49f3663bbfc57fd3d69..7930e89c09616961452664091e20374d479d4c85 100644
 --- a/include/slang/parsing/Preprocessor.h
 +++ b/include/slang/parsing/Preprocessor.h
 @@ -22,6 +22,7 @@
@@ -293,17 +305,26 @@ index 88d571c1a80cd25fdc86c49f3663bbfc57fd3d69..844c1b0b6de52a67a2366a99bda5e9c3
  
  struct ConditionalDirectiveExpressionSyntax;
  struct DefineDirectiveSyntax;
-@@ -77,6 +78,9 @@ struct SLANG_EXPORT PreprocessorOptions {
+@@ -77,6 +78,18 @@ struct SLANG_EXPORT PreprocessorOptions {
      /// module/program/package/class inside an include file with protected code has the
      /// end of scope token inside the protected code.
      bool allowMissingProtectedScopeEnd = false;
 +
 +    /// Opt-in reusable first-root UVM prefix checkpoint. Disabled by default.
 +    bool captureUvmPrefix = false;
++    /// Canonical explicit UVM entry root. Empty retains legacy filename detection.
++    std::string uvmPrefixRoot;
++
++    bool matchesUvmPrefixRoot(const std::filesystem::path& path) const {
++        if (!uvmPrefixRoot.empty())
++            return path == std::filesystem::path(uvmPrefixRoot);
++        auto name = path.filename();
++        return name == "uvm.sv" || name == "uvm_pkg.sv";
++    }
  };
  
  /// Preprocessor - Interface between lexer and parser
-@@ -85,6 +89,8 @@ struct SLANG_EXPORT PreprocessorOptions {
+@@ -85,6 +98,8 @@ struct SLANG_EXPORT PreprocessorOptions {
  /// and macro expansion, and the actual SystemVerilog parser that wants a nice coherent stream
  /// of tokens to consume.
  class SLANG_EXPORT Preprocessor {
@@ -312,7 +333,7 @@ index 88d571c1a80cd25fdc86c49f3663bbfc57fd3d69..844c1b0b6de52a67a2366a99bda5e9c3
  public:
      Preprocessor(SourceManager& sourceManager, BumpAllocator& alloc, Diagnostics& diagnostics,
                   const Bag& options = {},
-@@ -476,6 +482,8 @@ private:
+@@ -476,6 +491,8 @@ private:
  
      // Directives don't get handled when lexing within a macro body
      // (either define or usage).
@@ -416,7 +437,7 @@ index a8d51f7746b0d8d0b2d5baf9c3dd9ef6477b4154..638de5071b369befab194767150f153f
      SyntaxNode* rootNode;
      const SourceLibrary* library;
 diff --git a/include/slang/text/SourceManager.h b/include/slang/text/SourceManager.h
-index de1d1c27195b364570eab007408f2aac14f86a17..3d655fd5c7e7fca1e1619672c35d4ba7b99117a6 100644
+index de1d1c27195b364570eab007408f2aac14f86a17..6fcfbfc4fad347b286f0d1514037e4baf881f2ec 100644
 --- a/include/slang/text/SourceManager.h
 +++ b/include/slang/text/SourceManager.h
 @@ -16,11 +16,13 @@
@@ -518,7 +539,17 @@ index de1d1c27195b364570eab007408f2aac14f86a17..3d655fd5c7e7fca1e1619672c35d4ba7
      /// Information about a `line directive in a source buffer.
      struct LineDirectiveInfo {
          std::string name;       // File name set by directive
-@@ -259,25 +339,46 @@ public:
+@@ -74,6 +154,9 @@ public:
+     /// and that path does not exist or is not a directory.
+     std::error_code addUserDirectories(std::string_view pattern);
+ 
++    /// Add one literal include directory without interpreting wildcard characters.
++    std::error_code addUserDirectory(std::filesystem::path path);
++
+     /// Gets the source line number for a given source location.
+     size_t getLineNumber(SourceLocation location) const;
+ 
+@@ -259,25 +342,46 @@ public:
      /// Sets whether filenames should be made "proximate" to the current directory
      /// for diagnostic reporting purposes. This is on by default but can be
      /// disabled to always use the simple filename.
@@ -570,7 +601,7 @@ index de1d1c27195b364570eab007408f2aac14f86a17..3d655fd5c7e7fca1e1619672c35d4ba7
  
      /// Stores information specified in a pragma diagnostic directive, which alters the
      /// currently active set of diagnostic mappings.
-@@ -339,6 +440,14 @@ public:
+@@ -339,6 +443,14 @@ public:
  
      /// Returns the total bytes consumed by all loaded source files:
      /// raw file content plus any cached line-offset tables.
@@ -585,7 +616,7 @@ index de1d1c27195b364570eab007408f2aac14f86a17..3d655fd5c7e7fca1e1619672c35d4ba7
      size_t getMemoryUsage() const;
  
      /// Appends raw line-start offsets for @a text to @a offsets, using the same
-@@ -370,6 +479,7 @@ private:
+@@ -370,6 +482,7 @@ private:
          uint64_t sortKey = 0;
          BufferKind bufferKind = BufferKind::DesignFile;
          std::vector<LineDirectiveInfo> lineDirectives;
@@ -593,7 +624,7 @@ index de1d1c27195b364570eab007408f2aac14f86a17..3d655fd5c7e7fca1e1619672c35d4ba7
  
          FileInfo() = default;
  
-@@ -455,6 +565,32 @@ private:
+@@ -455,6 +568,32 @@ private:
      // map from buffer to diagnostic directive lists
      flat_hash_map<BufferID, std::vector<DiagnosticDirectiveInfo>> diagDirectives;
  
@@ -1000,7 +1031,7 @@ index 3fa297e9c399e3143a30eeebacbcd569f3f30159..0eb352284b87411bfd3576392b14b094
      for (auto& [key, formatter] : formatters)
          formatter->startMessage(diag);
 diff --git a/source/driver/Driver.cpp b/source/driver/Driver.cpp
-index d049078b09193791a4dfbc2e7dd89db458bf61f6..22b3fb988eec5a064ec2e765b8a2203df36a24f0 100644
+index d049078b09193791a4dfbc2e7dd89db458bf61f6..58e9a804a360937a8f344331ac964b268ca20dea 100644
 --- a/source/driver/Driver.cpp
 +++ b/source/driver/Driver.cpp
 @@ -26,6 +26,7 @@
@@ -1104,16 +1135,17 @@ index d049078b09193791a4dfbc2e7dd89db458bf61f6..22b3fb988eec5a064ec2e765b8a2203d
      if (!reportLoadErrors())
          return false;
  
-@@ -1177,6 +1190,7 @@ void Driver::addParseOptions(Bag& bag) const {
+@@ -1177,6 +1190,8 @@ void Driver::addParseOptions(Bag& bag) const {
      soptions.librariesInheritMacros = options.librariesInheritMacros == true;
  
      PreprocessorOptions ppoptions;
 +    ppoptions.captureUvmPrefix = options.captureUvmPrefix;
++    ppoptions.uvmPrefixRoot = options.uvmPrefixRoot;
      ppoptions.predefines = options.defines;
      ppoptions.undefines = options.undefines;
      ppoptions.predefineSource = "<command-line>";
 diff --git a/source/driver/SourceLoader.cpp b/source/driver/SourceLoader.cpp
-index 99b853be78fe889077b3cd38965417c5955788e7..c1711074d5f288d631f3eaae9b32a934e041b98e 100644
+index 99b853be78fe889077b3cd38965417c5955788e7..eeb75ca8f21b4c66fc1570ea9a55127d81a7be16 100644
 --- a/source/driver/SourceLoader.cpp
 +++ b/source/driver/SourceLoader.cpp
 @@ -14,6 +14,7 @@
@@ -1124,7 +1156,25 @@ index 99b853be78fe889077b3cd38965417c5955788e7..c1711074d5f288d631f3eaae9b32a934
  #include "slang/util/SmallVector.h"
  #include "slang/util/String.h"
  #include "slang/util/ThreadPool.h"
-@@ -191,16 +192,27 @@ std::vector<SourceBuffer> SourceLoader::loadSources() {
+@@ -43,6 +44,17 @@ void SourceLoader::addFiles(std::string_view pattern) {
+                      /* expandEnvVars */ false);
+ }
+ 
++void SourceLoader::prependFile(fs::path path) {
++    SLANG_ASSERT(path.is_absolute());
++    if (fileIndex.contains(path))
++        return;
++    fileEntries.insert(fileEntries.begin(),
++                       FileEntry(std::move(path), false, nullptr, nullptr, GlobRank::ExactPath));
++    for (auto& [_, index] : fileIndex)
++        ++index;
++    fileIndex.emplace(fileEntries.front().path, 0);
++}
++
+ std::vector<std::filesystem::path> SourceLoader::getFilePaths() const {
+     std::vector<std::filesystem::path> paths;
+     paths.reserve(fileEntries.size());
+@@ -191,16 +203,27 @@ std::vector<SourceBuffer> SourceLoader::loadSources() {
      return results;
  }
  
@@ -1155,7 +1205,7 @@ index 99b853be78fe889077b3cd38965417c5955788e7..c1711074d5f288d631f3eaae9b32a934
                  auto readResult = sourceManager.readSource(path);
                  if (readResult) {
                      return *readResult;
-@@ -369,9 +381,29 @@ SourceLoader::SyntaxTreeList SourceLoader::loadAndParseSources(const Bag& option
+@@ -369,9 +392,29 @@ SourceLoader::SyntaxTreeList SourceLoader::loadAndParseSources(const Bag& option
      }
  
      if (!searchDirectories.empty()) {
@@ -1187,7 +1237,7 @@ index 99b853be78fe889077b3cd38965417c5955788e7..c1711074d5f288d631f3eaae9b32a934
      }
  
      // Collect per-buffer warning options from all separate compilation units.
-@@ -511,6 +543,39 @@ void SourceLoader::addFilesInternal(std::string_view pattern, const fs::path& ba
+@@ -511,6 +554,39 @@ void SourceLoader::addFilesInternal(std::string_view pattern, const fs::path& ba
      std::error_code ec;
      auto rank = svGlob(basePath, pattern, GlobMode::Files, files, expandEnvVars, ec);
  
@@ -1227,7 +1277,7 @@ index 99b853be78fe889077b3cd38965417c5955788e7..c1711074d5f288d631f3eaae9b32a934
      if (ec && !dirPrefixes.empty()) {
          // The file was not found at the given path; try prepending each
          // registered directory prefix in the order they were added.
-@@ -520,6 +585,7 @@ void SourceLoader::addFilesInternal(std::string_view pattern, const fs::path& ba
+@@ -520,6 +596,7 @@ void SourceLoader::addFilesInternal(std::string_view pattern, const fs::path& ba
              std::error_code prefixEc;
              auto prefixRank = svGlob(basePath, prefix + patternStr, GlobMode::Files, prefixed,
                                       expandEnvVars, prefixEc);
@@ -1235,7 +1285,7 @@ index 99b853be78fe889077b3cd38965417c5955788e7..c1711074d5f288d631f3eaae9b32a934
              if (!prefixEc) {
                  files = std::move(prefixed);
                  rank = prefixRank;
-@@ -530,6 +596,8 @@ void SourceLoader::addFilesInternal(std::string_view pattern, const fs::path& ba
+@@ -530,6 +607,8 @@ void SourceLoader::addFilesInternal(std::string_view pattern, const fs::path& ba
      }
  
      if (ec) {
@@ -1343,7 +1393,7 @@ index e86c15c68a361c3168d7948e294e33fdbd0b9b92..b426ae04e2afb57532572913f65b5171
                      else {
                          addDiag(diag::ExpectedDiagPragmaArg, simple.value.range());
 diff --git a/source/syntax/SyntaxTree.cpp b/source/syntax/SyntaxTree.cpp
-index ac681a4db5f9b15af26152781d4260c8db59d68f..5c9645f323c0f52f072a430032984a8b84ee50e4 100644
+index ac681a4db5f9b15af26152781d4260c8db59d68f..449aa77bb6f1cba613471fd5db62394a29073c7c 100644
 --- a/source/syntax/SyntaxTree.cpp
 +++ b/source/syntax/SyntaxTree.cpp
 @@ -7,16 +7,90 @@
@@ -1618,7 +1668,7 @@ index ac681a4db5f9b15af26152781d4260c8db59d68f..5c9645f323c0f52f072a430032984a8b
      if (sources.empty())
          SLANG_THROW(std::invalid_argument("sources cannot be empty"));
  
-@@ -139,8 +377,56 @@ std::shared_ptr<SyntaxTree> SyntaxTree::create(SourceManager& sourceManager,
+@@ -139,8 +377,55 @@ std::shared_ptr<SyntaxTree> SyntaxTree::create(SourceManager& sourceManager,
  
      BumpAllocator alloc;
      Diagnostics diagnostics;
@@ -1630,8 +1680,7 @@ index ac681a4db5f9b15af26152781d4260c8db59d68f..5c9645f323c0f52f072a430032984a8b
 +                   !originalPP.bufferChangeCB && originalPP.keywordMapping.empty() &&
 +                   inheritedMacros.empty();
 +    if (capture) {
-+        auto name = sourceManager.getFullPath(sources[0].id).filename().string();
-+        capture = name == "uvm.sv" || name == "uvm_pkg.sv";
++        capture = originalPP.matchesUvmPrefixRoot(sourceManager.getFullPath(sources[0].id));
 +    }
 +    std::optional<InitialCheckpoint> checkpoint;
 +    Preprocessor* active = nullptr;
@@ -1677,7 +1726,7 @@ index ac681a4db5f9b15af26152781d4260c8db59d68f..5c9645f323c0f52f072a430032984a8b
      const SourceLibrary* library = nullptr;
      for (auto it = sources.rbegin(); it != sources.rend(); it++) {
          preprocessor.pushSource(*it);
-@@ -168,9 +454,55 @@ std::shared_ptr<SyntaxTree> SyntaxTree::create(SourceManager& sourceManager,
+@@ -168,9 +453,54 @@ std::shared_ptr<SyntaxTree> SyntaxTree::create(SourceManager& sourceManager,
              return create(sourceManager, sources, options, inheritedMacros, false);
      }
  
@@ -1713,8 +1762,7 @@ index ac681a4db5f9b15af26152781d4260c8db59d68f..5c9645f323c0f52f072a430032984a8b
 +        }
 +    }
 +    if (originalPP.captureUvmPrefix && sources.size() == 1) {
-+        const auto filename = sourceManager.getFullPath(sources[0].id).filename().string();
-+        if (filename == "uvm.sv" || filename == "uvm_pkg.sv") {
++        if (originalPP.matchesUvmPrefixRoot(sourceManager.getFullPath(sources[0].id))) {
 +            // Complete directive ancestry before any reader can observe this tree.
 +            DirectiveSummary summary;
 +            freezeDirectiveAncestry(result->root(), summary);
@@ -1734,7 +1782,7 @@ index ac681a4db5f9b15af26152781d4260c8db59d68f..5c9645f323c0f52f072a430032984a8b
  }
  
  std::shared_ptr<SyntaxTree> SyntaxTree::fromLibraryMapFile(std::string_view path,
-@@ -216,6 +548,187 @@ std::shared_ptr<SyntaxTree> SyntaxTree::fromLibraryMapBuffer(const SourceBuffer&
+@@ -216,6 +546,187 @@ std::shared_ptr<SyntaxTree> SyntaxTree::fromLibraryMapBuffer(const SourceBuffer&
                         parser.getMetadata(), preprocessor.getMetadata(), options));
  }
  
@@ -1923,7 +1971,7 @@ index ac681a4db5f9b15af26152781d4260c8db59d68f..5c9645f323c0f52f072a430032984a8b
      auto text = SyntaxPrinter(sourceManager())
                      .setIncludeDirectives(true)
 diff --git a/source/text/SourceManager.cpp b/source/text/SourceManager.cpp
-index 386684b5adada5a55d10eb0152211b4ce63be7e4..7a627296b322b0604ca409b52e2cd2260e39fc5e 100644
+index 386684b5adada5a55d10eb0152211b4ce63be7e4..0e5024ff0166b3d38f0170ced7705768bfe71b6d 100644
 --- a/source/text/SourceManager.cpp
 +++ b/source/text/SourceManager.cpp
 @@ -7,6 +7,9 @@
@@ -2345,7 +2393,7 @@ index 386684b5adada5a55d10eb0152211b4ce63be7e4..7a627296b322b0604ca409b52e2cd226
  SourceManager::SourceManager() {
      // add a dummy entry to the start of the directory list so that our file IDs line up
      FileInfo file;
-@@ -36,23 +434,33 @@ SourceManager::SourceManager() {
+@@ -36,27 +434,54 @@ SourceManager::SourceManager() {
  }
  
  std::error_code SourceManager::addSystemDirectories(std::string_view pattern) {
@@ -2379,7 +2427,28 @@ index 386684b5adada5a55d10eb0152211b4ce63be7e4..7a627296b322b0604ca409b52e2cd226
      userDirectories.insert(userDirectories.end(), dirs.begin(), dirs.end());
      return ec;
  }
-@@ -497,8 +905,9 @@ SourceBuffer SourceManager::assignText(std::string_view text, SourceLocation inc
+ 
++std::error_code SourceManager::addUserDirectory(fs::path path) {
++    if (snapshotReplay)
++        failSnapshot("include directories cannot change during replay");
++    std::error_code ec;
++    if (!fs::is_directory(path, ec))
++        return ec ? ec : std::make_error_code(std::errc::not_a_directory);
++    path = fs::canonical(path, ec);
++    if (ec)
++        return ec;
++    std::unique_lock<std::shared_mutex> lock(includeDirMutex);
++    std::unique_lock<std::shared_mutex> sourceLock(mutex);
++    if (snapshotRecording && bufferEntries.size() != 1)
++        snapshotConflict = true;
++    userDirectories.push_back(std::move(path));
++    return {};
++}
++
+ size_t SourceManager::getRawLineNumber(SourceLocation location) const {
+     std::shared_lock<std::shared_mutex> lock(mutex);
+     return getRawLineNumber(location, lock);
+@@ -497,8 +922,9 @@ SourceBuffer SourceManager::assignText(std::string_view text, SourceLocation inc
  
  SourceBuffer SourceManager::assignText(std::string_view path, std::string_view text,
                                         SourceLocation includedFrom, const SourceLibrary* library) {
@@ -2390,7 +2459,7 @@ index 386684b5adada5a55d10eb0152211b4ce63be7e4..7a627296b322b0604ca409b52e2cd226
          using namespace std::literals;
          temp = "<unnamed_buffer"s + std::to_string(unnamedBufferCount++) + ">"s;
          path = temp;
-@@ -509,26 +918,70 @@ SourceBuffer SourceManager::assignText(std::string_view path, std::string_view t
+@@ -509,26 +935,70 @@ SourceBuffer SourceManager::assignText(std::string_view path, std::string_view t
      if (buffer.empty() || buffer.back() != '\0')
          buffer.push_back('\0');
  
@@ -2471,7 +2540,7 @@ index 386684b5adada5a55d10eb0152211b4ce63be7e4..7a627296b322b0604ca409b52e2cd226
  }
  
  SourceManager::BufferOrError SourceManager::readSource(const fs::path& path,
-@@ -541,6 +994,29 @@ SourceManager::BufferOrError SourceManager::readHeader(
+@@ -541,6 +1011,29 @@ SourceManager::BufferOrError SourceManager::readHeader(
      std::string_view path, SourceLocation includedFrom, const SourceLibrary* library,
      bool isSystemPath, std::span<std::filesystem::path const> additionalIncludePaths) {
  
@@ -2501,7 +2570,7 @@ index 386684b5adada5a55d10eb0152211b4ce63be7e4..7a627296b322b0604ca409b52e2cd226
      // if the header is specified as an absolute path, just do a straight lookup
      SLANG_ASSERT(!path.empty());
      fs::path p = path;
-@@ -614,18 +1090,25 @@ SourceManager::BufferOrError SourceManager::readHeader(
+@@ -614,18 +1107,25 @@ SourceManager::BufferOrError SourceManager::readHeader(
  }
  
  void SourceManager::addLineDirective(SourceLocation location, size_t lineNum, std::string_view name,
@@ -2529,7 +2598,7 @@ index 386684b5adada5a55d10eb0152211b4ce63be7e4..7a627296b322b0604ca409b52e2cd226
      else
          full = fs::path(info->data->name).replace_filename(linePath);
  
-@@ -634,9 +1117,15 @@ void SourceManager::addLineDirective(SourceLocation location, size_t lineNum, st
+@@ -634,9 +1134,15 @@ void SourceManager::addLineDirective(SourceLocation location, size_t lineNum, st
  }
  
  void SourceManager::addDiagnosticDirective(SourceLocation location, std::string_view name,
@@ -2546,7 +2615,7 @@ index 386684b5adada5a55d10eb0152211b4ce63be7e4..7a627296b322b0604ca409b52e2cd226
  
      size_t offset = fileLocation.offset();
      auto& vec = diagDirectives[fileLocation.buffer()];
-@@ -699,6 +1188,8 @@ std::vector<std::shared_ptr<void>> SourceManager::retainBuffers(
+@@ -699,6 +1205,8 @@ std::vector<std::shared_ptr<void>> SourceManager::retainBuffers(
  
  SourceBuffer SourceManager::replaceBufferImpl(FileInfo* oldInfo, SmallVector<char>&& buffer,
                                                std::unique_lock<std::shared_mutex>& lock) {
@@ -2555,7 +2624,7 @@ index 386684b5adada5a55d10eb0152211b4ce63be7e4..7a627296b322b0604ca409b52e2cd226
      auto oldData = oldInfo->data;
  
      // Mark old data as stale, remove reference
-@@ -713,6 +1204,12 @@ SourceBuffer SourceManager::replaceBufferImpl(FileInfo* oldInfo, SmallVector<cha
+@@ -713,6 +1221,12 @@ SourceBuffer SourceManager::replaceBufferImpl(FileInfo* oldInfo, SmallVector<cha
      lookupCache.insert_or_assign(getU8Str(newData->fullPath),
                                   std::pair{newData, std::error_code{}});
  
@@ -2568,7 +2637,7 @@ index 386684b5adada5a55d10eb0152211b4ce63be7e4..7a627296b322b0604ca409b52e2cd226
      // Create a new FileInfo entry with new data (don't modify old entry!)
      // Old data should be freed if nothing more points to it.
      return createBufferEntry(newData, oldInfo->includedFrom, oldInfo->library, oldInfo->sortKey,
-@@ -727,6 +1224,8 @@ SourceBuffer SourceManager::replaceBuffer(BufferID id, SmallVector<char>&& buffe
+@@ -727,6 +1241,8 @@ SourceBuffer SourceManager::replaceBuffer(BufferID id, SmallVector<char>&& buffe
  }
  
  SourceManager::BufferOrError SourceManager::reloadBuffer(BufferID id) {
@@ -2577,7 +2646,7 @@ index 386684b5adada5a55d10eb0152211b4ce63be7e4..7a627296b322b0604ca409b52e2cd226
      std::unique_lock<std::shared_mutex> lock(mutex);
  
      auto oldInfo = getFileInfo(id, lock);
-@@ -783,6 +1282,9 @@ SourceBuffer SourceManager::createBufferEntry(std::shared_ptr<FileData> fd,
+@@ -783,6 +1299,9 @@ SourceBuffer SourceManager::createBufferEntry(std::shared_ptr<FileData> fd,
  }
  
  bool SourceManager::isCached(const fs::path& path) const {
@@ -2587,7 +2656,7 @@ index 386684b5adada5a55d10eb0152211b4ce63be7e4..7a627296b322b0604ca409b52e2cd226
      fs::path absPath;
      if (!disableProximatePaths) {
          std::error_code ec;
-@@ -803,6 +1305,51 @@ SourceManager::BufferOrError SourceManager::openCached(const fs::path& fullPath,
+@@ -803,6 +1322,51 @@ SourceManager::BufferOrError SourceManager::openCached(const fs::path& fullPath,
                                                         SourceLocation includedFrom,
                                                         const SourceLibrary* library,
                                                         uint64_t sortKey) {
@@ -2639,7 +2708,7 @@ index 386684b5adada5a55d10eb0152211b4ce63be7e4..7a627296b322b0604ca409b52e2cd226
      fs::path absPath;
      if (!disableProximatePaths) {
          std::error_code ec;
-@@ -816,6 +1363,8 @@ SourceManager::BufferOrError SourceManager::openCached(const fs::path& fullPath,
+@@ -816,6 +1380,8 @@ SourceManager::BufferOrError SourceManager::openCached(const fs::path& fullPath,
  
      // first see if we have this file cached
      std::string pathStr = getU8Str(absPath);
@@ -2648,7 +2717,7 @@ index 386684b5adada5a55d10eb0152211b4ce63be7e4..7a627296b322b0604ca409b52e2cd226
      {
          std::unique_lock<std::shared_mutex> lock(mutex);
          auto it = lookupCache.find(pathStr);
-@@ -844,31 +1393,23 @@ SourceManager::BufferOrError SourceManager::openCached(const fs::path& fullPath,
+@@ -844,31 +1410,23 @@ SourceManager::BufferOrError SourceManager::openCached(const fs::path& fullPath,
  SourceBuffer SourceManager::cacheBuffer(fs::path&& path, std::string&& pathStr,
                                          SourceLocation includedFrom, const SourceLibrary* library,
                                          uint64_t sortKey, SmallVector<char>&& buffer) {
@@ -2726,7 +2795,7 @@ index f1b0a80f7ac9be510a57709c2f92953be448d534..d51707507c2bf8cb3c8db6373b194abc
    Test.cpp)
  
 diff --git a/tests/unittests/DriverTests.cpp b/tests/unittests/DriverTests.cpp
-index b4f6b728ec76e88401c81479159b7cc702b4e74a..bb5841a2c93fcb25f132c463fc3adc6aa3b08b28 100644
+index b4f6b728ec76e88401c81479159b7cc702b4e74a..e2aed8762a1d011a906b9c064b8ca797047b2ca3 100644
 --- a/tests/unittests/DriverTests.cpp
 +++ b/tests/unittests/DriverTests.cpp
 @@ -41,6 +41,33 @@ TEST_CASE("Driver processOptions can skip input file check") {
@@ -2763,7 +2832,7 @@ index b4f6b728ec76e88401c81479159b7cc702b4e74a..bb5841a2c93fcb25f132c463fc3adc6a
  TEST_CASE("Driver valid column unit") {
      Driver driver;
      driver.addStandardArgs();
-@@ -150,6 +177,285 @@ TEST_CASE("Driver tracks command file metadata") {
+@@ -150,6 +177,307 @@ TEST_CASE("Driver tracks command file metadata") {
      CHECK(jsonIt->second.defines == std::vector<std::string>{"BAZ=3"});
  }
  
@@ -2802,6 +2871,28 @@ index b4f6b728ec76e88401c81479159b7cc702b4e74a..bb5841a2c93fcb25f132c463fc3adc6a
 +}
 +
 +} // namespace
++
++TEST_CASE("Literal library sources prepend without reordering or corrupting source indexes") {
++    SourceLoaderTestFiles files;
++    auto tail = fs::canonical(files.write("tail.sv", "module tail; endmodule\n"));
++    auto library = fs::canonical(
++        files.write("library ?dir/vendor.sv", "package uvm_pkg; endpackage\n"));
++    auto next = fs::canonical(files.write("next.sv", "module next; endmodule\n"));
++    SourceManager sm;
++    SourceLoader loader(sm);
++    loader.addFiles(tail.string());
++    loader.prependFile(library);
++    loader.prependFile(library);
++    loader.addFiles(tail.string());
++    loader.addFiles(next.string());
++    CHECK(loader.getFilePaths() == std::vector<fs::path>{library, tail, next});
++    REQUIRE(loader.loadSources().size() == 3);
++    REQUIRE(!sm.addUserDirectory(library.parent_path()));
++    files.write("library ?dir/entry.svh", "typedef int selected;\n");
++    auto source = sm.readSource(tail.string());
++    REQUIRE(source);
++    CHECK(sm.readHeader("entry.svh", SourceLocation(source->id, 0), nullptr, false, {}));
++}
 +
 +TEST_CASE("Driver retains metadata for missing nested command files") {
 +    auto outputGuard = OS::captureOutput();
@@ -3049,7 +3140,7 @@ index b4f6b728ec76e88401c81479159b7cc702b4e74a..bb5841a2c93fcb25f132c463fc3adc6a
  TEST_CASE("SourceLoader doesn't reload names satisfied by later worklist entries") {
      SourceManager sourceManager;
  
-@@ -344,13 +650,15 @@ endmodule
+@@ -344,13 +672,15 @@ endmodule
                              (root / "top.sv").string(), root.string());
      CHECK(driver.parseCommandLine(args));
      CHECK(driver.processOptions());

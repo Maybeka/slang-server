@@ -190,12 +190,14 @@ public:
     void updatePackageContextKind(const URI& uri, const syntax::SyntaxTree& tree);
     uint64_t getExplicitContextRevision(const URI& uri) const;
     bool hasConfiguredCompilationInputs() const {
-        return m_config.compilationFilelist.value().has_value() || !m_configuredUnits.empty();
+        return m_config.compilationFilelist.value().has_value() ||
+               m_config.uvm.value().has_value() || !m_configuredUnits.empty();
     }
     bool hasSourceContextHints() const { return !m_explicitContexts.empty(); }
     uint64_t getContextInputRevision() const { return m_snapshotRevision; }
     std::vector<std::filesystem::path> getContextWatchPaths() const;
     bool configuredInputLoadFailed() const { return m_nativeInputsFailed; }
+    bool isUvmConfigurationInput(const std::filesystem::path& path) const;
     uint64_t getOwnerDiscoveryAttemptCount() const { return m_ownerDiscoveryAttempts; }
     const SemanticDiagnosticBatch::Statistics& getSemanticDiagnosticBatchStatistics() const {
         return m_semanticDiagnosticStatistics;
@@ -354,6 +356,12 @@ private:
     std::vector<std::shared_ptr<SlangDoc>> m_configuredUnits;
     bool m_nativeInputsFailed = false;
     bool m_configurationInputsFailed = false;
+    std::filesystem::path m_uvmEntryPath;
+    bool m_uvmLibraryOnly = false;
+    std::vector<std::filesystem::path> m_uvmWatchPaths;
+    bool configureUvmLibrary(const std::filesystem::path& base, bool requireValidConfig);
+    bool completeUvmLibraryInputs(bool requireValidConfig);
+    bool uvmConfigurationError(std::string_view message, bool requireValidConfig);
     uint64_t m_configuredUnitRevision = UINT64_MAX;
     std::vector<std::shared_ptr<syntax::SyntaxTree>> m_currentConfiguredTrees;
     struct CachedSourceHints {

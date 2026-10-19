@@ -179,6 +179,11 @@ bool ServerDriver::parseAndLoadSources(const std::vector<std::string>& buildfile
         }
     }
 
+    ok &= configureUvmLibrary(m_workspacePathPrefix.empty()
+                                  ? previousDirectory
+                                  : std::filesystem::path(m_workspacePathPrefix),
+                              requireValidConfig);
+
     if (!ok && requireValidConfig) {
         WARN("Config reload failed: {}", driver.textDiagClient->getString());
         return false;
@@ -211,6 +216,10 @@ bool ServerDriver::parseAndLoadSources(const std::vector<std::string>& buildfile
     sm.enableSnapshotRecording(true);
     m_configurationInputsFailed = !ok;
     ok &= driver.parseAllSources();
+    if (!m_uvmEntryPath.empty() && !completeUvmLibraryInputs(requireValidConfig)) {
+        ok = false;
+        m_configurationInputsFailed = true;
+    }
     diagEngine.setMappingsFromPragmas();
 
     if (requireValidConfig) {

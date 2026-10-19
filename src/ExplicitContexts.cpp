@@ -242,9 +242,11 @@ uint64_t ServerDriver::getExplicitContextRevision(const URI& uri) const {
 }
 
 std::vector<std::filesystem::path> ServerDriver::getContextWatchPaths() const {
-    if ((comp || !hasConfiguredCompilationInputs()) && !hasSourceContextHints())
+    if ((comp || !hasConfiguredCompilationInputs()) && !hasSourceContextHints() &&
+        !m_config.uvm.value())
         return {};
     std::set<std::filesystem::path> paths;
+    paths.insert(m_uvmWatchPaths.begin(), m_uvmWatchPaths.end());
     for (const auto& [path, _] : driver.getCommandFileMetadata())
         paths.insert(path);
     for (const auto& path : driver.sourceLoader.getFailedLiteralPaths())
@@ -402,7 +404,7 @@ std::optional<ServerDriver::PackageIncludeContext> ServerDriver::getExplicitIncl
                 firstRange);
             handled = true;
         }
-        else if (hasConfiguredCompilationInputs()) {
+        else if (hasConfiguredCompilationInputs() && !m_uvmLibraryOnly) {
             handled = true;
             addExplicitContextError(
                 uri, "Document has no source context in the configured compilation inputs");

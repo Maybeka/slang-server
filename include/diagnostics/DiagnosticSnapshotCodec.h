@@ -60,6 +60,7 @@ struct OwnedPreprocessorOptions {
     std::vector<OwnedKeywordMapping> keywordMapping;
     bool allowMissingProtectedScopeEnd = false;
     bool captureUvmPrefix = false;
+    std::string uvmPrefixRoot;
 };
 struct OwnedParserOptions {
     uint32_t maxRecursionDepth = 1024;

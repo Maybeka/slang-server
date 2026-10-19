@@ -5,8 +5,53 @@ library in exploration mode. It defaults to `false`. Each process owns its
 parsed-library cache in memory; this does not create a portable or persistent UVM
 database.
 
+## Select a UVM library
+
+Configure sources independently of enabling the cache:
+
+```json
+{
+  "uvm": {"sourceDirectory": "third_party/uvm/src", "entryFile": "uvm_pkg.sv"},
+  "experimentalUvmPrefixCache": false
+}
+```
+
+`sourceDirectory` resolves from the workspace root, or accepts an absolute path.
+`entryFile` resolves from that directory, or accepts an absolute path. Without an
+entry, the server selects `uvm_pkg.sv` directly in the directory, then
+`src/uvm_pkg.sv`, then `uvm.sv`. If both package locations exist, select an entry
+explicitly. The source directory, entry directory and existing `src` directory
+are added after configured include paths as literal directories, including names
+containing spaces or wildcard characters.
+
+When a project already supplies the selected library, the server retains the
+original root order and include wrappers. Otherwise it prepends the entry to
+the source inputs. It requires exactly one `uvm_pkg` reached through the selected
+entry; a different library, missing entry or ambiguous choice reports a
+configuration error. Set `entryFile` to the entry used by the project, such as
+`uvm.sv` when the filelist uses that wrapper. No configuration means no automatic
+UVM injection. This setting does not select a bundled library.
+
+A library configured without a complete compilation filelist also supplies the
+package to independently opened user sources. Filelist projects retain their
+explicit source boundaries. Watched library inputs and configuration changes
+rebuild the context while preserving unsaved editor text. Creation of a missing
+entry can repair the configuration. Open editor text takes precedence over a
+disk event for the same library file.
+
+Setting `experimentalUvmPrefixCache` to `true` permits compatible in-process
+prefix reuse, including explicitly named entries. Source configuration alone
+does not enable caching. The cache restrictions below still apply: a library
+included through a different root, or positioned after another source, keeps
+native parsing. The configuration does not promise semantic-analysis reuse or
+a persistent precompiled database.
+
+## Reuse and invalidation
+
 The ordered compilation must start with `uvm_pkg.sv` or `uvm.sv`, containing only
 the `uvm_pkg` package, followed by the design roots in the same compilation unit.
+An explicitly configured entry can use another filename. A standalone library
+can retain its native immutable tree without parsing it again for preparation.
 Keep external macros that affect UVM in the ordered command-line/configuration
 flags. UVM's own definitions and ordinary invocations remain supported. Source
 overrides, changed dependencies, incompatible parse options and unsupported

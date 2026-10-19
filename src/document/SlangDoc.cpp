@@ -97,24 +97,23 @@ void cacheTrace(const char* event) {
 }
 void prepareUvmPrefix(std::shared_ptr<syntax::SyntaxTree>& prefix, const SourceBuffer& buffer,
                       SourceManager& sm, const Bag& options) {
-    auto filename = sm.getFullPath(buffer.id).filename().string();
-    if (filename != "uvm.sv" && filename != "uvm_pkg.sv")
-        throw std::runtime_error("first root is not UVM");
     auto pp = options.getOrDefault<parsing::PreprocessorOptions>();
+    if (!pp.matchesUvmPrefixRoot(sm.getFullPath(buffer.id)))
+        throw std::runtime_error("first root is not the selected UVM entry");
     if (pp.bufferChangeCB || !pp.keywordMapping.empty())
         throw std::runtime_error("callback / keyword mapping unsupported");
     if (!prefix || !hasValidBuffers(sm, prefix)) {
         prefix = syntax::SyntaxTree::fromBuffer(buffer, sm, options);
-        auto& root = prefix->root().as<syntax::CompilationUnitSyntax>();
-        if (root.members.size() != 1 ||
-            root.members[0]->kind != syntax::SyntaxKind::PackageDeclaration ||
-            root.members[0]->as<syntax::ModuleDeclarationSyntax>().header->name.valueText() !=
-                "uvm_pkg")
-            throw std::runtime_error("prefix must contain only uvm_pkg");
-        if (!prefixResumeSafe(*prefix))
-            throw std::runtime_error("prefix directive state unsupported");
         cacheTrace("prefix-built");
     }
+    auto& root = prefix->root().as<syntax::CompilationUnitSyntax>();
+    if (root.members.size() != 1 ||
+        root.members[0]->kind != syntax::SyntaxKind::PackageDeclaration ||
+        root.members[0]->as<syntax::ModuleDeclarationSyntax>().header->name.valueText() !=
+            "uvm_pkg")
+        throw std::runtime_error("prefix must contain only uvm_pkg");
+    if (!prefixResumeSafe(*prefix))
+        throw std::runtime_error("prefix directive state unsupported");
 }
 std::shared_ptr<syntax::SyntaxTree> cachedUvmTree(std::shared_ptr<syntax::SyntaxTree>& prefix,
                                                   std::span<const SourceBuffer> buffers,
@@ -206,7 +205,7 @@ std::shared_ptr<SlangDoc> SlangDoc::fromTree(ServerDriver& driver,
     }
     ret->m_nativeCompilationUnit = std::move(unit);
     ret->m_tree = tree;
-    if (driver.isUvmPrefixCacheEnabled() && ret->m_nativeCompilationUnit->rootPaths.size() > 1 &&
+    if (driver.isUvmPrefixCacheEnabled() && !ret->m_nativeCompilationUnit->rootPaths.empty() &&
         !ret->requiresNativeReplay()) {
         try {
             auto buffer = driver.sm.readSource(ret->m_nativeCompilationUnit->rootPaths[0],
@@ -229,9 +228,12 @@ std::shared_ptr<SlangDoc> SlangDoc::fromTree(ServerDriver& driver,
                 cacheTrace("prefix-captured");
                 cacheTrace("prefix-built");
             }
-            else
+            else {
+                if (ret->m_nativeCompilationUnit->rootPaths.size() == 1)
+                    ret->m_uvmPrefixTree = tree;
                 prepareUvmPrefix(ret->m_uvmPrefixTree, *buffer, driver.sm,
                                  ret->m_nativeCompilationUnit->options);
+            }
         }
         catch (const std::exception& error) {
             ret->m_uvmPrefixDisabled = true;

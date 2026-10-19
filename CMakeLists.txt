@@ -345,6 +345,7 @@ add_library(
   src/Config.cpp
   src/Indexer.cpp
   src/ServerDriver.cpp
+  src/UvmLibrary.cpp
   src/SlangServer.cpp
   src/ServerDiagClient.cpp
   src/diagnostics/DiagnosticProcess.cpp

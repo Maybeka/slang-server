@@ -49,6 +49,22 @@ struct Config {
                      std::vector<std::string>>
         explorePreincludeFiles;
 
+    struct UvmConfig {
+        rfl::Description<"UVM source directory or distribution root, relative to the workspace. "
+                         "An existing project UVM is validated and retained; another version is "
+                         "never silently substituted.",
+                         std::string>
+            sourceDirectory;
+        rfl::Description<"Optional UVM entry file, relative to sourceDirectory unless absolute. "
+                         "Otherwise locate uvm_pkg.sv directly or under src.",
+                         std::optional<std::string>>
+            entryFile;
+    };
+    rfl::Description<"Explicit UVM library inputs. No library is injected unless configured. "
+                     "Source loading is independent of experimentalUvmPrefixCache.",
+                     std::optional<UvmConfig>>
+        uvm;
+
     rfl::Description<"Opt-in fast snapshot cwd checks (default false = strict). Requires the "
                      "process working directory and its ancestors not to be moved, deleted "
                      "or renamed during analysis. Ordinary source edits remain allowed. "

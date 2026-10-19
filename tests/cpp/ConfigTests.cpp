@@ -54,6 +54,27 @@ struct ConfigWorkspace {
 
 } // namespace
 
+TEST_CASE("UVM path configuration round trips without enabling the cache") {
+    ConfigWorkspace workspace;
+    workspace.write(
+        "server.json",
+        R"({"uvm":{"sourceDirectory":"third party/uvm", "entryFile":"src/vendor.sv"}})");
+    auto config = Config::fromFiles((workspace.root / "server.json").string(), std::nullopt,
+                                    std::nullopt);
+    REQUIRE(config);
+    REQUIRE(config->uvm.value());
+    CHECK(config->uvm.value()->sourceDirectory.value() == "third party/uvm");
+    CHECK(config->uvm.value()->entryFile.value() == "src/vendor.sv");
+    CHECK_FALSE(config->experimentalUvmPrefixCache.value());
+    auto restored = rfl::json::read<Config>(rfl::json::write(*config));
+    REQUIRE(restored);
+    CHECK(restored->uvm.value()->sourceDirectory.value() == "third party/uvm");
+    workspace.write("server.json", R"({"uvm":{"sourceDirectory":false}})");
+    CHECK_FALSE(
+        Config::fromFiles((workspace.root / "server.json").string(), std::nullopt, std::nullopt));
+    CHECK_FALSE(Config{}.uvm.value());
+}
+
 TEST_CASE("Config incdirs append across workspace user and local files") {
     ConfigWorkspace workspace;
     workspace.write("workspace.json", R"({"incdirs":["shared"], "flags":"-DSHARED"})");
