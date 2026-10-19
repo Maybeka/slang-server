@@ -752,6 +752,10 @@ TEST_CASE("Saved full diagnostics lose coverage when a sibling buffer changes",
         .contentChanges = {lsp::TextDocumentContentChangeWholeDocument{
             "`define DEFAULT_WIDTH invalid_width_token\n"}}});
     CHECK_FALSE(server.m_driver->comp->containsCurrentSource(childPath));
+    // Semantic refresh is not a full diagnostic publication. Even when a query
+    // makes the compilation current, the saved pass cannot cover the queued work.
+    server.m_driver->comp->getScopesByModule();
+    CHECK(server.m_driver->comp->containsCurrentSource(childPath));
     server.m_driver->runPendingDiagnostics();
     CHECK(std::ranges::any_of(child.getDiagnostics(), [](const auto& diagnostic) {
         return diagnostic.message.find("invalid_width_token") != std::string::npos;

@@ -1,5 +1,13 @@
 # Validation records
 
+## macOS 2026-10-20: frozen-analysis correctness prerequisite
+
+The [RTL freshness report](macos-frozen-foundation-2026-10-20.md) records lazy
+semantic refresh for unsaved external-package and instance-parameter changes,
+with separate diagnostic-publication freshness. It is the initial milestone of
+the [overall implementation plan](../docs/development/frozen-analysis-plan.md),
+not completion of the planned caches or a new performance result.
+
 ## macOS 2026-10-19: official upstream completion reproduction and fixes
 
 The [completion and macro-warning report](macos-completion-2026-10-19.md) pins an

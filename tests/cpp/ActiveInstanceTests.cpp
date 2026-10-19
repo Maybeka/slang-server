@@ -127,11 +127,6 @@ TEST_CASE("EditingActiveInstancePreservesParentLocalType") {
 
     auto doc = server.openFile("passthrough.sv");
     REQUIRE(server.setActiveInstance("top.local_leaf"));
-    auto* instance = server.m_driver->comp->getActiveInstanceSymbol("passthrough");
-    REQUIRE(instance);
-    auto* designType = instance->body.lookupName("T");
-    REQUIRE(designType);
-
     doc.append("\n");
     doc.publishChanges();
 
@@ -139,6 +134,12 @@ TEST_CASE("EditingActiveInstancePreservesParentLocalType") {
     auto* shallowType = doc.doc->getAnalysis()->getCompilation()->getRoot().lookupName(
         "passthrough.T");
     REQUIRE(shallowType);
+    // Unsaved edits can now refresh the full design. Compare against its current
+    // type, rather than retaining a raw pointer from a retired compilation.
+    auto* instance = server.m_driver->comp->getActiveInstanceSymbol("passthrough");
+    REQUIRE(instance);
+    auto* designType = instance->body.lookupName("T");
+    REQUIRE(designType);
     CHECK(shallowType->as<slang::ast::Type>().isEnum());
     CHECK(&shallowType->as<slang::ast::Type>().getCanonicalType() ==
           &designType->as<slang::ast::Type>().getCanonicalType());

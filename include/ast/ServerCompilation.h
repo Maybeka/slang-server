@@ -37,7 +37,7 @@ struct ActiveGenerateLoop {
 
 /// @brief A server compilation that is set via top level or a .f file.
 /// Manages the specification of the compilation, as well as the analysis state that gets
-/// refreshed on file saves.
+/// refreshed lazily after edits and on file saves.
 class ServerCompilation {
 public:
     /// @brief Constructs a new ServerCompilation instance
@@ -55,10 +55,16 @@ public:
     void refresh();
     void refreshDocuments(const std::vector<std::shared_ptr<SlangDoc>>& documents);
 
+    /// Defer rebuilding until a semantic consumer needs the latest editor text.
+    void invalidate() { m_dirty = true; }
+
     /// Whether the current full compilation covers the latest data for this source.
     bool containsCurrentSource(const std::filesystem::path& path) const;
 
-    InstanceIndexer& getInstances() { return m_analysis->instances; }
+    InstanceIndexer& getInstances() {
+        ensureCurrent();
+        return m_analysis->instances;
+    }
 
     /// Get instances by module; Used for the 'instances' view. Includes declaration metadata.
     std::vector<hier::InstanceSet> getScopesByModule();
@@ -127,6 +133,11 @@ public:
     ConeResult getLoadCone(const std::string& path);
 
 private:
+    /// Lazy semantic state is shared by hierarchy and per-document consumers.
+    void ensureCurrent() const;
+    bool m_dirty = false;
+    bool m_refreshing = false;
+
     /// Return the stored active selection for a module, if any.
     std::optional<hier::QualifiedInstance> getActiveInstanceSelection(
         std::string_view moduleName) const;

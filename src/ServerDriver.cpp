@@ -647,6 +647,13 @@ void ServerDriver::onDocDidChange(const lsp::DidChangeTextDocumentParams& params
     ++m_ownerEpoch;
     doc->onChange(params.contentChanges);
     doc->setVersion(params.textDocument.version);
+    if (comp) {
+        comp->invalidate();
+        // A query can rebuild semantic state without publishing a full diagnostic
+        // pass. That newer compilation must not authenticate an older saved pass.
+        m_fullDiagnosticGeneration = 0;
+        invalidateAnalysesAndRefreshClient();
+    }
     bool preincludeChanged = isExplorePreinclude(doc->getURI());
     if (preincludeChanged) {
         // A nested file can enter or leave the preinclude graph. Invalidate even
@@ -659,7 +666,8 @@ void ServerDriver::onDocDidChange(const lsp::DidChangeTextDocumentParams& params
     }
     // A changed sibling include can invalidate another open header's package
     // analysis even though neither document is the package root. Keep standalone
-    // RTL dependency publication on its existing save-triggered path.
+    // RTL diagnostic publication on its existing save-triggered path. Semantic
+    // queries use the lazily refreshed full-design context, including unsaved text.
     for (const auto& uri : m_openDocs) {
         auto openDoc = docs.find(uri);
         if (uri == doc->getURI() || openDoc == docs.end() || openDoc->second->hasAnalysis())

@@ -1,0 +1,683 @@
+{
+  "milestone": "Phase 0/0a: native RTL freshness prerequisite",
+  "overallGoal": "active; explicit UVM paths, frozen regions and macro hover remain pending",
+  "date": "2026-10-20",
+  "platform": "macOS arm64",
+  "baselineProduct": "53abb6b27a687ce8b26e612a9a0b22e11f4ffced",
+  "initialNativeProbe": {
+    "assertions": 72,
+    "passed": 68,
+    "failed": 4
+  },
+  "finalFocused": {
+    "cases": 6,
+    "assertions": 102,
+    "passed": true
+  },
+  "ctest": [
+    624,
+    624
+  ],
+  "python": [
+    15,
+    15
+  ],
+  "checks": [
+    {
+      "name": "focused",
+      "command": [
+        "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/build-uvm/bin/server_unittests",
+        "[frozen-analysis-oracle],EditingActiveInstancePreservesParentLocalType,Saved full diagnostics lose coverage when a sibling buffer changes"
+      ],
+      "returncode": 0,
+      "seconds": 0.055622374871745706
+    },
+    {
+      "name": "ctest",
+      "command": [
+        "/opt/homebrew/bin/ctest",
+        "--test-dir",
+        "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/build-uvm",
+        "--output-on-failure",
+        "--no-tests=error",
+        "-j2"
+      ],
+      "returncode": 0,
+      "seconds": 19.706220000050962
+    },
+    {
+      "name": "python",
+      "command": [
+        "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/source/.venv/bin/python",
+        "-m",
+        "pytest",
+        "tests/system",
+        "tests/method_scope",
+        "--binary",
+        "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/build-uvm/bin/slang-server",
+        "-q"
+      ],
+      "returncode": 0,
+      "seconds": 1.7487484158482403
+    }
+  ],
+  "source": {
+    "files": {
+      "include/ast/ServerCompilation.h": "b3d4fe6f7ffb05e1b51f844a364dc874f8832abffa758b82016a97f08e639628",
+      "src/ServerDriver.cpp": "31cc6cafd27c9c4dc54fdcd85e947406cd3a353934956c2da48f7a3163b11514",
+      "src/ast/ServerCompilation.cpp": "5fb43e87d1b11f857685d87908ed52aef4c387cccc58e88e32f4645c2035e4ce",
+      "src/ast/ServerCompilationAnalysis.cpp": "d7b171f020e0b157ab54d4726ec408ced5e456c9f0487fd61087d13e11422cf1",
+      "tests/cpp/HoverTests.cpp": "a549eea83f429a9eb278740b75b05c3040d9a61b4f08defd904735b3191513d9",
+      "tests/cpp/ActiveInstanceTests.cpp": "d06c7ac5246cb2e1fc454cb02a8d5bf4602b316377c80797a296959a25d44b24",
+      "tests/cpp/DiagTests.cpp": "2d982221a3c4209dca9fe60c7f7c80493e0e45a471d86c59b1c1d676109428b3"
+    },
+    "binarySha256": "4f1b019c25f28b4a7f363f42b87284338d4ce94968659e103b668be7b7b25fb1",
+    "tmpdir": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/frozen-analysis-2026-10-20/tmp",
+    "note": "Functional prerequisite; not a performance measurement or frozen-cache implementation"
+  },
+  "realProcesses": 56,
+  "realPairs": [
+    {
+      "case": "W01-compare",
+      "suppress": false,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 2034,
+      "warningCounts": [
+        0,
+        0,
+        0
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "eff4d01f5036c637396e050aa7ed3e62028b9aa5bbe697907341019fce65e187"
+    },
+    {
+      "case": "W01-compare",
+      "suppress": true,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 2034,
+      "warningCounts": [
+        0,
+        0,
+        0
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "eff4d01f5036c637396e050aa7ed3e62028b9aa5bbe697907341019fce65e187"
+    },
+    {
+      "case": "W02-local-rename",
+      "suppress": false,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 369,
+      "warningCounts": [
+        0,
+        0,
+        0
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "7285f332cff8f083c86a8205e030abdccd93dca3a23d0347d7197428c95259eb"
+    },
+    {
+      "case": "W02-local-rename",
+      "suppress": true,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 369,
+      "warningCounts": [
+        0,
+        0,
+        0
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "7285f332cff8f083c86a8205e030abdccd93dca3a23d0347d7197428c95259eb"
+    },
+    {
+      "case": "W03-local-add-remove",
+      "suppress": false,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 2377,
+      "warningCounts": [
+        0,
+        1,
+        0
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "a228f441a2547daeca0e3407d34972725083eba98fc404be4d2e8e455f333f20"
+    },
+    {
+      "case": "W03-local-add-remove",
+      "suppress": true,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 2377,
+      "warningCounts": [
+        0,
+        1,
+        0
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "a228f441a2547daeca0e3407d34972725083eba98fc404be4d2e8e455f333f20"
+    },
+    {
+      "case": "W04-ral-ref",
+      "suppress": false,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 18,
+      "warningCounts": [
+        5,
+        5,
+        5
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "15d3d1c1ff5c579d159628ef4fa0fd113fbbe20771633ec1f138dc1cef2d2761"
+    },
+    {
+      "case": "W04-ral-ref",
+      "suppress": true,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 18,
+      "warningCounts": [
+        4,
+        4,
+        4
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "20e0dec67d36592d6d9df97629abbd40ce03d44e72eddc46bd3b5be57132b846"
+    },
+    {
+      "case": "W05-macro-argument",
+      "suppress": false,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 369,
+      "warningCounts": [
+        3,
+        3,
+        3
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "8f3a4f7d33ab381453abc88ec795a6cd3d9a9f808ff3ace176a3f6bcbbd28599"
+    },
+    {
+      "case": "W05-macro-argument",
+      "suppress": true,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 369,
+      "warningCounts": [
+        1,
+        1,
+        1
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "9389623501b9535fcfe4af01ed823aa4202ab0b6361d2fb3acc309ee64e93399"
+    },
+    {
+      "case": "W06-sequence-local",
+      "suppress": false,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 2281,
+      "warningCounts": [
+        2,
+        2,
+        2
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "498235553d0bfa7b90cc8361e9f64f18a1d6bfb29220ea309f534c49e1be1a68"
+    },
+    {
+      "case": "W06-sequence-local",
+      "suppress": true,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 2281,
+      "warningCounts": [
+        0,
+        0,
+        0
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "bee510492d67d812416ad5c68fa77005099840709d1c04ed2e1900de43478040"
+    },
+    {
+      "case": "W07-pss-multidoc",
+      "suppress": false,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 171,
+      "warningCounts": [
+        1,
+        1,
+        1
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "db356b58dc68f75607bd7e581b43551c7812d4dcbf71017011baca14f7276d77"
+    },
+    {
+      "case": "W07-pss-multidoc",
+      "suppress": true,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 171,
+      "warningCounts": [
+        0,
+        0,
+        0
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "3f3edc908f246daa2c7cfaa071ca78f1d35ba2598c79eb5c0bf7ecfe85a7f6ee"
+    },
+    {
+      "case": "W08-ubus-task",
+      "suppress": false,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 393,
+      "warningCounts": [
+        24,
+        24,
+        24
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "479d89612c619aee3f0295c6940cebcb912ef75dd4910a5179149859396dc74a"
+    },
+    {
+      "case": "W08-ubus-task",
+      "suppress": true,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 393,
+      "warningCounts": [
+        19,
+        19,
+        19
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "7c71a3a483bd355c5d45b7d056cf3bde8b42b499d18ae89d0ce0d5d5e5a8474b"
+    },
+    {
+      "case": "W09-ubus-config",
+      "suppress": false,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 2379,
+      "warningCounts": [
+        24,
+        24,
+        24
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "3cbce7c8a03b983c0ef1dea1e5113686ea07152aa980b41d059479d1d7dfccc6"
+    },
+    {
+      "case": "W09-ubus-config",
+      "suppress": true,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 2379,
+      "warningCounts": [
+        19,
+        19,
+        19
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "9fae181d1040607d0b6ed1a227879d8443344a06cb6a2c51ea652b70a5771abb"
+    },
+    {
+      "case": "W10-incomplete-recover",
+      "suppress": false,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 2034,
+      "warningCounts": [
+        0,
+        0,
+        0
+      ],
+      "errorCounts": [
+        0,
+        1,
+        0
+      ],
+      "publicSha256": "a432da5fc7bde113f29e2517b55dc223756133efb6360d0ee6f99b08cd962156"
+    },
+    {
+      "case": "W10-incomplete-recover",
+      "suppress": true,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 2034,
+      "warningCounts": [
+        0,
+        0,
+        0
+      ],
+      "errorCounts": [
+        0,
+        1,
+        0
+      ],
+      "publicSha256": "a432da5fc7bde113f29e2517b55dc223756133efb6360d0ee6f99b08cd962156"
+    },
+    {
+      "case": "W11-local-rebind",
+      "suppress": false,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 2376,
+      "warningCounts": [
+        3,
+        3,
+        3
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "158f4f01c4147ea3c0e637e0463caf5f34b3bcc658d17f61a0586a9e41decdc9"
+    },
+    {
+      "case": "W11-local-rebind",
+      "suppress": true,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 2376,
+      "warningCounts": [
+        1,
+        1,
+        1
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "e7b8cf2ddb180cd48ccd7246af693a6a17aa511bb811e88fd13e9a6516dcd601"
+    },
+    {
+      "case": "W13-continuous",
+      "suppress": false,
+      "equal": true,
+      "staleEqual": true,
+      "states": 11,
+      "resolvedItems": 7458,
+      "warningCounts": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "e36f64e095f47dbe384876ad0da25db2c0e817075b7eebb627f325b7790d2f45"
+    },
+    {
+      "case": "W13-continuous",
+      "suppress": true,
+      "equal": true,
+      "staleEqual": true,
+      "states": 11,
+      "resolvedItems": 7458,
+      "warningCounts": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "e36f64e095f47dbe384876ad0da25db2c0e817075b7eebb627f325b7790d2f45"
+    },
+    {
+      "case": "W14-negotiated-utf8",
+      "suppress": false,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 2034,
+      "warningCounts": [
+        0,
+        0,
+        0
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "ee8beeca3fe2a9f3e6503a7dabb4a17323056da5bb45a95a23039b793dccb038"
+    },
+    {
+      "case": "W14-negotiated-utf8",
+      "suppress": true,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 2034,
+      "warningCounts": [
+        0,
+        0,
+        0
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "ee8beeca3fe2a9f3e6503a7dabb4a17323056da5bb45a95a23039b793dccb038"
+    },
+    {
+      "case": "W15-crlf-only",
+      "suppress": false,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 2034,
+      "warningCounts": [
+        0,
+        0,
+        0
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "e0ec2e041e88af7db56303ddce67608b07ab4acea73ce7077b4e3a725a1d8a50"
+    },
+    {
+      "case": "W15-crlf-only",
+      "suppress": true,
+      "equal": true,
+      "staleEqual": true,
+      "states": 3,
+      "resolvedItems": 2034,
+      "warningCounts": [
+        0,
+        0,
+        0
+      ],
+      "errorCounts": [
+        0,
+        0,
+        0
+      ],
+      "publicSha256": "e0ec2e041e88af7db56303ddce67608b07ab4acea73ce7077b4e3a725a1d8a50"
+    }
+  ],
+  "headlessEditorProjects": [
+    "spi",
+    "pss",
+    "ubus"
+  ],
+  "sdkRestorationFilesVerified": 708,
+  "newCacheImplemented": false,
+  "newPerformanceClaim": false,
+  "experimentalCacheDefaults": "unchanged, disabled",
+  "limitations": [
+    "Known native W12 UTF-16 case excluded; UTF-8/CRLF included",
+    "Outer diagnostics normalized for previously documented equal-location/code ordering; relatedInformation and duplicates preserved",
+    "No Linux rerun or GUI visual test",
+    "Correct full-design semantic work can cost more than the former stale unsaved state; not presented as a speedup",
+    "Scripts reference earlier private workload/oracle helpers; corpus and binaries excluded from archive"
+  ],
+  "evidence": {
+    "archive": "artifacts/macos-frozen-foundation-2026-10-20.tar.gz",
+    "bytes": 30781,
+    "sha256": "28fbfad1de4933b9e3c9f05c51e2625ac5d69f71ce4d6735b3bb771aec968408",
+    "manifest": {
+      "baseline-readiness.json": "d5b15bddf4f4bdb7170d90b813010e2e124a2a61d54629fb0204e9f6cf36ac08",
+      "native-oracles-confirmed.log": "a184ea664d2d8d45e4e69b13ee47b1ceb77bad5e249da54ecba2e2332f299eb9",
+      "native-oracles-fixed-2.log": "6d88b56d1dd945c96cba1994f19617a488724365e0bffaf41fa82956f98f2fb5",
+      "focused-freshness-final.log": "5de559f7dd2cbd141aedc7d86a648d31ab79aade5dc7ee89a7ae08be3505afa0",
+      "ctest-freshness-final.log": "6f8626901095d498d426e8beb7abd02395c8d072f21f8787cc999e37a6e93396",
+      "python-freshness-final.log": "d75603f9786468f1512af75d1b71c88f548072b4a5f03f4f6e0bcccba8804844",
+      "freshness-checks.json": "e4e885cfb06e18ef83259c21703f2417d3a71510b6e7cc6e4f550141e0a8b4a5",
+      "freshness-source.json": "b7d0b7b7187e30d221d3ee6f85fe95ff5341901b2423c6eb95b506eab0cad9ab",
+      "check_freshness.py": "10d75510b7a44c5460e839a76a232e41b6e8e12bd0b71f41134724b3b144a5e5",
+      "real-oracles.json": "eece24b63b7d21614803f827a13a29bede983d4ba97e8e6cd0783544cbcea555",
+      "real-oracles.log": "b25eede4a149ddb51dcb04cd59fd3d500914e71d274c468303bc84a9e775f4c4",
+      "real_oracles.py": "1fb0b1fd5d88b4ee0e2f4ab6b1ba166d4d27e63860a54b891495d8902b978f64",
+      "editor-spi.log": "de62183fc184e0ae619aedc6c939a0f93c8e4902de35741baad582e1ad28cf67",
+      "editor-pss.log": "e50945ce2f4a6a14a8497ec5c700bff78b66b9b332c9de17148f740a5c254585",
+      "editor-ubus.log": "edd542c86bc3270ef4bc7d860f426ee98d60fc015e06143755c7c207b0b82e18"
+    }
+  }
+}

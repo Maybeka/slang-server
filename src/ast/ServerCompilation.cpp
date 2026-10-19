@@ -23,6 +23,7 @@
 #include "slang/ast/symbols/PortSymbols.h"
 #include "slang/syntax/AllSyntax.h"
 #include "slang/text/SourceManager.h"
+#include "slang/util/ScopeGuard.h"
 
 namespace fs = std::filesystem;
 
@@ -475,7 +476,6 @@ ServerCompilation::ServerCompilation(std::vector<std::shared_ptr<SlangDoc>> docu
     if (m_top) {
         m_options.insertOrGet<slang::ast::CompilationOptions>().topModules = {*m_top};
     }
-    indexModuleDocs();
     refresh();
 }
 
@@ -493,18 +493,29 @@ void ServerCompilation::indexModuleDocs() {
 }
 
 void ServerCompilation::refresh() {
+    m_dirty = true;
+    m_refreshing = true;
+    auto guard = ScopeGuard([&] { m_refreshing = false; });
+    indexModuleDocs();
     m_analysis = std::make_shared<ServerCompilationAnalysis>(m_documents, m_options,
                                                              m_sourceManager);
     m_hierarchySearchItems.clear();
     m_hierarchySearchIndexed = false;
     syncActiveInstances();
+    m_dirty = false;
+}
+
+void ServerCompilation::ensureCurrent() const {
+    // Syntax discovery during a rebuild can consult the previous symbol paths;
+    // it must not recursively rebuild the same compilation.
+    if (m_dirty && !m_refreshing)
+        const_cast<ServerCompilation*>(this)->refresh();
 }
 
 void ServerCompilation::refreshDocuments(const std::vector<std::shared_ptr<SlangDoc>>& documents) {
     m_documents.clear();
     for (const auto& document : documents)
         m_documents.emplace(document->getPath(), document);
-    indexModuleDocs();
     refresh();
 }
 
@@ -523,6 +534,7 @@ bool ServerCompilation::containsCurrentSource(const std::filesystem::path& path)
 }
 
 std::vector<hier::InstanceSet> ServerCompilation::getScopesByModule() {
+    ensureCurrent();
     std::vector<hier::InstanceSet> result;
     for (auto& [_name, instances] : m_analysis->instances.moduleToInstances) {
         if (instances.size() == 0) {
@@ -545,6 +557,7 @@ std::vector<hier::InstanceSet> ServerCompilation::getScopesByModule() {
 
 const std::vector<const slang::ast::InstanceSymbol*>& ServerCompilation::getInstancesOfModule(
     const std::string& moduleName) const {
+    ensureCurrent();
     static const std::vector<const slang::ast::InstanceSymbol*> empty;
     auto it = m_analysis->instances.moduleToInstances.find(moduleName);
     if (it == m_analysis->instances.moduleToInstances.end()) {
@@ -564,6 +577,7 @@ std::optional<hier::QualifiedInstance> ServerCompilation::getActiveInstanceSelec
 
 const slang::ast::InstanceSymbol* ServerCompilation::getActiveInstanceSymbol(
     std::string_view moduleName) const {
+    ensureCurrent();
     auto it = m_analysis->instances.moduleToInstances.find(std::string(moduleName));
     if (it == m_analysis->instances.moduleToInstances.end()) {
         return nullptr;
@@ -585,6 +599,7 @@ const slang::ast::InstanceSymbol* ServerCompilation::getActiveInstanceSymbol(
 
 ActiveDesignContext ServerCompilation::createActiveDesignContext(
     std::span<const std::string_view> definitionNames) const {
+    ensureCurrent();
     ActiveDesignContext result(m_analysis);
     for (auto name : definitionNames) {
         if (auto* instance = getActiveInstanceSymbol(name))
@@ -595,6 +610,7 @@ ActiveDesignContext ServerCompilation::createActiveDesignContext(
 
 std::optional<ActiveGenerateLoop> ServerCompilation::getActiveGenerateLoop(
     std::string_view moduleName, const syntax::LoopGenerateSyntax& loop) const {
+    ensureCurrent();
     auto* activeInstance = getActiveInstanceSymbol(moduleName);
     if (!activeInstance)
         return std::nullopt;
@@ -623,6 +639,7 @@ std::optional<ActiveGenerateLoop> ServerCompilation::getActiveGenerateLoop(
 }
 
 std::optional<std::string> ServerCompilation::getPreferredSymbolPath(std::string_view name) const {
+    ensureCurrent();
     auto& compilation = m_analysis->compilation;
     auto& root = compilation.getRoot();
 
@@ -649,6 +666,7 @@ std::optional<std::string> ServerCompilation::getPreferredSymbolPath(std::string
 }
 
 bool ServerCompilation::setActiveInstance(const std::string& hierPath) {
+    ensureCurrent();
     auto* sym = lookupHierSymbol(m_analysis->compilation, hierPath);
     if (!sym) {
         return false;
@@ -693,6 +711,7 @@ bool ServerCompilation::setActiveInstance(const std::string& hierPath) {
 
 std::optional<hier::QualifiedInstance> ServerCompilation::getActiveInstance(
     const std::string& moduleName) {
+    ensureCurrent();
     auto& byModule = m_analysis->instances.moduleToInstances;
     if (byModule.find(moduleName) == byModule.end()) {
         return std::nullopt;
@@ -735,12 +754,14 @@ void ServerCompilation::syncActiveInstances() {
 }
 
 std::vector<hier::HierItem_t> ServerCompilation::getScope(const std::string& hierPath) {
+    ensureCurrent();
     auto scopeChildren = tryGetScopeChildren(m_analysis->compilation, m_sourceManager, hierPath);
     return scopeChildren.value_or(std::vector<hier::HierItem_t>{});
 }
 
 std::vector<hier::ScopeStep> ServerCompilation::getScopes(const std::string& hierPath,
                                                           const lsp::RequestContext& ctx) {
+    ensureCurrent();
     std::vector<hier::ScopeStep> result;
     auto& compilation = m_analysis->compilation;
 
@@ -767,6 +788,7 @@ std::vector<hier::ScopeStep> ServerCompilation::getScopes(const std::string& hie
 }
 
 hier::HierarchySearchResult ServerCompilation::searchHierarchy(const std::string& query) {
+    ensureCurrent();
     constexpr size_t maxResults = 100;
     hier::HierarchySearchResult result{};
 
@@ -914,6 +936,7 @@ hier::HierarchySearchResult ServerCompilation::searchHierarchy(const std::string
 }
 
 std::optional<lsp::Location> ServerCompilation::getHierLocation(const std::string& hierPath) {
+    ensureCurrent();
     auto& comp = m_analysis->compilation;
     const slang::ast::Symbol* sym = lookupHierSymbol(comp, hierPath);
 
@@ -924,8 +947,8 @@ std::optional<lsp::Location> ServerCompilation::getHierLocation(const std::strin
         }
     }
 
-    // Edit fallback: the full compilation is stale (only refreshed on save). A signal
-    // typed since the last build won't resolve in the full comp, so split the path at
+    // A source can be open outside the configured full design. If it does not
+    // resolve in the refreshed compilation, split the path at
     // the deepest dot-segment that still resolves to an instance and look up the
     // remainder against that module's *shallow* compilation (which rebuilds per-edit).
     if (!sym) {
@@ -1005,6 +1028,7 @@ std::optional<lsp::Location> ServerCompilation::getHierLocation(const std::strin
 
 std::vector<std::string> ServerCompilation::getInstances(
     const lsp::TextDocumentPositionParams& params) {
+    ensureCurrent();
     auto path = std::string(params.textDocument.uri.getPath());
     auto it = m_documents.find(path);
     if (it == m_documents.end()) {
@@ -1024,6 +1048,7 @@ std::vector<std::string> ServerCompilation::getInstances(
 
 std::vector<lsp::CallHierarchyItem> ServerCompilation::getDocPrepareCallHierarchy(
     const lsp::CallHierarchyPrepareParams& params) {
+    ensureCurrent();
     auto instances = getInstances(lsp::TextDocumentPositionParams{
         .textDocument = params.textDocument,
         .position = params.position,
@@ -1051,6 +1076,7 @@ std::vector<lsp::CallHierarchyItem> ServerCompilation::getDocPrepareCallHierarch
 }
 
 bool ServerCompilation::isWcpVariable(const std::string& path) {
+    ensureCurrent();
     const auto& root = m_analysis->compilation.getRoot();
     slang::ast::LookupResult result;
     slang::ast::ASTContext context(root, ast::LookupLocation::max);
@@ -1100,6 +1126,7 @@ bool ServerCompilation::isWcpVariable(const std::string& path) {
 
 std::optional<lsp::ShowDocumentParams> ServerCompilation::getHierDocParams(
     const std::string& path) {
+    ensureCurrent();
     // TODO -- structs / nested structs -- currently taken to variable instance, not
     // type definition -- do we want both?
     slang::ast::LookupResult result;
@@ -1124,14 +1151,17 @@ std::optional<lsp::ShowDocumentParams> ServerCompilation::getHierDocParams(
 }
 
 void ServerCompilation::issueDiagnosticsTo(slang::DiagnosticEngine& diagEngine) {
+    ensureCurrent();
     m_analysis->issueDiagnosticsTo(diagEngine);
 }
 
 ConeResult ServerCompilation::getDriverCone(const std::string& path) {
+    ensureCurrent();
     return {m_analysis->getDriverCone(path), m_sourceManager};
 }
 
 ConeResult ServerCompilation::getLoadCone(const std::string& path) {
+    ensureCurrent();
     return {m_analysis->getLoadCone(path), m_sourceManager};
 }
 

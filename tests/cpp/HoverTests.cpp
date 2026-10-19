@@ -1,8 +1,10 @@
 // SPDX-FileCopyrightText: Hudson River Trading
 // SPDX-License-Identifier: MIT
 
+#include "ast/ServerCompilation.h"
 #include "utils/GoldenTest.h"
 #include "utils/ServerHarness.h"
+#include <catch2/generators/catch_generators.hpp>
 #include <cstdlib>
 
 static size_t countSubstring(std::string_view text, std::string_view substring) {
@@ -12,6 +14,118 @@ static size_t countSubstring(std::string_view text, std::string_view substring) 
         count++;
     }
     return count;
+}
+
+TEST_CASE("Frozen analysis native oracle keeps instance specializations separate",
+          "[frozen-analysis-oracle]") {
+    ServerHarness server("frozen_analysis");
+    server.setBuildFile("design.f");
+    auto leaf = server.openFile("leaf.sv");
+    auto widthOf = [&](std::string_view name) {
+        auto hover = leaf.getHoverAt(leaf.before(std::string(name)).m_offset);
+        REQUIRE(hover);
+        return rfl::get<lsp::MarkupContent>(hover->contents).value;
+    };
+    REQUIRE(server.setActiveInstance("top.u_frozen"));
+    CHECK(widthOf("payload;").find("Width: `8`") != std::string::npos);
+    REQUIRE(server.setActiveInstance("top.u_other"));
+    CHECK(widthOf("payload;").find("Width: `16`") != std::string::npos);
+    CHECK(widthOf("external_word;").find("Width: `8`") != std::string::npos);
+    REQUIRE(server.setActiveInstance("top.u_frozen"));
+    CHECK(widthOf("payload;").find("Width: `8`") != std::string::npos);
+}
+
+TEST_CASE("Frozen analysis native oracle observes external package changes",
+          "[frozen-analysis-oracle]") {
+    const bool save = GENERATE(false, true);
+    CAPTURE(save);
+    ServerHarness server("frozen_analysis");
+    server.setBuildFile("design.f");
+    auto leaf = server.openFile("leaf.sv");
+    auto package = server.openFile("types_pkg.sv");
+    auto widthOf = [&](std::string_view name) {
+        auto hover = leaf.getHoverAt(leaf.before(std::string(name)).m_offset);
+        REQUIRE(hover);
+        return rfl::get<lsp::MarkupContent>(hover->contents).value;
+    };
+    REQUIRE(server.setActiveInstance("top.u_other"));
+    CHECK(widthOf("external_word;").find("Width: `8`") != std::string::npos);
+    auto offset = package.before("8;").m_offset;
+    package.erase(offset, offset + 1);
+    package.insert(offset, "12");
+    if (save)
+        package.save();
+    else
+        package.publishChanges();
+    CHECK(widthOf("external_word;").find("Width: `12`") != std::string::npos);
+    CHECK(widthOf("payload;").find("Width: `16`") != std::string::npos);
+    REQUIRE(server.setActiveInstance("top.u_frozen"));
+    CHECK(widthOf("payload;").find("Width: `12`") != std::string::npos);
+}
+
+TEST_CASE("Frozen analysis native oracle observes parent parameter changes",
+          "[frozen-analysis-oracle]") {
+    const bool save = GENERATE(false, true);
+    CAPTURE(save);
+    ServerHarness server("frozen_analysis");
+    server.setBuildFile("design.f");
+    auto leaf = server.openFile("leaf.sv");
+    auto top = server.openFile("top.sv");
+    auto payload = leaf.before("payload;");
+    auto content = [&]() {
+        auto hover = leaf.getHoverAt(payload.m_offset);
+        REQUIRE(hover);
+        return rfl::get<lsp::MarkupContent>(hover->contents).value;
+    };
+    REQUIRE(server.setActiveInstance("top.u_other"));
+    CHECK(content().find("Width: `16`") != std::string::npos);
+    auto offset = top.before("16)").m_offset;
+    top.erase(offset, offset + 2);
+    top.insert(offset, "24");
+    if (save)
+        top.save();
+    else
+        top.publishChanges();
+    CHECK(content().find("Width: `24`") != std::string::npos);
+    CHECK(content().find("Width: `16`") == std::string::npos);
+    REQUIRE(server.setActiveInstance("top.u_frozen"));
+    CHECK(content().find("Width: `8`") != std::string::npos);
+}
+
+TEST_CASE("RTL edit bursts refresh hierarchy lazily and reuse the new context",
+          "[frozen-analysis-oracle]") {
+    ServerHarness server("frozen_analysis");
+    server.setBuildFile("design.f");
+    auto leaf = server.openFile("leaf.sv");
+    auto top = server.openFile("top.sv");
+    auto& design = *server.m_driver->comp;
+    auto original = design.createActiveDesignContext({});
+    REQUIRE(design.getHierLocation("top.u_other.wide.generated_word"));
+    REQUIRE(server.setActiveInstance("top.u_other"));
+    auto oldText = top.getText();
+    auto offset = oldText.find("16)");
+    REQUIRE(offset != std::string::npos);
+    auto path = server.m_driver->sm.getFullPath(top.doc->getBuffer());
+    for (int version = 2; version <= 3; ++version) {
+        auto text = oldText;
+        text.replace(offset, 2, version == 2 ? "12" : "4");
+        server.SlangServer::onDocDidChange(lsp::DidChangeTextDocumentParams{
+            .textDocument = {.version = version, .uri = top.m_uri},
+            .contentChanges = {lsp::TextDocumentContentChangeWholeDocument{.text = text}}});
+        // Text synchronization does not eagerly rebuild the whole design.
+        CHECK_FALSE(design.containsCurrentSource(path));
+    }
+    // Query the hierarchy first: refreshing only hover would leave this stale.
+    CHECK_FALSE(design.getHierLocation("top.u_other.wide.generated_word"));
+    CHECK(design.containsCurrentSource(path));
+    auto current = design.createActiveDesignContext({});
+    CHECK(&original.getAnalysis() != &current.getAnalysis());
+    auto hover = leaf.getHoverAt(leaf.before("payload;").m_offset);
+    REQUIRE(hover);
+    CHECK(rfl::get<lsp::MarkupContent>(hover->contents).value.find("Width: `4`") !=
+          std::string::npos);
+    auto repeated = design.createActiveDesignContext({});
+    CHECK(&current.getAnalysis() == &repeated.getAnalysis());
 }
 
 TEST_CASE("HoverMacroExpansion") {

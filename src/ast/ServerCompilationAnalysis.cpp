@@ -50,6 +50,9 @@ ServerCompilationAnalysis::ServerCompilationAnalysis(
 
 slang::analysis::AnalysisManager& ServerCompilationAnalysis::getAnalysisManager() {
     if (!m_driverAnalysis) {
+        // A query can refresh the design before the save-triggered diagnostic
+        // pass. Complete elaboration before freezing it for driver analysis.
+        (void)compilation.getSemanticDiagnostics();
         m_driverAnalysis = std::make_unique<slang::analysis::AnalysisManager>(m_analysisOptions);
         compilation.freeze();
         m_driverAnalysis->analyze(compilation);
