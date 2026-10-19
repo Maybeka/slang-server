@@ -8,7 +8,11 @@
 
 #include "util/SlangExtensions.h"
 
+#include <stdexcept>
+#include <unordered_map>
+
 #include "slang/ast/types/AllTypes.h"
+#include "slang/syntax/AllSyntax.h"
 #include "slang/syntax/SyntaxKind.h"
 #include "slang/syntax/SyntaxNode.h"
 
@@ -29,6 +33,26 @@ bool hasValidBuffers(const SourceManager& sm, const std::shared_ptr<syntax::Synt
     }
 
     return true;
+}
+
+void validateUvmMacroEnvironment(const syntax::SyntaxTree& prefix, const syntax::SyntaxTree& tree) {
+    // Contract: user source must not replace or undefine the external/UVM macro environment.
+    std::unordered_map<std::string_view, const syntax::DefineDirectiveSyntax*> macros;
+    for (auto* d : tree.getDefinedMacros())
+        macros[d->name.valueText()] = d;
+    for (auto* d : prefix.getDefinedMacros()) {
+        auto name = d->name.valueText();
+        if (!d->name.location().valid() || d->name.location() == SourceLocation::NoLocation)
+            continue;
+        auto it = macros.find(name);
+        if (it == macros.end() || it->second != d)
+            throw std::runtime_error("UVM / external macro overridden by user source");
+    }
+    for (const auto& ref : tree.getMacroRefs())
+        if (ref.syntax && ref.syntax->kind == syntax::SyntaxKind::UndefDirective && ref.definition)
+            for (auto* d : prefix.getDefinedMacros())
+                if (ref.definition == d)
+                    throw std::runtime_error("UVM macro undefined by user source");
 }
 
 const ast::Type& unwrapErrorType(const ast::Type& type) {

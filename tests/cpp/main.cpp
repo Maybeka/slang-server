@@ -48,16 +48,19 @@ int main(int argc, char** argv) {
     }
     // The test executable can hold a real child after private analysis creation,
     // immediately before semantic collection. Shipping CLI has no gate override.
-    if (argc == 2 && std::string_view(argv[1]) == "--diagnostic-worker") {
-        server::runDiagnosticWorker([] {
+    if (argc == 2 && (std::string_view(argv[1]) == "--diagnostic-worker" ||
+                      std::string_view(argv[1]) == "--diagnostic-session-worker")) {
+        server::runDiagnosticWorker(
+            [] {
 #ifndef _WIN32
-            if (const char* gate = std::getenv("SLANG_DIAGNOSTIC_TEST_GATE")) {
-                std::ofstream(std::string(gate) + ".ready") << getpid();
-                while (!std::filesystem::exists(std::string(gate) + ".release"))
-                    std::this_thread::sleep_for(std::chrono::milliseconds(5));
-            }
+                if (const char* gate = std::getenv("SLANG_DIAGNOSTIC_TEST_GATE")) {
+                    std::ofstream(std::string(gate) + ".ready") << getpid();
+                    while (!std::filesystem::exists(std::string(gate) + ".release"))
+                        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+                }
 #endif
-        });
+            },
+            std::string_view(argv[1]) == "--diagnostic-session-worker");
     }
     slang::OS::setupConsole();
     slang::syntax::SyntaxTree::getDefaultSourceManager().setDisableProximatePaths(true);

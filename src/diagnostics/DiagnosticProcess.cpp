@@ -280,6 +280,7 @@ struct DiagnosticProcess::Impl {
     std::optional<Job> pending;
     std::optional<Result> result;
     uint64_t epoch = 0;
+    uint64_t sessionInvalidation = 0, observedSessionInvalidation = 0;
     bool stopping = false;
     Fd notification;
 #    ifdef __APPLE__
@@ -287,6 +288,18 @@ struct DiagnosticProcess::Impl {
     Fd notificationWrite;
 #    endif
     std::thread thread;
+    std::unique_ptr<Child> sessionChild;
+    Fd sessionSocket;
+    uint64_t sessionKey = 0, sessionToken = 0;
+
+    void resetSession() noexcept {
+        sessionChild.reset(); // Kill/reap before EOF can look like a malformed request.
+        if (sessionSocket.value >= 0) {
+            ::close(sessionSocket.value);
+            sessionSocket.value = -1;
+        }
+        sessionKey = sessionToken = 0;
+    }
 
     Impl(std::string path, Limits config, std::function<void()> callback) :
         executable(std::move(path)), limits(config), wake(std::move(callback)) {
@@ -346,24 +359,40 @@ struct DiagnosticProcess::Impl {
         return stopping || epoch != token;
     }
     void run() noexcept {
+        struct SessionCleanup {
+            Impl& owner;
+            ~SessionCleanup() { owner.resetSession(); }
+        } cleanup{*this};
         for (;;) {
             std::optional<Job> job;
             uint64_t token;
+            uint64_t invalidation;
             {
                 std::lock_guard lock(mutex);
                 if (stopping)
                     return;
                 token = epoch;
+                invalidation = sessionInvalidation;
                 job.swap(pending);
             }
+            if (observedSessionInvalidation != invalidation) {
+                resetSession();
+                observedSessionInvalidation = invalidation;
+            }
             if (!job) {
+                if (sessionChild && token != sessionToken)
+                    resetSession();
                 pollfd fd{notification.value, POLLIN, 0};
                 int rc;
                 do {
-                    rc = ::poll(&fd, 1, -1);
+                    // A warm diagnostic library is useful during typing, but need
+                    // not retain an extra compiler process through long idle periods.
+                    rc = ::poll(&fd, 1, sessionChild ? 5000 : -1);
                 } while (rc < 0 && errno == EINTR);
                 if (rc < 0)
                     return; // Only possible for invalid internal descriptors.
+                if (rc == 0)
+                    resetSession();
                 drain();
                 continue;
             }
@@ -377,9 +406,11 @@ struct DiagnosticProcess::Impl {
                 }
             }
             catch (const std::exception& error) {
+                resetSession();
                 completed.error = error.what();
             }
             catch (...) {
+                resetSession();
                 completed.error = "Unknown diagnostic process failure";
             }
             bool publish = false;
@@ -412,81 +443,105 @@ struct DiagnosticProcess::Impl {
         if (obsolete(token))
             return {};
 #    endif
-        int pair[2];
-        socketPair(pair);
-        Fd parent(pair[0]), childSocket(pair[1]);
-        moveAboveStdio(parent.value);
-        moveAboveStdio(childSocket.value);
-        if (::fcntl(parent.value, F_SETFL, O_NONBLOCK) < 0)
-            throw sysError("fcntl(O_NONBLOCK)");
-        posix_spawn_file_actions_t actions;
-        int rc = ::posix_spawn_file_actions_init(&actions);
-        if (rc)
-            throw sysError("spawn actions init", rc);
-        struct Cleanup {
-            posix_spawn_file_actions_t* a;
-            ~Cleanup() { ::posix_spawn_file_actions_destroy(a); }
-        } cleanup{&actions};
-        auto check = [](int error) {
-            if (error)
-                throw sysError("spawn actions", error);
-        };
-        check(::posix_spawn_file_actions_adddup2(&actions, childSocket.value, STDIN_FILENO));
-        check(::posix_spawn_file_actions_adddup2(&actions, childSocket.value, STDOUT_FILENO));
+        const bool persistent = job.sessionKey != 0;
+        Fd localSocket;
+        Child localChild;
+        if (!persistent || !sessionChild || sessionKey != job.sessionKey) {
+            resetSession();
+            int pair[2];
+            socketPair(pair);
+            Fd parent(pair[0]), childSocket(pair[1]);
+            moveAboveStdio(parent.value);
+            moveAboveStdio(childSocket.value);
+            if (::fcntl(parent.value, F_SETFL, O_NONBLOCK) < 0)
+                throw sysError("fcntl(O_NONBLOCK)");
+            posix_spawn_file_actions_t actions;
+            int rc = ::posix_spawn_file_actions_init(&actions);
+            if (rc)
+                throw sysError("spawn actions init", rc);
+            struct Cleanup {
+                posix_spawn_file_actions_t* a;
+                ~Cleanup() { ::posix_spawn_file_actions_destroy(a); }
+            } cleanup{&actions};
+            auto check = [](int error) {
+                if (error)
+                    throw sysError("spawn actions", error);
+            };
+            check(::posix_spawn_file_actions_adddup2(&actions, childSocket.value, STDIN_FILENO));
+            check(::posix_spawn_file_actions_adddup2(&actions, childSocket.value, STDOUT_FILENO));
 #    ifdef __APPLE__
-        // CLOEXEC_DEFAULT closes all descriptors not explicitly used by an action,
-        // even descriptors concurrently opened without FD_CLOEXEC elsewhere.
-        if (::fcntl(STDERR_FILENO, F_GETFD) >= 0)
-            check(::posix_spawn_file_actions_addinherit_np(&actions, STDERR_FILENO));
-        else if (errno != EBADF)
-            throw sysError("inspect stderr");
+            // CLOEXEC_DEFAULT closes all descriptors not explicitly used by an action,
+            // even descriptors concurrently opened without FD_CLOEXEC elsewhere.
+            if (::fcntl(STDERR_FILENO, F_GETFD) >= 0)
+                check(::posix_spawn_file_actions_addinherit_np(&actions, STDERR_FILENO));
+            else if (errno != EBADF)
+                throw sysError("inspect stderr");
 #    else
-        check(::posix_spawn_file_actions_addclosefrom_np(&actions, STDERR_FILENO + 1));
+            check(::posix_spawn_file_actions_addclosefrom_np(&actions, STDERR_FILENO + 1));
 #    endif
-        posix_spawnattr_t attributes;
-        check(::posix_spawnattr_init(&attributes));
-        struct AttrCleanup {
-            posix_spawnattr_t* a;
-            ~AttrCleanup() { ::posix_spawnattr_destroy(a); }
-        } attrCleanup{&attributes};
-        sigset_t empty;
-        sigemptyset(&empty);
-        check(::posix_spawnattr_setsigmask(&attributes, &empty));
-        short spawnFlags = POSIX_SPAWN_SETSIGMASK;
+            posix_spawnattr_t attributes;
+            check(::posix_spawnattr_init(&attributes));
+            struct AttrCleanup {
+                posix_spawnattr_t* a;
+                ~AttrCleanup() { ::posix_spawnattr_destroy(a); }
+            } attrCleanup{&attributes};
+            sigset_t empty;
+            sigemptyset(&empty);
+            check(::posix_spawnattr_setsigmask(&attributes, &empty));
+            short spawnFlags = POSIX_SPAWN_SETSIGMASK;
 #    ifdef __APPLE__
-        spawnFlags |= POSIX_SPAWN_CLOEXEC_DEFAULT;
-        // Universal executables must launch the same slice as this process,
-        // including an x86_64 process running under Rosetta.
+            spawnFlags |= POSIX_SPAWN_CLOEXEC_DEFAULT;
+            // Universal executables must launch the same slice as this process,
+            // including an x86_64 process running under Rosetta.
 #        if defined(__arm64__) || defined(__aarch64__)
-        cpu_type_t architecture = CPU_TYPE_ARM64;
+            cpu_type_t architecture = CPU_TYPE_ARM64;
 #        elif defined(__x86_64__)
-        cpu_type_t architecture = CPU_TYPE_X86_64;
+            cpu_type_t architecture = CPU_TYPE_X86_64;
 #        else
 #            error Unsupported macOS diagnostic worker architecture
 #        endif
-        size_t selected = 0;
-        check(::posix_spawnattr_setbinpref_np(&attributes, 1, &architecture, &selected));
-        if (selected != 1)
-            throw std::runtime_error("cannot select diagnostic worker architecture");
+            size_t selected = 0;
+            check(::posix_spawnattr_setbinpref_np(&attributes, 1, &architecture, &selected));
+            if (selected != 1)
+                throw std::runtime_error("cannot select diagnostic worker architecture");
 #    endif
-        check(::posix_spawnattr_setflags(&attributes, spawnFlags));
-        char mode[] = "--diagnostic-worker";
-        char* argv[] = {executable.data(), mode, nullptr};
-        Child child;
-        rc = ::posix_spawn(&child.pid, executable.c_str(), &actions, &attributes, argv, environ);
-        if (rc) {
-            child.pid = -1;
-            throw sysError("posix_spawn", rc);
-        }
-        ::close(childSocket.value);
-        childSocket.value = -1;
-        const auto deadline = std::chrono::steady_clock::now() + limits.timeout;
+            check(::posix_spawnattr_setflags(&attributes, spawnFlags));
+            char onceMode[] = "--diagnostic-worker";
+            char sessionMode[] = "--diagnostic-session-worker";
+            char* mode = persistent ? sessionMode : onceMode;
+            char* argv[] = {executable.data(), mode, nullptr};
+            Child child;
+            rc = ::posix_spawn(&child.pid, executable.c_str(), &actions, &attributes, argv,
+                               environ);
+            if (rc) {
+                child.pid = -1;
+                throw sysError("posix_spawn", rc);
+            }
+            ::close(childSocket.value);
+            childSocket.value = -1;
 #    ifdef __APPLE__
-        // The PID is still our unreaped child. No snapshot bytes are sent until
-        // public Security APIs authenticate its live image against our own.
-        // A replaced path may bootstrap, but it cannot receive a diagnostic job.
-        imageIdentity->validateChild(child.pid);
+            // The PID is still our unreaped child. No snapshot bytes are sent until
+            // public Security APIs authenticate its live image against our own.
+            // A replaced path may bootstrap, but it cannot receive a diagnostic job.
+            imageIdentity->validateChild(child.pid);
 #    endif
+            if (persistent) {
+                sessionChild = std::make_unique<Child>();
+                sessionChild->pid = child.pid;
+                sessionSocket.value = parent.value;
+                sessionKey = job.sessionKey;
+            }
+            else {
+                localChild.pid = child.pid;
+                localSocket.value = parent.value;
+            }
+            child.pid = -1;
+            parent.value = -1;
+        }
+        Child& child = persistent ? *sessionChild : localChild;
+        Fd& parent = persistent ? sessionSocket : localSocket;
+        int rc = 0;
+        const auto deadline = std::chrono::steady_clock::now() + limits.timeout;
         auto inputHeader = header(job.input.size());
         size_t sentHeader = 0, sentInput = 0, gotHeader = 0;
         std::array<char, 8> outputHeader{};
@@ -494,9 +549,18 @@ struct DiagnosticProcess::Impl {
         uint64_t expected = 0;
         bool inputClosed = false, eof = false;
         for (;;) {
-            if (obsolete(token))
+            if (obsolete(token)) {
+                resetSession();
                 return {}; // Child RAII cancels and reaps off main thread.
+            }
             bool exited = child.reap();
+            if (persistent && exited)
+                throw std::runtime_error("Diagnostic session worker exited");
+            if (persistent && sentHeader == 8 && sentInput == job.input.size() && gotHeader == 8 &&
+                output.size() == expected) {
+                sessionToken = token;
+                return output;
+            }
             if (exited && (!WIFEXITED(child.status) || WEXITSTATUS(child.status) != 0))
                 throw std::runtime_error("Diagnostic worker exited unsuccessfully (wait status " +
                                          std::to_string(child.status) + ")");
@@ -511,7 +575,8 @@ struct DiagnosticProcess::Impl {
             if (now >= deadline)
                 throw std::runtime_error("Diagnostic worker timed out");
             if (!inputClosed && sentHeader == 8 && sentInput == job.input.size()) {
-                ::shutdown(parent.value, SHUT_WR);
+                if (!persistent)
+                    ::shutdown(parent.value, SHUT_WR);
                 inputClosed = true;
             }
             pollfd fds[2] = {{notification.value, POLLIN, 0},
@@ -534,6 +599,8 @@ struct DiagnosticProcess::Impl {
             if (!eof && (fds[1].revents & (POLLIN | POLLHUP | POLLERR))) {
                 std::array<char, 65536> buffer;
                 ssize_t count = ::recv(parent.value, buffer.data(), buffer.size(), 0);
+                if (count == 0 && persistent)
+                    throw std::runtime_error("Diagnostic session socket closed unexpectedly");
                 if (count == 0)
                     eof = true;
                 else if (count < 0) {
@@ -682,6 +749,7 @@ void DiagnosticProcess::cancel() {
     {
         std::lock_guard lock(impl->mutex);
         ++impl->epoch;
+        ++impl->sessionInvalidation;
         impl->pending.reset();
         impl->result.reset();
     }

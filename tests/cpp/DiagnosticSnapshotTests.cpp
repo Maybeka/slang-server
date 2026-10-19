@@ -10,6 +10,7 @@
 #include <thread>
 
 #include "slang/driver/Driver.h"
+#include "slang/parsing/Preprocessor.h"
 #include "slang/util/ScopeGuard.h"
 #ifndef _WIN32
 #    include <signal.h>
@@ -31,6 +32,273 @@ void changeWithoutDiagnostics(ServerHarness& server, const URI& uri, int version
          .contentChanges = {lsp::TextDocumentContentChangeWholeDocument{.text = text}}});
 }
 } // namespace
+
+TEST_CASE("UVM diagnostic-only parses do not capture edit checkpoints", "[uvm-followup]") {
+    namespace fs = std::filesystem;
+    auto root = fs::temp_directory_path() /
+                ("slang-uvm-diagnostic-purpose-" +
+                 std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    fs::create_directories(root / ".slang");
+    auto cleanup = slang::ScopeGuard([&] { fs::remove_all(root); });
+    std::ofstream(root / ".slang/server.json")
+        << R"({"compilationFilelist":"files.f","flags":"--single-unit --threads 1 -DWORKER_CLI=3","experimentalUvmPrefixCache":true})";
+    std::ofstream(root / "files.f") << "uvm_pkg.sv\nowner.sv\n";
+    std::ofstream(root / "uvm_pkg.sv") << "`define UVM_FIXED 1\npackage uvm_pkg; localparam int "
+                                          "VALUE=`WORKER_CLI; class base; endclass endpackage\n";
+    std::ofstream(root / "owner.sv") << "package app;\n`include \"item.svh\"\nendpackage\n";
+    const std::string original = "class item extends uvm_pkg::base; int value; endclass\n";
+    std::ofstream(root / "item.svh") << original;
+    ServerHarness server(lsp::InitializeParams{
+        .workspaceFolders = {{lsp::WorkspaceFolder{.uri = URI::fromFile(root), .name = "uvm"}}}});
+    auto uri = URI::fromFile(root / "item.svh");
+    server.m_driver->openDocument(uri, original, 1, true);
+    auto snapshot = server.m_driver->captureDiagnosticSnapshot({});
+    REQUIRE(snapshot);
+    REQUIRE(std::any_of(snapshot->input->treeOptions.begin(), snapshot->input->treeOptions.end(),
+                        [](const auto& o) {
+                            return o.preprocessor && o.preprocessor->captureUvmPrefix;
+                        }));
+    server::DiagnosticJobStatistics statistics;
+    auto output = server::executeDiagnosticJob(
+        server::encodeDiagnosticJob(snapshot->metadata, *snapshot->input), {}, &statistics);
+    CHECK(statistics.parsedTrees == snapshot->metadata.trees.size());
+    CHECK(statistics.prefixCaptureParses == 0);
+    auto nativeInput = *snapshot->input;
+    for (auto& options : nativeInput.treeOptions)
+        if (options.preprocessor)
+            options.preprocessor->captureUvmPrefix = false;
+    auto native = server::executeDiagnosticJob(
+        server::encodeDiagnosticJob(snapshot->metadata, nativeInput));
+    CHECK(rfl::json::write<rfl::UnderlyingEnums>(output) ==
+          rfl::json::write<rfl::UnderlyingEnums>(native));
+
+    server::DiagnosticJobSession session;
+    server::DiagnosticJobStatistics first, second;
+    auto encoded = server::encodeDiagnosticJob(snapshot->metadata, *snapshot->input);
+    auto seeded = session.execute(encoded, {}, &first);
+    CHECK(first.prefixCaptureParses == 1);
+    auto resumed = session.execute(encoded, {}, &second);
+    CHECK(second.reusedPrefixes == 1);
+    CHECK(second.parsedTrees == 0);
+    CHECK(rfl::json::write<rfl::UnderlyingEnums>(seeded) ==
+          rfl::json::write<rfl::UnderlyingEnums>(native));
+    CHECK(rfl::json::write<rfl::UnderlyingEnums>(resumed) ==
+          rfl::json::write<rfl::UnderlyingEnums>(native));
+
+#if defined(__linux__) || defined(__APPLE__)
+    {
+        std::optional<std::string> previous;
+        if (auto* value = std::getenv("SLANG_UVM_WORKER_PREFIX_DISABLE"))
+            previous = value;
+        setenv("SLANG_UVM_WORKER_PREFIX_DISABLE", "1", 1);
+        auto restore = slang::ScopeGuard([&] {
+            if (previous)
+                setenv("SLANG_UVM_WORKER_PREFIX_DISABLE", previous->c_str(), 1);
+            else
+                unsetenv("SLANG_UVM_WORKER_PREFIX_DISABLE");
+        });
+        server::DiagnosticJobSession transportOnly;
+        server::DiagnosticJobStatistics stats;
+        auto a = transportOnly.execute(encoded, {}, &stats);
+        auto b = transportOnly.execute(encoded, {}, &stats);
+        CHECK(stats.parsedTrees == 2);
+        CHECK(stats.prefixCaptureParses == 0);
+        CHECK(stats.reusedPrefixes == 0);
+        CHECK(rfl::json::write<rfl::UnderlyingEnums>(a) ==
+              rfl::json::write<rfl::UnderlyingEnums>(native));
+        CHECK(rfl::json::write<rfl::UnderlyingEnums>(b) ==
+              rfl::json::write<rfl::UnderlyingEnums>(native));
+    }
+#endif
+
+    auto alterHeader = [&](auto& input, std::string text) {
+        text.push_back('\0');
+        for (auto& file : input.sources.files)
+            if (fs::path(file.fullPath).filename() == "item.svh")
+                file.bytes = text;
+    };
+    auto editedInput = *snapshot->input;
+    alterHeader(editedInput,
+                "class item extends uvm_pkg::base; missing_session_type value; endclass\n");
+    auto editedJob = server::encodeDiagnosticJob(snapshot->metadata, editedInput);
+    server::DiagnosticJobStatistics editedStats;
+    auto edited = session.execute(editedJob, {}, &editedStats);
+    CHECK(editedStats.reusedPrefixes == 1);
+    CHECK(rfl::json::write<rfl::UnderlyingEnums>(edited) ==
+          rfl::json::write<rfl::UnderlyingEnums>(server::executeDiagnosticJob(editedJob)));
+    CHECK(std::any_of(edited.documents.begin(), edited.documents.end(),
+                      [](const auto& document) { return !document.diagnostics.empty(); }));
+
+    auto libraryInput = *snapshot->input;
+    for (auto& file : libraryInput.sources.files)
+        if (fs::path(file.fullPath).filename() == "uvm_pkg.sv") {
+            file.bytes = "`define UVM_FIXED 1\npackage uvm_pkg; endpackage\n";
+            file.bytes.push_back('\0');
+        }
+    auto changedLibrary = server::encodeDiagnosticJob(snapshot->metadata, libraryInput);
+    server::DiagnosticJobStatistics libraryStats;
+    auto invalidated = session.execute(changedLibrary, {}, &libraryStats);
+    CHECK(libraryStats.reusedPrefixes == 0);
+    CHECK(libraryStats.parsedTrees == 1);
+    CHECK(rfl::json::write<rfl::UnderlyingEnums>(invalidated) ==
+          rfl::json::write<rfl::UnderlyingEnums>(server::executeDiagnosticJob(changedLibrary)));
+
+    // An untrusted cache hint must not bypass the worker's own macro-state proof.
+    server::DiagnosticJobSession guarded;
+    guarded.execute(encoded);
+    auto overriddenInput = *snapshot->input;
+    alterHeader(overriddenInput, "`undef UVM_FIXED\n`define UVM_FIXED 2\n" + original);
+    auto overriddenJob = server::encodeDiagnosticJob(snapshot->metadata, overriddenInput);
+    server::DiagnosticJobStatistics overrideStats;
+    auto overridden = guarded.execute(overriddenJob, {}, &overrideStats);
+    CHECK(overrideStats.reusedPrefixes == 0);
+    CHECK(overrideStats.prefixCaptureParses == 0);
+    CHECK(overrideStats.parsedTrees == 1);
+    CHECK(rfl::json::write<rfl::UnderlyingEnums>(overridden) ==
+          rfl::json::write<rfl::UnderlyingEnums>(server::executeDiagnosticJob(overriddenJob)));
+    server::DiagnosticJobStatistics declinedStats;
+    guarded.execute(encoded, {}, &declinedStats);
+    CHECK(declinedStats.prefixCaptureParses == 0);
+    CHECK(declinedStats.reusedPrefixes == 0);
+
+    // A source macro override makes this owner permanently native until context replacement.
+    changeWithoutDiagnostics(server, uri, 2, "`undef UVM_FIXED\n`define UVM_FIXED 2\n" + original);
+    auto declined = server.m_driver->captureDiagnosticSnapshot({});
+    REQUIRE(declined);
+    CHECK(std::none_of(declined->input->treeOptions.begin(), declined->input->treeOptions.end(),
+                       [](const auto& o) {
+                           return o.preprocessor && o.preprocessor->captureUvmPrefix;
+                       }));
+}
+
+#if defined(__linux__) || defined(__APPLE__)
+TEST_CASE("UVM retirement seeds the incoming unsaved version without a second parse",
+          "[uvm-followup]") {
+    namespace fs = std::filesystem;
+    auto root = fs::temp_directory_path() /
+                ("slang-uvm-retire-latest-" +
+                 std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    fs::create_directories(root / ".slang");
+    std::optional<std::string> previous;
+    if (auto* value = std::getenv("SLANG_UVM_GENERATION_EDIT_LIMIT"))
+        previous = value;
+    setenv("SLANG_UVM_GENERATION_EDIT_LIMIT", "1", 1);
+    auto cleanup = slang::ScopeGuard([&] {
+        if (previous)
+            setenv("SLANG_UVM_GENERATION_EDIT_LIMIT", previous->c_str(), 1);
+        else
+            unsetenv("SLANG_UVM_GENERATION_EDIT_LIMIT");
+        fs::remove_all(root);
+    });
+    std::ofstream(root / ".slang/server.json")
+        << R"({"compilationFilelist":"files.f","flags":"--single-unit --threads 1","experimentalUvmPrefixCache":true})";
+    std::ofstream(root / "files.f") << "uvm_pkg.sv\nowner.sv\n";
+    std::ofstream(root / "uvm_pkg.sv") << "package uvm_pkg; class base; endclass endpackage\n";
+    std::ofstream(root / "owner.sv") << "package app;\n`include \"item.svh\"\nendpackage\n";
+    const std::string original = "class item extends uvm_pkg::base; int first; endclass\n";
+    const std::string latest = "class item extends uvm_pkg::base; int newest; endclass\n";
+    std::ofstream(root / "item.svh") << original;
+    ServerHarness server(lsp::InitializeParams{
+        .workspaceFolders = {{lsp::WorkspaceFolder{.uri = URI::fromFile(root), .name = "uvm"}}}});
+    auto uri = URI::fromFile(root / "item.svh");
+    server.m_driver->openDocument(uri, original, 1, true);
+    auto epoch = server.m_driver->completions.getCompletionEpoch();
+    changeWithoutDiagnostics(server, uri, 2, original + "\n");
+    changeWithoutDiagnostics(server, uri, 3, latest);
+    CHECK(server.m_driver->completions.getCompletionEpoch() != epoch);
+    auto doc = server.m_driver->getDocument(uri);
+    REQUIRE(doc);
+    CHECK(doc->getVersion() == 3);
+    CHECK(doc->textMatches(latest));
+    bool cachedLatest = false;
+    for (const auto& [_, owner] : server.m_driver->docs)
+        if (auto tree = owner->getCachedSyntaxTree())
+            for (auto id : tree->getSourceBufferIds())
+                if (server.m_driver->sm.isLatestData(id) &&
+                    server.m_driver->sm.getFullPath(id).filename() == "item.svh")
+                    cachedLatest |= server.m_driver->sm.getSourceText(id) == latest + '\0';
+    CHECK(cachedLatest);
+    auto snapshot = server.m_driver->captureDiagnosticSnapshot({});
+    REQUIRE(snapshot);
+    auto output = server::executeDiagnosticJob(
+        server::encodeDiagnosticJob(snapshot->metadata, *snapshot->input));
+    server.m_driver->commitDiagnosticSnapshot(*snapshot, std::move(output), {});
+    CHECK(server.client.getDiagnostics(uri).empty());
+    CHECK(server.client.diagnosticVersions.at(uri) == 3);
+}
+#endif
+
+// Exercise real signed-image spawning and framed multi-job lifetime, independently
+// of the direct worker-cache tests above.
+#if defined(__linux__) || defined(__APPLE__)
+TEST_CASE("Diagnostic sessions reuse only their owner epoch and retire idle helpers",
+          "[uvm-followup][diagnostic-session]") {
+    namespace fs = std::filesystem;
+    auto gate = fs::temp_directory_path() / ("slang-session-lifetime-" + std::to_string(getpid()));
+    auto ready = gate.string() + ".ready", release = gate.string() + ".release";
+    fs::remove(ready);
+    std::ofstream(release) << "released";
+    std::optional<std::string> oldGate;
+    if (auto* value = std::getenv("SLANG_DIAGNOSTIC_TEST_GATE"))
+        oldGate = value;
+    setenv("SLANG_DIAGNOSTIC_TEST_GATE", gate.c_str(), 1);
+    auto cleanup = slang::ScopeGuard([&] {
+        if (oldGate)
+            setenv("SLANG_DIAGNOSTIC_TEST_GATE", oldGate->c_str(), 1);
+        else
+            unsetenv("SLANG_DIAGNOSTIC_TEST_GATE");
+        fs::remove(ready);
+        fs::remove(release);
+    });
+    ServerHarness server;
+    auto doc = server.openFile("session_lifetime.sv", "package p; int first; endpackage\n");
+    changeWithoutDiagnostics(server, doc.m_uri, 2, "package p; int latest; endpackage\n");
+    auto snapshot = server.m_driver->captureDiagnosticSnapshot({});
+    REQUIRE(snapshot);
+    const auto input = server::encodeDiagnosticJob(snapshot->metadata, *snapshot->input);
+    isolated_diagnostics::Limits limits;
+    limits.timeout = std::chrono::seconds(5);
+    isolated_diagnostics::DiagnosticProcess helper(
+        isolated_diagnostics::currentDiagnosticExecutable(), limits, [] {});
+    uint64_t sequence = 0;
+    auto submit = [&](uint64_t key) {
+        isolated_diagnostics::Job job;
+        job.jobId = ++sequence;
+        job.sessionKey = key;
+        job.input = input;
+        REQUIRE(helper.submit(std::move(job)));
+        std::optional<isolated_diagnostics::Result> result;
+        auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(15);
+        while (!(result = helper.takeResult()) && std::chrono::steady_clock::now() < deadline)
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        REQUIRE(result);
+        REQUIRE(result->error.empty());
+        CHECK(result->jobId == sequence);
+        CHECK(rfl::json::read<server::DiagnosticJobOutput, rfl::UnderlyingEnums>(result->output));
+        int pid = 0;
+        std::ifstream(ready) >> pid;
+        REQUIRE(pid > 0);
+        return pid;
+    };
+    int first = submit(11);
+    CHECK(submit(11) == first);
+    helper.cancel();
+    int second = submit(11); // Immediate submit must not hide the preceding cancel.
+    CHECK(second != first);
+    CHECK(kill(first, 0) == -1);
+    int third = submit(12);
+    CHECK(third != second);
+    CHECK(kill(second, 0) == -1);
+    auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    while (kill(third, 0) == 0 && std::chrono::steady_clock::now() < deadline)
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    CHECK(kill(third, 0) == -1); // Idle cache does not retain a worker indefinitely.
+    int fourth = submit(12);
+    helper.requestStop();
+    helper.join();
+    CHECK(kill(fourth, 0) == -1);
+}
+#endif
 
 TEST_CASE("SDK driver option identities survive server snapshot capture") {
     slang::driver::Driver driver;

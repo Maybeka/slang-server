@@ -22,6 +22,7 @@
 #include "util/Logging.h"
 #include "util/Markdown.h"
 #include "util/SlangExtensions.h"
+#include "util/UvmPhaseTrace.h"
 #include <algorithm>
 #include <filesystem>
 #include <memory>
@@ -452,12 +453,15 @@ std::unique_ptr<ServerDriver> ServerDriver::createForExplore(
     Indexer& indexer, SlangLspClient& client, const Config& config,
     std::optional<std::string_view> workspaceFolder, const ServerDriver* oldDriver,
     bool requireValidConfig, bool deferOpenDiagnostics) {
+    UvmPhaseTrace phases(deferOpenDiagnostics && config.experimentalUvmPrefixCache.value());
     auto newDriver = std::make_unique<ServerDriver>(indexer, client, config,
                                                     std::vector<std::string>{}, workspaceFolder,
                                                     requireValidConfig, oldDriver);
+    phases.mark("retirement-construct");
     if (requireValidConfig && !newDriver->m_configLoaded)
         return nullptr;
     newDriver->copyOpenDocumentsFrom(oldDriver, deferOpenDiagnostics);
+    phases.mark("retirement-copy-open");
     return newDriver;
 }
 

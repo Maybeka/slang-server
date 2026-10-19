@@ -127,23 +127,7 @@ std::shared_ptr<syntax::SyntaxTree> cachedUvmTree(std::shared_ptr<syntax::Syntax
     pp.predefines.clear();
     suffixOptions.set(pp);
     auto suffix = syntax::SyntaxTree::afterCachedPrefix(prefix, buffers.subspan(1), suffixOptions);
-    // Contract: user source must not replace or undefine the external/UVM macro environment.
-    std::unordered_map<std::string_view, const syntax::DefineDirectiveSyntax*> macros;
-    for (auto* d : suffix->getDefinedMacros())
-        macros[d->name.valueText()] = d;
-    for (auto* d : prefix->getDefinedMacros()) {
-        auto name = d->name.valueText();
-        if (!d->name.location().valid() || d->name.location() == SourceLocation::NoLocation)
-            continue;
-        auto it = macros.find(name);
-        if (it == macros.end() || it->second != d)
-            throw std::runtime_error("UVM / external macro overridden by user source");
-    }
-    for (const auto& ref : suffix->getMacroRefs())
-        if (ref.syntax && ref.syntax->kind == syntax::SyntaxKind::UndefDirective && ref.definition)
-            for (auto* d : prefix->getDefinedMacros())
-                if (ref.definition == d)
-                    throw std::runtime_error("UVM macro undefined by user source");
+    validateUvmMacroEnvironment(*prefix, *suffix);
     cacheTrace("prefix-reused");
     return syntax::SyntaxTree::withCachedPrefix(prefix, suffix);
 }
@@ -399,8 +383,19 @@ std::shared_ptr<syntax::SyntaxTree> SlangDoc::getSyntaxTree(const lsp::RequestCo
                     cacheTrace(error.what());
                 }
             }
-            if (!tree)
-                tree = syntax::SyntaxTree::fromBuffers(buffers, m_sourceManager, unit.options);
+            if (!tree) {
+                // A declined prefix stays native for this document context. Do not keep
+                // capturing checkpoints that cannot be consumed by later edits.
+                if (unit.options.getOrDefault<parsing::PreprocessorOptions>().captureUvmPrefix) {
+                    auto nativeOptions = unit.options;
+                    auto pp = nativeOptions.getOrDefault<parsing::PreprocessorOptions>();
+                    pp.captureUvmPrefix = false;
+                    nativeOptions.set(pp);
+                    tree = syntax::SyntaxTree::fromBuffers(buffers, m_sourceManager, nativeOptions);
+                }
+                else
+                    tree = syntax::SyntaxTree::fromBuffers(buffers, m_sourceManager, unit.options);
+            }
             tree->isLibraryUnit = unit.isLibraryUnit;
             m_tree = std::move(tree);
         }

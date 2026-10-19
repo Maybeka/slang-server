@@ -17,6 +17,9 @@ struct Job {
     // If set, replaces input. Cancellation is checked before and after encoding.
     // Keep encoding bounded: shutdown join must wait for an executing encoder.
     std::function<std::string()> encode;
+    // Nonzero opts into a persistent helper belonging to this exact owner epoch.
+    // Zero retains the original one-request process / framing contract.
+    uint64_t sessionKey = 0;
 };
 
 struct Result {

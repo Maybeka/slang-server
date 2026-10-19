@@ -18,6 +18,7 @@
 #include "lsp/URI.h"
 #include "util/Converters.h"
 #include "util/Logging.h"
+#include "util/UvmPhaseTrace.h"
 #include <algorithm>
 #include <cctype>
 #include <charconv>
@@ -1576,6 +1577,8 @@ void SlangServer::runBackgroundWork(const lsp::RequestContext& ctx) {
                 isolated_diagnostics::Job job;
                 job.generation = snapshot->diagnosticGeneration;
                 job.jobId = ++m_diagnosticJobId;
+                if (m_config.experimentalUvmPrefixCache.value())
+                    job.sessionKey = m_driver->completions.getCompletionEpoch();
                 job.encode = [metadata = std::move(metadata), input] {
                     return encodeDiagnosticJob(metadata, *input);
                 };
@@ -1630,6 +1633,7 @@ void SlangServer::maybeRetireParsedContext() {
         return;
     }
     auto oldEntries = m_driver->sm.getSourceLocationEntryCount();
+    UvmPhaseTrace phases;
     auto trace = [&](const char* result, uint64_t newEpoch, size_t newBytes) {
         if (auto* path = std::getenv("SLANG_UVM_GENERATION_TRACE"))
             if (auto* file = std::fopen(path, "a")) {
@@ -1646,18 +1650,20 @@ void SlangServer::maybeRetireParsedContext() {
         m_diagnosticProcess->cancel();
     m_activeDiagnosticSnapshot.reset();
     m_driver->prepareForContextRetirement();
+    phases.mark("retirement-release");
     try {
         if (!loadConfig(m_config, false, true, true)) {
             ++m_contextEdits;
             trace("replacement-failed", epoch, bytes);
             return;
         }
+        phases.mark("retirement-load-publish");
         m_contextRetired = true;
         m_driver->completions.requireCompletionEpoch();
         m_contextEpoch = m_driver->completions.getCompletionEpoch();
         auto fresh = m_driver->sm.getSourceLocationTableBytes() + m_driver->sm.getMemoryUsage();
         m_contextBudget = std::max<size_t>(16 * 1024 * 1024, fresh * 2);
-        m_contextEdits = 1;
+        m_contextEdits = 0;
         trace("retired", m_contextEpoch, fresh);
     }
     catch (const std::exception&) {
@@ -1670,7 +1676,7 @@ void SlangServer::maybeRetireParsedContext() {
             m_contextEpoch = actual;
             auto fresh = m_driver->sm.getSourceLocationTableBytes() + m_driver->sm.getMemoryUsage();
             m_contextBudget = std::max<size_t>(16 * 1024 * 1024, fresh * 2);
-            m_contextEdits = 1;
+            m_contextEdits = 0;
         }
         else
             ++m_contextEdits;
@@ -1681,7 +1687,6 @@ void SlangServer::maybeRetireParsedContext() {
 
 void SlangServer::onDocDidChange(const lsp::DidChangeTextDocumentParams& params,
                                  lsp::RequestContext ctx) {
-    maybeRetireParsedContext();
     if (m_config.experimentalMethodScopeOverlay.value() && !m_driver->comp) {
         bool synced = false;
         try {
@@ -1714,6 +1719,7 @@ void SlangServer::onDocDidChange(const lsp::DidChangeTextDocumentParams& params,
             }
             if (m_methodScope->apply(params, m_config, ctx, synced)) {
                 m_methodScopeDecline.clear();
+                maybeRetireParsedContext();
                 return;
             }
         }
@@ -1732,6 +1738,9 @@ void SlangServer::onDocDidChange(const lsp::DidChangeTextDocumentParams& params,
         }
     }
     m_driver->onDocDidChange(params, ctx);
+    // Seed a replacement with the latest unsaved text. Rebuilding before this
+    // notification would parse the previous version and immediately invalidate it.
+    maybeRetireParsedContext();
 }
 
 void SlangServer::onDocDidSave(const lsp::DidSaveTextDocumentParams& params) {

@@ -38,17 +38,21 @@ int main(int argc, char** argv) {
         std::fprintf(stderr, "Cannot initialize diagnostic process safety: %s\n", error.what());
         return 1;
     }
-    if (argc == 2 && std::string_view(argv[1]) == "--diagnostic-worker") {
+    if (argc == 2 && (std::string_view(argv[1]) == "--diagnostic-worker" ||
+                      std::string_view(argv[1]) == "--diagnostic-session-worker")) {
+        const bool persistent = std::string_view(argv[1]) == "--diagnostic-session-worker";
 #ifdef SLANG_SERVER_TEST_DIAGNOSTIC_GATE
-        runDiagnosticWorker([] {
-            if (const char* gate = std::getenv("SLANG_DIAGNOSTIC_TEST_GATE")) {
-                std::ofstream(std::string(gate) + ".ready") << "private semantic ready";
-                while (!std::filesystem::exists(std::string(gate) + ".release"))
-                    std::this_thread::sleep_for(std::chrono::milliseconds(5));
-            }
-        });
+        runDiagnosticWorker(
+            [] {
+                if (const char* gate = std::getenv("SLANG_DIAGNOSTIC_TEST_GATE")) {
+                    std::ofstream(std::string(gate) + ".ready") << "private semantic ready";
+                    while (!std::filesystem::exists(std::string(gate) + ".release"))
+                        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+                }
+            },
+            persistent);
 #else
-        runDiagnosticWorker();
+        runDiagnosticWorker({}, persistent);
 #endif
     }
 

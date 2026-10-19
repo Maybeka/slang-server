@@ -81,69 +81,80 @@ void publishPid(const std::string& path) {
     auto text = std::to_string(::getpid()) + "\n";
     writeAll(fd.value, text.data(), text.size());
 }
-int worker() {
-    const std::string input = isolated_diagnostics::readDiagnosticRequest();
-    auto separator = input.find('\n');
-    const auto mode = input.substr(0, separator);
-    const auto payload = separator == std::string::npos ? std::string()
-                                                        : input.substr(separator + 1);
-    if (mode == "echo") {
-        isolated_diagnostics::writeDiagnosticResponse(payload);
-    }
-    else if (mode == "fragmented") {
-        auto prefix = frameHeader(payload.size());
-        for (char byte : prefix) {
-            writeAll(STDOUT_FILENO, &byte, 1);
-            std::this_thread::sleep_for(1ms);
+int worker(bool persistent = false) {
+    std::unique_ptr<isolated_diagnostics::DiagnosticParentGuard> guard;
+    if (persistent)
+        guard = std::make_unique<isolated_diagnostics::DiagnosticParentGuard>(::getppid());
+    bool keepAlive = false;
+    do {
+        const std::string input = isolated_diagnostics::readDiagnosticRequest();
+        auto separator = input.find('\n');
+        const auto mode = input.substr(0, separator);
+        const auto payload = separator == std::string::npos ? std::string()
+                                                            : input.substr(separator + 1);
+        keepAlive = mode == "echo" || mode == "fragmented" || mode == "pid" || mode == "fd-check";
+        if (mode == "pid") {
+            isolated_diagnostics::writeDiagnosticResponse(std::to_string(::getpid()));
         }
-        for (size_t i = 0; i < payload.size(); i += 7)
-            writeAll(STDOUT_FILENO, payload.data() + i, std::min<size_t>(7, payload.size() - i));
-    }
-    else if (mode == "oversize") {
-        rawFrame(std::numeric_limits<uint64_t>::max(), "");
-    }
-    else if (mode == "truncated-header") {
-        auto prefix = frameHeader(5);
-        writeAll(STDOUT_FILENO, prefix.data(), 4);
-    }
-    else if (mode == "truncated-body") {
-        rawFrame(8, "short");
-    }
-    else if (mode == "extra") {
-        rawFrame(2, "abc");
-    }
-    else if (mode == "double-frame") {
-        isolated_diagnostics::writeDiagnosticResponse("first");
-        isolated_diagnostics::writeDiagnosticResponse("second");
-    }
-    else if (mode == "crash") {
-        ::raise(SIGKILL); // No core file, no dependency on a shell or another executable.
-        return 91;
-    }
-    else if (mode == "hold") {
-        publishPid(payload);
-        for (;;)
-            ::pause();
-    }
-    else if (mode == "fd-check") {
-        const int fd = std::stoi(payload);
-        errno = 0;
-        const int flags = ::fcntl(fd, F_GETFD);
-        isolated_diagnostics::writeDiagnosticResponse(flags == -1 && errno == EBADF ? "closed"
-                                                                                    : "leaked");
-    }
-    else if (mode == "helper-output-limit") {
-        try {
-            isolated_diagnostics::writeDiagnosticResponse("12345", 4);
-            return 92;
+        else if (mode == "echo") {
+            isolated_diagnostics::writeDiagnosticResponse(payload);
         }
-        catch (const std::runtime_error&) {
-            isolated_diagnostics::writeDiagnosticResponse("rejected");
+        else if (mode == "fragmented") {
+            auto prefix = frameHeader(payload.size());
+            for (char byte : prefix) {
+                writeAll(STDOUT_FILENO, &byte, 1);
+                std::this_thread::sleep_for(1ms);
+            }
+            for (size_t i = 0; i < payload.size(); i += 7)
+                writeAll(STDOUT_FILENO, payload.data() + i,
+                         std::min<size_t>(7, payload.size() - i));
         }
-    }
-    else {
-        throw std::runtime_error("Unknown test worker mode: " + mode);
-    }
+        else if (mode == "oversize") {
+            rawFrame(std::numeric_limits<uint64_t>::max(), "");
+        }
+        else if (mode == "truncated-header") {
+            auto prefix = frameHeader(5);
+            writeAll(STDOUT_FILENO, prefix.data(), 4);
+        }
+        else if (mode == "truncated-body") {
+            rawFrame(8, "short");
+        }
+        else if (mode == "extra") {
+            rawFrame(2, "abc");
+        }
+        else if (mode == "double-frame") {
+            isolated_diagnostics::writeDiagnosticResponse("first");
+            isolated_diagnostics::writeDiagnosticResponse("second");
+        }
+        else if (mode == "crash") {
+            ::raise(SIGKILL); // No core file, no dependency on a shell or another executable.
+            return 91;
+        }
+        else if (mode == "hold") {
+            publishPid(payload);
+            for (;;)
+                ::pause();
+        }
+        else if (mode == "fd-check") {
+            const int fd = std::stoi(payload);
+            errno = 0;
+            const int flags = ::fcntl(fd, F_GETFD);
+            isolated_diagnostics::writeDiagnosticResponse(flags == -1 && errno == EBADF ? "closed"
+                                                                                        : "leaked");
+        }
+        else if (mode == "helper-output-limit") {
+            try {
+                isolated_diagnostics::writeDiagnosticResponse("12345", 4);
+                return 92;
+            }
+            catch (const std::runtime_error&) {
+                isolated_diagnostics::writeDiagnosticResponse("rejected");
+            }
+        }
+        else {
+            throw std::runtime_error("Unknown test worker mode: " + mode);
+        }
+    } while (persistent && keepAlive);
     return 0;
 }
 
@@ -238,8 +249,8 @@ struct Session {
             changed.wait_for(lock, 5ms);
         }
     }
-    void submit(std::string input, uint64_t generation = 17, uint64_t id = 31) {
-        require(process.submit(Job{generation, id, std::move(input), {}}),
+    void submit(std::string input, uint64_t generation = 17, uint64_t id = 31, uint64_t key = 0) {
+        require(process.submit(Job{generation, id, std::move(input), {}, key}),
                 "submit unexpectedly rejected");
     }
 };
@@ -587,8 +598,9 @@ int main(int argc, char** argv) {
             return parentOwnerCase(argv[0], argv[2], std::stoi(argv[3]), std::stoi(argv[4]));
         if (argc == 5 && std::string(argv[1]) == "--parent-watch-case")
             return parentWatchCase(argv[2], std::stoll(argv[3]), std::stoi(argv[4]));
-        if (argc == 2 && std::string(argv[1]) == "--diagnostic-worker")
-            return worker();
+        if (argc == 2 && (std::string(argv[1]) == "--diagnostic-worker" ||
+                          std::string(argv[1]) == "--diagnostic-session-worker"))
+            return worker(std::string(argv[1]) == "--diagnostic-session-worker");
         if (argc == 3 && std::string(argv[1]) == "--stdio-case")
             return stdioCase(argv[2]);
         if (argc == 3 && std::string(argv[1]) == "--helper-case")
@@ -623,6 +635,56 @@ int main(int argc, char** argv) {
                              .count()
                       << " ms)" << std::endl;
         };
+        test("session owner epoch reuse and cancel-before-submit", [&] {
+            Session session(executable);
+            session.submit("pid", 17, 31, 71);
+            auto first = session.await();
+            require(first.error.empty(), first.error);
+            session.submit("pid", 18, 32, 71);
+            expectSuccess(session.await(), first.output, 18, 32);
+            session.submit("pid", 19, 33, 72);
+            auto second = session.await();
+            require(second.error.empty() && second.output != first.output,
+                    "Owner epoch reused old child");
+            require(::kill(std::stoi(first.output), 0) == -1, "Old owner was not reaped");
+            session.process.cancel();
+            session.submit("pid", 20, 34, 72);
+            auto third = session.await();
+            require(third.error.empty() && third.output != second.output,
+                    "Cancel was hidden by new submit");
+            require(::kill(std::stoi(second.output), 0) == -1,
+                    "Cancelled idle owner was not reaped");
+            session.process.requestStop();
+            session.process.join();
+            require(::kill(std::stoi(third.output), 0) == -1, "Stopped idle owner was not reaped");
+        });
+        for (const auto& mode :
+             {"oversize", "truncated-header", "truncated-body", "extra", "double-frame", "crash"}) {
+            test(std::string("session rejects malformed second frame ") + mode, [&] {
+                Session session(executable);
+                session.submit("echo\nready", 17, 31, 71);
+                expectSuccess(session.await(), "ready");
+                session.submit(mode, 18, 32, 71);
+                auto bad = session.await();
+                require(!bad.error.empty(), "Malformed session response was accepted");
+                session.submit("echo\nrecovered", 19, 33, 71);
+                expectSuccess(session.await(), "recovered", 19, 33);
+            });
+        }
+        test("session second-frame timeout reaps and permits fresh owner", [&] {
+            Session session(executable, limits(400ms));
+            session.submit("echo\nready", 17, 31, 71);
+            expectSuccess(session.await(), "ready");
+            auto marker = temporary.file("session-timeout.pid");
+            session.submit("hold\n" + marker, 18, 32, 71);
+            auto bad = session.await();
+            require(!bad.error.empty(), "Held session did not time out");
+            int pid = 0;
+            std::ifstream(marker) >> pid;
+            require(pid > 1 && ::kill(pid, 0) == -1, "Timed out session was not reaped");
+            session.submit("echo\nrecovered", 19, 33, 71);
+            expectSuccess(session.await(), "recovered", 19, 33);
+        });
         test("binary large frame and identity", [&] {
             std::string payload(1024 * 1024 + 17, '\0');
             for (size_t i = 0; i < payload.size(); ++i)

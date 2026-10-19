@@ -26,6 +26,10 @@ namespace server {
 bool hasValidBuffers(const slang::SourceManager& sm,
                      const std::shared_ptr<slang::syntax::SyntaxTree>& tree);
 
+/// Reject replacement or undefinition of the captured external/UVM macro environment.
+void validateUvmMacroEnvironment(const slang::syntax::SyntaxTree& prefix,
+                                 const slang::syntax::SyntaxTree& tree);
+
 /// Return the canonical type, unwrapping a recoverable error type when available.
 const slang::ast::Type& unwrapErrorType(const slang::ast::Type& type);
 

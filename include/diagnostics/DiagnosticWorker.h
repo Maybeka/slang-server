@@ -2,8 +2,10 @@
 #pragma once
 #include "lsp/LspTypes.h"
 #include "lsp/URI.h"
+#include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -57,10 +59,34 @@ namespace diagnostic_snapshot {
 struct Input;
 }
 std::string encodeDiagnosticJob(const DiagnosticJobMetadata&, const diagnostic_snapshot::Input&);
+struct DiagnosticJobStatistics {
+    size_t parsedTrees = 0;
+    size_t prefixCaptureParses = 0;
+    size_t reusedPrefixes = 0;
+};
 DiagnosticJobOutput executeDiagnosticJob(std::string_view input,
-                                         const std::function<void()>& beforeSemantic = {});
+                                         const std::function<void()>& beforeSemantic = {},
+                                         DiagnosticJobStatistics* statistics = nullptr);
+
+// Serial worker-local ownership only. No SyntaxTree, SourceManager or physical ID
+// crosses the value-only job protocol. Destroy the session on parent epoch change.
+class DiagnosticJobSession {
+public:
+    DiagnosticJobSession();
+    ~DiagnosticJobSession();
+    DiagnosticJobSession(const DiagnosticJobSession&) = delete;
+    DiagnosticJobSession& operator=(const DiagnosticJobSession&) = delete;
+    DiagnosticJobOutput execute(std::string_view input,
+                                const std::function<void()>& beforeSemantic = {},
+                                DiagnosticJobStatistics* statistics = nullptr);
+
+private:
+    struct Impl;
+    std::unique_ptr<Impl> impl;
+};
 
 // Worker mode is entered before constructing the LSP server or its threads.
 // Writes only framed protocol output, then exits without static teardown.
-[[noreturn]] void runDiagnosticWorker(const std::function<void()>& beforeSemantic = {});
+[[noreturn]] void runDiagnosticWorker(const std::function<void()>& beforeSemantic = {},
+                                      bool persistent = false);
 } // namespace server

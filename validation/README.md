@@ -1,5 +1,17 @@
 # Validation records
 
+## macOS 2026-10-19: worker and retirement follow-up
+
+The [follow-up acceptance report](macos-uvm-followup-2026-10-19.md) and
+[machine-readable results](macos-uvm-followup-2026-10-19.json) evaluate unused
+capture removal, retirement seeded with the incoming edit, and worker-local UVM
+prefix reuse against `2903a08`. They retain cold-start, complete resolve,
+fallback, natural retirement and separate parent/process-family RSS evidence.
+Complete diagnostic content is preserved; equal-location/code diagnostic entry
+order can change in two UBUS cases, as documented with the exact comparison.
+The experiment remains **default off**. The initial report below remains a
+separate historical result.
+
 ## macOS 2026-10-19: parsed UVM prefix reuse
 
 The opt-in UVM prefix implementation is evaluated in the

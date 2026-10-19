@@ -404,7 +404,7 @@ index a8d51f774..638de5071 100644
      SyntaxNode* rootNode;
      const SourceLibrary* library;
 diff --git a/include/slang/text/SourceManager.h b/include/slang/text/SourceManager.h
-index de1d1c271..f36070843 100644
+index de1d1c271..3d655fd5c 100644
 --- a/include/slang/text/SourceManager.h
 +++ b/include/slang/text/SourceManager.h
 @@ -16,11 +16,13 @@
@@ -421,7 +421,7 @@ index de1d1c271..f36070843 100644
  #include "slang/util/FlatMap.h"
  #include "slang/util/SmallVector.h"
  #include "slang/util/Util.h"
-@@ -44,6 +46,77 @@ class SLANG_EXPORT SourceManager {
+@@ -44,6 +46,84 @@ class SLANG_EXPORT SourceManager {
  public:
      using BufferOrError = nonstd::expected<SourceBuffer, std::error_code>;
  
@@ -490,6 +490,13 @@ index de1d1c271..f36070843 100644
 +    SourceSnapshot captureSnapshot(std::span<const BufferID> graphBuffers) const;
 +    /// Loads into a fresh manager. Replay never consults the source filesystem.
 +    void loadSnapshot(const SourceSnapshot& snapshot);
++    /// Advances an idle replay manager while retaining explicitly witnessed immutable buffers.
++    /// Requires identical lookup/header-request topology, cwd and include settings. Every
++    /// retained buffer must have identical bytes and display identity in the new snapshot.
++    /// Other old file IDs are invalidated, never recycled. Incompatible contexts return false
++    /// before changing replay state; malformed snapshots throw. The owner must serialize this
++    /// with all readers and separately prove parser options / macro checkpoint compatibility.
++    bool tryUpdateSnapshot(const SourceSnapshot& snapshot, std::span<const BufferID> retained);
 +    SourceBuffer createRootBuffer(uint32_t fileId, uint64_t sortKey = UINT64_MAX);
 +    bool snapshotIncomplete() const { return snapshotIncompleteFlag.load(); }
 +    /// Bracket one fresh parse with the exact generated file IDs captured for that tree.
@@ -499,7 +506,7 @@ index de1d1c271..f36070843 100644
      /// Information about a `line directive in a source buffer.
      struct LineDirectiveInfo {
          std::string name;       // File name set by directive
-@@ -259,25 +332,46 @@ public:
+@@ -259,25 +339,46 @@ public:
      /// Sets whether filenames should be made "proximate" to the current directory
      /// for diagnostic reporting purposes. This is on by default but can be
      /// disabled to always use the simple filename.
@@ -551,7 +558,7 @@ index de1d1c271..f36070843 100644
  
      /// Stores information specified in a pragma diagnostic directive, which alters the
      /// currently active set of diagnostic mappings.
-@@ -339,6 +433,14 @@ public:
+@@ -339,6 +440,14 @@ public:
  
      /// Returns the total bytes consumed by all loaded source files:
      /// raw file content plus any cached line-offset tables.
@@ -566,7 +573,7 @@ index de1d1c271..f36070843 100644
      size_t getMemoryUsage() const;
  
      /// Appends raw line-start offsets for @a text to @a offsets, using the same
-@@ -370,6 +472,7 @@ private:
+@@ -370,6 +479,7 @@ private:
          uint64_t sortKey = 0;
          BufferKind bufferKind = BufferKind::DesignFile;
          std::vector<LineDirectiveInfo> lineDirectives;
@@ -574,7 +581,7 @@ index de1d1c271..f36070843 100644
  
          FileInfo() = default;
  
-@@ -455,6 +558,32 @@ private:
+@@ -455,6 +565,32 @@ private:
      // map from buffer to diagnostic directive lists
      flat_hash_map<BufferID, std::vector<DiagnosticDirectiveInfo>> diagDirectives;
  
@@ -1873,18 +1880,20 @@ index ac681a4db..5c9645f32 100644
      auto text = SyntaxPrinter(sourceManager())
                      .setIncludeDirectives(true)
 diff --git a/source/text/SourceManager.cpp b/source/text/SourceManager.cpp
-index 386684b5a..692ccfb4b 100644
+index 386684b5a..7a627296b 100644
 --- a/source/text/SourceManager.cpp
 +++ b/source/text/SourceManager.cpp
-@@ -8,6 +8,7 @@
+@@ -7,6 +7,9 @@
+ //------------------------------------------------------------------------------
  #include "slang/text/SourceManager.h"
  
- #include <memory>
++#include <cstdio>
++#include <cstdlib>
 +#include <functional>
+ #include <memory>
  #include <string>
  
- #include "slang/text/CharInfo.h"
-@@ -22,6 +23,280 @@ namespace slang {
+@@ -22,6 +25,387 @@ namespace slang {
  
  static const fs::path emptyPath;
  
@@ -1937,9 +1946,12 @@ index 386684b5a..692ccfb4b 100644
 +SourceManager::FastCwdPhase::~FastCwdPhase() noexcept {
 +    // Unwinding must release the phase, preserving the original cancellation /
 +    // failure. A boundary failure still poisons the manager for later attempts.
-+    try { finish(); } catch (...) {}
++    try {
++        finish();
++    }
++    catch (...) {
++    }
 +}
-+
 +
 +[[noreturn]] void SourceManager::failSnapshot(std::string_view reason) const {
 +    snapshotIncompleteFlag = true;
@@ -2012,7 +2024,8 @@ index 386684b5a..692ccfb4b 100644
 +                info->bufferKind == BufferKind::LibraryMap)
 +                SLANG_THROW(std::runtime_error("source library contexts are unsupported"));
 +            if (info->hasExternalDirectives)
-+                SLANG_THROW(std::runtime_error("externally injected source directives are unsupported"));
++                SLANG_THROW(
++                    std::runtime_error("externally injected source directives are unsupported"));
 +            addFile(info->data);
 +            if (info->includedFrom.valid())
 +                validateBuffer(info->includedFrom.buffer());
@@ -2088,8 +2101,8 @@ index 386684b5a..692ccfb4b 100644
 +    for (auto& lookup : snapshot.lookups) {
 +        if (!paths.insert(lookup.path).second || lookup.fileId > snapshot.files.size() ||
 +            (lookup.fileId && (lookup.errorValue || !lookup.errorCategory.empty())) ||
-+            (!lookup.fileId && (!lookup.errorValue ||
-+                (lookup.errorCategory != "generic" && lookup.errorCategory != "system"))))
++            (!lookup.fileId && (!lookup.errorValue || (lookup.errorCategory != "generic" &&
++                                                       lookup.errorCategory != "system"))))
 +            SLANG_THROW(std::runtime_error("invalid snapshot lookup"));
 +    }
 +    for (auto id : snapshot.graphFileIds) {
@@ -2121,12 +2134,117 @@ index 386684b5a..692ccfb4b 100644
 +        if (lookup.fileId)
 +            value.first = snapshotFiles[lookup.fileId];
 +        else
-+            value.second = std::error_code(lookup.errorValue, lookup.errorCategory == "generic" ?
-+                std::generic_category() : std::system_category());
++            value.second = std::error_code(lookup.errorValue, lookup.errorCategory == "generic"
++                                                                  ? std::generic_category()
++                                                                  : std::system_category());
 +        snapshotLookups.emplace(lookup.path, std::move(value));
 +    }
 +    snapshotHeaderRequests.insert(snapshot.headerRequests.begin(), snapshot.headerRequests.end());
 +    snapshotReplay = true;
++}
++
++bool SourceManager::tryUpdateSnapshot(const SourceSnapshot& snapshot,
++                                      std::span<const BufferID> retained) {
++    // Reuse fresh-load validation without changing its strict public contract.
++    SourceManager next;
++    next.loadSnapshot(snapshot);
++    std::unique_lock<std::shared_mutex> includeLock(includeDirMutex);
++    std::unique_lock<std::shared_mutex> lock(mutex);
++    auto decline = [](const char* reason) {
++        if (auto* path = std::getenv("SLANG_UVM_WORKER_CACHE_TRACE"))
++            if (auto* file = std::fopen(path, "a")) {
++                std::fprintf(file, "%ld\tsnapshot-%s\n", long(OS::getpid()), reason);
++                std::fclose(file);
++            }
++        return false;
++    };
++    if (!snapshotReplay || snapshotGeneratedSequenceActive || snapshotIncompleteFlag ||
++        retained.empty())
++        return decline("not-idle");
++    if (snapshotCwd != next.snapshotCwd || disableProximatePaths != next.disableProximatePaths ||
++        disableLocalIncludes != next.disableLocalIncludes || incDirFirst != next.incDirFirst)
++        return decline("settings");
++    if (systemDirectories != next.systemDirectories || userDirectories != next.userDirectories)
++        return decline("include-directories");
++    if (snapshotLookups.size() != next.snapshotLookups.size())
++        return decline("lookup-size");
++    if (snapshotHeaderRequests.size() != next.snapshotHeaderRequests.size())
++        return decline("header-size");
++    for (auto& request : snapshotHeaderRequests)
++        if (!next.snapshotHeaderRequests.contains(request))
++            return decline("header-topology");
++    auto sameIdentity = [](const FileData& a, const FileData& b) {
++        return a.fullPath == b.fullPath && a.name == b.name && *a.directory == *b.directory;
++    };
++    for (auto& [path, value] : snapshotLookups) {
++        auto it = next.snapshotLookups.find(path);
++        if (it == next.snapshotLookups.end() || value.second != it->second.second ||
++            bool(value.first) != bool(it->second.first) ||
++            (value.first && !sameIdentity(*value.first, *it->second.first)))
++            return decline("lookup-identity");
++    }
++    flat_hash_map<std::string, std::shared_ptr<FileData>> keep;
++    for (auto id : retained) {
++        auto info = getFileInfo(id, lock);
++        if (!info || !info->data || info->data->isStale || info->library ||
++            info->hasExternalDirectives)
++            return decline("retained-id");
++        auto path = getU8Str(info->data->fullPath);
++        // Unrelated parses can add unnamed generated files to the recording.
++        // Only explicitly retained files carry state into this next parse.
++        if (snapshotGeneratedPaths.contains(path) != next.snapshotGeneratedPaths.contains(path))
++            return decline("retained-generated-identity");
++        auto found = next.lookupCache.find(path);
++        if (found == next.lookupCache.end() || !found->second.first ||
++            !sameIdentity(*info->data, *found->second.first) ||
++            info->data->mem != found->second.first->mem)
++            return decline("retained-identity-or-bytes");
++        keep.emplace(std::move(path), info->data);
++    }
++
++    // FileData directory pointers must refer to this manager's stable path set,
++    // not the temporary validation manager. Immutable retained files share their
++    // existing storage; only other files need newly owned bytes here.
++    flat_hash_map<const FileData*, std::shared_ptr<FileData>> replacements;
++    flat_hash_set<const FileData*> retainedData;
++    for (auto& [_, data] : keep)
++        retainedData.insert(data.get());
++    for (size_t i = 1; i < next.snapshotFiles.size(); ++i) {
++        auto& data = next.snapshotFiles[i];
++        auto original = data.get();
++        auto it = keep.find(getU8Str(data->fullPath));
++        std::shared_ptr<FileData> replacement;
++        if (it != keep.end())
++            replacement = it->second;
++        else {
++            auto directory = &*directories.insert(*data->directory).first;
++            SmallVector<char> bytes;
++            bytes.insert(bytes.end(), data->mem.begin(), data->mem.end());
++            replacement = std::make_shared<FileData>(directory, data->name, std::move(bytes),
++                                                     data->fullPath);
++        }
++        replacements.emplace(original, replacement);
++        data = std::move(replacement);
++    }
++    for (auto& [_, value] : next.lookupCache)
++        if (value.first)
++            value.first = replacements.at(value.first.get());
++    for (auto& [_, value] : next.snapshotLookups)
++        if (value.first)
++            value.first = replacements.at(value.first.get());
++    // All potentially throwing preparation precedes invalidating live file IDs.
++    for (auto& entry : bufferEntries)
++        if (auto* info = std::get_if<FileInfo>(&entry);
++            info && info->data && !retainedData.contains(info->data.get())) {
++            info->data->isStale = true;
++            info->data.reset();
++        }
++    lookupCache.swap(next.lookupCache);
++    snapshotLookups.swap(next.snapshotLookups);
++    snapshotFiles.swap(next.snapshotFiles);
++    snapshotHeaderRequests.swap(next.snapshotHeaderRequests);
++    snapshotGeneratedPaths.swap(next.snapshotGeneratedPaths);
++    return true;
 +}
 +
 +SourceBuffer SourceManager::createRootBuffer(uint32_t fileId, uint64_t sortKey) {
@@ -2135,8 +2253,6 @@ index 386684b5a..692ccfb4b 100644
 +        failSnapshot("invalid root file ID");
 +    return createBufferEntry(snapshotFiles[fileId], {}, nullptr, sortKey, lock);
 +}
-+
-+
 +
 +void SourceManager::setSnapshotGeneratedSequence(std::span<const uint32_t> fileIds) {
 +    std::unique_lock<std::shared_mutex> lock(mutex);
@@ -2165,7 +2281,7 @@ index 386684b5a..692ccfb4b 100644
  static size_t getTextEnd(const SmallVector<char>& mem) {
      size_t result = mem.size();
      if (result && mem[result - 1] == '\0')
-@@ -29,6 +304,20 @@ static size_t getTextEnd(const SmallVector<char>& mem) {
+@@ -29,6 +413,20 @@ static size_t getTextEnd(const SmallVector<char>& mem) {
      return result;
  }
  
@@ -2186,7 +2302,7 @@ index 386684b5a..692ccfb4b 100644
  SourceManager::SourceManager() {
      // add a dummy entry to the start of the directory list so that our file IDs line up
      FileInfo file;
-@@ -36,23 +325,33 @@ SourceManager::SourceManager() {
+@@ -36,23 +434,33 @@ SourceManager::SourceManager() {
  }
  
  std::error_code SourceManager::addSystemDirectories(std::string_view pattern) {
@@ -2220,7 +2336,7 @@ index 386684b5a..692ccfb4b 100644
      userDirectories.insert(userDirectories.end(), dirs.begin(), dirs.end());
      return ec;
  }
-@@ -497,8 +796,9 @@ SourceBuffer SourceManager::assignText(std::string_view text, SourceLocation inc
+@@ -497,8 +905,9 @@ SourceBuffer SourceManager::assignText(std::string_view text, SourceLocation inc
  
  SourceBuffer SourceManager::assignText(std::string_view path, std::string_view text,
                                         SourceLocation includedFrom, const SourceLibrary* library) {
@@ -2231,7 +2347,7 @@ index 386684b5a..692ccfb4b 100644
          using namespace std::literals;
          temp = "<unnamed_buffer"s + std::to_string(unnamedBufferCount++) + ">"s;
          path = temp;
-@@ -509,26 +809,70 @@ SourceBuffer SourceManager::assignText(std::string_view path, std::string_view t
+@@ -509,26 +918,70 @@ SourceBuffer SourceManager::assignText(std::string_view path, std::string_view t
      if (buffer.empty() || buffer.back() != '\0')
          buffer.push_back('\0');
  
@@ -2312,7 +2428,7 @@ index 386684b5a..692ccfb4b 100644
  }
  
  SourceManager::BufferOrError SourceManager::readSource(const fs::path& path,
-@@ -541,6 +885,29 @@ SourceManager::BufferOrError SourceManager::readHeader(
+@@ -541,6 +994,29 @@ SourceManager::BufferOrError SourceManager::readHeader(
      std::string_view path, SourceLocation includedFrom, const SourceLibrary* library,
      bool isSystemPath, std::span<std::filesystem::path const> additionalIncludePaths) {
  
@@ -2342,7 +2458,7 @@ index 386684b5a..692ccfb4b 100644
      // if the header is specified as an absolute path, just do a straight lookup
      SLANG_ASSERT(!path.empty());
      fs::path p = path;
-@@ -614,18 +981,24 @@ SourceManager::BufferOrError SourceManager::readHeader(
+@@ -614,18 +1090,25 @@ SourceManager::BufferOrError SourceManager::readHeader(
  }
  
  void SourceManager::addLineDirective(SourceLocation location, size_t lineNum, std::string_view name,
@@ -2365,11 +2481,12 @@ index 386684b5a..692ccfb4b 100644
      std::error_code ec;
      if (!disableProximatePaths && linePath.has_relative_path())
 -        full = linePath.lexically_proximate(fs::current_path(ec));
-+        full = linePath.lexically_proximate(snapshotReplay ? fs::path(snapshotCwd) : fs::current_path(ec));
++        full = linePath.lexically_proximate(snapshotReplay ? fs::path(snapshotCwd)
++                                                           : fs::current_path(ec));
      else
          full = fs::path(info->data->name).replace_filename(linePath);
  
-@@ -634,9 +1007,15 @@ void SourceManager::addLineDirective(SourceLocation location, size_t lineNum, st
+@@ -634,9 +1117,15 @@ void SourceManager::addLineDirective(SourceLocation location, size_t lineNum, st
  }
  
  void SourceManager::addDiagnosticDirective(SourceLocation location, std::string_view name,
@@ -2386,7 +2503,7 @@ index 386684b5a..692ccfb4b 100644
  
      size_t offset = fileLocation.offset();
      auto& vec = diagDirectives[fileLocation.buffer()];
-@@ -699,6 +1078,8 @@ std::vector<std::shared_ptr<void>> SourceManager::retainBuffers(
+@@ -699,6 +1188,8 @@ std::vector<std::shared_ptr<void>> SourceManager::retainBuffers(
  
  SourceBuffer SourceManager::replaceBufferImpl(FileInfo* oldInfo, SmallVector<char>&& buffer,
                                                std::unique_lock<std::shared_mutex>& lock) {
@@ -2395,7 +2512,7 @@ index 386684b5a..692ccfb4b 100644
      auto oldData = oldInfo->data;
  
      // Mark old data as stale, remove reference
-@@ -713,6 +1094,12 @@ SourceBuffer SourceManager::replaceBufferImpl(FileInfo* oldInfo, SmallVector<cha
+@@ -713,6 +1204,12 @@ SourceBuffer SourceManager::replaceBufferImpl(FileInfo* oldInfo, SmallVector<cha
      lookupCache.insert_or_assign(getU8Str(newData->fullPath),
                                   std::pair{newData, std::error_code{}});
  
@@ -2408,7 +2525,7 @@ index 386684b5a..692ccfb4b 100644
      // Create a new FileInfo entry with new data (don't modify old entry!)
      // Old data should be freed if nothing more points to it.
      return createBufferEntry(newData, oldInfo->includedFrom, oldInfo->library, oldInfo->sortKey,
-@@ -727,6 +1114,8 @@ SourceBuffer SourceManager::replaceBuffer(BufferID id, SmallVector<char>&& buffe
+@@ -727,6 +1224,8 @@ SourceBuffer SourceManager::replaceBuffer(BufferID id, SmallVector<char>&& buffe
  }
  
  SourceManager::BufferOrError SourceManager::reloadBuffer(BufferID id) {
@@ -2417,7 +2534,7 @@ index 386684b5a..692ccfb4b 100644
      std::unique_lock<std::shared_mutex> lock(mutex);
  
      auto oldInfo = getFileInfo(id, lock);
-@@ -783,6 +1172,9 @@ SourceBuffer SourceManager::createBufferEntry(std::shared_ptr<FileData> fd,
+@@ -783,6 +1282,9 @@ SourceBuffer SourceManager::createBufferEntry(std::shared_ptr<FileData> fd,
  }
  
  bool SourceManager::isCached(const fs::path& path) const {
@@ -2427,11 +2544,10 @@ index 386684b5a..692ccfb4b 100644
      fs::path absPath;
      if (!disableProximatePaths) {
          std::error_code ec;
-@@ -800,9 +1192,51 @@ bool SourceManager::isCached(const fs::path& path) const {
- }
- 
- SourceManager::BufferOrError SourceManager::openCached(const fs::path& fullPath,
-+    SourceLocation includedFrom, const SourceLibrary* library, uint64_t sortKey) {
+@@ -803,6 +1305,51 @@ SourceManager::BufferOrError SourceManager::openCached(const fs::path& fullPath,
+                                                        SourceLocation includedFrom,
+                                                        const SourceLibrary* library,
+                                                        uint64_t sortKey) {
 +    const auto raw = getU8Str(fullPath);
 +    if (snapshotReplay) {
 +        std::unique_lock<std::shared_mutex> lock(mutex);
@@ -2473,14 +2589,14 @@ index 386684b5a..692ccfb4b 100644
 +}
 +
 +SourceManager::BufferOrError SourceManager::openCachedImpl(const fs::path& fullPath,
-                                                        SourceLocation includedFrom,
-                                                        const SourceLibrary* library,
--                                                       uint64_t sortKey) {
-+                                                       uint64_t sortKey, std::string* resolvedPath) {
++                                                           SourceLocation includedFrom,
++                                                           const SourceLibrary* library,
++                                                           uint64_t sortKey,
++                                                           std::string* resolvedPath) {
      fs::path absPath;
      if (!disableProximatePaths) {
          std::error_code ec;
-@@ -816,6 +1250,8 @@ SourceManager::BufferOrError SourceManager::openCached(const fs::path& fullPath,
+@@ -816,6 +1363,8 @@ SourceManager::BufferOrError SourceManager::openCached(const fs::path& fullPath,
  
      // first see if we have this file cached
      std::string pathStr = getU8Str(absPath);
@@ -2489,7 +2605,7 @@ index 386684b5a..692ccfb4b 100644
      {
          std::unique_lock<std::shared_mutex> lock(mutex);
          auto it = lookupCache.find(pathStr);
-@@ -844,31 +1280,23 @@ SourceManager::BufferOrError SourceManager::openCached(const fs::path& fullPath,
+@@ -844,31 +1393,23 @@ SourceManager::BufferOrError SourceManager::openCached(const fs::path& fullPath,
  SourceBuffer SourceManager::cacheBuffer(fs::path&& path, std::string&& pathStr,
                                          SourceLocation includedFrom, const SourceLibrary* library,
                                          uint64_t sortKey, SmallVector<char>&& buffer) {
@@ -3439,12 +3555,13 @@ index 000000000..f5fd85238
 +} // namespace slang
 diff --git a/tests/unittests/SourceSnapshotTests.cpp b/tests/unittests/SourceSnapshotTests.cpp
 new file mode 100644
-index 000000000..481f13d56
+index 000000000..0a1ffe93e
 --- /dev/null
 +++ b/tests/unittests/SourceSnapshotTests.cpp
-@@ -0,0 +1,409 @@
+@@ -0,0 +1,491 @@
 +// SPDX-License-Identifier: MIT
 +#include "Test.h"
++#include <cerrno>
 +#include <fstream>
 +
 +#include "slang/diagnostics/DiagnosticEngine.h"
@@ -3851,6 +3968,87 @@ index 000000000..481f13d56
 +    CHECK_THROWS(original.captureSnapshot(std::vector{root.id}));
 +    CHECK_THROWS(original.enableSnapshotRecording(true));
 +    CHECK_THROWS(original.captureSnapshot(std::vector{root.id}));
++}
++
++TEST_CASE("Replay updates retain immutable prefix buffers and invalidate edited IDs",
++          "[snapshot-update]") {
++    SnapshotFixture f;
++    SourceManager::SourceSnapshot snapshot;
++    snapshot.cwd = f.dir.string();
++    auto library = (f.dir / "uvm_pkg.sv").string();
++    auto user = (f.dir / "user.sv").string();
++    auto bytes = [](std::string text) {
++        text.push_back('\0');
++        return text;
++    };
++    snapshot.files = {{library, f.dir.string(), "uvm_pkg.sv",
++                       bytes("package uvm_pkg; class base; endclass endpackage\n"), false},
++                      {user, f.dir.string(), "user.sv", bytes("package p; int first; endpackage\n"),
++                       false}};
++    snapshot.lookups = {{library, 1, 0, ""},
++                        {user, 2, 0, ""},
++                        {(f.dir / "absent.svh").string(), 0, ENOENT, "generic"}};
++    SourceManager sm;
++    sm.loadSnapshot(snapshot);
++    auto a = sm.createRootBuffer(1), b = sm.createRootBuffer(2);
++    Bag options;
++    parsing::PreprocessorOptions pp;
++    pp.captureUvmPrefix = true;
++    options.set(pp);
++    auto native = SyntaxTree::fromBuffers(std::vector{a, b}, sm, options);
++    auto prefix = SyntaxTree::preparedUvmPrefix(native);
++    REQUIRE(prefix);
++    auto retained = prefix->getSourceBufferIds();
++    auto next = snapshot;
++    next.files[1].bytes = bytes("package p; int newest; endpackage\n");
++    // Independent parses add generated CLI buffers unrelated to this tree.
++    next.files.push_back(
++        {"<unnamed_buffer91>", "", "<unnamed_buffer91>", bytes("`define UNRELATED 1\n"), true});
++    REQUIRE(sm.tryUpdateSnapshot(next, retained));
++    CHECK(sm.isLatestData(a.id));
++    CHECK_FALSE(sm.isLatestData(b.id));
++    auto latest = sm.createRootBuffer(2);
++    CHECK(latest.id != b.id);
++    CHECK(latest.data == next.files[1].bytes);
++    sm.setSnapshotGeneratedSequence({});
++    auto suffix = SyntaxTree::afterCachedPrefix(prefix, std::vector{latest}, options);
++    sm.finishSnapshotGeneratedSequence();
++    auto composed = SyntaxTree::withCachedPrefix(prefix, suffix);
++    CHECK(composed->root().toString().find("newest") != std::string::npos);
++    CHECK(composed->root().toString().find("first") == std::string::npos);
++
++    SECTION("changed immutable bytes decline without altering current replay") {
++        next.files[0].bytes = bytes("package uvm_pkg; endpackage\n");
++    }
++    SECTION("cwd change declines") {
++        next.cwd += "/other";
++    }
++    SECTION("include lookup topology change declines") {
++        next.lookups.pop_back();
++    }
++    SECTION("failed lookup result change declines") {
++        next.lookups.back().errorValue = EACCES;
++    }
++    SECTION("header request change declines") {
++        next.headerRequests.push_back("new-request");
++    }
++    SECTION("include ordering flag change declines") {
++        next.incDirFirst = true;
++    }
++    SECTION("display identity change declines") {
++        next.files[0].displayName = "other.sv";
++    }
++    SECTION("retained generated classification change declines") {
++        next.files[0].generated = true;
++    }
++    CHECK_FALSE(sm.tryUpdateSnapshot(next, retained));
++    CHECK(sm.isLatestData(a.id));
++    CHECK(sm.isLatestData(latest.id));
++    CHECK(sm.getSourceText(latest.id) == bytes("package p; int newest; endpackage\n"));
++    auto malformed = snapshot;
++    malformed.files.push_back(malformed.files[0]);
++    CHECK_THROWS(sm.tryUpdateSnapshot(malformed, retained));
++    CHECK(sm.isLatestData(latest.id));
 +}
 diff --git a/tests/unittests/ast/PackageAnalysisTests.cpp b/tests/unittests/ast/PackageAnalysisTests.cpp
 new file mode 100644

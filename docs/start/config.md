@@ -343,11 +343,15 @@ Keep external macros that affect UVM in the ordered command-line/configuration
 flags. UVM's own macro definitions and ordinary macro invocations are supported.
 Source overrides, changed dependencies, unsupported directives and incompatible
 parse contexts invalidate reuse or use native parsing. Compilation-unit ordering
-and diagnostic behavior remain the same.
+and complete diagnostic content remain the same; equal-location/code diagnostics
+may change array order when worker source IDs change.
 
 This experiment also caches compatible library parses for completion resolution
-and retires oversized source contexts. Retirement can add a query latency spike;
+and retires oversized source contexts. Compatible isolated diagnostic jobs reuse a
+worker-local UVM prefix; idle workers are released after five seconds. Retirement
+can add a query latency spike;
 memory and total latency benefits depend on the workload. See the
 [eligibility and ownership rules](../features/uvm-prefix-cache.md) and the
-[Mac performance acceptance](../../validation/macos-uvm-prefix-2026-10-19.md).
+[Mac performance acceptance](../../validation/macos-uvm-prefix-2026-10-19.md) and
+[worker/retirement follow-up](../../validation/macos-uvm-followup-2026-10-19.md).
 It remains disabled by default.
