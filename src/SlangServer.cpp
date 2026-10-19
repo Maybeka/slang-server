@@ -21,6 +21,8 @@
 #include <algorithm>
 #include <cctype>
 #include <charconv>
+#include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <fmt/base.h>
 #include <fmt/ranges.h>
@@ -914,7 +916,8 @@ std::vector<std::string> SlangServer::getLoads(const std::string& path) {
     return m_driver->comp->getLoadCone(path).getPaths();
 }
 
-bool SlangServer::loadConfig(const Config& config, bool forceIndexing, bool requireValidConfig) {
+bool SlangServer::loadConfig(const Config& config, bool forceIndexing, bool requireValidConfig,
+                             bool deferOpenDiagnostics) {
     const auto workspacePath = m_workspaceFolder ? std::optional<std::string_view>(
                                                        m_workspaceFolder->uri.getPath())
                                                  : std::nullopt;
@@ -927,7 +930,8 @@ bool SlangServer::loadConfig(const Config& config, bool forceIndexing, bool requ
     }
     else {
         newDriver = ServerDriver::createForExplore(m_indexer, m_client, config, workspacePath,
-                                                   m_driver.get(), requireValidConfig);
+                                                   m_driver.get(), requireValidConfig,
+                                                   deferOpenDiagnostics);
     }
     if (!newDriver)
         return false;
@@ -974,7 +978,10 @@ bool SlangServer::loadConfig(const Config& config, bool forceIndexing, bool requ
     // The replacement driver was already built above. Recreating it here would
     // report configuration errors twice and discard the validated reload state.
     m_contextWatchesDirty = true;
-    m_driver->refreshOpenIncludeContexts();
+    // Retirement copies every open document into the pending queue. Analyze only
+    // after the incoming edit, instead of binding the soon-obsolete text first.
+    if (!deferOpenDiagnostics)
+        m_driver->refreshOpenIncludeContexts();
 
     refreshContextFileWatches();
 
@@ -1413,7 +1420,7 @@ std::optional<std::vector<lsp::DocumentLink>> SlangServer::getDocDocumentLink(
     return doc->getDocLinks();
 }
 
-rfl::Variant<std::vector<lsp::SymbolInformation>, std::vector<lsp::DocumentSymbol>, std ::monostate>
+rfl::Variant<std::vector<lsp::SymbolInformation>, std::vector<lsp::DocumentSymbol>, std::monostate>
 SlangServer::getDocDocumentSymbol(const lsp::DocumentSymbolParams& params) {
     auto doc = m_driver->getDocument(params.textDocument.uri);
     if (doc) {
@@ -1602,8 +1609,79 @@ void SlangServer::onDocDidOpen(const lsp::DidOpenTextDocumentParams& params) {
                            params.textDocument.version, !m_diagnosticExecutable.empty());
 }
 
+void SlangServer::maybeRetireParsedContext() {
+    if (!m_config.experimentalUvmPrefixCache.value() ||
+        std::getenv("SLANG_UVM_GENERATION_DISABLE") || !m_driver || m_driver->comp || m_buildfile ||
+        m_topFile)
+        return;
+    auto epoch = m_driver->completions.getCompletionEpoch();
+    auto table = m_driver->sm.getSourceLocationTableBytes();
+    auto bytes = table + m_driver->sm.getMemoryUsage();
+    if (m_contextEpoch != epoch) {
+        m_contextEpoch = epoch;
+        m_contextBudget = std::max<size_t>(16 * 1024 * 1024, bytes * 2);
+        m_contextEdits = 0;
+    }
+    uint64_t forced = 0;
+    if (auto* value = std::getenv("SLANG_UVM_GENERATION_EDIT_LIMIT"))
+        forced = std::strtoull(value, nullptr, 10);
+    if (bytes <= m_contextBudget && (!forced || m_contextEdits < forced)) {
+        ++m_contextEdits;
+        return;
+    }
+    auto oldEntries = m_driver->sm.getSourceLocationEntryCount();
+    auto trace = [&](const char* result, uint64_t newEpoch, size_t newBytes) {
+        if (auto* path = std::getenv("SLANG_UVM_GENERATION_TRACE"))
+            if (auto* file = std::fopen(path, "a")) {
+                std::fprintf(file, "%ld\t%s\t%llu\t%llu\t%zu\t%zu\t%zu\n",
+                             long(slang::OS::getpid()), result, (unsigned long long)epoch,
+                             (unsigned long long)newEpoch, oldEntries, bytes, newBytes);
+                std::fclose(file);
+            }
+    };
+    // Foreground and background model access is serialized by serverStateMutex.
+    // Diagnostic children own copied snapshots; cancel and discard their old owner before swapping.
+    m_methodScope.reset();
+    if (m_diagnosticProcess)
+        m_diagnosticProcess->cancel();
+    m_activeDiagnosticSnapshot.reset();
+    m_driver->prepareForContextRetirement();
+    try {
+        if (!loadConfig(m_config, false, true, true)) {
+            ++m_contextEdits;
+            trace("replacement-failed", epoch, bytes);
+            return;
+        }
+        m_contextRetired = true;
+        m_driver->completions.requireCompletionEpoch();
+        m_contextEpoch = m_driver->completions.getCompletionEpoch();
+        auto fresh = m_driver->sm.getSourceLocationTableBytes() + m_driver->sm.getMemoryUsage();
+        m_contextBudget = std::max<size_t>(16 * 1024 * 1024, fresh * 2);
+        m_contextEdits = 1;
+        trace("retired", m_contextEpoch, fresh);
+    }
+    catch (const std::exception&) {
+        // A failed construction keeps the old owner. If a later publication step threw after
+        // the swap, fence that new owner too; the incoming text change is still applied once.
+        auto actual = m_driver->completions.getCompletionEpoch();
+        if (actual != epoch) {
+            m_contextRetired = true;
+            m_driver->completions.requireCompletionEpoch();
+            m_contextEpoch = actual;
+            auto fresh = m_driver->sm.getSourceLocationTableBytes() + m_driver->sm.getMemoryUsage();
+            m_contextBudget = std::max<size_t>(16 * 1024 * 1024, fresh * 2);
+            m_contextEdits = 1;
+        }
+        else
+            ++m_contextEdits;
+        trace("replacement-exception", actual,
+              m_driver->sm.getSourceLocationTableBytes() + m_driver->sm.getMemoryUsage());
+    }
+}
+
 void SlangServer::onDocDidChange(const lsp::DidChangeTextDocumentParams& params,
                                  lsp::RequestContext ctx) {
+    maybeRetireParsedContext();
     if (m_config.experimentalMethodScopeOverlay.value() && !m_driver->comp) {
         bool synced = false;
         try {
@@ -1905,6 +1983,8 @@ lsp::CompletionItem SlangServer::getCompletionItemResolve(const lsp::CompletionI
             m_methodScope.reset();
     }
     lsp::CompletionItem ret = item;
+    if (m_contextRetired && m_config.experimentalUvmPrefixCache.value())
+        m_driver->completions.requireCompletionEpoch();
     m_driver->completions.getCompletionItemResolve(ret, ctx);
     return ret;
 }

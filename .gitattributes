@@ -1,1 +1,4 @@
 * text=auto eol=lf
+
+# Unified diff context lines contain a required leading space.
+restoration/*.patch -whitespace

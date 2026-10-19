@@ -56,6 +56,11 @@ protected:
     std::unique_ptr<isolated_diagnostics::DiagnosticProcess> m_diagnosticProcess;
     std::optional<ServerDriver::DiagnosticSnapshot> m_activeDiagnosticSnapshot;
     uint64_t m_diagnosticJobId = 0;
+    uint64_t m_contextEpoch = 0;
+    size_t m_contextBudget = 0;
+    uint64_t m_contextEdits = 0;
+    bool m_contextRetired = false;
+    void maybeRetireParsedContext();
     std::string m_diagnosticExecutable;
     std::string m_diagnosticFallbackReason;
 
@@ -141,7 +146,7 @@ public:
     /// Load the configuration from a given config object, reindex if needed or forced
     /// Returns false when an automatic reload cannot construct a valid replacement.
     bool loadConfig(const Config& config, bool forceIndexing = false,
-                    bool requireValidConfig = false);
+                    bool requireValidConfig = false, bool deferOpenDiagnostics = false);
 
     const Config& getConfig() const { return m_config; }
 

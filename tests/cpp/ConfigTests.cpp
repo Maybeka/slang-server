@@ -8,6 +8,7 @@
 #include <cstdio>
 #include <fstream>
 #include <rfl/from_generic.hpp>
+#include <rfl/json.hpp>
 
 #include "slang/util/OS.h"
 #include "slang/util/ScopeGuard.h"
@@ -1465,4 +1466,13 @@ TEST_CASE("Auto-configure preserves the most recently selected compilation") {
                       lsp::FileChangeType::Changed}}});
     CHECK(server.getActiveInstance(selected));
     CHECK_FALSE(server.getActiveInstance(selected == "top" ? "source" : "top"));
+}
+
+TEST_CASE("UVM prefix reuse requires an explicit configuration opt-in") {
+    Config defaults;
+    CHECK_FALSE(defaults.experimentalUvmPrefixCache.value());
+    auto config = rfl::json::read<Config, rfl::DefaultIfMissing>(
+        R"({"experimentalUvmPrefixCache": true})");
+    REQUIRE(config);
+    CHECK(config->experimentalUvmPrefixCache.value());
 }

@@ -18,6 +18,8 @@ export interface Config {
   fastCwdSnapshotChecks?: boolean
   /** Experimental closed flat int method overlay. Default off. Phase one requires equal-length ASCII edits with fixed line layout and local count; unknown contexts and unsupported queries use the complete native path. */
   experimentalMethodScopeOverlay?: boolean
+  /** Experimental immutable UVM prefix reuse. Default off. External macros affecting UVM must come from command-line/configuration flags. Unsupported source changes or preprocessing state use native parsing. */
+  experimentalUvmPrefixCache?: boolean
   /**
    * @deprecated
    * Globs of what to index. By default will index all sv and svh files in the workspace.

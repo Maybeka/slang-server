@@ -64,6 +64,12 @@ struct Config {
                      bool>
         experimentalMethodScopeOverlay = false;
 
+    rfl::Description<"Experimental immutable UVM prefix reuse. Default off. External macros "
+                     "affecting UVM must come from command-line/configuration flags. Unsupported "
+                     "source changes or preprocessing state use native parsing.",
+                     bool>
+        experimentalUvmPrefixCache = false;
+
     // Legacy indexing globs, kept for backwards compatibility
     rfl::Deprecated<"Use 'index' instead.",
                     "Globs of what to index. By default will "

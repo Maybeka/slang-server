@@ -758,6 +758,24 @@ void MemberCompletionQuery::addCompletions(std::vector<lsp::CompletionItem>& res
     }
 }
 
+void MemberCompletionQuery::resolveLogical(CompletionDispatch& dispatch, lsp::CompletionItem& item,
+                                           const lsp::RequestContext& ctx) {
+    if (!item.data)
+        return;
+    auto data = rfl::from_generic<CompletionData, rfl::UnderlyingEnums>(*item.data);
+    if (!data || data->receiverBufferId) {
+        item.data.reset();
+        return;
+    }
+    // Expired physical IDs / offsets are never interpreted in the replacement SourceManager.
+    // Native lexical handles already allow a fresh qualified-name lookup when source identity
+    // expires.
+    data->bufferId = 0;
+    data->offset = 0;
+    item.data = rfl::to_generic<rfl::UnderlyingEnums>(*data);
+    resolve(dispatch, item, ctx);
+}
+
 void MemberCompletionQuery::resolve(CompletionDispatch& dispatch, lsp::CompletionItem& item,
                                     const lsp::RequestContext& ctx) {
     if (!item.data)

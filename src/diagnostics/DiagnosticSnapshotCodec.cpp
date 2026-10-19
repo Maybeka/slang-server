@@ -578,6 +578,7 @@ OwnedOptions captureOptions(const slang::Bag& options, const Limits& limits) {
         for (const auto& [pattern, version] : input->keywordMapping)
             out.keywordMapping.push_back({pattern, static_cast<uint32_t>(version)});
         out.allowMissingProtectedScopeEnd = input->allowMissingProtectedScopeEnd;
+        out.captureUvmPrefix = input->captureUvmPrefix;
     }
     if (auto* input = options.get<slang::parsing::ParserOptions>()) {
         ++count;
@@ -673,6 +674,7 @@ ReconstructedOptions::ReconstructedOptions(OwnedOptions options, const Limits& l
             out.keywordMapping.emplace_back(
                 entry.pattern, static_cast<slang::parsing::KeywordVersion>(entry.version));
         out.allowMissingProtectedScopeEnd = input.allowMissingProtectedScopeEnd;
+        out.captureUvmPrefix = input.captureUvmPrefix;
         bag_.set(std::move(out));
     }
     if (owned_.parser) {

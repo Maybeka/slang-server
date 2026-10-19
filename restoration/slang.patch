@@ -1,5 +1,5 @@
 diff --git a/docs/command-line-ref.dox b/docs/command-line-ref.dox
-index 153bb54e1b1ba9c278a844e004f3099f4cdce6f4..3dc00ddb388db1389032fa8166fdd96e13c8272a 100644
+index 153bb54e1..3dc00ddb3 100644
 --- a/docs/command-line-ref.dox
 +++ b/docs/command-line-ref.dox
 @@ -576,8 +576,11 @@ permit this, but some tools allow it anyway so this flag can be used for compati
@@ -17,7 +17,7 @@ index 153bb54e1b1ba9c278a844e004f3099f4cdce6f4..3dc00ddb388db1389032fa8166fdd96e
  `--allow-dup-initial-drivers`
  
 diff --git a/include/slang/ast/Compilation.h b/include/slang/ast/Compilation.h
-index b7ddc64e46b08cf082b7e7ffec12ffe769afc693..b6ca1f791d306069279b5cf8792be0d705849e9c 100644
+index b7ddc64e4..b6ca1f791 100644
 --- a/include/slang/ast/Compilation.h
 +++ b/include/slang/ast/Compilation.h
 @@ -88,7 +88,8 @@ enum class SLANG_EXPORT CompilationFlags {
@@ -50,7 +50,7 @@ index b7ddc64e46b08cf082b7e7ffec12ffe769afc693..b6ca1f791d306069279b5cf8792be0d7
  /// Contains various options that can control compilation behavior.
  struct SLANG_EXPORT CompilationOptions {
 diff --git a/include/slang/ast/types/TypePrinter.h b/include/slang/ast/types/TypePrinter.h
-index 9b2fe5cb9b06ede36a1a8e39427e5a035c010fdb..26d2b1b6788df71f901bce71a48ee6dde9f738d2 100644
+index 9b2fe5cb9..26d2b1b67 100644
 --- a/include/slang/ast/types/TypePrinter.h
 +++ b/include/slang/ast/types/TypePrinter.h
 @@ -133,12 +133,19 @@ public:
@@ -75,7 +75,7 @@ index 9b2fe5cb9b06ede36a1a8e39427e5a035c010fdb..26d2b1b6788df71f901bce71a48ee6dd
      flat_hash_set<const Type*> seenTypes;
      flat_hash_set<const Type*> typesToDisambiguate;
 diff --git a/include/slang/diagnostics/DiagnosticEngine.h b/include/slang/diagnostics/DiagnosticEngine.h
-index bc43d0037063e9e47d7c4fbd85473077d953a4a4..0354fae611098e36f7d52216b5b98888357c0bd1 100644
+index bc43d0037..0354fae61 100644
 --- a/include/slang/diagnostics/DiagnosticEngine.h
 +++ b/include/slang/diagnostics/DiagnosticEngine.h
 @@ -21,6 +21,7 @@
@@ -195,18 +195,28 @@ index bc43d0037063e9e47d7c4fbd85473077d953a4a4..0354fae611098e36f7d52216b5b98888
  
  } // namespace slang
 diff --git a/include/slang/driver/Driver.h b/include/slang/driver/Driver.h
-index 0f9cff2a3c5865d20a9f6c570e07ab640a1b0f69..3580c9c8e54e2103cea139848d9f8b4c01136141 100644
+index 0f9cff2a3..96f711462 100644
 --- a/include/slang/driver/Driver.h
 +++ b/include/slang/driver/Driver.h
-@@ -15,6 +15,7 @@
- #include "slang/driver/SourceLoader.h"
- #include "slang/parsing/LexerFacts.h"
- #include "slang/text/SourceManager.h"
-+#include "slang/util/CwdCoordinator.h"
+@@ -18,6 +18,7 @@
  #include "slang/util/Bag.h"
  #include "slang/util/CommandLine.h"
  #include "slang/util/ConcurrentMap.h"
-@@ -391,6 +392,7 @@ public:
++#include "slang/util/CwdCoordinator.h"
+ #include "slang/util/Function.h"
+ #include "slang/util/LanguageVersion.h"
+ #include "slang/util/OS.h"
+@@ -372,6 +373,9 @@ public:
+ 
+         /// Returns true if the lintMode option is provided.
+         bool lintMode() const;
++
++        /// Embedder-only prefix capture policy; never enabled by command-line defaults.
++        bool captureUvmPrefix = false;
+     } options;
+ 
+     /// Constructs a new instance of the @a Driver class.
+@@ -391,6 +395,7 @@ public:
      template<typename TArgs>
      [[nodiscard]] bool parseCommandLine(int argc, TArgs argv,
                                          const CommandLine::ParseOptions& parseOptions = {}) {
@@ -215,7 +225,7 @@ index 0f9cff2a3c5865d20a9f6c570e07ab640a1b0f69..3580c9c8e54e2103cea139848d9f8b4c
              issueCommandLineErrors(cmdLine);
              return false;
 diff --git a/include/slang/driver/SourceLoader.h b/include/slang/driver/SourceLoader.h
-index 0913e369e9dfcbcc41ca5dc07b1892631b767833..eef399de445fb2fd607b48bce09d6adf52f8deb9 100644
+index 0913e369e..eef399de4 100644
 --- a/include/slang/driver/SourceLoader.h
 +++ b/include/slang/driver/SourceLoader.h
 @@ -151,6 +151,13 @@ public:
@@ -259,8 +269,48 @@ index 0913e369e9dfcbcc41ca5dc07b1892631b767833..eef399de445fb2fd607b48bce09d6adf
      SyntaxTreeList libraryMapTrees;
  
      static constexpr int MinFilesForThreading = 4;
+diff --git a/include/slang/parsing/Preprocessor.h b/include/slang/parsing/Preprocessor.h
+index 88d571c1a..844c1b0b6 100644
+--- a/include/slang/parsing/Preprocessor.h
++++ b/include/slang/parsing/Preprocessor.h
+@@ -22,6 +22,7 @@
+ #include "slang/util/SmallVector.h"
+ 
+ namespace slang::syntax {
++class SyntaxTree;
+ 
+ struct ConditionalDirectiveExpressionSyntax;
+ struct DefineDirectiveSyntax;
+@@ -77,6 +78,9 @@ struct SLANG_EXPORT PreprocessorOptions {
+     /// module/program/package/class inside an include file with protected code has the
+     /// end of scope token inside the protected code.
+     bool allowMissingProtectedScopeEnd = false;
++
++    /// Opt-in reusable first-root UVM prefix checkpoint. Disabled by default.
++    bool captureUvmPrefix = false;
+ };
+ 
+ /// Preprocessor - Interface between lexer and parser
+@@ -85,6 +89,8 @@ struct SLANG_EXPORT PreprocessorOptions {
+ /// and macro expansion, and the actual SystemVerilog parser that wants a nice coherent stream
+ /// of tokens to consume.
+ class SLANG_EXPORT Preprocessor {
++    friend class slang::syntax::SyntaxTree;
++
+ public:
+     Preprocessor(SourceManager& sourceManager, BumpAllocator& alloc, Diagnostics& diagnostics,
+                  const Bag& options = {},
+@@ -476,6 +482,8 @@ private:
+ 
+     // Directives don't get handled when lexing within a macro body
+     // (either define or usage).
++    // SyntaxTree installs a stack-local callback; it never escapes this parser.
++    function_ref<void()> afterDirectiveCB;
+     bool inMacroBody = false;
+ 
+     // Special handling for pulling directives when in an ifdef condition expr.
 diff --git a/include/slang/parsing/PreprocessorMetadata.h b/include/slang/parsing/PreprocessorMetadata.h
-index fc3236bf12bc3f64d131decc19c66be949bda1a4..ce4f769274e44cc1acb2229f52c1435eb76fddf3 100644
+index fc3236bf1..ce4f76927 100644
 --- a/include/slang/parsing/PreprocessorMetadata.h
 +++ b/include/slang/parsing/PreprocessorMetadata.h
 @@ -45,6 +45,9 @@ struct SLANG_EXPORT PreprocessorMetadata {
@@ -274,10 +324,62 @@ index fc3236bf12bc3f64d131decc19c66be949bda1a4..ce4f769274e44cc1acb2229f52c1435e
  
  } // namespace slang::parsing
 diff --git a/include/slang/syntax/SyntaxTree.h b/include/slang/syntax/SyntaxTree.h
-index a8d51f7746b0d8d0b2d5baf9c3dd9ef6477b4154..232b2615fb2a592f8eb0cc7c6765d17dc026da58 100644
+index a8d51f774..638de5071 100644
 --- a/include/slang/syntax/SyntaxTree.h
 +++ b/include/slang/syntax/SyntaxTree.h
-@@ -233,6 +233,11 @@ public:
+@@ -9,6 +9,7 @@
+ 
+ #include <expected.hpp>
+ #include <memory>
++#include <string>
+ #include <vector>
+ 
+ #include "slang/diagnostics/Diagnostics.h"
+@@ -58,7 +59,7 @@ public:
+                const SourceLibrary* library,
+                const std::shared_ptr<SyntaxTree>& preTransform = nullptr);
+ 
+-    SyntaxTree(SyntaxTree&& other) = default;
++    SyntaxTree(SyntaxTree&& other);
+     ~SyntaxTree();
+ 
+     /// Creates a syntax tree from a full compilation unit.
+@@ -197,6 +198,34 @@ public:
+                                                             SourceManager& sourceManager,
+                                                             const Bag& options = {});
+ 
++    size_t getRetainedSyntaxBytes() const;
++    size_t getRetainedSourceBytes() const;
++    std::string getPrefixParseCwd() const;
++
++    /// Recorded line/pragma side effects for an immutable prefix. Unprepared trees
++    /// return nullopt and require an ordinary directive inspection.
++    std::optional<bool> getPrefixSourceEffects() const;
++
++    /// Whether all recorded prefix directives have resumable lexer/parser state.
++    /// Unprepared trees return nullopt and require a full inspection.
++    std::optional<bool> isPrefixResumeSafe() const;
++
++    /// Extracts a read-only package view from an opt-in first-root parse checkpoint.
++    /// The native parse freezes shared directive ancestry before publication. Views
++    /// retain physical parents, arenas and buffers, and may be created/read concurrently.
++    /// The owning SourceManager must outlive every view; rewriting borrowed nodes is forbidden.
++    static std::shared_ptr<SyntaxTree> preparedUvmPrefix(const std::shared_ptr<SyntaxTree>& native);
++
++    /// Returns one logical compilation-unit view. Prefix nodes retain physical ancestry.
++    /// The prefix is immutable: clients must never reparent or rewrite its nodes.
++    /// Arenas and source buffers are pinned; the SourceManager must outlive the view.
++    static std::shared_ptr<SyntaxTree> withCachedPrefix(const std::shared_ptr<SyntaxTree>& prefix,
++                                                        const std::shared_ptr<SyntaxTree>& suffix);
++
++    static std::shared_ptr<SyntaxTree> afterCachedPrefix(const std::shared_ptr<SyntaxTree>& prefix,
++                                                         std::span<const SourceBuffer> sources,
++                                                         const Bag& options);
++
+     /// Gets any diagnostics generated while parsing.
+     Diagnostics& diagnostics() { return diagnosticsBuffer; }
+ 
+@@ -233,6 +262,11 @@ public:
      /// This is empty if created from a SyntaxRewriter.
      MacroList getDefinedMacros() const { return preprocessorMetadata.definedMacros; }
  
@@ -289,11 +391,23 @@ index a8d51f7746b0d8d0b2d5baf9c3dd9ef6477b4154..232b2615fb2a592f8eb0cc7c6765d17d
      /// Gets the list of include directives that were encountered while parsing.
      /// This is empty if created from a SyntaxRewriter.
      IncludeList getIncludeDirectives() const { return preprocessorMetadata.includeDirectives; }
+@@ -269,7 +303,10 @@ private:
+     static std::shared_ptr<SyntaxTree> create(SourceManager& sourceManager,
+                                               std::span<const SourceBuffer> source,
+                                               const Bag& options, MacroList inheritedMacros,
+-                                              bool guess);
++                                              bool guess, const SyntaxTree* cachedPrefix = nullptr);
++
++    struct PrefixState;
++    std::unique_ptr<PrefixState> prefixState;
+ 
+     SyntaxNode* rootNode;
+     const SourceLibrary* library;
 diff --git a/include/slang/text/SourceManager.h b/include/slang/text/SourceManager.h
-index de1d1c27195b364570eab007408f2aac14f86a17..fcdda998186c3ac71b62a6307142cbf26d016541 100644
+index de1d1c271..f36070843 100644
 --- a/include/slang/text/SourceManager.h
 +++ b/include/slang/text/SourceManager.h
-@@ -16,12 +16,14 @@
+@@ -16,11 +16,13 @@
  #include <set>
  #include <shared_mutex>
  #include <span>
@@ -303,12 +417,11 @@ index de1d1c27195b364570eab007408f2aac14f86a17..fcdda998186c3ac71b62a6307142cbf2
  #include <vector>
  
  #include "slang/text/SourceLocation.h"
- #include "slang/util/FlatMap.h"
 +#include "slang/util/CwdCoordinator.h"
+ #include "slang/util/FlatMap.h"
  #include "slang/util/SmallVector.h"
  #include "slang/util/Util.h"
- 
-@@ -44,6 +46,75 @@ class SLANG_EXPORT SourceManager {
+@@ -44,6 +46,77 @@ class SLANG_EXPORT SourceManager {
  public:
      using BufferOrError = nonstd::expected<SourceBuffer, std::error_code>;
  
@@ -347,8 +460,9 @@ index de1d1c27195b364570eab007408f2aac14f86a17..fcdda998186c3ac71b62a6307142cbf2
 +    void enableSnapshotRecording(bool allowConfigurationBuffers = false);
 +    class FastCwdContextError : public std::runtime_error {
 +    public:
-+        FastCwdContextError() : std::runtime_error(
-+            "fast cwd snapshot context changed or is unavailable; result discarded; reload configuration") {}
++        FastCwdContextError() :
++            std::runtime_error("fast cwd snapshot context changed or is unavailable; result "
++                               "discarded; reload configuration") {}
 +    };
 +    /// Opt in before recording. Outside a phase, lookup checks remain strict.
 +    /// Caller must keep cwd and its ancestor namespace stable during analysis.
@@ -365,6 +479,7 @@ index de1d1c27195b364570eab007408f2aac14f86a17..fcdda998186c3ac71b62a6307142cbf2
 +        FastCwdPhase& operator=(const FastCwdPhase&) = delete;
 +        /// Must finish successfully before returning / publishing a result.
 +        void finish();
++
 +    private:
 +        SourceManager* manager = nullptr;
 +        std::optional<CwdCoordinator::AnalysisLease> lease;
@@ -384,7 +499,7 @@ index de1d1c27195b364570eab007408f2aac14f86a17..fcdda998186c3ac71b62a6307142cbf2
      /// Information about a `line directive in a source buffer.
      struct LineDirectiveInfo {
          std::string name;       // File name set by directive
-@@ -259,25 +330,46 @@ public:
+@@ -259,25 +332,46 @@ public:
      /// Sets whether filenames should be made "proximate" to the current directory
      /// for diagnostic reporting purposes. This is on by default but can be
      /// disabled to always use the simple filename.
@@ -436,7 +551,22 @@ index de1d1c27195b364570eab007408f2aac14f86a17..fcdda998186c3ac71b62a6307142cbf2
  
      /// Stores information specified in a pragma diagnostic directive, which alters the
      /// currently active set of diagnostic mappings.
-@@ -370,6 +462,7 @@ private:
+@@ -339,6 +433,14 @@ public:
+ 
+     /// Returns the total bytes consumed by all loaded source files:
+     /// raw file content plus any cached line-offset tables.
++    size_t getSourceLocationTableBytes() const {
++        std::shared_lock lock(mutex);
++        return bufferEntries.capacity() * sizeof(bufferEntries[0]);
++    }
++    size_t getSourceLocationEntryCount() const {
++        std::shared_lock lock(mutex);
++        return bufferEntries.size();
++    }
+     size_t getMemoryUsage() const;
+ 
+     /// Appends raw line-start offsets for @a text to @a offsets, using the same
+@@ -370,6 +472,7 @@ private:
          uint64_t sortKey = 0;
          BufferKind bufferKind = BufferKind::DesignFile;
          std::vector<LineDirectiveInfo> lineDirectives;
@@ -444,7 +574,7 @@ index de1d1c27195b364570eab007408f2aac14f86a17..fcdda998186c3ac71b62a6307142cbf2
  
          FileInfo() = default;
  
-@@ -455,6 +548,31 @@ private:
+@@ -455,6 +558,32 @@ private:
      // map from buffer to diagnostic directive lists
      flat_hash_map<BufferID, std::vector<DiagnosticDirectiveInfo>> diagDirectives;
  
@@ -460,7 +590,8 @@ index de1d1c27195b364570eab007408f2aac14f86a17..fcdda998186c3ac71b62a6307142cbf2
 +    std::string snapshotCwd;
 +    mutable std::atomic<bool> snapshotIncompleteFlag = false;
 +    // Keys are exact read arguments, before canonicalization or any normalization.
-+    flat_hash_map<std::string, std::pair<std::shared_ptr<FileData>, std::error_code>> snapshotLookups;
++    flat_hash_map<std::string, std::pair<std::shared_ptr<FileData>, std::error_code>>
++        snapshotLookups;
 +    flat_hash_map<std::string, std::string> snapshotLookupTargets;
 +    flat_hash_set<std::string> snapshotHeaderRequests;
 +    flat_hash_set<std::string> snapshotGeneratedPaths;
@@ -469,15 +600,15 @@ index de1d1c27195b364570eab007408f2aac14f86a17..fcdda998186c3ac71b62a6307142cbf2
 +    size_t snapshotGeneratedIndex = 0;
 +    bool snapshotGeneratedSequenceActive = false;
 +    [[noreturn]] void failSnapshot(std::string_view reason) const;
-+    BufferOrError openCachedImpl(const std::filesystem::path& fullPath,
-+                                SourceLocation includedFrom, const SourceLibrary* library,
-+                                uint64_t sortKey, std::string* resolvedPath);
++    BufferOrError openCachedImpl(const std::filesystem::path& fullPath, SourceLocation includedFrom,
++                                 const SourceLibrary* library, uint64_t sortKey,
++                                 std::string* resolvedPath);
 +
      std::atomic<uint32_t> unnamedBufferCount = 0;
      bool disableProximatePaths = false;
      bool disableLocalIncludes = false;
 diff --git a/include/slang/util/Bag.h b/include/slang/util/Bag.h
-index 989512211f988a20c626534386bcf9c817c380ff..9998e942d0f4886b556712d85db657a6e87d6ba9 100644
+index 989512211..9998e942d 100644
 --- a/include/slang/util/Bag.h
 +++ b/include/slang/util/Bag.h
 @@ -36,6 +36,9 @@ public:
@@ -490,47 +621,8 @@ index 989512211f988a20c626534386bcf9c817c380ff..9998e942d0f4886b556712d85db657a6
      /// Adds or overwrites an existing element of type T in the bag
      /// (making a copy in the process).
      template<typename T>
-diff --git a/include/slang/util/CwdCoordinator.h b/include/slang/util/CwdCoordinator.h
-new file mode 100644
-index 0000000000000000000000000000000000000000..9e2d67cfc61d06f5bbe33ce83e43ae566efd7555
---- /dev/null
-+++ b/include/slang/util/CwdCoordinator.h
-@@ -0,0 +1,33 @@
-+// SPDX-License-Identifier: MIT
-+#pragma once
-+#include <atomic>
-+#include <filesystem>
-+#include <mutex>
-+#include "slang/util/Util.h"
-+namespace slang {
-+/// Coordinates internal command-file cwd writers with trusted analysis phases.
-+/// Does not protect the filesystem namespace against other processes.
-+class SLANG_EXPORT CwdCoordinator {
-+public:
-+    class SLANG_EXPORT WriteLease {
-+    public:
-+        WriteLease();
-+    private:
-+        std::unique_lock<std::recursive_mutex> lock;
-+    };
-+    class SLANG_EXPORT AnalysisLease {
-+    public:
-+        AnalysisLease();
-+        ~AnalysisLease();
-+        AnalysisLease(const AnalysisLease&) = delete;
-+        AnalysisLease& operator=(const AnalysisLease&) = delete;
-+    private:
-+        std::unique_lock<std::recursive_mutex> lock;
-+    };
-+    static void setCurrentPath(const std::filesystem::path& path, std::error_code& ec);
-+private:
-+    static std::recursive_mutex mutex;
-+    static std::atomic<unsigned> activeAnalyses;
-+    static thread_local unsigned localAnalyses;
-+};
-+} // namespace slang
 diff --git a/source/CMakeLists.txt b/source/CMakeLists.txt
-index ce1415ffde4d4ad8d37542cec33691a79ed56a2b..ab8affba575e4aff3b538e34ff67d9a31da0b162 100644
+index ce1415ffd..ab8affba5 100644
 --- a/source/CMakeLists.txt
 +++ b/source/CMakeLists.txt
 @@ -117,6 +117,7 @@ add_library(
@@ -542,7 +634,7 @@ index ce1415ffde4d4ad8d37542cec33691a79ed56a2b..ab8affba575e4aff3b538e34ff67d9a3
    util/IntervalMap.cpp
    util/OS.cpp
 diff --git a/source/ast/Compilation.cpp b/source/ast/Compilation.cpp
-index ed7528f2c63e43df29c59538afa58b94099e6df0..200af8071476f6939ffd3ae2c6b21037e18e3a0b 100644
+index ed7528f2c..200af8071 100644
 --- a/source/ast/Compilation.cpp
 +++ b/source/ast/Compilation.cpp
 @@ -14,7 +14,6 @@
@@ -600,7 +692,7 @@ index ed7528f2c63e43df29c59538afa58b94099e6df0..200af8071476f6939ffd3ae2c6b21037
  
      // Report any lingering name conflicts.
 diff --git a/source/ast/ElabVisitors.h b/source/ast/ElabVisitors.h
-index 2f346fa600e460dd4df92866801bf263296174c7..1ac0db2f31e0247218e226cdb4e9def98817ef3a 100644
+index 2f346fa60..1ac0db2f3 100644
 --- a/source/ast/ElabVisitors.h
 +++ b/source/ast/ElabVisitors.h
 @@ -314,7 +314,7 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
@@ -647,7 +739,7 @@ index 2f346fa600e460dd4df92866801bf263296174c7..1ac0db2f31e0247218e226cdb4e9def9
                  compilation.checkVirtualIfaceInstance(*inst);
              }
 diff --git a/source/ast/builtins/MiscSystemFuncs.cpp b/source/ast/builtins/MiscSystemFuncs.cpp
-index fcdb3f43617be3c20b8a3f6d9e8b2bcfd37dced4..1e4ab3f975c0eae196060e6a3f7e9b0d853a36cc 100644
+index fcdb3f436..1e4ab3f97 100644
 --- a/source/ast/builtins/MiscSystemFuncs.cpp
 +++ b/source/ast/builtins/MiscSystemFuncs.cpp
 @@ -141,7 +141,7 @@ public:
@@ -672,7 +764,7 @@ index fcdb3f43617be3c20b8a3f6d9e8b2bcfd37dced4..1e4ab3f975c0eae196060e6a3f7e9b0d
                  return comp.getErrorType();
              }
 diff --git a/source/ast/expressions/OperatorExpressions.cpp b/source/ast/expressions/OperatorExpressions.cpp
-index e51460a5ccaad10cdffb74b8f7b965f705e25673..0f4ee0c8c00db997acd0367bbc746542e5d26920 100644
+index e51460a5c..0f4ee0c8c 100644
 --- a/source/ast/expressions/OperatorExpressions.cpp
 +++ b/source/ast/expressions/OperatorExpressions.cpp
 @@ -1985,8 +1985,11 @@ Expression& ConcatenationExpression::fromSyntax(Compilation& comp,
@@ -689,7 +781,7 @@ index e51460a5ccaad10cdffb74b8f7b965f705e25673..0f4ee0c8c00db997acd0367bbc746542
                      expr = &ConversionExpression::makeImplicit(context, comp.getStringType(),
                                                                 ConversionKind::Explicit, *expr,
 diff --git a/source/diagnostics/DiagnosticEngine.cpp b/source/diagnostics/DiagnosticEngine.cpp
-index 3fa297e9c399e3143a30eeebacbcd569f3f30159..97f78013d3a4937b887e7f882cae37dbb197d77c 100644
+index 3fa297e9c..97f78013d 100644
 --- a/source/diagnostics/DiagnosticEngine.cpp
 +++ b/source/diagnostics/DiagnosticEngine.cpp
 @@ -9,7 +9,10 @@
@@ -858,17 +950,17 @@ index 3fa297e9c399e3143a30eeebacbcd569f3f30159..97f78013d3a4937b887e7f882cae37db
      for (auto& [key, formatter] : formatters)
          formatter->startMessage(diag);
 diff --git a/source/driver/Driver.cpp b/source/driver/Driver.cpp
-index d049078b09193791a4dfbc2e7dd89db458bf61f6..cff5ff4cab1ee52c18bdecc047c0c1d9f5d58163 100644
+index d049078b0..22b3fb988 100644
 --- a/source/driver/Driver.cpp
 +++ b/source/driver/Driver.cpp
-@@ -27,6 +27,7 @@
+@@ -26,6 +26,7 @@
+ #include "slang/syntax/SyntaxPrinter.h"
  #include "slang/syntax/SyntaxTree.h"
  #include "slang/text/Json.h"
- #include "slang/util/Random.h"
 +#include "slang/util/CwdCoordinator.h"
+ #include "slang/util/Random.h"
  #include "slang/util/String.h"
  #include "slang/util/ThreadPool.h"
- 
 @@ -333,7 +334,7 @@ void Driver::addStandardArgs() {
      addCompFlag(CompilationFlags::RelaxEnumConversions, "--relax-enum-conversions",
                  "Allow all integral types to convert implicitly to enum types");
@@ -962,8 +1054,16 @@ index d049078b09193791a4dfbc2e7dd89db458bf61f6..cff5ff4cab1ee52c18bdecc047c0c1d9
      if (!reportLoadErrors())
          return false;
  
+@@ -1177,6 +1190,7 @@ void Driver::addParseOptions(Bag& bag) const {
+     soptions.librariesInheritMacros = options.librariesInheritMacros == true;
+ 
+     PreprocessorOptions ppoptions;
++    ppoptions.captureUvmPrefix = options.captureUvmPrefix;
+     ppoptions.predefines = options.defines;
+     ppoptions.undefines = options.undefines;
+     ppoptions.predefineSource = "<command-line>";
 diff --git a/source/driver/SourceLoader.cpp b/source/driver/SourceLoader.cpp
-index 99b853be78fe889077b3cd38965417c5955788e7..c1711074d5f288d631f3eaae9b32a934e041b98e 100644
+index 99b853be7..c1711074d 100644
 --- a/source/driver/SourceLoader.cpp
 +++ b/source/driver/SourceLoader.cpp
 @@ -14,6 +14,7 @@
@@ -1095,7 +1195,7 @@ index 99b853be78fe889077b3cd38965417c5955788e7..c1711074d5f288d631f3eaae9b32a934
          return;
      }
 diff --git a/source/parsing/Lexer.cpp b/source/parsing/Lexer.cpp
-index a91519cb4e865e7b578b6f3f458e13cd7a67963e..56f6b9ac1f1e1c6d9963efde55cc46bb3de5f377 100644
+index a91519cb4..56f6b9ac1 100644
 --- a/source/parsing/Lexer.cpp
 +++ b/source/parsing/Lexer.cpp
 @@ -1426,16 +1426,16 @@ bool Lexer::tryApplyCommentHandler() {
@@ -1120,7 +1220,7 @@ index a91519cb4e865e7b578b6f3f458e13cd7a67963e..56f6b9ac1f1e1c6d9963efde55cc46bb
      }
      SLANG_UNREACHABLE;
 diff --git a/source/parsing/Preprocessor.cpp b/source/parsing/Preprocessor.cpp
-index 5601d7e738142d8a7906fef416c07b9f927543d0..9bd1ee80bf3da8527693284fd4cafab893b8f5fd 100644
+index 5601d7e73..747dfc7d7 100644
 --- a/source/parsing/Preprocessor.cpp
 +++ b/source/parsing/Preprocessor.cpp
 @@ -99,7 +99,7 @@ void Preprocessor::pushSource(std::string_view source, std::string_view name) {
@@ -1146,7 +1246,17 @@ index 5601d7e738142d8a7906fef416c07b9f927543d0..9bd1ee80bf3da8527693284fd4cafab8
      // Look for the macro in the temporary preprocessor's macro map.
      // Any macros found that are not the built-in intrinsic macros should
      // be copied over to our own map.
-@@ -1130,7 +1137,7 @@ Trivia Preprocessor::handleLineDirective(Token directive) {
+@@ -541,6 +548,9 @@ Token Preprocessor::handleDirectives(Token token) {
+                 return token.withTrivia(alloc, trivia);
+         }
+ 
++        // Finalize a deferred root checkpoint after the directive has updated macro state.
++        if (afterDirectiveCB)
++            afterDirectiveCB();
+         token = nextRaw();
+     }
+ }
+@@ -1130,7 +1140,7 @@ Trivia Preprocessor::handleLineDirective(Token directive) {
              // We should only notify the source manager about the line directive if it
              // is well formed, to avoid very strange line number issues.
              sourceManager.addLineDirective(directive.location(), *lineNum, fileName.valueText(),
@@ -1156,7 +1266,7 @@ index 5601d7e738142d8a7906fef416c07b9f927543d0..9bd1ee80bf3da8527693284fd4cafab8
      }
      return Trivia(TriviaKind::Directive, result);
 diff --git a/source/parsing/Preprocessor_pragmas.cpp b/source/parsing/Preprocessor_pragmas.cpp
-index e86c15c68a361c3168d7948e294e33fdbd0b9b92..b426ae04e2afb57532572913f65b51714ab4218d 100644
+index e86c15c68..b426ae04e 100644
 --- a/source/parsing/Preprocessor_pragmas.cpp
 +++ b/source/parsing/Preprocessor_pragmas.cpp
 @@ -257,11 +257,11 @@ void Preprocessor::applyDiagnosticPragma(const PragmaDirectiveSyntax& pragma) {
@@ -1182,8 +1292,588 @@ index e86c15c68a361c3168d7948e294e33fdbd0b9b92..b426ae04e2afb57532572913f65b5171
                      }
                      else {
                          addDiag(diag::ExpectedDiagPragmaArg, simple.value.range());
+diff --git a/source/syntax/SyntaxTree.cpp b/source/syntax/SyntaxTree.cpp
+index ac681a4db..5c9645f32 100644
+--- a/source/syntax/SyntaxTree.cpp
++++ b/source/syntax/SyntaxTree.cpp
+@@ -7,16 +7,90 @@
+ //------------------------------------------------------------------------------
+ #include "slang/syntax/SyntaxTree.h"
+ 
++#include <cstdio>
++#include <cstdlib>
++
+ #include "slang/parsing/Parser.h"
+ #include "slang/parsing/ParserMetadata.h"
+ #include "slang/parsing/Preprocessor.h"
++#include "slang/syntax/AllSyntax.h"
+ #include "slang/syntax/SyntaxPrinter.h"
+ #include "slang/text/SourceManager.h"
++#include "slang/util/FlatMap.h"
++#include "slang/util/OS.h"
+ #include "slang/util/TimeTrace.h"
+ 
+ namespace slang::syntax {
+ 
+ using namespace parsing;
++namespace {
++struct InitialCheckpoint {
++    BufferID root;
++    std::string cwd;
++    PreprocessorMetadata pp;
++    std::vector<std::pair<const char*, std::string_view>> guards;
++};
++struct DirectiveSummary {
++    bool sourceEffects = false;
++    bool resumeSafe = true;
++    bool defparams = false;
++    bool binds = false;
++};
++void freezeDirectiveAncestry(SyntaxNode& node, DirectiveSummary& summary);
++void freezeDirectiveTrivia(std::span<const Trivia> trivia, SyntaxNode& parent,
++                           DirectiveSummary& summary) {
++    for (const auto& entry : trivia) {
++        if (entry.kind == TriviaKind::Directive) {
++            auto& directive = *entry.syntax();
++            freezeDirectiveAncestry(directive, summary);
++            directive.parent = &parent;
++        }
++        else if (entry.kind == TriviaKind::SkippedTokens) {
++            for (auto token : entry.getSkippedTokens())
++                freezeDirectiveTrivia(token.trivia(), parent, summary);
++        }
++    }
++}
++void freezeDirectiveAncestry(SyntaxNode& node, DirectiveSummary& summary) {
++    summary.sourceEffects |= node.kind == SyntaxKind::LineDirective ||
++                             node.kind == SyntaxKind::PragmaDirective;
++    switch (node.kind) {
++        case SyntaxKind::TimeScaleDirective:
++        case SyntaxKind::DefaultNetTypeDirective:
++        case SyntaxKind::UnconnectedDriveDirective:
++        case SyntaxKind::NoUnconnectedDriveDirective:
++        case SyntaxKind::CellDefineDirective:
++        case SyntaxKind::EndCellDefineDirective:
++        case SyntaxKind::ResetAllDirective:
++        case SyntaxKind::BeginKeywordsDirective:
++        case SyntaxKind::EndKeywordsDirective:
++        case SyntaxKind::PragmaDirective:
++            summary.resumeSafe = false;
++            break;
++        default:
++            break;
++    }
++    summary.defparams |= node.kind == SyntaxKind::DefParam;
++    summary.binds |= node.kind == SyntaxKind::BindDirective;
++    for (size_t i = 0; i < node.getChildCount(); ++i) {
++        if (auto child = node.childNode(i))
++            freezeDirectiveAncestry(*child, summary);
++        else if (auto token = node.childTokenPtr(i); token && *token)
++            freezeDirectiveTrivia(token->trivia(), node, summary);
++    }
++}
++} // namespace
++
++// Published fragment state belongs to the tree. No process-global pointer registry.
++struct SyntaxTree::PrefixState {
++    std::optional<InitialCheckpoint> checkpoint;
++    std::optional<DirectiveSummary> capturedPackageDirectives;
++    std::optional<DirectiveSummary> wholeTreeDirectives;
++    std::vector<std::pair<const char*, std::string_view>> guards;
++    size_t extraBytes = 0;
++    size_t extraSourceBytes = 0;
++    std::string cwd;
++};
+ 
+ SyntaxTree::SyntaxTree(SyntaxNode* root, SourceManager& sourceManager, BumpAllocator&& alloc,
+                        const SourceLibrary* library,
+@@ -27,7 +101,171 @@ SyntaxTree::SyntaxTree(SyntaxNode* root, SourceManager& sourceManager, BumpAlloc
+         metadata.eofToken = preTransform->getMetadata().eofToken.deepClone(this->alloc);
+ }
+ 
++size_t SyntaxTree::getRetainedSyntaxBytes() const {
++    return alloc.getTotalBytesAllocated() + (prefixState ? prefixState->extraBytes : 0);
++}
++size_t SyntaxTree::getRetainedSourceBytes() const {
++    size_t result = prefixState ? prefixState->extraSourceBytes : 0;
++    for (auto id : getSourceBufferIds())
++        result += sourceMan.getSourceText(id).size();
++    for (auto id : getPredefineBufferIds())
++        result += sourceMan.getSourceText(id).size();
++    return result;
++}
++std::string SyntaxTree::getPrefixParseCwd() const {
++    return prefixState ? prefixState->cwd : std::string{};
++}
++std::optional<bool> SyntaxTree::getPrefixSourceEffects() const {
++    if (!prefixState || !prefixState->wholeTreeDirectives)
++        return std::nullopt;
++    return prefixState->wholeTreeDirectives->sourceEffects;
++}
++std::optional<bool> SyntaxTree::isPrefixResumeSafe() const {
++    if (!prefixState || !prefixState->wholeTreeDirectives)
++        return std::nullopt;
++    return prefixState->wholeTreeDirectives->resumeSafe;
++}
+ SyntaxTree::~SyntaxTree() = default;
++SyntaxTree::SyntaxTree(SyntaxTree&& other) = default;
++// A fragment has immutable physical ancestry. Compilation consumes the view's ordered
++// members and exact metadata to create a single logical compilation unit.
++std::shared_ptr<SyntaxTree> SyntaxTree::withCachedPrefix(
++    const std::shared_ptr<SyntaxTree>& prefix, const std::shared_ptr<SyntaxTree>& suffix) {
++    if (!prefix || !suffix || !prefix->prefixState || !prefix->prefixState->wholeTreeDirectives ||
++        !prefix->prefixState->wholeTreeDirectives->resumeSafe)
++        SLANG_THROW(std::invalid_argument("a prepared, resumable prefix is required"));
++    if (&prefix->sourceMan != &suffix->sourceMan || prefix->library != suffix->library)
++        SLANG_THROW(std::invalid_argument("prefix source manager / library mismatch"));
++    auto& sm = prefix->sourceMan;
++    BumpAllocator alloc;
++    auto& left = prefix->root().as<CompilationUnitSyntax>();
++    auto& right = suffix->root().as<CompilationUnitSyntax>();
++    SmallVector<MemberSyntax*> members;
++    for (auto* member : left.members)
++        members.push_back(member); // Borrow immutable prefix; deleter pins its arena.
++    for (auto* member : right.members)
++        members.push_back(deepClone(*member, alloc));
++    SyntaxFactory factory(alloc);
++    // Construct an empty composition root first: its normal constructor reparents children.
++    // Prefix nodes keep physical ancestry in the immutable prefix root; suffix clones belong here.
++    auto& root = factory.compilationUnit({}, right.endOfFile.deepClone(alloc));
++    root.members = SyntaxList<MemberSyntax>(alloc, members);
++    // Retain end-of-prefix directives on the first suffix token for metadata reconstruction.
++    if (!right.members.empty() && !left.endOfFile.trivia().empty()) {
++        auto* token = members[left.members.size()]->getFirstTokenPtr();
++        SmallVector<Trivia> trivia;
++        for (auto t : left.endOfFile.trivia())
++            trivia.push_back(t.clone(alloc, true));
++        for (auto t : token->trivia())
++            trivia.push_back(t.clone(alloc, true));
++        *token = token->withTrivia(alloc, trivia);
++    }
++    // Generated deepClone omits parser preview links (notably enum injection).
++    // Rebuild those links against cloned nodes; never point the new tree at old parents.
++    flat_hash_map<const SyntaxNode*, SyntaxNode*> mapped;
++    std::vector<std::pair<const SyntaxNode*, SyntaxNode*>> paired;
++    auto pairNodes = [&](auto&& self, const SyntaxNode& old, SyntaxNode& fresh,
++                         SyntaxNode* parent) -> void {
++        if (old.kind != fresh.kind || old.getChildCount() != fresh.getChildCount())
++            SLANG_THROW(std::runtime_error("clone shape mismatch"));
++        fresh.parent = SyntaxNode::ParentRef(parent);
++        mapped.emplace(&old, &fresh);
++        paired.emplace_back(&old, &fresh);
++        for (size_t i = 0; i < old.getChildCount(); ++i)
++            if (auto child = old.childNode(i))
++                self(self, *child, *fresh.childNode(i), &fresh);
++    };
++    // Prefix nodes and preview links are retained verbatim; map only cloned user syntax.
++    for (size_t i = 0; i < right.members.size(); ++i)
++        pairNodes(pairNodes, *right.members[i], *members[left.members.size() + i], &root);
++    for (size_t i = 0; i < paired.size(); ++i) {
++        auto [old, fresh] = paired[i];
++        if (auto preview = old->previewNode()) {
++            auto it = mapped.find(preview);
++            if (it == mapped.end()) {
++                auto extra = deepClone(*preview, alloc);
++                auto parent = mapped.find(preview->parent);
++                pairNodes(pairNodes, *preview, *extra,
++                          parent == mapped.end() ? nullptr : parent->second);
++                it = mapped.find(preview);
++            }
++            fresh->setPreviewNode(alloc, it->second);
++        }
++    }
++    // Preserve parser metadata exactly, including default net type and time scale.
++    ParserMetadata metadata;
++    auto appendMetadata = [&](const ParserMetadata& source) {
++        for (auto& [node, info] : source.nodeMeta)
++            metadata.nodeMeta.emplace_back(&mapped.at(node)->as<ModuleDeclarationSyntax>(), info);
++        for (auto node : source.globalInstances)
++            metadata.globalInstances.push_back(
++                &mapped.at(node)->as<HierarchyInstantiationSyntax>());
++        for (auto node : source.classPackageNames)
++            metadata.classPackageNames.push_back(&mapped.at(node)->as<IdentifierNameSyntax>());
++        for (auto node : source.packageImports)
++            metadata.packageImports.push_back(
++                &mapped.at(node)->as<PackageImportDeclarationSyntax>());
++        for (auto node : source.classDecls)
++            metadata.classDecls.push_back(&mapped.at(node)->as<ClassDeclarationSyntax>());
++        for (auto node : source.interfacePorts)
++            metadata.interfacePorts.push_back(&mapped.at(node)->as<InterfacePortHeaderSyntax>());
++        for (auto node : source.virtualInterfaceTypes)
++            metadata.virtualInterfaceTypes.push_back(
++                &mapped.at(node)->as<VirtualInterfaceTypeSyntax>());
++        for (auto node : source.namedPortTypes)
++            metadata.namedPortTypes.push_back(&mapped.at(node)->as<IdentifierNameSyntax>());
++        metadata.hasDefparams |= source.hasDefparams;
++        metadata.hasBindDirectives |= source.hasBindDirectives;
++    };
++    metadata = prefix->metadata;
++    appendMetadata(suffix->metadata);
++    metadata.eofToken = root.endOfFile;
++    auto pp = suffix->preprocessorMetadata;
++    pp.includeDirectives.insert(pp.includeDirectives.begin(),
++                                prefix->preprocessorMetadata.includeDirectives.begin(),
++                                prefix->preprocessorMetadata.includeDirectives.end());
++    pp.macroRefs.insert(pp.macroRefs.begin(), prefix->preprocessorMetadata.macroRefs.begin(),
++                        prefix->preprocessorMetadata.macroRefs.end());
++    if (!suffix->getPredefineBufferIds().empty())
++        SLANG_THROW(std::runtime_error("suffix unexpectedly created command line macros"));
++    pp.predefineBufferIds = prefix->preprocessorMetadata.predefineBufferIds;
++    // Native pushes every root in reverse order, then visits prefix includes, then suffix includes.
++    std::vector<BufferID> ids;
++    auto isRoot = [&](BufferID id) { return !sm.getIncludedFrom(id).valid(); };
++    for (auto id : suffix->getSourceBufferIds())
++        if (isRoot(id))
++            ids.push_back(id);
++    for (auto id : prefix->getSourceBufferIds())
++        if (isRoot(id))
++            ids.push_back(id);
++    for (auto id : prefix->getSourceBufferIds())
++        if (!isRoot(id))
++            ids.push_back(id);
++    for (auto id : suffix->getSourceBufferIds())
++        if (!isRoot(id))
++            ids.push_back(id);
++    pp.sourceBufferIds = std::move(ids);
++    auto diagnostics = prefix->diagnosticsBuffer;
++    for (auto& d : suffix->diagnosticsBuffer)
++        diagnostics.push_back(d);
++    auto* result = new SyntaxTree(&root, prefix->library, sm, std::move(alloc),
++                                  std::move(diagnostics), std::move(metadata), std::move(pp),
++                                  prefix->options_);
++    result->isLibraryUnit = prefix->isLibraryUnit;
++    auto ownerBytes = prefix->getRetainedSyntaxBytes() + suffix->getRetainedSyntaxBytes();
++    auto ownerSources = prefix->getRetainedSourceBytes() + suffix->getRetainedSourceBytes();
++    result->prefixState = std::make_unique<PrefixState>();
++    result->prefixState->extraBytes = ownerBytes;
++    result->prefixState->extraSourceBytes = ownerSources;
++
++    // Metadata points into both original trees. Their arenas remain pinned to this tree only.
++    auto pins = sm.retainBuffers(result->getSourceBufferIds());
++    auto macroPins = sm.retainBuffers(result->getPredefineBufferIds());
++    return std::shared_ptr<SyntaxTree>(result, [prefix, suffix, pins = std::move(pins),
++                                                macroPins = std::move(macroPins)](SyntaxTree* p) {
++        delete p;
++    });
++}
+ 
+ SyntaxTree::TreeOrError SyntaxTree::fromFile(std::string_view path) {
+     return fromFile(path, getDefaultSourceManager());
+@@ -126,7 +364,7 @@ SyntaxTree::SyntaxTree(SyntaxNode* root, const SourceLibrary* library, SourceMan
+ std::shared_ptr<SyntaxTree> SyntaxTree::create(SourceManager& sourceManager,
+                                                std::span<const SourceBuffer> sources,
+                                                const Bag& options, MacroList inheritedMacros,
+-                                               bool guess) {
++                                               bool guess, const SyntaxTree* cachedPrefix) {
+     if (sources.empty())
+         SLANG_THROW(std::invalid_argument("sources cannot be empty"));
+ 
+@@ -139,8 +377,56 @@ std::shared_ptr<SyntaxTree> SyntaxTree::create(SourceManager& sourceManager,
+ 
+     BumpAllocator alloc;
+     Diagnostics diagnostics;
+-    Preprocessor preprocessor(sourceManager, alloc, diagnostics, options, inheritedMacros);
+-
++    Bag parseOptions = options;
++    auto originalPP = options.getOrDefault<PreprocessorOptions>();
++    bool capture = originalPP.captureUvmPrefix && sources.size() > 1 &&
++                   !originalPP.bufferChangeCB && originalPP.keywordMapping.empty() &&
++                   inheritedMacros.empty();
++    if (capture) {
++        auto name = sourceManager.getFullPath(sources[0].id).filename().string();
++        capture = name == "uvm.sv" || name == "uvm_pkg.sv";
++    }
++    std::optional<InitialCheckpoint> checkpoint;
++    Preprocessor* active = nullptr;
++    bool pendingBoundary = false;
++    auto saveCheckpoint = [&] {
++        if (pendingBoundary && !checkpoint && !active->inMacroBody && !active->inIfDefCondition) {
++            checkpoint.emplace();
++            checkpoint->root = sources[0].id;
++            std::error_code cwdError;
++            auto cwd = std::filesystem::current_path(cwdError);
++            if (!cwdError)
++                checkpoint->cwd = cwd.string();
++            const auto& state = active->getMetadata();
++            checkpoint->pp = state;
++            for (auto& pair : active->includeOnceHeaders)
++                checkpoint->guards.emplace_back(pair.first, pair.second);
++            pendingBoundary = false;
++        }
++    };
++    auto onBoundary = [&](BufferID id, bool back, bool skip) {
++        if (capture && !checkpoint && !back && !skip && id == sources[1].id) {
++            pendingBoundary = true;
++            saveCheckpoint(); // A final define can still be inMacroBody: defer until its handler
++                              // returns.
++        }
++    };
++    if (capture) {
++        auto wrapped = originalPP;
++        wrapped.bufferChangeCB = onBoundary;
++        parseOptions.set(wrapped);
++    }
++    Preprocessor preprocessor(sourceManager, alloc, diagnostics, parseOptions, inheritedMacros);
++    active = &preprocessor;
++    if (capture)
++        preprocessor.afterDirectiveCB = saveCheckpoint;
++
++    if (cachedPrefix) {
++        if (!cachedPrefix->prefixState)
++            SLANG_THROW(std::runtime_error("missing prefix header-guard state"));
++        for (auto& [key, value] : cachedPrefix->prefixState->guards)
++            preprocessor.includeOnceHeaders.emplace(key, value);
++    }
+     const SourceLibrary* library = nullptr;
+     for (auto it = sources.rbegin(); it != sources.rend(); it++) {
+         preprocessor.pushSource(*it);
+@@ -168,9 +454,55 @@ std::shared_ptr<SyntaxTree> SyntaxTree::create(SourceManager& sourceManager,
+             return create(sourceManager, sources, options, inheritedMacros, false);
+     }
+ 
+-    return std::shared_ptr<SyntaxTree>(
++    if (const char* path = std::getenv("SLANG_UVM_PARSE_TRACE")) {
++        uint64_t bytes = 0, uvmBytes = 0;
++        for (auto id : preprocessor.getMetadata().sourceBufferIds) {
++            auto size = sourceManager.getSourceText(id).size();
++            bytes += size;
++            if (sourceManager.getFullPath(id).string().find("/uvm/") != std::string::npos)
++                uvmBytes += size;
++        }
++        if (auto* f = std::fopen(path, "a")) {
++            std::fprintf(f, "%ld\t%zu\t%llu\t%llu\n", long(slang::OS::getpid()), sources.size(),
++                         (unsigned long long)bytes, (unsigned long long)uvmBytes);
++            std::fclose(f);
++        }
++    }
++    auto result = std::shared_ptr<SyntaxTree>(
+         new SyntaxTree(root, library, sourceManager, std::move(alloc), std::move(diagnostics),
+                        parser.getMetadata(), preprocessor.getMetadata(), options));
++    if (checkpoint) {
++        result->prefixState = std::make_unique<PrefixState>();
++        result->prefixState->checkpoint = std::move(*checkpoint);
++        if (root->kind == SyntaxKind::CompilationUnit) {
++            auto& unit = root->as<CompilationUnitSyntax>();
++            if (!unit.members.empty() && unit.members[0]->kind == SyntaxKind::PackageDeclaration &&
++                unit.members[0]->as<ModuleDeclarationSyntax>().header->name.valueText() ==
++                    "uvm_pkg") {
++                auto& summary = result->prefixState->capturedPackageDirectives.emplace();
++                freezeDirectiveAncestry(*unit.members[0], summary);
++            }
++        }
++    }
++    if (originalPP.captureUvmPrefix && sources.size() == 1) {
++        const auto filename = sourceManager.getFullPath(sources[0].id).filename().string();
++        if (filename == "uvm.sv" || filename == "uvm_pkg.sv") {
++            // Complete directive ancestry before any reader can observe this tree.
++            DirectiveSummary summary;
++            freezeDirectiveAncestry(result->root(), summary);
++            std::error_code cwdError;
++            auto cwd = std::filesystem::current_path(cwdError);
++            if (!result->prefixState)
++                result->prefixState = std::make_unique<PrefixState>();
++            result->prefixState->wholeTreeDirectives = summary;
++            if (!cwdError)
++                result->prefixState->cwd = cwd.string();
++            auto& guards = result->prefixState->guards;
++            for (auto& entry : preprocessor.includeOnceHeaders)
++                guards.emplace_back(entry.first, entry.second);
++        }
++    }
++    return result;
+ }
+ 
+ std::shared_ptr<SyntaxTree> SyntaxTree::fromLibraryMapFile(std::string_view path,
+@@ -216,6 +548,187 @@ std::shared_ptr<SyntaxTree> SyntaxTree::fromLibraryMapBuffer(const SourceBuffer&
+                        parser.getMetadata(), preprocessor.getMetadata(), options));
+ }
+ 
++std::shared_ptr<SyntaxTree> SyntaxTree::afterCachedPrefix(const std::shared_ptr<SyntaxTree>& prefix,
++                                                          std::span<const SourceBuffer> sources,
++                                                          const Bag& options) {
++    if (!prefix || !prefix->prefixState || !prefix->prefixState->wholeTreeDirectives ||
++        !prefix->prefixState->wholeTreeDirectives->resumeSafe)
++        SLANG_THROW(std::invalid_argument("a prepared, resumable prefix is required"));
++    return create(prefix->sourceMan, sources, options, prefix->getDefinedMacros(), false,
++                  prefix.get());
++}
++
++std::shared_ptr<SyntaxTree> SyntaxTree::preparedUvmPrefix(
++    const std::shared_ptr<SyntaxTree>& native) {
++    if (!native->prefixState || !native->prefixState->checkpoint)
++        return {};
++    // Checkpoints belong to the original parse generation. Buffer pins protect
++    // token storage; they do not make replaced SourceManager IDs current again.
++    for (auto id : native->getSourceBufferIds())
++        if (!native->sourceMan.isLatestData(id))
++            return {};
++    for (auto id : native->getPredefineBufferIds())
++        if (!native->sourceMan.isLatestData(id))
++            return {};
++    auto checkpoint = *native->prefixState->checkpoint;
++    auto& sm = native->sourceMan;
++    auto sourceRoot = [&](SourceLocation loc) {
++        if (!loc.valid() || loc == SourceLocation::NoLocation)
++            return BufferID{};
++        auto id = sm.getFullyExpandedLoc(loc).buffer();
++        while (auto from = sm.getIncludedFrom(id))
++            id = sm.getFullyExpandedLoc(from).buffer();
++        return id;
++    };
++    if (native->root().kind != SyntaxKind::CompilationUnit)
++        return {};
++    auto& all = native->root().as<CompilationUnitSyntax>();
++    if (all.members.empty() || all.members[0]->kind != SyntaxKind::PackageDeclaration)
++        return {};
++    auto* package = all.members[0];
++    if (package->as<ModuleDeclarationSyntax>().header->name.valueText() != "uvm_pkg" ||
++        sourceRoot(package->getFirstToken().location()) != checkpoint.root ||
++        sourceRoot(package->getLastToken().location()) != checkpoint.root)
++        return {};
++    for (size_t i = 1; i < all.members.size(); ++i)
++        if (sourceRoot(all.members[i]->getFirstToken().location()) == checkpoint.root)
++            return {};
++    BumpAllocator arena;
++    SmallVector<Trivia> trailing;
++    flat_hash_map<const SyntaxNode*, SyntaxNode*> tailAliases;
++    auto mapNodes = [&](auto&& self, const SyntaxNode& old, SyntaxNode& fresh) -> void {
++        tailAliases.emplace(&old, &fresh);
++        auto mapTrivia = [&](auto&& rec, std::span<const Trivia> a,
++                             std::span<const Trivia> b) -> void {
++            if (a.size() != b.size())
++                SLANG_THROW(std::runtime_error("tail trivia clone shape mismatch"));
++            for (size_t i = 0; i < a.size(); ++i) {
++                if (a[i].kind == TriviaKind::Directive)
++                    self(self, *a[i].syntax(), *b[i].syntax());
++                else if (a[i].kind == TriviaKind::SkippedTokens) {
++                    auto x = a[i].getSkippedTokens(), y = b[i].getSkippedTokens();
++                    if (x.size() != y.size())
++                        SLANG_THROW(std::runtime_error("tail skipped token clone mismatch"));
++                    for (size_t j = 0; j < x.size(); ++j)
++                        rec(rec, x[j].trivia(), y[j].trivia());
++                }
++            }
++        };
++        if (old.getChildCount() != fresh.getChildCount())
++            SLANG_THROW(std::runtime_error("tail node clone mismatch"));
++        for (size_t i = 0; i < old.getChildCount(); ++i)
++            if (auto child = old.childNode(i))
++                self(self, *child, *fresh.childNode(i));
++            else
++                mapTrivia(mapTrivia, old.childToken(i).trivia(), fresh.childToken(i).trivia());
++    };
++    // Prefix-ending directives move to the first suffix token in a native combined parse.
++    // Include only explicit prefix-origin trivia; implicit raw whitespace is immaterial.
++    auto pending = all.members.size() > 1 ? all.members[1]->getFirstToken() : all.endOfFile;
++    for (auto t : pending.trivia()) {
++        auto loc = t.getExplicitLocation();
++        if (t.kind == TriviaKind::Directive)
++            loc = t.syntax()->getFirstToken().location();
++        if (loc && sourceRoot(*loc) == checkpoint.root) {
++            auto clone = t.clone(arena, true);
++            if (t.kind == TriviaKind::Directive) {
++                auto last = t.syntax()->getLastToken().location();
++                if (sourceRoot(last) != checkpoint.root)
++                    SLANG_THROW(
++                        std::runtime_error("prefix directive crosses source root boundary"));
++                mapNodes(mapNodes, *t.syntax(), *clone.syntax());
++            }
++            trailing.push_back(clone);
++        }
++        else if (t.kind == TriviaKind::SkippedTokens) {
++            // Do not guess the origin of mixed skipped source during error recovery.
++            return {};
++        }
++    }
++    auto text = sm.getSourceText(checkpoint.root);
++    auto eof = Token(arena, TokenKind::EndOfFile, trailing, "",
++                     SourceLocation(checkpoint.root, text.empty() ? 0 : text.size() - 1));
++    SyntaxFactory factory(arena);
++    auto& root = factory.compilationUnit({}, eof);
++    MemberSyntax* memberList[] = {package};
++    root.members = SyntaxList<MemberSyntax>(arena,
++                                            memberList); // Immutable physical ancestry retained.
++    ParserMetadata metadata;
++    auto inPackage = [&](const SyntaxNode* n) {
++        for (; n; n = n->parent)
++            if (n == package)
++                return true;
++        return false;
++    };
++    for (auto& pair : native->metadata.nodeMeta)
++        if (inPackage(pair.first))
++            metadata.nodeMeta.push_back(pair);
++    auto filter = [&](const auto& input, auto& output) {
++        for (auto n : input)
++            if (inPackage(n))
++                output.push_back(n);
++    };
++    filter(native->metadata.globalInstances, metadata.globalInstances);
++    filter(native->metadata.classPackageNames, metadata.classPackageNames);
++    filter(native->metadata.packageImports, metadata.packageImports);
++    filter(native->metadata.classDecls, metadata.classDecls);
++    filter(native->metadata.interfacePorts, metadata.interfacePorts);
++    filter(native->metadata.virtualInterfaceTypes, metadata.virtualInterfaceTypes);
++    filter(native->metadata.namedPortTypes, metadata.namedPortTypes);
++    metadata.eofToken = eof;
++    // The package was frozen before the native tree was published. Only the new EOF
++    // trivia belongs to this view, so creating views never writes borrowed nodes.
++    if (!native->prefixState->capturedPackageDirectives)
++        return {};
++    auto summary = *native->prefixState->capturedPackageDirectives;
++    freezeDirectiveTrivia(root.endOfFile.trivia(), root, summary);
++    metadata.hasDefparams = summary.defparams;
++    metadata.hasBindDirectives = summary.binds;
++    Diagnostics diagnostics;
++    for (auto& d : native->diagnosticsBuffer) {
++        if (!d.location.valid() || d.location == SourceLocation::NoLocation)
++            return {};
++        if (sourceRoot(d.location) == checkpoint.root)
++            diagnostics.push_back(d);
++    }
++    // Checkpoint includes all top-level roots pushed in reverse order: retain only UVM.
++    auto& ids = checkpoint.pp.sourceBufferIds;
++    std::erase_if(ids, [&](BufferID id) {
++        return sourceRoot(SourceLocation(id, 0)) != checkpoint.root;
++    });
++    for (auto& d : checkpoint.pp.definedMacros)
++        if (auto it = tailAliases.find(d); it != tailAliases.end())
++            d = &it->second->as<DefineDirectiveSyntax>();
++    for (auto& ref : checkpoint.pp.macroRefs) {
++        if (auto it = tailAliases.find(ref.syntax); it != tailAliases.end())
++            ref.syntax = it->second;
++        if (auto it = tailAliases.find(ref.definition); it != tailAliases.end())
++            ref.definition = &it->second->as<DefineDirectiveSyntax>();
++    }
++    for (auto& include : checkpoint.pp.includeDirectives)
++        if (auto it = tailAliases.find(include.syntax); it != tailAliases.end())
++            include.syntax = &it->second->as<IncludeDirectiveSyntax>();
++    auto* result = new SyntaxTree(&root, native->library, sm, std::move(arena),
++                                  std::move(diagnostics), std::move(metadata),
++                                  std::move(checkpoint.pp), native->options_);
++    result->isLibraryUnit = native->isLibraryUnit;
++    auto ownerBytes = native->getRetainedSyntaxBytes();
++    auto ownerSources = native->getRetainedSourceBytes();
++    result->prefixState = std::make_unique<PrefixState>();
++    result->prefixState->wholeTreeDirectives = summary;
++    result->prefixState->guards = std::move(checkpoint.guards);
++    result->prefixState->extraBytes = ownerBytes;
++    result->prefixState->extraSourceBytes = ownerSources;
++    result->prefixState->cwd = std::move(checkpoint.cwd);
++    auto buffers = native->getSourceBufferIds();
++    auto pins = sm.retainBuffers(buffers);
++    auto macroPins = sm.retainBuffers(native->getPredefineBufferIds());
++    return std::shared_ptr<SyntaxTree>(result, [native, pins = std::move(pins),
++                                                macroPins = std::move(macroPins)](SyntaxTree* p) {
++        delete p;
++    });
++}
++
+ bool SyntaxTree::validate() const {
+     auto text = SyntaxPrinter(sourceManager())
+                     .setIncludeDirectives(true)
 diff --git a/source/text/SourceManager.cpp b/source/text/SourceManager.cpp
-index 386684b5adada5a55d10eb0152211b4ce63be7e4..692ccfb4bda92050509167edca9f7bceb0d1ac2d 100644
+index 386684b5a..692ccfb4b 100644
 --- a/source/text/SourceManager.cpp
 +++ b/source/text/SourceManager.cpp
 @@ -8,6 +8,7 @@
@@ -1841,48 +2531,8 @@ index 386684b5adada5a55d10eb0152211b4ce63be7e4..692ccfb4bda92050509167edca9f7bce
  }
  
  template<IsLock TLock>
-diff --git a/source/util/CwdCoordinator.cpp b/source/util/CwdCoordinator.cpp
-new file mode 100644
-index 0000000000000000000000000000000000000000..f5fd85238ecea8f0ea25dc2a58b622c00b6c9745
---- /dev/null
-+++ b/source/util/CwdCoordinator.cpp
-@@ -0,0 +1,34 @@
-+// SPDX-License-Identifier: MIT
-+#include "slang/util/CwdCoordinator.h"
-+#include <stdexcept>
-+namespace slang {
-+std::recursive_mutex CwdCoordinator::mutex;
-+std::atomic<unsigned> CwdCoordinator::activeAnalyses{0};
-+thread_local unsigned CwdCoordinator::localAnalyses = 0;
-+CwdCoordinator::WriteLease::WriteLease() : lock(mutex, std::defer_lock) {
-+    // Fail before waiting: a parser callback can run on a pool worker while the
-+    // phase owner is waiting for that worker. Waiting here would deadlock.
-+    if (activeAnalyses.load())
-+        SLANG_THROW(std::runtime_error("internal cwd mutation during fast analysis is forbidden"));
-+    lock.lock();
-+    if (activeAnalyses.load())
-+        SLANG_THROW(std::runtime_error("internal cwd mutation during fast analysis is forbidden"));
-+}
-+CwdCoordinator::AnalysisLease::AnalysisLease() : lock(mutex, std::defer_lock) {
-+    // Workers borrow an existing phase, never recursively acquire it. Reject
-+    // accidental acquisition before locking so owner->pool waits cannot cycle.
-+    if (activeAnalyses.load() && !localAnalyses)
-+        SLANG_THROW(std::runtime_error("fast analysis phases must be owned by one state thread; workers borrow the phase"));
-+    lock.lock();
-+    ++localAnalyses;
-+    ++activeAnalyses;
-+}
-+CwdCoordinator::AnalysisLease::~AnalysisLease() {
-+    --localAnalyses;
-+    --activeAnalyses;
-+}
-+void CwdCoordinator::setCurrentPath(const std::filesystem::path& path, std::error_code& ec) {
-+    WriteLease lease;
-+    std::filesystem::current_path(path, ec);
-+}
-+} // namespace slang
 diff --git a/tests/unittests/CMakeLists.txt b/tests/unittests/CMakeLists.txt
-index f1b0a80f7ac9be510a57709c2f92953be448d534..d51707507c2bf8cb3c8db6373b194abc96164801 100644
+index f1b0a80f7..d51707507 100644
 --- a/tests/unittests/CMakeLists.txt
 +++ b/tests/unittests/CMakeLists.txt
 @@ -25,6 +25,7 @@ add_executable(
@@ -1902,7 +2552,7 @@ index f1b0a80f7ac9be510a57709c2f92953be448d534..d51707507c2bf8cb3c8db6373b194abc
    Test.cpp)
  
 diff --git a/tests/unittests/DriverTests.cpp b/tests/unittests/DriverTests.cpp
-index b4f6b728ec76e88401c81479159b7cc702b4e74a..bb5841a2c93fcb25f132c463fc3adc6aa3b08b28 100644
+index b4f6b728e..bb5841a2c 100644
 --- a/tests/unittests/DriverTests.cpp
 +++ b/tests/unittests/DriverTests.cpp
 @@ -41,6 +41,33 @@ TEST_CASE("Driver processOptions can skip input file check") {
@@ -2249,7 +2899,7 @@ index b4f6b728ec76e88401c81479159b7cc702b4e74a..bb5841a2c93fcb25f132c463fc3adc6a
  #endif
  
 diff --git a/tests/unittests/FileTests.cpp b/tests/unittests/FileTests.cpp
-index d3e9fbb31e44cdb6bac0817c03e01b3f83e52fe4..1668b07cdfbe4e7e1f93b50c06692c6fd18a5e5d 100644
+index d3e9fbb31..1668b07cd 100644
 --- a/tests/unittests/FileTests.cpp
 +++ b/tests/unittests/FileTests.cpp
 @@ -3,6 +3,7 @@
@@ -2358,9 +3008,438 @@ index d3e9fbb31e44cdb6bac0817c03e01b3f83e52fe4..1668b07cdfbe4e7e1f93b50c06692c6f
  TEST_CASE("Replace assigned source buffer") {
      SourceManager manager;
  
+diff --git a/tests/unittests/ast/ClassTests.cpp b/tests/unittests/ast/ClassTests.cpp
+index 2353d2143..72709888e 100644
+--- a/tests/unittests/ast/ClassTests.cpp
++++ b/tests/unittests/ast/ClassTests.cpp
+@@ -2199,6 +2199,105 @@ endclass
+     CHECK(diags[10].code == diag::NameListWithScopeRandomize);
+ }
+ 
++TEST_CASE("Class randomize accepts inherited properties") {
++    auto tree = SyntaxTree::fromText(R"(
++class Base #(type T = int);
++    rand T inherited;
++    protected rand int protected_value;
++    local rand int local_value;
++    int non_rand;
++
++    function void run_base();
++        void'(this.randomize(local_value));
++    endfunction
++endclass
++
++class Middle extends Base #(byte);
++endclass
++
++class Derived extends Middle;
++    rand int own_value;
++    function void run();
++        void'(this.randomize(inherited, protected_value, non_rand, own_value));
++        void'(randomize(inherited));
++        void'(this.randomize(inherited) with { inherited > 0; });
++        void'(this.randomize(null));
++    endfunction
++endclass
++
++module m;
++    Derived d;
++    initial void'(d.randomize(inherited, non_rand));
++endmodule
++)");
++
++    Compilation compilation;
++    compilation.addSyntaxTree(tree);
++    NO_COMPILATION_ERRORS;
++}
++
++TEST_CASE("Class randomize inherited property restrictions") {
++    auto tree = SyntaxTree::fromText(R"(
++class Base;
++    rand int inherited;
++    protected rand int protected_value;
++    local rand int local_value;
++endclass
++
++class Derived extends Base;
++    function void run();
++        void'(this.randomize(local_value));
++        void'(this.randomize(inherited[0]));
++        void'(this.randomize(this.inherited));
++    endfunction
++endclass
++
++class Unrelated;
++    rand int other_value;
++    Derived d;
++    function void run();
++        void'(d.randomize(other_value));
++        void'(d.randomize(protected_value));
++    endfunction
++endclass
++)");
++
++    Compilation compilation;
++    compilation.addSyntaxTree(tree);
++
++    auto& diags = compilation.getAllDiagnostics();
++    REQUIRE(diags.size() == 5);
++    CHECK(diags[0].code == diag::LocalMemberAccess);
++    CHECK(diags[1].code == diag::ExpectedClassPropertyName);
++    CHECK(diags[2].code == diag::ExpectedClassPropertyName);
++    CHECK(diags[3].code == diag::ExpectedClassPropertyName);
++    CHECK(diags[4].code == diag::ProtectedMemberAccess);
++}
++
++TEST_CASE("Class randomize rejects covergroup option properties") {
++    auto tree = SyntaxTree::fromText(R"(
++class C;
++    rand int x;
++endclass
++module m;
++    C d;
++    covergroup cg;
++        option.weight = d.randomize(option);
++        option.goal = d.randomize(type_option);
++    endgroup
++    cg g = new;
++endmodule
++)");
++
++    Compilation compilation;
++    compilation.addSyntaxTree(tree);
++
++    auto& diags = compilation.getAllDiagnostics();
++    REQUIRE(diags.size() == 2);
++    CHECK(diags[0].code == diag::ExpectedClassPropertyName);
++    CHECK(diags[1].code == diag::ExpectedClassPropertyName);
++}
++
+ TEST_CASE("Scope randomize rand variables") {
+     auto tree = SyntaxTree::fromText(R"(
+ module m;
+diff --git a/tests/unittests/ast/ExpressionTests.cpp b/tests/unittests/ast/ExpressionTests.cpp
+index 444eb7a05..6b3c4b868 100644
+--- a/tests/unittests/ast/ExpressionTests.cpp
++++ b/tests/unittests/ast/ExpressionTests.cpp
+@@ -4262,6 +4262,82 @@ endmodule
+     CHECK(diags[2].code == diag::ConcatWithStringInt);
+ }
+ 
++TEST_CASE("String concatenation integral conversion compat flag") {
++    auto tree = SyntaxTree::fromText(R"(
++function automatic string append_byte(string text, byte character);
++    return {text, character};
++endfunction
++
++function automatic string append_index(string text, string suffix);
++    return {text, suffix[0]};
++endfunction
++
++function automatic string append_packed(string text, logic [31:0] characters);
++    return {text, characters};
++endfunction
++
++function automatic string append_unsigned(string text, byte unsigned character);
++    return {text, character};
++endfunction
++
++$static_assert(append_byte("abc", 8'h64) == "abcd");
++$static_assert(append_byte("abc", 8'h00) == "abc");
++$static_assert(append_byte("abc", byte'(8'hff)) == {"abc", string'(8'hff)});
++$static_assert(append_unsigned("abc", 8'hff) == {"abc", string'(8'hff)});
++$static_assert(append_index("abc", "def") == "abcd");
++$static_assert(append_packed("a", 32'h00620063) == "abc");
++$static_assert({string'("a"), 12'h162} == {"a", string'(12'h162)});
++$static_assert({8'h61, string'("b"), 8'h63} == "abc");
++$static_assert({8'h61, 8'h62} == 16'h6162);
++)");
++
++    SECTION("Strict mode still diagnoses integral operands") {
++        Compilation compilation;
++        compilation.addSyntaxTree(tree);
++        auto& diags = compilation.getAllDiagnostics();
++        REQUIRE(diags.size() == 7);
++        for (auto& diag : diags)
++            CHECK(diag.code == diag::ConcatWithStringInt);
++    }
++
++    SECTION("Relaxed mode evaluates operands as string casts") {
++        CompilationOptions options;
++        options.flags |= CompilationFlags::RelaxStringConversions;
++        Compilation compilation(options);
++        compilation.addSyntaxTree(tree);
++        NO_COMPILATION_ERRORS;
++    }
++}
++
++TEST_CASE("String concatenation compat flag rejects non-integral operands") {
++    auto tree = SyntaxTree::fromText(R"(
++module m;
++    string s;
++    event e;
++    real r;
++    byte a[];
++    initial begin
++        s = {s, e};
++        s = {s, r};
++        s = {s, a};
++        s = {s, {0{8'h62}}};
++    end
++endmodule
++)");
++
++    CompilationOptions options;
++    options.flags |= CompilationFlags::RelaxStringConversions;
++    Compilation compilation(options);
++    compilation.addSyntaxTree(tree);
++
++    auto& diags = compilation.getAllDiagnostics();
++    REQUIRE(diags.size() == 4);
++    CHECK(diags[0].code == diag::BadConcatExpression);
++    CHECK(diags[1].code == diag::BadConcatExpression);
++    CHECK(diags[2].code == diag::BadConcatExpression);
++    CHECK(diags[3].code == diag::ConcatWithStringInt);
++}
++
+ TEST_CASE("No range select ordering error for single bit value") {
+     auto tree = SyntaxTree::fromText(R"(
+ module m;
+diff --git a/tests/unittests/parsing/DiagnosticTests.cpp b/tests/unittests/parsing/DiagnosticTests.cpp
+index 322dabb6a..25e9c71a1 100644
+--- a/tests/unittests/parsing/DiagnosticTests.cpp
++++ b/tests/unittests/parsing/DiagnosticTests.cpp
+@@ -3,6 +3,7 @@
+ 
+ #include "Test.h"
+ 
++#include "slang/ast/types/TypePrinter.h"
+ #include "slang/diagnostics/DiagnosticClient.h"
+ #include "slang/diagnostics/JsonDiagnosticClient.h"
+ #include "slang/diagnostics/TextDiagnosticClient.h"
+@@ -1043,3 +1044,140 @@ TEST_CASE("DiagnosticEngine::setBaselineSeverity -- per-unit path") {
+     CHECK(diags2.empty());
+     CHECK(engine2.getSeverity(diag::UnknownSystemName, loc) == DiagnosticSeverity::Ignored);
+ }
++
++TEST_CASE("Diagnostic settings snapshots own global settings") {
++    Compilation initializeBuiltins;
++    DiagnosticEngine::SettingsSnapshot snapshot;
++    {
++        SourceManager sourceManager;
++        DiagnosticEngine engine(sourceManager);
++        engine.setSeverity(diag::ExpectedClosingQuote, DiagnosticSeverity::Warning);
++        engine.setBaselineSeverity(diag::UnknownSystemName, DiagnosticSeverity::Error);
++        engine.setMessage(diag::ExpectedClosingQuote, "snapshot message");
++        engine.setErrorLimit(3);
++        engine.setIgnoreAllWarnings(true);
++        engine.setIgnoreAllNotes(true);
++        engine.setWarningsAsErrors(true);
++        engine.setErrorsAsFatal(true);
++        engine.setFatalsAsErrors(true);
++        REQUIRE(!engine.addIgnorePaths(".../generated/..."));
++        REQUIRE(!engine.addIgnoreMacroPaths(".../macros/..."));
++        snapshot = engine.captureSettings();
++        engine.setMessage(diag::ExpectedClosingQuote, "changed after capture");
++        engine.clearMappings();
++    }
++
++    SourceManager freshSourceManager;
++    DiagnosticEngine replay(freshSourceManager);
++    replay.applySettings(snapshot);
++    CHECK(replay.getMessage(diag::ExpectedClosingQuote) == "snapshot message");
++    CHECK(replay.getSeverity(diag::ExpectedClosingQuote, {}) == DiagnosticSeverity::Warning);
++    CHECK(replay.getSeverity(diag::UnknownSystemName, {}) == DiagnosticSeverity::Error);
++    CHECK(replay.getSeverity(diag::RealLiteralUnderflow, {}) == DiagnosticSeverity::Ignored);
++    CHECK(replay.getSeverity(diag::NoteImportedFrom, {}) == DiagnosticSeverity::Ignored);
++    CHECK(replay.getSeverity(diag::DotOnType, {}) == DiagnosticSeverity::Fatal);
++    CHECK(replay.getNumErrors() == 0);
++    CHECK(replay.getNumWarnings() == 0);
++
++    auto copied = replay.captureSettings();
++    CHECK(copied.baselineSeverityTable.at(diag::UnknownSystemName) == DiagnosticSeverity::Error);
++    CHECK(copied.ignoreWarnPatterns == snapshot.ignoreWarnPatterns);
++    CHECK(copied.ignoreMacroWarnPatterns == snapshot.ignoreMacroWarnPatterns);
++    CHECK(copied.errorLimit == 3);
++    CHECK(copied.ignoreAllWarnings);
++    CHECK(copied.ignoreAllNotes);
++    CHECK(copied.warningsAsErrors);
++    CHECK(copied.errorsAsFatal);
++    CHECK(copied.fatalsAsErrors);
++    CHECK(copied.useBuiltinTypeFormatter);
++    CHECK(copied.useBuiltinSymbolPath);
++
++    // The replay formatter must not alias the process-wide mutable formatter.
++    DiagnosticEngine other(freshSourceManager);
++    CHECK(replay.getFormatters().at(SLANG_TYPEOF(const Type*)) !=
++          other.getFormatters().at(SLANG_TYPEOF(const Type*)));
++
++    // Subsequent warning options still consult the preserved baseline table.
++    REQUIRE(replay.setWarningOptions(std::vector{"none"s}).empty());
++    CHECK(replay.getSeverity(diag::UnknownSystemName, {}) == DiagnosticSeverity::Error);
++}
++
++TEST_CASE("Diagnostic settings snapshots reject unsupported policies") {
++    Compilation initializeBuiltins;
++    SourceManager sourceManager;
++    DiagnosticEngine engine(sourceManager);
++
++    SECTION("waiver manager") {
++        engine.setWaiverManager(std::make_shared<WaiverManager>());
++        CHECK_THROWS_WITH(engine.captureSettings(),
++                          "Diagnostic settings snapshot does not support waiver managers");
++    }
++    SECTION("per-buffer warnings") {
++        auto buffer = sourceManager.assignText("snapshot.sv", "");
++        flat_hash_map<BufferID, std::vector<std::string>> options;
++        options[buffer.id] = {"none"s};
++        REQUIRE(engine.setBufferWarningOptions(options).empty());
++        CHECK_THROWS_WITH(
++            engine.captureSettings(),
++            "Diagnostic settings snapshot does not support per-buffer warning options");
++    }
++    SECTION("custom symbol callback") {
++        engine.setSymbolPathCB([](const Symbol&) { return "custom"s; });
++        CHECK_THROWS_WITH(
++            engine.captureSettings(),
++            "Diagnostic settings snapshot does not support custom symbol path callbacks");
++    }
++    SECTION("custom formatter") {
++        engine.setFormatter<const Type*>(std::make_shared<TypeArgFormatter>());
++        CHECK_THROWS_WITH(
++            engine.captureSettings(),
++            "Diagnostic settings snapshot does not support custom argument formatters");
++    }
++    SECTION("modified builtin formatter") {
++        // First detach from the process-wide default formatter.
++        engine.applySettings(engine.captureSettings());
++        auto formatter = std::static_pointer_cast<TypeArgFormatter>(
++            engine.getFormatters().at(SLANG_TYPEOF(const Type*)));
++        formatter->setOptions(TypePrintingOptions{});
++        CHECK_THROWS_WITH(
++            engine.captureSettings(),
++            "Diagnostic settings snapshot does not support custom type formatter options");
++    }
++}
++
++TEST_CASE("Diagnostic settings snapshots rebuild pragma mappings") {
++    constexpr auto text = R"(
++`pragma diagnostic ignore="empty-member"
++module m;
++    ;
++endmodule
++)";
++    DiagnosticEngine::SettingsSnapshot snapshot;
++    {
++        SourceManager sourceManager;
++        auto buffer = sourceManager.assignText("source", text);
++        auto tree = SyntaxTree::fromBuffer(buffer, sourceManager);
++        DiagnosticEngine engine(sourceManager);
++        REQUIRE(engine.setMappingsFromPragmas().empty());
++        REQUIRE(tree->diagnostics().empty());
++        SourceLocation location(buffer.id, std::string_view(text).find("    ;") + 4);
++        CHECK(engine.getSeverity(diag::EmptyMember, location) == DiagnosticSeverity::Ignored);
++        snapshot = engine.captureSettings();
++    }
++
++    SourceManager freshSourceManager;
++    freshSourceManager.assignText("shift-buffer-id.sv", "");
++    auto buffer = freshSourceManager.assignText("source", text);
++    auto tree = SyntaxTree::fromBuffer(buffer, freshSourceManager);
++    DiagnosticEngine replay(freshSourceManager);
++    replay.applySettings(snapshot);
++    REQUIRE(tree->diagnostics().empty());
++    SourceLocation location(buffer.id, std::string_view(text).find("    ;") + 4);
++    CHECK(replay.getSeverity(diag::EmptyMember, location) == DiagnosticSeverity::Warning);
++    REQUIRE(replay.setMappingsFromPragmas().empty());
++    CHECK(replay.getSeverity(diag::EmptyMember, location) == DiagnosticSeverity::Ignored);
++
++    // Applying again clears previous mappings even when reusing an engine.
++    replay.applySettings(snapshot);
++    CHECK(replay.getSeverity(diag::EmptyMember, location) == DiagnosticSeverity::Warning);
++}
+diff --git a/include/slang/util/CwdCoordinator.h b/include/slang/util/CwdCoordinator.h
+new file mode 100644
+index 000000000..9e2d67cfc
+--- /dev/null
++++ b/include/slang/util/CwdCoordinator.h
+@@ -0,0 +1,33 @@
++// SPDX-License-Identifier: MIT
++#pragma once
++#include <atomic>
++#include <filesystem>
++#include <mutex>
++#include "slang/util/Util.h"
++namespace slang {
++/// Coordinates internal command-file cwd writers with trusted analysis phases.
++/// Does not protect the filesystem namespace against other processes.
++class SLANG_EXPORT CwdCoordinator {
++public:
++    class SLANG_EXPORT WriteLease {
++    public:
++        WriteLease();
++    private:
++        std::unique_lock<std::recursive_mutex> lock;
++    };
++    class SLANG_EXPORT AnalysisLease {
++    public:
++        AnalysisLease();
++        ~AnalysisLease();
++        AnalysisLease(const AnalysisLease&) = delete;
++        AnalysisLease& operator=(const AnalysisLease&) = delete;
++    private:
++        std::unique_lock<std::recursive_mutex> lock;
++    };
++    static void setCurrentPath(const std::filesystem::path& path, std::error_code& ec);
++private:
++    static std::recursive_mutex mutex;
++    static std::atomic<unsigned> activeAnalyses;
++    static thread_local unsigned localAnalyses;
++};
++} // namespace slang
+diff --git a/source/util/CwdCoordinator.cpp b/source/util/CwdCoordinator.cpp
+new file mode 100644
+index 000000000..f5fd85238
+--- /dev/null
++++ b/source/util/CwdCoordinator.cpp
+@@ -0,0 +1,34 @@
++// SPDX-License-Identifier: MIT
++#include "slang/util/CwdCoordinator.h"
++#include <stdexcept>
++namespace slang {
++std::recursive_mutex CwdCoordinator::mutex;
++std::atomic<unsigned> CwdCoordinator::activeAnalyses{0};
++thread_local unsigned CwdCoordinator::localAnalyses = 0;
++CwdCoordinator::WriteLease::WriteLease() : lock(mutex, std::defer_lock) {
++    // Fail before waiting: a parser callback can run on a pool worker while the
++    // phase owner is waiting for that worker. Waiting here would deadlock.
++    if (activeAnalyses.load())
++        SLANG_THROW(std::runtime_error("internal cwd mutation during fast analysis is forbidden"));
++    lock.lock();
++    if (activeAnalyses.load())
++        SLANG_THROW(std::runtime_error("internal cwd mutation during fast analysis is forbidden"));
++}
++CwdCoordinator::AnalysisLease::AnalysisLease() : lock(mutex, std::defer_lock) {
++    // Workers borrow an existing phase, never recursively acquire it. Reject
++    // accidental acquisition before locking so owner->pool waits cannot cycle.
++    if (activeAnalyses.load() && !localAnalyses)
++        SLANG_THROW(std::runtime_error("fast analysis phases must be owned by one state thread; workers borrow the phase"));
++    lock.lock();
++    ++localAnalyses;
++    ++activeAnalyses;
++}
++CwdCoordinator::AnalysisLease::~AnalysisLease() {
++    --localAnalyses;
++    --activeAnalyses;
++}
++void CwdCoordinator::setCurrentPath(const std::filesystem::path& path, std::error_code& ec) {
++    WriteLease lease;
++    std::filesystem::current_path(path, ec);
++}
++} // namespace slang
 diff --git a/tests/unittests/SourceSnapshotTests.cpp b/tests/unittests/SourceSnapshotTests.cpp
 new file mode 100644
-index 0000000000000000000000000000000000000000..481f13d56fae5a8cf0f5611c257cfcc7a5ef6319
+index 000000000..481f13d56
 --- /dev/null
 +++ b/tests/unittests/SourceSnapshotTests.cpp
 @@ -0,0 +1,409 @@
@@ -2773,206 +3852,9 @@ index 0000000000000000000000000000000000000000..481f13d56fae5a8cf0f5611c257cfcc7
 +    CHECK_THROWS(original.enableSnapshotRecording(true));
 +    CHECK_THROWS(original.captureSnapshot(std::vector{root.id}));
 +}
-diff --git a/tests/unittests/ast/ClassTests.cpp b/tests/unittests/ast/ClassTests.cpp
-index 2353d21435f167a21bb448971b690d482d541bf5..72709888ec652c537fcd6ed9d2314d9092a147a9 100644
---- a/tests/unittests/ast/ClassTests.cpp
-+++ b/tests/unittests/ast/ClassTests.cpp
-@@ -2199,6 +2199,105 @@ endclass
-     CHECK(diags[10].code == diag::NameListWithScopeRandomize);
- }
- 
-+TEST_CASE("Class randomize accepts inherited properties") {
-+    auto tree = SyntaxTree::fromText(R"(
-+class Base #(type T = int);
-+    rand T inherited;
-+    protected rand int protected_value;
-+    local rand int local_value;
-+    int non_rand;
-+
-+    function void run_base();
-+        void'(this.randomize(local_value));
-+    endfunction
-+endclass
-+
-+class Middle extends Base #(byte);
-+endclass
-+
-+class Derived extends Middle;
-+    rand int own_value;
-+    function void run();
-+        void'(this.randomize(inherited, protected_value, non_rand, own_value));
-+        void'(randomize(inherited));
-+        void'(this.randomize(inherited) with { inherited > 0; });
-+        void'(this.randomize(null));
-+    endfunction
-+endclass
-+
-+module m;
-+    Derived d;
-+    initial void'(d.randomize(inherited, non_rand));
-+endmodule
-+)");
-+
-+    Compilation compilation;
-+    compilation.addSyntaxTree(tree);
-+    NO_COMPILATION_ERRORS;
-+}
-+
-+TEST_CASE("Class randomize inherited property restrictions") {
-+    auto tree = SyntaxTree::fromText(R"(
-+class Base;
-+    rand int inherited;
-+    protected rand int protected_value;
-+    local rand int local_value;
-+endclass
-+
-+class Derived extends Base;
-+    function void run();
-+        void'(this.randomize(local_value));
-+        void'(this.randomize(inherited[0]));
-+        void'(this.randomize(this.inherited));
-+    endfunction
-+endclass
-+
-+class Unrelated;
-+    rand int other_value;
-+    Derived d;
-+    function void run();
-+        void'(d.randomize(other_value));
-+        void'(d.randomize(protected_value));
-+    endfunction
-+endclass
-+)");
-+
-+    Compilation compilation;
-+    compilation.addSyntaxTree(tree);
-+
-+    auto& diags = compilation.getAllDiagnostics();
-+    REQUIRE(diags.size() == 5);
-+    CHECK(diags[0].code == diag::LocalMemberAccess);
-+    CHECK(diags[1].code == diag::ExpectedClassPropertyName);
-+    CHECK(diags[2].code == diag::ExpectedClassPropertyName);
-+    CHECK(diags[3].code == diag::ExpectedClassPropertyName);
-+    CHECK(diags[4].code == diag::ProtectedMemberAccess);
-+}
-+
-+TEST_CASE("Class randomize rejects covergroup option properties") {
-+    auto tree = SyntaxTree::fromText(R"(
-+class C;
-+    rand int x;
-+endclass
-+module m;
-+    C d;
-+    covergroup cg;
-+        option.weight = d.randomize(option);
-+        option.goal = d.randomize(type_option);
-+    endgroup
-+    cg g = new;
-+endmodule
-+)");
-+
-+    Compilation compilation;
-+    compilation.addSyntaxTree(tree);
-+
-+    auto& diags = compilation.getAllDiagnostics();
-+    REQUIRE(diags.size() == 2);
-+    CHECK(diags[0].code == diag::ExpectedClassPropertyName);
-+    CHECK(diags[1].code == diag::ExpectedClassPropertyName);
-+}
-+
- TEST_CASE("Scope randomize rand variables") {
-     auto tree = SyntaxTree::fromText(R"(
- module m;
-diff --git a/tests/unittests/ast/ExpressionTests.cpp b/tests/unittests/ast/ExpressionTests.cpp
-index 444eb7a0567e5a4db447035d4cb7d9b886b8e6df..6b3c4b8683fd0fad3f76d66785d10671bb2b4fdd 100644
---- a/tests/unittests/ast/ExpressionTests.cpp
-+++ b/tests/unittests/ast/ExpressionTests.cpp
-@@ -4262,6 +4262,82 @@ endmodule
-     CHECK(diags[2].code == diag::ConcatWithStringInt);
- }
- 
-+TEST_CASE("String concatenation integral conversion compat flag") {
-+    auto tree = SyntaxTree::fromText(R"(
-+function automatic string append_byte(string text, byte character);
-+    return {text, character};
-+endfunction
-+
-+function automatic string append_index(string text, string suffix);
-+    return {text, suffix[0]};
-+endfunction
-+
-+function automatic string append_packed(string text, logic [31:0] characters);
-+    return {text, characters};
-+endfunction
-+
-+function automatic string append_unsigned(string text, byte unsigned character);
-+    return {text, character};
-+endfunction
-+
-+$static_assert(append_byte("abc", 8'h64) == "abcd");
-+$static_assert(append_byte("abc", 8'h00) == "abc");
-+$static_assert(append_byte("abc", byte'(8'hff)) == {"abc", string'(8'hff)});
-+$static_assert(append_unsigned("abc", 8'hff) == {"abc", string'(8'hff)});
-+$static_assert(append_index("abc", "def") == "abcd");
-+$static_assert(append_packed("a", 32'h00620063) == "abc");
-+$static_assert({string'("a"), 12'h162} == {"a", string'(12'h162)});
-+$static_assert({8'h61, string'("b"), 8'h63} == "abc");
-+$static_assert({8'h61, 8'h62} == 16'h6162);
-+)");
-+
-+    SECTION("Strict mode still diagnoses integral operands") {
-+        Compilation compilation;
-+        compilation.addSyntaxTree(tree);
-+        auto& diags = compilation.getAllDiagnostics();
-+        REQUIRE(diags.size() == 7);
-+        for (auto& diag : diags)
-+            CHECK(diag.code == diag::ConcatWithStringInt);
-+    }
-+
-+    SECTION("Relaxed mode evaluates operands as string casts") {
-+        CompilationOptions options;
-+        options.flags |= CompilationFlags::RelaxStringConversions;
-+        Compilation compilation(options);
-+        compilation.addSyntaxTree(tree);
-+        NO_COMPILATION_ERRORS;
-+    }
-+}
-+
-+TEST_CASE("String concatenation compat flag rejects non-integral operands") {
-+    auto tree = SyntaxTree::fromText(R"(
-+module m;
-+    string s;
-+    event e;
-+    real r;
-+    byte a[];
-+    initial begin
-+        s = {s, e};
-+        s = {s, r};
-+        s = {s, a};
-+        s = {s, {0{8'h62}}};
-+    end
-+endmodule
-+)");
-+
-+    CompilationOptions options;
-+    options.flags |= CompilationFlags::RelaxStringConversions;
-+    Compilation compilation(options);
-+    compilation.addSyntaxTree(tree);
-+
-+    auto& diags = compilation.getAllDiagnostics();
-+    REQUIRE(diags.size() == 4);
-+    CHECK(diags[0].code == diag::BadConcatExpression);
-+    CHECK(diags[1].code == diag::BadConcatExpression);
-+    CHECK(diags[2].code == diag::BadConcatExpression);
-+    CHECK(diags[3].code == diag::ConcatWithStringInt);
-+}
-+
- TEST_CASE("No range select ordering error for single bit value") {
-     auto tree = SyntaxTree::fromText(R"(
- module m;
 diff --git a/tests/unittests/ast/PackageAnalysisTests.cpp b/tests/unittests/ast/PackageAnalysisTests.cpp
 new file mode 100644
-index 0000000000000000000000000000000000000000..0243e36ea4091617b7b471e13c507f875b14eda4
+index 000000000..0243e36ea
 --- /dev/null
 +++ b/tests/unittests/ast/PackageAnalysisTests.cpp
 @@ -0,0 +1,282 @@
@@ -3257,157 +4139,4 @@ index 0000000000000000000000000000000000000000..0243e36ea4091617b7b471e13c507f87
 +                   d.code == diag::CouldNotResolveHierarchicalPath;
 +        }));
 +    }
-+}
-diff --git a/tests/unittests/parsing/DiagnosticTests.cpp b/tests/unittests/parsing/DiagnosticTests.cpp
-index 322dabb6a2b6442a0a22db9e3e46fce53ab16dfd..25e9c71a19209139472ef915922a498aa6a3963a 100644
---- a/tests/unittests/parsing/DiagnosticTests.cpp
-+++ b/tests/unittests/parsing/DiagnosticTests.cpp
-@@ -3,6 +3,7 @@
- 
- #include "Test.h"
- 
-+#include "slang/ast/types/TypePrinter.h"
- #include "slang/diagnostics/DiagnosticClient.h"
- #include "slang/diagnostics/JsonDiagnosticClient.h"
- #include "slang/diagnostics/TextDiagnosticClient.h"
-@@ -1043,3 +1044,140 @@ TEST_CASE("DiagnosticEngine::setBaselineSeverity -- per-unit path") {
-     CHECK(diags2.empty());
-     CHECK(engine2.getSeverity(diag::UnknownSystemName, loc) == DiagnosticSeverity::Ignored);
- }
-+
-+TEST_CASE("Diagnostic settings snapshots own global settings") {
-+    Compilation initializeBuiltins;
-+    DiagnosticEngine::SettingsSnapshot snapshot;
-+    {
-+        SourceManager sourceManager;
-+        DiagnosticEngine engine(sourceManager);
-+        engine.setSeverity(diag::ExpectedClosingQuote, DiagnosticSeverity::Warning);
-+        engine.setBaselineSeverity(diag::UnknownSystemName, DiagnosticSeverity::Error);
-+        engine.setMessage(diag::ExpectedClosingQuote, "snapshot message");
-+        engine.setErrorLimit(3);
-+        engine.setIgnoreAllWarnings(true);
-+        engine.setIgnoreAllNotes(true);
-+        engine.setWarningsAsErrors(true);
-+        engine.setErrorsAsFatal(true);
-+        engine.setFatalsAsErrors(true);
-+        REQUIRE(!engine.addIgnorePaths(".../generated/..."));
-+        REQUIRE(!engine.addIgnoreMacroPaths(".../macros/..."));
-+        snapshot = engine.captureSettings();
-+        engine.setMessage(diag::ExpectedClosingQuote, "changed after capture");
-+        engine.clearMappings();
-+    }
-+
-+    SourceManager freshSourceManager;
-+    DiagnosticEngine replay(freshSourceManager);
-+    replay.applySettings(snapshot);
-+    CHECK(replay.getMessage(diag::ExpectedClosingQuote) == "snapshot message");
-+    CHECK(replay.getSeverity(diag::ExpectedClosingQuote, {}) == DiagnosticSeverity::Warning);
-+    CHECK(replay.getSeverity(diag::UnknownSystemName, {}) == DiagnosticSeverity::Error);
-+    CHECK(replay.getSeverity(diag::RealLiteralUnderflow, {}) == DiagnosticSeverity::Ignored);
-+    CHECK(replay.getSeverity(diag::NoteImportedFrom, {}) == DiagnosticSeverity::Ignored);
-+    CHECK(replay.getSeverity(diag::DotOnType, {}) == DiagnosticSeverity::Fatal);
-+    CHECK(replay.getNumErrors() == 0);
-+    CHECK(replay.getNumWarnings() == 0);
-+
-+    auto copied = replay.captureSettings();
-+    CHECK(copied.baselineSeverityTable.at(diag::UnknownSystemName) == DiagnosticSeverity::Error);
-+    CHECK(copied.ignoreWarnPatterns == snapshot.ignoreWarnPatterns);
-+    CHECK(copied.ignoreMacroWarnPatterns == snapshot.ignoreMacroWarnPatterns);
-+    CHECK(copied.errorLimit == 3);
-+    CHECK(copied.ignoreAllWarnings);
-+    CHECK(copied.ignoreAllNotes);
-+    CHECK(copied.warningsAsErrors);
-+    CHECK(copied.errorsAsFatal);
-+    CHECK(copied.fatalsAsErrors);
-+    CHECK(copied.useBuiltinTypeFormatter);
-+    CHECK(copied.useBuiltinSymbolPath);
-+
-+    // The replay formatter must not alias the process-wide mutable formatter.
-+    DiagnosticEngine other(freshSourceManager);
-+    CHECK(replay.getFormatters().at(SLANG_TYPEOF(const Type*)) !=
-+          other.getFormatters().at(SLANG_TYPEOF(const Type*)));
-+
-+    // Subsequent warning options still consult the preserved baseline table.
-+    REQUIRE(replay.setWarningOptions(std::vector{"none"s}).empty());
-+    CHECK(replay.getSeverity(diag::UnknownSystemName, {}) == DiagnosticSeverity::Error);
-+}
-+
-+TEST_CASE("Diagnostic settings snapshots reject unsupported policies") {
-+    Compilation initializeBuiltins;
-+    SourceManager sourceManager;
-+    DiagnosticEngine engine(sourceManager);
-+
-+    SECTION("waiver manager") {
-+        engine.setWaiverManager(std::make_shared<WaiverManager>());
-+        CHECK_THROWS_WITH(engine.captureSettings(),
-+                          "Diagnostic settings snapshot does not support waiver managers");
-+    }
-+    SECTION("per-buffer warnings") {
-+        auto buffer = sourceManager.assignText("snapshot.sv", "");
-+        flat_hash_map<BufferID, std::vector<std::string>> options;
-+        options[buffer.id] = {"none"s};
-+        REQUIRE(engine.setBufferWarningOptions(options).empty());
-+        CHECK_THROWS_WITH(
-+            engine.captureSettings(),
-+            "Diagnostic settings snapshot does not support per-buffer warning options");
-+    }
-+    SECTION("custom symbol callback") {
-+        engine.setSymbolPathCB([](const Symbol&) { return "custom"s; });
-+        CHECK_THROWS_WITH(
-+            engine.captureSettings(),
-+            "Diagnostic settings snapshot does not support custom symbol path callbacks");
-+    }
-+    SECTION("custom formatter") {
-+        engine.setFormatter<const Type*>(std::make_shared<TypeArgFormatter>());
-+        CHECK_THROWS_WITH(
-+            engine.captureSettings(),
-+            "Diagnostic settings snapshot does not support custom argument formatters");
-+    }
-+    SECTION("modified builtin formatter") {
-+        // First detach from the process-wide default formatter.
-+        engine.applySettings(engine.captureSettings());
-+        auto formatter = std::static_pointer_cast<TypeArgFormatter>(
-+            engine.getFormatters().at(SLANG_TYPEOF(const Type*)));
-+        formatter->setOptions(TypePrintingOptions{});
-+        CHECK_THROWS_WITH(
-+            engine.captureSettings(),
-+            "Diagnostic settings snapshot does not support custom type formatter options");
-+    }
-+}
-+
-+TEST_CASE("Diagnostic settings snapshots rebuild pragma mappings") {
-+    constexpr auto text = R"(
-+`pragma diagnostic ignore="empty-member"
-+module m;
-+    ;
-+endmodule
-+)";
-+    DiagnosticEngine::SettingsSnapshot snapshot;
-+    {
-+        SourceManager sourceManager;
-+        auto buffer = sourceManager.assignText("source", text);
-+        auto tree = SyntaxTree::fromBuffer(buffer, sourceManager);
-+        DiagnosticEngine engine(sourceManager);
-+        REQUIRE(engine.setMappingsFromPragmas().empty());
-+        REQUIRE(tree->diagnostics().empty());
-+        SourceLocation location(buffer.id, std::string_view(text).find("    ;") + 4);
-+        CHECK(engine.getSeverity(diag::EmptyMember, location) == DiagnosticSeverity::Ignored);
-+        snapshot = engine.captureSettings();
-+    }
-+
-+    SourceManager freshSourceManager;
-+    freshSourceManager.assignText("shift-buffer-id.sv", "");
-+    auto buffer = freshSourceManager.assignText("source", text);
-+    auto tree = SyntaxTree::fromBuffer(buffer, freshSourceManager);
-+    DiagnosticEngine replay(freshSourceManager);
-+    replay.applySettings(snapshot);
-+    REQUIRE(tree->diagnostics().empty());
-+    SourceLocation location(buffer.id, std::string_view(text).find("    ;") + 4);
-+    CHECK(replay.getSeverity(diag::EmptyMember, location) == DiagnosticSeverity::Warning);
-+    REQUIRE(replay.setMappingsFromPragmas().empty());
-+    CHECK(replay.getSeverity(diag::EmptyMember, location) == DiagnosticSeverity::Ignored);
-+
-+    // Applying again clears previous mappings even when reusing an engine.
-+    replay.applySettings(snapshot);
-+    CHECK(replay.getSeverity(diag::EmptyMember, location) == DiagnosticSeverity::Warning);
 +}

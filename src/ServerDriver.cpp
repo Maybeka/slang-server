@@ -198,6 +198,7 @@ bool ServerDriver::parseAndLoadSources(const std::vector<std::string>& buildfile
     diagEngine.setIgnoreAllWarnings(false);
     diagEngine.setIgnoreAllNotes(false);
 
+    driver.options.captureUvmPrefix = isUvmPrefixCacheEnabled();
     options = driver.createOptionBag();
     options.set(driver.getAnalysisOptions());
     // Native command files can change cwd and install include paths. Only the
@@ -417,7 +418,16 @@ void ServerDriver::publishCompilationDiagnostics(const URI* priorityUri) {
         diagClient->pushDiags();
 }
 
-void ServerDriver::copyOpenDocumentsFrom(const ServerDriver* oldDriver) {
+void ServerDriver::prepareForContextRetirement() {
+    completions.invalidateParsedLibraryCache();
+    for (auto& [uri, doc] : docs)
+        doc->releaseSemanticCaches();
+    for (auto& doc : m_configuredUnits)
+        doc->releaseSemanticCaches();
+}
+
+void ServerDriver::copyOpenDocumentsFrom(const ServerDriver* oldDriver,
+                                         bool deferConfiguredDiagnostics) {
     if (!oldDriver)
         return;
 
@@ -434,20 +444,20 @@ void ServerDriver::copyOpenDocumentsFrom(const ServerDriver* oldDriver) {
         // openDocument expects no \0
         auto text = docIt->second->getText();
         text.remove_suffix(1);
-        openDocument(uri, text, docIt->second->getVersion());
+        openDocument(uri, text, docIt->second->getVersion(), deferConfiguredDiagnostics);
     }
 }
 
 std::unique_ptr<ServerDriver> ServerDriver::createForExplore(
     Indexer& indexer, SlangLspClient& client, const Config& config,
     std::optional<std::string_view> workspaceFolder, const ServerDriver* oldDriver,
-    bool requireValidConfig) {
+    bool requireValidConfig, bool deferOpenDiagnostics) {
     auto newDriver = std::make_unique<ServerDriver>(indexer, client, config,
                                                     std::vector<std::string>{}, workspaceFolder,
                                                     requireValidConfig, oldDriver);
     if (requireValidConfig && !newDriver->m_configLoaded)
         return nullptr;
-    newDriver->copyOpenDocumentsFrom(oldDriver);
+    newDriver->copyOpenDocumentsFrom(oldDriver, deferOpenDiagnostics);
     return newDriver;
 }
 
@@ -484,6 +494,7 @@ std::unique_ptr<ServerDriver> ServerDriver::createFromFileLists(
 
 void ServerDriver::openDocument(const URI& uri, const std::string_view text,
                                 std::optional<int> version, bool deferConfiguredDiagnostics) {
+    completions.invalidateParsedLibraryCache();
     ++m_snapshotRevision;
     // An explicitly opened package takes precedence over automatic candidate discovery.
     if (m_automaticOwnerRoots.erase(uri))
@@ -728,6 +739,7 @@ void ServerDriver::runPendingDiagnostics(const lsp::RequestContext& ctx) {
 }
 
 void ServerDriver::closeDocument(const URI& uri) {
+    completions.invalidateParsedLibraryCache();
     ++m_snapshotRevision;
     if (isExplorePreinclude(uri))
         m_publishedPreincludeRevision.reset();
@@ -767,6 +779,7 @@ void ServerDriver::reloadDocument(const URI& uri) {
 
 void ServerDriver::onWorkspaceDidChangeWatchedFiles(
     const lsp::DidChangeWatchedFilesParams& params) {
+    completions.invalidateParsedLibraryCache();
     ++m_snapshotRevision;
     bool preincludeChanged = false;
     std::vector<std::shared_ptr<SlangDoc>> updatedDocs;

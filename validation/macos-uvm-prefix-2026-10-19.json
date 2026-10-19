@@ -1,0 +1,4871 @@
+{
+  "schemaVersion": 1,
+  "scope": "Mac real UVM parsed-prefix engineering acceptance; Config off/on comparison within the same frozen ordinary binary; static language-server workloads, not simulator or production-design acceptance",
+  "identity": {
+    "parentCommit": "73f82dc4551b4ce9470b92be2d0c4e14ecfbcdce",
+    "platform": "macOS-27.0.1-arm64-arm-64bit",
+    "candidate": {
+      "binary": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/uvm-engineering-2026-10-19/product-next/slang-server-v4",
+      "sha256": "89145d3b115efec1f5b4528c09ae6755d8a0da82a1db665a87af3e24d34e8de7",
+      "status": "built; transparent-wrapper warning/error distinction"
+    },
+    "originalNativeSha256": "83ee074544b350b523d4c2d63782d213312a8e46963e097f02e7f36390ffe44b",
+    "sdk": {
+      "base": "151a801ceaf6faf23d79a42d210ff67e50eb4660",
+      "patchSha256": "1cefe45c27666d00d79de1838519fd9eb5bedd0d56b74495b8bc96f789595f5e",
+      "filesVerified": 708,
+      "mismatches": [],
+      "scope": "Fresh SDK git archive, clean patch check and apply, then all retained file hashes; no build/test claim"
+    },
+    "productSourceSha256": {
+      "clients/vscode/resources/config.schema.json": "7cbb05d55aea2a190bf95dc0c95eb68adb41789714242e9d48a1f00bc1da233b",
+      "clients/vscode/src/config.gen.ts": "2a45c3dfb6ff2b0acf75528b75a507982c554f31df2a51340fc2c7d331ffd9c9",
+      "include/Config.h": "7fab66e1ff3f3fff7dff65ea2227a69330ccde19412e02bfdc571d83dc53bec1",
+      "include/ServerDriver.h": "2d284fd898e410ca318835a3d2b469b4ddb1524875b434fad568c2f67a2c2afd",
+      "include/SlangServer.h": "e72588110d80a0bf51c95d3fe9ed51d672f1512efd75c4b442a116b93fdc92e6",
+      "include/completions/CompletionContext.h": "241dfd5e89c56ef6c9471a3958a2aa0eb86c2154ebf3689b7164d943f7740346",
+      "include/completions/CompletionDispatch.h": "60d14203f8bce419d1db95c054a537e848c102c3e94d4f0cfb26290aad8eb56f",
+      "include/completions/MemberCompletions.h": "917915f500759d7535eae7d4338502c893dd46dd42c4e9e3d383feb872b9a8bf",
+      "include/diagnostics/DiagnosticSnapshotCodec.h": "aab380358592122e9370efd5077d23db06ea79f403be7aa7c894411266fa5058",
+      "include/document/SlangDoc.h": "acfee75fb085a4153ce9920fc63a3d6740b2e59d14447b078f46d78c72caf0a3",
+      "restoration/main-sdk.json": "8069f1ebddc3c93cff2b1a8e4af9b52acfb847c1266a11914cf7cbfe7c0cf2e6",
+      "restoration/slang.patch": "1cefe45c27666d00d79de1838519fd9eb5bedd0d56b74495b8bc96f789595f5e",
+      "src/ServerDriver.cpp": "b228f9db29eb0878ddde8ebfa2fa0516da637fd339e5c181e9cbaccb0b90fcdc",
+      "src/SlangServer.cpp": "5edcb3740ca0ed66ba915756619ed1ffc2377f4b30d830596a963c5b0f8ee04b",
+      "src/completions/CompletionDispatch.cpp": "8ab953d440d00aa24c0550d444ec372dc4d1a02bff10ee03f02d84d729e07891",
+      "src/completions/InstanceCompletions.cpp": "8b7beb099c28255532eb390790456f97d27815dfc0a3981d98fb8ebae202734c",
+      "src/completions/MacroCompletions.cpp": "8316f98a7db3b81a93d81fe0863bfdff0089044cb86b47b1a53359a876ba36d9",
+      "src/completions/MemberCompletions.cpp": "bf45d34f98635dbd44dce899d6573133e01686e7b7926b899d72858c51144513",
+      "src/diagnostics/DiagnosticSnapshotCodec.cpp": "099ffd25e7a8c55b0e3fb4c9bf107c24d67b8a8c5b93a291dca3c91d594fb396",
+      "src/document/SlangDoc.cpp": "5f3940138851958a0733b50ed702a4b20a1eb1f1868c14aa243feed7cd18f2f4",
+      "src/document/SyntaxIndexer.cpp": "815328d2e20b98750ad7294c781350a547a3cf9962194beaa9152dda32738800",
+      "tests/cpp/ConfigTests.cpp": "d90de93921e9de417c693b5b3be1c04dc385deaacc3ffd60f783eb2b814f5717",
+      "tests/cpp/DiagnosticSnapshotTests.cpp": "d11d75069e43563043c2fe0b2b34a28647e5ad4aff3bc82d001730ef875a6692",
+      "tests/cpp/UvmPrefixTests.cpp": "7b16c7db81b77cc72a36c4e7a9ece8f97cb9e0ee4f0d6c2b0dbccfbae4811c07"
+    }
+  },
+  "projects": [
+    {
+      "id": "spi-block",
+      "root": "projects/spi-block",
+      "config": {
+        "indexingThreads": 1,
+        "flags": "--single-unit --threads 1 --timescale 1ns/1ps --top hdl_top --top hvl_top",
+        "compilationFilelist": "design.f",
+        "experimentalMethodScopeOverlay": false
+      },
+      "configSha256": "930db0be21737173742d1b78746c412a05d8459a46d46e97380abac92a6aa59b",
+      "inventoryBytes": 2558949,
+      "inventoryLines": 77665,
+      "provenance": {
+        "kind": "local educational laboratory",
+        "baseInventorySha256": "214e20162ce2d49b14d448c342a8621b0b0b50de324a17ab3a0a1c0f18313c7e",
+        "recipe": "original Makefile COMMON + variant-specific test package and tops; exact source text preserved",
+        "notProductionEvidence": true,
+        "topModules": [
+          "hdl_top",
+          "hvl_top"
+        ],
+        "languageServerAdaptation": "Explicit HDL roots/order/includes/timescale/tops preserved; VCS implicit vendor macros, simulator flags, C++ DPI linking and simulation are not emulated."
+      },
+      "uvmCommit": "71f30a7473118b3cea582d7673c3af8e161fce71",
+      "staticAnalysisOnly": true
+    },
+    {
+      "id": "spi-pss",
+      "root": "projects/spi-pss",
+      "config": {
+        "indexingThreads": 1,
+        "flags": "--single-unit --threads 1 --timescale 1ns/1ps --top hdl_top_pss --top hvl_top_pss",
+        "compilationFilelist": "design.f",
+        "experimentalMethodScopeOverlay": false
+      },
+      "configSha256": "128879a74cd22bd00816c31b740c61be5b8420bc24ea58d2b07bbc6f7a87dc3b",
+      "inventoryBytes": 2558957,
+      "inventoryLines": 77665,
+      "provenance": {
+        "kind": "local educational laboratory",
+        "baseInventorySha256": "214e20162ce2d49b14d448c342a8621b0b0b50de324a17ab3a0a1c0f18313c7e",
+        "recipe": "original Makefile COMMON + variant-specific test package and tops; exact source text preserved",
+        "notProductionEvidence": true,
+        "topModules": [
+          "hdl_top_pss",
+          "hvl_top_pss"
+        ],
+        "languageServerAdaptation": "Explicit HDL roots/order/includes/timescale/tops preserved; VCS implicit vendor macros, simulator flags, C++ DPI linking and simulation are not emulated."
+      },
+      "uvmCommit": "71f30a7473118b3cea582d7673c3af8e161fce71",
+      "staticAnalysisOnly": true
+    },
+    {
+      "id": "official-ubus",
+      "root": "projects/official-ubus",
+      "config": {
+        "indexingThreads": 1,
+        "flags": "--single-unit --threads 1 --timescale 1ns/1ns",
+        "compilationFilelist": "design.f",
+        "experimentalMethodScopeOverlay": false
+      },
+      "configSha256": "1d2d3e03c817f87cc9a5202b236f659a4e7028f2923b26fa803bcc1f07cb820b",
+      "inventoryBytes": 2602939,
+      "inventoryLines": 78866,
+      "provenance": {
+        "kind": "official integrated reference example",
+        "repository": "https://github.com/accellera/uvm.git",
+        "recipe": "examples/Makefile.vcs and original shared examples/Makefile.vcs; HDL roots, define, includes and timescale preserved",
+        "omitted": "VCS-specific runtime/debug options, C++ DPI compilation and simulation; no equivalent language-server action",
+        "notProductionEvidence": true
+      },
+      "uvmCommit": "71f30a7473118b3cea582d7673c3af8e161fce71",
+      "staticAnalysisOnly": true
+    }
+  ],
+  "acceptance": {
+    "stages": [
+      {
+        "name": "default-off oracle",
+        "returncode": 0,
+        "seconds": 33.54964633285999,
+        "log": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/uvm-engineering-2026-10-19/product-next/accept-00.log",
+        "command": [
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/source/.venv/bin/python",
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/uvm-engineering-2026-10-19/validate_next_v4.py",
+          "off"
+        ]
+      },
+      {
+        "name": "default-on oracle",
+        "returncode": 0,
+        "seconds": 28.27869962505065,
+        "log": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/uvm-engineering-2026-10-19/product-next/accept-01.log",
+        "command": [
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/source/.venv/bin/python",
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/uvm-engineering-2026-10-19/validate_next_v4.py",
+          "on"
+        ]
+      },
+      {
+        "name": "macro freshness",
+        "returncode": 0,
+        "seconds": 6.406580041861162,
+        "log": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/uvm-engineering-2026-10-19/product-next/accept-02.log",
+        "command": [
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/source/.venv/bin/python",
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/uvm-engineering-2026-10-19/control_next_v4.py"
+        ]
+      },
+      {
+        "name": "replacement failure",
+        "returncode": 0,
+        "seconds": 9.270288500003517,
+        "log": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/uvm-engineering-2026-10-19/product-next/accept-03.log",
+        "command": [
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/source/.venv/bin/python",
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/uvm-engineering-2026-10-19/rollback_next_v4.py"
+        ]
+      },
+      {
+        "name": "cache pressure",
+        "returncode": 0,
+        "seconds": 0.27627229201607406,
+        "log": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/uvm-engineering-2026-10-19/product-next/accept-04.log",
+        "command": [
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/source/.venv/bin/python",
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/uvm-engineering-2026-10-19/pressure_next.py"
+        ]
+      },
+      {
+        "name": "complete build",
+        "returncode": 0,
+        "seconds": 1.30635816603899,
+        "log": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/uvm-engineering-2026-10-19/product-next/accept-05.log",
+        "command": [
+          "/opt/homebrew/bin/cmake",
+          "--build",
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/build-uvm",
+          "-j2"
+        ]
+      },
+      {
+        "name": "complete ctest",
+        "returncode": 0,
+        "seconds": 15.729222249938175,
+        "log": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/uvm-engineering-2026-10-19/product-next/accept-06.log",
+        "command": [
+          "/opt/homebrew/bin/ctest",
+          "--test-dir",
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/build-uvm",
+          "--output-on-failure",
+          "-j2"
+        ]
+      },
+      {
+        "name": "python system",
+        "returncode": 0,
+        "seconds": 1.1124134580604732,
+        "log": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/uvm-engineering-2026-10-19/product-next/accept-07.log",
+        "command": [
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/source/.venv/bin/python",
+          "-m",
+          "pytest",
+          "tests/system",
+          "--binary",
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/uvm-engineering-2026-10-19/product-next/slang-server-v4",
+          "-q"
+        ]
+      },
+      {
+        "name": "latency matrix",
+        "returncode": 0,
+        "seconds": 374.6489930001553,
+        "log": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/uvm-engineering-2026-10-19/product-next/accept-08.log",
+        "command": [
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/source/.venv/bin/python",
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/uvm-engineering-2026-10-19/latency_next.py"
+        ]
+      },
+      {
+        "name": "full resolve matrix",
+        "returncode": 0,
+        "seconds": 423.57295762514696,
+        "log": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/uvm-engineering-2026-10-19/product-next/accept-09.log",
+        "command": [
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/source/.venv/bin/python",
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/uvm-engineering-2026-10-19/rich_next.py"
+        ]
+      }
+    ],
+    "measurementStages": [
+      {
+        "name": "fallback and invalidation",
+        "returncode": 0,
+        "seconds": 157.77368783392012,
+        "log": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/uvm-engineering-2026-10-19/product-next/long-accept-0.log"
+      },
+      {
+        "name": "long ordinary latency",
+        "returncode": 0,
+        "seconds": 752.0220828747842,
+        "log": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/uvm-engineering-2026-10-19/product-next/long-accept-1.log"
+      },
+      {
+        "name": "separate memory",
+        "returncode": 0,
+        "seconds": 877.1442020421382,
+        "log": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/uvm-engineering-2026-10-19/product-next/long-accept-2.log"
+      }
+    ],
+    "ctest": 613,
+    "sdkCases": 2561,
+    "sdkAssertions": 23611,
+    "systemPython": 8,
+    "measurementAndLuaPython": 7,
+    "transport": 35,
+    "specialized": {
+      "cases": 3,
+      "assertions": 169
+    },
+    "oracleCasesPerArm": 15,
+    "oracleArms": [
+      "off",
+      "on",
+      "forced-retirement"
+    ],
+    "oracleResolvedItemsPerArm": {
+      "off": 26696,
+      "on": 26696,
+      "forced": 26696
+    },
+    "independentCommands": [
+      {
+        "command": [
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/build-uvm/bin/unittests"
+        ],
+        "cwd": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/build-uvm/external/slang/tests/unittests",
+        "logSha256": "d5b6fd57b0610f1aec6fa162d2d6043c25dcda7f4a56be455f1e8975edee846e",
+        "scope": "SDK source unchanged between this full SDK run and frozen v4; final restoration hashes verify its inputs"
+      },
+      {
+        "command": [
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/source/.venv/bin/python",
+          "-m",
+          "pytest",
+          "tests/method_scope",
+          "-q"
+        ],
+        "cwd": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/source",
+        "logSha256": "ca12bf5ea55b044bc10bb2aa85a86e00af21c4d9016b261b92fd477b542d30a9",
+        "scope": "independent measurement and Lua contracts, unchanged by subsequent candidate revisions"
+      },
+      {
+        "command": [
+          "bash",
+          "tests/transport/run-diagnostic-transport-tests.sh"
+        ],
+        "cwd": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/source",
+        "logSha256": "182f9f1dfe108a402faeb5eca7d77a18e3238550032848eb9a64aed9f2a07ed9",
+        "scope": "independent transport sources unchanged by subsequent candidate revisions"
+      }
+    ],
+    "inputIntegrity": {
+      "equal": true,
+      "files": 590,
+      "scope": "All frozen timing-corpus files, including filelists and UVM, match the preregistered inventory after all measurement stages."
+    },
+    "staticAudit": {
+      "format": {
+        "command": "clang-format --dry-run --Werror",
+        "files": 20,
+        "exitCode": 0
+      },
+      "whitespace": {
+        "productExitCode": 0,
+        "sdkExitCode": 0
+      },
+      "liveSdkFilesMatched": 708,
+      "defaultFlag": "experimentalUvmPrefixCache=false",
+      "publication": "Not covered by this pre-publication static audit; recorded separately after push."
+    },
+    "controls": [
+      "steady/config-watch/library-watch/unsaved-library macro freshness",
+      "failed replacement preserves old context and unsaved text, then recovers, SPI/PSS/UBUS",
+      "64-entry LRU eviction and 65 MiB oversized bypass, 69 native-equal documents",
+      "single logical unit, physical ancestry, enum previews, source-token lifetime",
+      "8 threads / 40 extraction and bind operations without borrowed-node mutation",
+      "wrapper warnings allowed; macro/conditional/lint effects and truncated include rejected"
+    ]
+  },
+  "latency": {
+    "candidateSha256": "89145d3b115efec1f5b4528c09ae6755d8a0da82a1db665a87af3e24d34e8de7",
+    "primaryProcesses": 400,
+    "allResolveProcesses": 240,
+    "allResolveResponses": 498240,
+    "primary": [
+      {
+        "stage": "burst",
+        "case": "W13-continuous",
+        "method": "completion",
+        "arms": {
+          "False": {
+            "coldFirstMs": {
+              "n": 20,
+              "p50": 100.3450205,
+              "mean": 101.26815835000001,
+              "p95": 107.919375,
+              "max": 108.512083
+            },
+            "firstEditMs": {
+              "n": 20,
+              "p50": 52.703104499999995,
+              "mean": 53.26315415,
+              "p95": 56.270958,
+              "max": 56.486209
+            },
+            "editResponseSumMs": {
+              "n": 20,
+              "p50": 507.2653545,
+              "mean": 511.2411605,
+              "p95": 535.6922480000001,
+              "max": 541.731208
+            },
+            "coldToFinalDiagnosticMs": {
+              "n": 20,
+              "p50": 948.776167,
+              "mean": 954.64068135,
+              "p95": 980.821375,
+              "max": 983.8405
+            },
+            "recoveryMs": {
+              "n": 20,
+              "p50": 51.642979499999996,
+              "mean": 51.6137209,
+              "p95": 54.014083,
+              "max": 54.317625
+            },
+            "cachedRepeatSumMs": {
+              "n": 20,
+              "p50": 29.970563499999997,
+              "mean": 29.9785831,
+              "p95": 30.252375,
+              "max": 30.877249
+            },
+            "resolveSumMs": {
+              "n": 20,
+              "p50": 10.4337515,
+              "mean": 10.3721272,
+              "p95": 10.68496,
+              "max": 10.753667
+            }
+          },
+          "True": {
+            "coldFirstMs": {
+              "n": 20,
+              "p50": 106.24822900000001,
+              "mean": 107.12106455,
+              "p95": 112.346083,
+              "max": 114.952917
+            },
+            "firstEditMs": {
+              "n": 20,
+              "p50": 20.1110415,
+              "mean": 20.0603042,
+              "p95": 20.639042,
+              "max": 20.861792
+            },
+            "editResponseSumMs": {
+              "n": 20,
+              "p50": 179.30399949999997,
+              "mean": 179.70121035,
+              "p95": 182.023543,
+              "max": 188.101043
+            },
+            "coldToFinalDiagnosticMs": {
+              "n": 20,
+              "p50": 646.668812,
+              "mean": 648.6152645,
+              "p95": 655.150709,
+              "max": 675.419042
+            },
+            "recoveryMs": {
+              "n": 20,
+              "p50": 17.707375499999998,
+              "mean": 17.80082295,
+              "p95": 18.781084,
+              "max": 19.138333
+            },
+            "cachedRepeatSumMs": {
+              "n": 20,
+              "p50": 38.429584,
+              "mean": 38.833467,
+              "p95": 39.134833,
+              "max": 46.637291
+            },
+            "resolveSumMs": {
+              "n": 20,
+              "p50": 8.594688000000001,
+              "mean": 8.6252523,
+              "p95": 8.850416,
+              "max": 9.255663
+            }
+          }
+        },
+        "paired": {
+          "coldFirstMs": {
+            "blocks": 10,
+            "meanDifferenceMs": 5.8529062,
+            "bootstrap95Ms": [
+              4.699172850000004,
+              6.887368450000004
+            ]
+          },
+          "firstEditMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -33.20284995,
+            "bootstrap95Ms": [
+              -34.0635955,
+              -32.401248249999995
+            ]
+          },
+          "editResponseSumMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -331.53995015,
+            "bootstrap95Ms": [
+              -336.05215175,
+              -326.7647381
+            ]
+          },
+          "coldToFinalDiagnosticMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -306.02541685,
+            "bootstrap95Ms": [
+              -310.27808145,
+              -301.71182315
+            ]
+          },
+          "recoveryMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -33.81289795,
+            "bootstrap95Ms": [
+              -34.4012417,
+              -33.175587750000005
+            ]
+          },
+          "cachedRepeatSumMs": {
+            "blocks": 10,
+            "meanDifferenceMs": 8.854883899999999,
+            "bootstrap95Ms": [
+              8.31318145,
+              9.6656314
+            ]
+          },
+          "resolveSumMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -1.7468748999999997,
+            "bootstrap95Ms": [
+              -1.8792373499999995,
+              -1.6166166499999999
+            ]
+          }
+        }
+      },
+      {
+        "stage": "burst",
+        "case": "W13-continuous",
+        "method": "definition",
+        "arms": {
+          "False": {
+            "coldFirstMs": {
+              "n": 20,
+              "p50": 96.2800625,
+              "mean": 97.7176604,
+              "p95": 104.548625,
+              "max": 106.491583
+            },
+            "firstEditMs": {
+              "n": 20,
+              "p50": 49.3855835,
+              "mean": 49.40787295,
+              "p95": 51.507708,
+              "max": 53.044041
+            },
+            "editResponseSumMs": {
+              "n": 20,
+              "p50": 471.79672949999997,
+              "mean": 476.17108555,
+              "p95": 497.33691699999997,
+              "max": 503.925039
+            },
+            "coldToFinalDiagnosticMs": {
+              "n": 20,
+              "p50": 841.2793335,
+              "mean": 846.5987187,
+              "p95": 874.39075,
+              "max": 880.409333
+            },
+            "recoveryMs": {
+              "n": 20,
+              "p50": 47.4287085,
+              "mean": 47.7303125,
+              "p95": 51.140417,
+              "max": 53.004875
+            },
+            "cachedRepeatSumMs": {
+              "n": 20,
+              "p50": 3.565854,
+              "mean": 3.55751895,
+              "p95": 3.6995430000000002,
+              "max": 3.706415
+            },
+            "resolveSumMs": {
+              "n": 20,
+              "p50": 0.0,
+              "mean": 0,
+              "p95": 0,
+              "max": 0
+            }
+          },
+          "True": {
+            "coldFirstMs": {
+              "n": 20,
+              "p50": 103.17420899999999,
+              "mean": 104.7133896,
+              "p95": 111.219042,
+              "max": 112.969667
+            },
+            "firstEditMs": {
+              "n": 20,
+              "p50": 16.456270500000002,
+              "mean": 16.5252186,
+              "p95": 17.119833,
+              "max": 17.331709
+            },
+            "editResponseSumMs": {
+              "n": 20,
+              "p50": 145.912312,
+              "mean": 146.64784975,
+              "p95": 152.663792,
+              "max": 154.120335
+            },
+            "coldToFinalDiagnosticMs": {
+              "n": 20,
+              "p50": 533.7441034999999,
+              "mean": 535.6284103,
+              "p95": 545.782958,
+              "max": 546.110417
+            },
+            "recoveryMs": {
+              "n": 20,
+              "p50": 13.971625,
+              "mean": 14.0726272,
+              "p95": 15.029334,
+              "max": 15.156584
+            },
+            "cachedRepeatSumMs": {
+              "n": 20,
+              "p50": 3.4992495,
+              "mean": 3.63102885,
+              "p95": 3.681,
+              "max": 6.030958
+            },
+            "resolveSumMs": {
+              "n": 20,
+              "p50": 0.0,
+              "mean": 0,
+              "p95": 0,
+              "max": 0
+            }
+          }
+        },
+        "paired": {
+          "coldFirstMs": {
+            "blocks": 10,
+            "meanDifferenceMs": 6.995729199999995,
+            "bootstrap95Ms": [
+              5.7337063999999955,
+              8.410500099999997
+            ]
+          },
+          "firstEditMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -32.882654349999996,
+            "bootstrap95Ms": [
+              -33.55256665,
+              -32.208202299999996
+            ]
+          },
+          "editResponseSumMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -329.5232358,
+            "bootstrap95Ms": [
+              -335.00600000000003,
+              -324.4454425
+            ]
+          },
+          "coldToFinalDiagnosticMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -310.9703084,
+            "bootstrap95Ms": [
+              -317.09311675000004,
+              -304.93145435
+            ]
+          },
+          "recoveryMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -33.6576853,
+            "bootstrap95Ms": [
+              -34.510208299999995,
+              -32.9147707
+            ]
+          },
+          "cachedRepeatSumMs": {
+            "blocks": 10,
+            "meanDifferenceMs": 0.07350989999999982,
+            "bootstrap95Ms": [
+              -0.09690100000000017,
+              0.3640741499999999
+            ]
+          },
+          "resolveSumMs": {
+            "blocks": 10,
+            "meanDifferenceMs": 0,
+            "bootstrap95Ms": [
+              0,
+              0
+            ]
+          }
+        }
+      },
+      {
+        "stage": "drained",
+        "case": "W01-compare",
+        "method": "completion",
+        "arms": {
+          "False": {
+            "coldFirstMs": {
+              "n": 20,
+              "p50": 100.2191455,
+              "mean": 102.54609585,
+              "p95": 113.421167,
+              "max": 117.693584
+            },
+            "firstEditMs": {
+              "n": 20,
+              "p50": 52.358729,
+              "mean": 52.7682772,
+              "p95": 56.601209,
+              "max": 58.035375
+            },
+            "editResponseSumMs": {
+              "n": 20,
+              "p50": 105.626042,
+              "mean": 106.7585313,
+              "p95": 115.076292,
+              "max": 117.718875
+            },
+            "coldToFinalDiagnosticMs": {
+              "n": 20,
+              "p50": 623.288479,
+              "mean": 629.81543745,
+              "p95": 660.470958,
+              "max": 670.830125
+            },
+            "recoveryMs": {
+              "n": 20,
+              "p50": 53.313874999999996,
+              "mean": 53.9902541,
+              "p95": 58.475083,
+              "max": 59.6835
+            },
+            "cachedRepeatSumMs": {
+              "n": 20,
+              "p50": 8.370750000000001,
+              "mean": 8.4291123,
+              "p95": 8.896832,
+              "max": 9.098167
+            },
+            "resolveSumMs": {
+              "n": 20,
+              "p50": 2.8503334999999996,
+              "mean": 2.82313305,
+              "p95": 3.0867910000000003,
+              "max": 3.193041
+            }
+          },
+          "True": {
+            "coldFirstMs": {
+              "n": 20,
+              "p50": 108.45775,
+              "mean": 109.1080438,
+              "p95": 115.510333,
+              "max": 116.331875
+            },
+            "firstEditMs": {
+              "n": 20,
+              "p50": 19.826646,
+              "mean": 19.706302,
+              "p95": 20.356625,
+              "max": 21.28675
+            },
+            "editResponseSumMs": {
+              "n": 20,
+              "p50": 39.230624999999996,
+              "mean": 39.25046245,
+              "p95": 40.603375,
+              "max": 42.204834000000005
+            },
+            "coldToFinalDiagnosticMs": {
+              "n": 20,
+              "p50": 582.854771,
+              "mean": 586.5084146,
+              "p95": 602.243417,
+              "max": 604.178791
+            },
+            "recoveryMs": {
+              "n": 20,
+              "p50": 19.6276045,
+              "mean": 19.54416045,
+              "p95": 20.71175,
+              "max": 20.918084
+            },
+            "cachedRepeatSumMs": {
+              "n": 20,
+              "p50": 10.8617295,
+              "mean": 10.90555005,
+              "p95": 11.368041,
+              "max": 11.396499
+            },
+            "resolveSumMs": {
+              "n": 20,
+              "p50": 2.5985620000000003,
+              "mean": 2.60561705,
+              "p95": 2.798584,
+              "max": 2.893834
+            }
+          }
+        },
+        "paired": {
+          "coldFirstMs": {
+            "blocks": 10,
+            "meanDifferenceMs": 6.561947949999994,
+            "bootstrap95Ms": [
+              3.4918416999999935,
+              8.821981149999992
+            ]
+          },
+          "firstEditMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -33.0619752,
+            "bootstrap95Ms": [
+              -34.3590607,
+              -32.1650626
+            ]
+          },
+          "editResponseSumMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -67.50806885,
+            "bootstrap95Ms": [
+              -70.27077745,
+              -65.78326405
+            ]
+          },
+          "coldToFinalDiagnosticMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -43.307022849999996,
+            "bootstrap95Ms": [
+              -48.649966499999934,
+              -39.750758050000016
+            ]
+          },
+          "recoveryMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -34.44609365,
+            "bootstrap95Ms": [
+              -35.9122562,
+              -33.4787332
+            ]
+          },
+          "cachedRepeatSumMs": {
+            "blocks": 10,
+            "meanDifferenceMs": 2.4764377499999997,
+            "bootstrap95Ms": [
+              2.3268210999999996,
+              2.6007940999999994
+            ]
+          },
+          "resolveSumMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -0.21751600000000004,
+            "bootstrap95Ms": [
+              -0.30485924999999997,
+              -0.13748104999999997
+            ]
+          }
+        }
+      },
+      {
+        "stage": "drained",
+        "case": "W01-compare",
+        "method": "definition",
+        "arms": {
+          "False": {
+            "coldFirstMs": {
+              "n": 20,
+              "p50": 99.493146,
+              "mean": 99.864675,
+              "p95": 104.525083,
+              "max": 106.883333
+            },
+            "firstEditMs": {
+              "n": 20,
+              "p50": 48.612833,
+              "mean": 49.28527505,
+              "p95": 52.124542,
+              "max": 52.303917
+            },
+            "editResponseSumMs": {
+              "n": 20,
+              "p50": 99.2563125,
+              "mean": 100.05945005,
+              "p95": 105.39429200000001,
+              "max": 105.543417
+            },
+            "coldToFinalDiagnosticMs": {
+              "n": 20,
+              "p50": 603.8180414999999,
+              "mean": 603.24667915,
+              "p95": 613.012667,
+              "max": 616.576791
+            },
+            "recoveryMs": {
+              "n": 20,
+              "p50": 50.5049165,
+              "mean": 50.774175,
+              "p95": 53.2395,
+              "max": 53.26975
+            },
+            "cachedRepeatSumMs": {
+              "n": 20,
+              "p50": 1.0319165,
+              "mean": 1.4094791,
+              "p95": 3.541166,
+              "max": 3.557334
+            },
+            "resolveSumMs": {
+              "n": 20,
+              "p50": 0.0,
+              "mean": 0,
+              "p95": 0,
+              "max": 0
+            }
+          },
+          "True": {
+            "coldFirstMs": {
+              "n": 20,
+              "p50": 106.34608349999999,
+              "mean": 106.89012275,
+              "p95": 114.653959,
+              "max": 116.490208
+            },
+            "firstEditMs": {
+              "n": 20,
+              "p50": 16.0727295,
+              "mean": 15.96877285,
+              "p95": 16.897833,
+              "max": 17.6085
+            },
+            "editResponseSumMs": {
+              "n": 20,
+              "p50": 31.825312500000003,
+              "mean": 31.57927075,
+              "p95": 33.559458,
+              "max": 34.240415999999996
+            },
+            "coldToFinalDiagnosticMs": {
+              "n": 20,
+              "p50": 557.8072495,
+              "mean": 560.5576207,
+              "p95": 572.806667,
+              "max": 578.355542
+            },
+            "recoveryMs": {
+              "n": 20,
+              "p50": 15.689999499999999,
+              "mean": 15.6104979,
+              "p95": 16.631916,
+              "max": 16.726917
+            },
+            "cachedRepeatSumMs": {
+              "n": 20,
+              "p50": 1.0390000000000001,
+              "mean": 1.2236916,
+              "p95": 2.341583,
+              "max": 2.364209
+            },
+            "resolveSumMs": {
+              "n": 20,
+              "p50": 0.0,
+              "mean": 0,
+              "p95": 0,
+              "max": 0
+            }
+          }
+        },
+        "paired": {
+          "coldFirstMs": {
+            "blocks": 10,
+            "meanDifferenceMs": 7.025447750000002,
+            "bootstrap95Ms": [
+              4.239705950000001,
+              9.783187349999999
+            ]
+          },
+          "firstEditMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -33.3165022,
+            "bootstrap95Ms": [
+              -34.10082725,
+              -32.68226685
+            ]
+          },
+          "editResponseSumMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -68.4801793,
+            "bootstrap95Ms": [
+              -69.73278555,
+              -67.36389175000001
+            ]
+          },
+          "coldToFinalDiagnosticMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -42.68905844999999,
+            "bootstrap95Ms": [
+              -45.36143334999997,
+              -40.13274805
+            ]
+          },
+          "recoveryMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -35.1636771,
+            "bootstrap95Ms": [
+              -35.7703646,
+              -34.612129350000004
+            ]
+          },
+          "cachedRepeatSumMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -0.1857875,
+            "bootstrap95Ms": [
+              -0.6260648,
+              0.13868114999999998
+            ]
+          },
+          "resolveSumMs": {
+            "blocks": 10,
+            "meanDifferenceMs": 0,
+            "bootstrap95Ms": [
+              0,
+              0
+            ]
+          }
+        }
+      },
+      {
+        "stage": "drained",
+        "case": "W07-pss-multidoc",
+        "method": "completion",
+        "arms": {
+          "False": {
+            "coldFirstMs": {
+              "n": 20,
+              "p50": 99.4809165,
+              "mean": 99.93141675,
+              "p95": 106.099583,
+              "max": 110.002375
+            },
+            "firstEditMs": {
+              "n": 20,
+              "p50": 49.302104,
+              "mean": 49.762685499999996,
+              "p95": 53.074042,
+              "max": 54.654292
+            },
+            "editResponseSumMs": {
+              "n": 20,
+              "p50": 100.0414165,
+              "mean": 100.8973397,
+              "p95": 106.988584,
+              "max": 107.196209
+            },
+            "coldToFinalDiagnosticMs": {
+              "n": 20,
+              "p50": 724.7864375,
+              "mean": 729.7296834,
+              "p95": 750.316459,
+              "max": 752.393417
+            },
+            "recoveryMs": {
+              "n": 20,
+              "p50": 50.8774375,
+              "mean": 51.1346542,
+              "p95": 54.122167,
+              "max": 55.096
+            },
+            "cachedRepeatSumMs": {
+              "n": 20,
+              "p50": 3.9169585,
+              "mean": 3.8905498499999998,
+              "p95": 4.177708,
+              "max": 4.180001
+            },
+            "resolveSumMs": {
+              "n": 20,
+              "p50": 4.6241875,
+              "mean": 4.3082855,
+              "p95": 4.918543,
+              "max": 4.950708
+            }
+          },
+          "True": {
+            "coldFirstMs": {
+              "n": 20,
+              "p50": 105.8113335,
+              "mean": 107.07015630000001,
+              "p95": 116.321667,
+              "max": 117.054
+            },
+            "firstEditMs": {
+              "n": 20,
+              "p50": 16.372729,
+              "mean": 16.32128125,
+              "p95": 17.102292,
+              "max": 17.661375
+            },
+            "editResponseSumMs": {
+              "n": 20,
+              "p50": 32.967479499999996,
+              "mean": 32.70161655,
+              "p95": 33.890417,
+              "max": 34.802667
+            },
+            "coldToFinalDiagnosticMs": {
+              "n": 20,
+              "p50": 685.3341875,
+              "mean": 690.14117085,
+              "p95": 714.335709,
+              "max": 714.994458
+            },
+            "recoveryMs": {
+              "n": 20,
+              "p50": 16.510375500000002,
+              "mean": 16.3803353,
+              "p95": 17.106333,
+              "max": 17.141292
+            },
+            "cachedRepeatSumMs": {
+              "n": 20,
+              "p50": 4.2396255,
+              "mean": 4.2997251499999996,
+              "p95": 4.410709,
+              "max": 5.370667
+            },
+            "resolveSumMs": {
+              "n": 20,
+              "p50": 4.789979,
+              "mean": 4.73519175,
+              "p95": 4.907249,
+              "max": 4.996042
+            }
+          }
+        },
+        "paired": {
+          "coldFirstMs": {
+            "blocks": 10,
+            "meanDifferenceMs": 7.138739550000002,
+            "bootstrap95Ms": [
+              5.088281350000008,
+              9.607918800000004
+            ]
+          },
+          "firstEditMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -33.44140425,
+            "bootstrap95Ms": [
+              -34.2459982,
+              -32.72662495
+            ]
+          },
+          "editResponseSumMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -68.19572315,
+            "bootstrap95Ms": [
+              -69.65128985000001,
+              -67.04125669999999
+            ]
+          },
+          "coldToFinalDiagnosticMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -39.588512550000004,
+            "bootstrap95Ms": [
+              -42.48341449999998,
+              -36.065520849999984
+            ]
+          },
+          "recoveryMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -34.7543189,
+            "bootstrap95Ms": [
+              -35.60785245,
+              -34.02314375
+            ]
+          },
+          "cachedRepeatSumMs": {
+            "blocks": 10,
+            "meanDifferenceMs": 0.4091752999999999,
+            "bootstrap95Ms": [
+              0.26715,
+              0.5724585999999998
+            ]
+          },
+          "resolveSumMs": {
+            "blocks": 10,
+            "meanDifferenceMs": 0.4269062499999997,
+            "bootstrap95Ms": [
+              0.17715659999999983,
+              0.6886375999999994
+            ]
+          }
+        }
+      },
+      {
+        "stage": "drained",
+        "case": "W07-pss-multidoc",
+        "method": "definition",
+        "arms": {
+          "False": {
+            "coldFirstMs": {
+              "n": 20,
+              "p50": 97.475854,
+              "mean": 99.48044785,
+              "p95": 108.844333,
+              "max": 111.112
+            },
+            "firstEditMs": {
+              "n": 20,
+              "p50": 49.050583,
+              "mean": 49.2226645,
+              "p95": 53.321,
+              "max": 53.617875
+            },
+            "editResponseSumMs": {
+              "n": 20,
+              "p50": 98.84518800000001,
+              "mean": 99.70266025,
+              "p95": 104.127125,
+              "max": 107.088458
+            },
+            "coldToFinalDiagnosticMs": {
+              "n": 20,
+              "p50": 716.247437,
+              "mean": 720.5567166,
+              "p95": 739.896917,
+              "max": 748.999375
+            },
+            "recoveryMs": {
+              "n": 20,
+              "p50": 50.212896,
+              "mean": 50.47999575,
+              "p95": 53.347291,
+              "max": 53.767458
+            },
+            "cachedRepeatSumMs": {
+              "n": 20,
+              "p50": 1.0155215,
+              "mean": 1.20523545,
+              "p95": 2.258,
+              "max": 2.343792
+            },
+            "resolveSumMs": {
+              "n": 20,
+              "p50": 0.0,
+              "mean": 0,
+              "p95": 0,
+              "max": 0
+            }
+          },
+          "True": {
+            "coldFirstMs": {
+              "n": 20,
+              "p50": 104.492917,
+              "mean": 104.9772605,
+              "p95": 113.355292,
+              "max": 114.223542
+            },
+            "firstEditMs": {
+              "n": 20,
+              "p50": 16.195146,
+              "mean": 16.11257285,
+              "p95": 16.770917,
+              "max": 18.119416
+            },
+            "editResponseSumMs": {
+              "n": 20,
+              "p50": 32.501979,
+              "mean": 32.1521249,
+              "p95": 33.384208,
+              "max": 34.522125
+            },
+            "coldToFinalDiagnosticMs": {
+              "n": 20,
+              "p50": 673.158146,
+              "mean": 676.56348345,
+              "p95": 696.876375,
+              "max": 697.981708
+            },
+            "recoveryMs": {
+              "n": 20,
+              "p50": 16.2285,
+              "mean": 16.03955205,
+              "p95": 16.615,
+              "max": 17.004791
+            },
+            "cachedRepeatSumMs": {
+              "n": 20,
+              "p50": 1.008479,
+              "mean": 1.01348335,
+              "p95": 1.100668,
+              "max": 1.120501
+            },
+            "resolveSumMs": {
+              "n": 20,
+              "p50": 0.0,
+              "mean": 0,
+              "p95": 0,
+              "max": 0
+            }
+          }
+        },
+        "paired": {
+          "coldFirstMs": {
+            "blocks": 10,
+            "meanDifferenceMs": 5.49681265,
+            "bootstrap95Ms": [
+              3.948156250000001,
+              6.850456499999998
+            ]
+          },
+          "firstEditMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -33.11009165,
+            "bootstrap95Ms": [
+              -33.8283293,
+              -32.36804565
+            ]
+          },
+          "editResponseSumMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -67.55053535,
+            "bootstrap95Ms": [
+              -68.94311040000001,
+              -66.14953535000001
+            ]
+          },
+          "coldToFinalDiagnosticMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -43.99323315,
+            "bootstrap95Ms": [
+              -46.70122495,
+              -41.3397246
+            ]
+          },
+          "recoveryMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -34.440443699999996,
+            "bootstrap95Ms": [
+              -35.087731149999996,
+              -33.765904199999994
+            ]
+          },
+          "cachedRepeatSumMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -0.19175209999999998,
+            "bootstrap95Ms": [
+              -0.45193949999999994,
+              0.0004981000000000124
+            ]
+          },
+          "resolveSumMs": {
+            "blocks": 10,
+            "meanDifferenceMs": 0,
+            "bootstrap95Ms": [
+              0,
+              0
+            ]
+          }
+        }
+      },
+      {
+        "stage": "drained",
+        "case": "W08-ubus-task",
+        "method": "completion",
+        "arms": {
+          "False": {
+            "coldFirstMs": {
+              "n": 20,
+              "p50": 93.4321665,
+              "mean": 93.95578345,
+              "p95": 97.500167,
+              "max": 98.094625
+            },
+            "firstEditMs": {
+              "n": 20,
+              "p50": 49.8076455,
+              "mean": 49.8113667,
+              "p95": 51.739792,
+              "max": 51.886334
+            },
+            "editResponseSumMs": {
+              "n": 20,
+              "p50": 100.923396,
+              "mean": 101.0371271,
+              "p95": 103.97241700000001,
+              "max": 104.700084
+            },
+            "coldToFinalDiagnosticMs": {
+              "n": 20,
+              "p50": 609.3360835000001,
+              "mean": 613.0983835,
+              "p95": 630.374375,
+              "max": 631.147375
+            },
+            "recoveryMs": {
+              "n": 20,
+              "p50": 50.999938,
+              "mean": 51.2257604,
+              "p95": 52.81375,
+              "max": 52.941166
+            },
+            "cachedRepeatSumMs": {
+              "n": 20,
+              "p50": 5.3777705,
+              "mean": 5.3094207,
+              "p95": 5.542749,
+              "max": 5.615126
+            },
+            "resolveSumMs": {
+              "n": 20,
+              "p50": 4.2809165,
+              "mean": 4.23935215,
+              "p95": 4.447543,
+              "max": 4.616209
+            }
+          },
+          "True": {
+            "coldFirstMs": {
+              "n": 20,
+              "p50": 101.24154150000001,
+              "mean": 101.40671025,
+              "p95": 105.258834,
+              "max": 106.610916
+            },
+            "firstEditMs": {
+              "n": 20,
+              "p50": 18.104146,
+              "mean": 17.8389917,
+              "p95": 18.527042,
+              "max": 18.627209
+            },
+            "editResponseSumMs": {
+              "n": 20,
+              "p50": 36.0459585,
+              "mean": 35.76751255,
+              "p95": 36.660001,
+              "max": 43.074208
+            },
+            "coldToFinalDiagnosticMs": {
+              "n": 20,
+              "p50": 570.7985625,
+              "mean": 573.0768166,
+              "p95": 589.941791,
+              "max": 590.494375
+            },
+            "recoveryMs": {
+              "n": 20,
+              "p50": 17.792271,
+              "mean": 17.92852085,
+              "p95": 18.238166,
+              "max": 24.936375
+            },
+            "cachedRepeatSumMs": {
+              "n": 20,
+              "p50": 5.856812499999999,
+              "mean": 5.87184995,
+              "p95": 6.044459,
+              "max": 6.062166
+            },
+            "resolveSumMs": {
+              "n": 20,
+              "p50": 4.2725625,
+              "mean": 4.2676229,
+              "p95": 4.412834,
+              "max": 4.5308329999999994
+            }
+          }
+        },
+        "paired": {
+          "coldFirstMs": {
+            "blocks": 10,
+            "meanDifferenceMs": 7.4509268,
+            "bootstrap95Ms": [
+              6.9142080500000045,
+              7.979110049999996
+            ]
+          },
+          "firstEditMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -31.972375,
+            "bootstrap95Ms": [
+              -32.5580478,
+              -31.42682285
+            ]
+          },
+          "editResponseSumMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -65.26961455,
+            "bootstrap95Ms": [
+              -66.01881455,
+              -64.57095395
+            ]
+          },
+          "coldToFinalDiagnosticMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -40.021566900000025,
+            "bootstrap95Ms": [
+              -41.444514800000015,
+              -38.592189849999976
+            ]
+          },
+          "recoveryMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -33.29723955,
+            "bootstrap95Ms": [
+              -33.97856245,
+              -32.5667189
+            ]
+          },
+          "cachedRepeatSumMs": {
+            "blocks": 10,
+            "meanDifferenceMs": 0.5624292499999999,
+            "bootstrap95Ms": [
+              0.4720229499999996,
+              0.6711232500000002
+            ]
+          },
+          "resolveSumMs": {
+            "blocks": 10,
+            "meanDifferenceMs": 0.028270750000000167,
+            "bootstrap95Ms": [
+              -0.09741299999999971,
+              0.15449590000000013
+            ]
+          }
+        }
+      },
+      {
+        "stage": "drained",
+        "case": "W08-ubus-task",
+        "method": "definition",
+        "arms": {
+          "False": {
+            "coldFirstMs": {
+              "n": 20,
+              "p50": 94.3485205,
+              "mean": 94.80956255,
+              "p95": 99.541375,
+              "max": 101.135
+            },
+            "firstEditMs": {
+              "n": 20,
+              "p50": 50.1849165,
+              "mean": 50.3442145,
+              "p95": 53.83375,
+              "max": 54.220958
+            },
+            "editResponseSumMs": {
+              "n": 20,
+              "p50": 101.2507295,
+              "mean": 101.79627909999999,
+              "p95": 107.415126,
+              "max": 108.893708
+            },
+            "coldToFinalDiagnosticMs": {
+              "n": 20,
+              "p50": 596.6988544999999,
+              "mean": 600.41495845,
+              "p95": 619.367,
+              "max": 629.006417
+            },
+            "recoveryMs": {
+              "n": 20,
+              "p50": 51.056021,
+              "mean": 51.4520646,
+              "p95": 54.582875,
+              "max": 55.059958
+            },
+            "cachedRepeatSumMs": {
+              "n": 20,
+              "p50": 0.9113549999999999,
+              "mean": 1.18441865,
+              "p95": 2.366666,
+              "max": 3.61675
+            },
+            "resolveSumMs": {
+              "n": 20,
+              "p50": 0.0,
+              "mean": 0,
+              "p95": 0,
+              "max": 0
+            }
+          },
+          "True": {
+            "coldFirstMs": {
+              "n": 20,
+              "p50": 100.0658335,
+              "mean": 100.25211254999999,
+              "p95": 103.321,
+              "max": 106.089417
+            },
+            "firstEditMs": {
+              "n": 20,
+              "p50": 17.540854000000003,
+              "mean": 17.3448604,
+              "p95": 17.925042,
+              "max": 18.309042
+            },
+            "editResponseSumMs": {
+              "n": 20,
+              "p50": 34.8476455,
+              "mean": 34.55332065,
+              "p95": 35.562917,
+              "max": 35.711208
+            },
+            "coldToFinalDiagnosticMs": {
+              "n": 20,
+              "p50": 557.295292,
+              "mean": 560.4006397,
+              "p95": 580.244375,
+              "max": 582.542
+            },
+            "recoveryMs": {
+              "n": 20,
+              "p50": 17.399937,
+              "mean": 17.20846025,
+              "p95": 17.720667,
+              "max": 17.744791
+            },
+            "cachedRepeatSumMs": {
+              "n": 20,
+              "p50": 0.944979,
+              "mean": 1.40533935,
+              "p95": 2.48104,
+              "max": 3.55175
+            },
+            "resolveSumMs": {
+              "n": 20,
+              "p50": 0.0,
+              "mean": 0,
+              "p95": 0,
+              "max": 0
+            }
+          }
+        },
+        "paired": {
+          "coldFirstMs": {
+            "blocks": 10,
+            "meanDifferenceMs": 5.4425500000000016,
+            "bootstrap95Ms": [
+              4.307270750000001,
+              6.594372900000001
+            ]
+          },
+          "firstEditMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -32.9993541,
+            "bootstrap95Ms": [
+              -33.83424575,
+              -32.2096605
+            ]
+          },
+          "editResponseSumMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -67.24295845,
+            "bootstrap95Ms": [
+              -68.79547275,
+              -65.7461357
+            ]
+          },
+          "coldToFinalDiagnosticMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -40.01431875000001,
+            "bootstrap95Ms": [
+              -43.18605425,
+              -36.90292915
+            ]
+          },
+          "recoveryMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -34.24360435,
+            "bootstrap95Ms": [
+              -34.982772999999995,
+              -33.42997115
+            ]
+          },
+          "cachedRepeatSumMs": {
+            "blocks": 10,
+            "meanDifferenceMs": 0.2209207,
+            "bootstrap95Ms": [
+              -0.10793090000000002,
+              0.5668078
+            ]
+          },
+          "resolveSumMs": {
+            "blocks": 10,
+            "meanDifferenceMs": 0,
+            "bootstrap95Ms": [
+              0,
+              0
+            ]
+          }
+        }
+      },
+      {
+        "stage": "drained",
+        "case": "W13-continuous",
+        "method": "completion",
+        "arms": {
+          "False": {
+            "coldFirstMs": {
+              "n": 20,
+              "p50": 100.2675625,
+              "mean": 101.1872623,
+              "p95": 108.306167,
+              "max": 108.490375
+            },
+            "firstEditMs": {
+              "n": 20,
+              "p50": 52.0263335,
+              "mean": 52.4211646,
+              "p95": 56.341875,
+              "max": 58.077583
+            },
+            "editResponseSumMs": {
+              "n": 20,
+              "p50": 518.8500839999999,
+              "mean": 522.04533525,
+              "p95": 548.86729,
+              "max": 571.822291
+            },
+            "coldToFinalDiagnosticMs": {
+              "n": 20,
+              "p50": 2141.3111245,
+              "mean": 2151.51777905,
+              "p95": 2196.051208,
+              "max": 2233.186125
+            },
+            "recoveryMs": {
+              "n": 20,
+              "p50": 52.073353999999995,
+              "mean": 52.0858125,
+              "p95": 54.02775,
+              "max": 54.384667
+            },
+            "cachedRepeatSumMs": {
+              "n": 20,
+              "p50": 30.359729,
+              "mean": 30.93252495,
+              "p95": 33.497375,
+              "max": 35.995751
+            },
+            "resolveSumMs": {
+              "n": 20,
+              "p50": 10.4751665,
+              "mean": 10.659531,
+              "p95": 12.194623,
+              "max": 13.850126
+            }
+          },
+          "True": {
+            "coldFirstMs": {
+              "n": 20,
+              "p50": 108.5682915,
+              "mean": 110.0326959,
+              "p95": 117.051084,
+              "max": 117.542541
+            },
+            "firstEditMs": {
+              "n": 20,
+              "p50": 19.895833500000002,
+              "mean": 19.7675354,
+              "p95": 20.760125,
+              "max": 20.800791
+            },
+            "editResponseSumMs": {
+              "n": 20,
+              "p50": 198.368227,
+              "mean": 196.77343745,
+              "p95": 205.038459,
+              "max": 205.883125
+            },
+            "coldToFinalDiagnosticMs": {
+              "n": 20,
+              "p50": 1885.1479165,
+              "mean": 1890.4583083,
+              "p95": 1916.047333,
+              "max": 1921.741834
+            },
+            "recoveryMs": {
+              "n": 20,
+              "p50": 20.0090625,
+              "mean": 19.8379707,
+              "p95": 20.902416,
+              "max": 21.268209
+            },
+            "cachedRepeatSumMs": {
+              "n": 20,
+              "p50": 39.666168,
+              "mean": 39.8329021,
+              "p95": 41.052459,
+              "max": 41.609125
+            },
+            "resolveSumMs": {
+              "n": 20,
+              "p50": 8.8776245,
+              "mean": 9.14574375,
+              "p95": 9.807916,
+              "max": 11.195374
+            }
+          }
+        },
+        "paired": {
+          "coldFirstMs": {
+            "blocks": 10,
+            "meanDifferenceMs": 8.8454336,
+            "bootstrap95Ms": [
+              7.290279349999999,
+              10.546825300000004
+            ]
+          },
+          "firstEditMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -32.6536292,
+            "bootstrap95Ms": [
+              -33.62314595,
+              -31.913408500000003
+            ]
+          },
+          "editResponseSumMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -325.2718978,
+            "bootstrap95Ms": [
+              -333.34410339999994,
+              -317.6097548
+            ]
+          },
+          "coldToFinalDiagnosticMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -261.05947074999995,
+            "bootstrap95Ms": [
+              -270.40557274999986,
+              -253.21849995
+            ]
+          },
+          "recoveryMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -32.247841799999996,
+            "bootstrap95Ms": [
+              -33.1498875,
+              -31.59610225
+            ]
+          },
+          "cachedRepeatSumMs": {
+            "blocks": 10,
+            "meanDifferenceMs": 8.900377150000002,
+            "bootstrap95Ms": [
+              8.218976900000003,
+              9.424530800000001
+            ]
+          },
+          "resolveSumMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -1.5137872499999996,
+            "bootstrap95Ms": [
+              -1.75966495,
+              -1.2750497499999995
+            ]
+          }
+        }
+      },
+      {
+        "stage": "drained",
+        "case": "W13-continuous",
+        "method": "definition",
+        "arms": {
+          "False": {
+            "coldFirstMs": {
+              "n": 20,
+              "p50": 99.4459995,
+              "mean": 100.09574995,
+              "p95": 103.949375,
+              "max": 114.023584
+            },
+            "firstEditMs": {
+              "n": 20,
+              "p50": 49.9432295,
+              "mean": 50.32147725,
+              "p95": 53.357708,
+              "max": 55.631375
+            },
+            "editResponseSumMs": {
+              "n": 20,
+              "p50": 496.4578765,
+              "mean": 496.9912897,
+              "p95": 521.710584,
+              "max": 523.5565
+            },
+            "coldToFinalDiagnosticMs": {
+              "n": 20,
+              "p50": 2050.071813,
+              "mean": 2061.1338021,
+              "p95": 2118.58475,
+              "max": 2132.601792
+            },
+            "recoveryMs": {
+              "n": 20,
+              "p50": 49.842,
+              "mean": 50.01182915,
+              "p95": 52.966625,
+              "max": 56.649916
+            },
+            "cachedRepeatSumMs": {
+              "n": 20,
+              "p50": 3.71877,
+              "mean": 5.0560647,
+              "p95": 8.936001000000001,
+              "max": 12.96471
+            },
+            "resolveSumMs": {
+              "n": 20,
+              "p50": 0.0,
+              "mean": 0,
+              "p95": 0,
+              "max": 0
+            }
+          },
+          "True": {
+            "coldFirstMs": {
+              "n": 20,
+              "p50": 107.97247899999999,
+              "mean": 108.21570625,
+              "p95": 112.825708,
+              "max": 116.795708
+            },
+            "firstEditMs": {
+              "n": 20,
+              "p50": 16.804,
+              "mean": 16.7748542,
+              "p95": 18.303708,
+              "max": 19.115625
+            },
+            "editResponseSumMs": {
+              "n": 20,
+              "p50": 164.45656150000002,
+              "mean": 162.51194815,
+              "p95": 167.491292,
+              "max": 168.340294
+            },
+            "coldToFinalDiagnosticMs": {
+              "n": 20,
+              "p50": 1795.4270000000001,
+              "mean": 1799.21267085,
+              "p95": 1827.670542,
+              "max": 1828.810583
+            },
+            "recoveryMs": {
+              "n": 20,
+              "p50": 16.050417,
+              "mean": 15.92175,
+              "p95": 16.833541,
+              "max": 17.046875
+            },
+            "cachedRepeatSumMs": {
+              "n": 20,
+              "p50": 3.854936,
+              "mean": 4.3347146500000004,
+              "p95": 6.29971,
+              "max": 7.587042
+            },
+            "resolveSumMs": {
+              "n": 20,
+              "p50": 0.0,
+              "mean": 0,
+              "p95": 0,
+              "max": 0
+            }
+          }
+        },
+        "paired": {
+          "coldFirstMs": {
+            "blocks": 10,
+            "meanDifferenceMs": 8.119956300000004,
+            "bootstrap95Ms": [
+              6.787235100000001,
+              9.149427200000003
+            ]
+          },
+          "firstEditMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -33.54662305,
+            "bootstrap95Ms": [
+              -34.595025050000004,
+              -32.580450150000004
+            ]
+          },
+          "editResponseSumMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -334.47934155,
+            "bootstrap95Ms": [
+              -340.9019937,
+              -329.06315605
+            ]
+          },
+          "coldToFinalDiagnosticMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -261.92113125,
+            "bootstrap95Ms": [
+              -274.44186049999985,
+              -251.65181285
+            ]
+          },
+          "recoveryMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -34.09007915,
+            "bootstrap95Ms": [
+              -34.96462475,
+              -33.278385400000005
+            ]
+          },
+          "cachedRepeatSumMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -0.7213500499999999,
+            "bootstrap95Ms": [
+              -1.7022859,
+              0.14771269999999995
+            ]
+          },
+          "resolveSumMs": {
+            "blocks": 10,
+            "meanDifferenceMs": 0,
+            "bootstrap95Ms": [
+              0,
+              0
+            ]
+          }
+        }
+      }
+    ],
+    "resolve": [
+      {
+        "case": "M-steady",
+        "arms": {
+          "off": {
+            "coldFirstPrimaryMs": {
+              "n": 20,
+              "p50": 97.921125,
+              "mean": 98.4758439,
+              "p95": 105.338292,
+              "max": 106.886459
+            },
+            "firstStageResolveMs": {
+              "n": 20,
+              "p50": 5.8068545,
+              "mean": 6.25640015,
+              "p95": 6.0060839999999995,
+              "max": 14.536417
+            },
+            "firstEditResolveMs": {
+              "n": 20,
+              "p50": 5.8899585000000005,
+              "mean": 6.8020043,
+              "p95": 12.983667,
+              "max": 14.423958
+            },
+            "editResolveSumMs": {
+              "n": 20,
+              "p50": 11.654021499999999,
+              "mean": 12.92973755,
+              "p95": 20.193083,
+              "max": 20.353416000000003
+            },
+            "allResolveSumMs": {
+              "n": 20,
+              "p50": 17.51152,
+              "mean": 19.1861377,
+              "p95": 26.176374000000003,
+              "max": 27.998626
+            },
+            "editPrimarySumMs": {
+              "n": 20,
+              "p50": 99.872167,
+              "mean": 100.84904795,
+              "p95": 106.318333,
+              "max": 106.550376
+            },
+            "coldToFinalDiagnosticMs": {
+              "n": 20,
+              "p50": 620.9528965,
+              "mean": 623.14309995,
+              "p95": 640.956667,
+              "max": 645.375708
+            },
+            "coldToAllQueriesAndDiagnosticsMs": {
+              "n": 20,
+              "p50": 620.9528965,
+              "mean": 623.14309995,
+              "p95": 640.956667,
+              "max": 645.375708
+            }
+          },
+          "on": {
+            "coldFirstPrimaryMs": {
+              "n": 20,
+              "p50": 104.536083,
+              "mean": 105.1832875,
+              "p95": 111.431916,
+              "max": 112.301709
+            },
+            "firstStageResolveMs": {
+              "n": 20,
+              "p50": 2.505582,
+              "mean": 2.7533455,
+              "p95": 2.601833,
+              "max": 7.62479
+            },
+            "firstEditResolveMs": {
+              "n": 20,
+              "p50": 1.750521,
+              "mean": 1.82727685,
+              "p95": 1.956167,
+              "max": 3.114041
+            },
+            "editResolveSumMs": {
+              "n": 20,
+              "p50": 3.4735424999999998,
+              "mean": 3.7518708,
+              "p95": 4.902625,
+              "max": 6.158874
+            },
+            "allResolveSumMs": {
+              "n": 20,
+              "p50": 5.9852495,
+              "mean": 6.5052163,
+              "p95": 8.653081,
+              "max": 11.398332
+            },
+            "editPrimarySumMs": {
+              "n": 20,
+              "p50": 32.5734165,
+              "mean": 32.3415539,
+              "p95": 34.166376,
+              "max": 34.342
+            },
+            "coldToFinalDiagnosticMs": {
+              "n": 20,
+              "p50": 561.695146,
+              "mean": 565.5909084,
+              "p95": 580.486792,
+              "max": 584.755584
+            },
+            "coldToAllQueriesAndDiagnosticsMs": {
+              "n": 20,
+              "p50": 561.695146,
+              "mean": 565.5909084,
+              "p95": 580.486792,
+              "max": 584.755584
+            }
+          }
+        },
+        "paired": {
+          "coldFirstPrimaryMs": {
+            "blocks": 10,
+            "meanDifferenceMs": 6.7074436,
+            "bootstrap95Ms": [
+              4.7591582500000005,
+              8.679050049999997
+            ]
+          },
+          "firstStageResolveMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -3.50305465,
+            "bootstrap95Ms": [
+              -4.63385045,
+              -2.5574984499999998
+            ]
+          },
+          "firstEditResolveMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -4.9747274500000005,
+            "bootstrap95Ms": [
+              -6.1769818,
+              -4.08521705
+            ]
+          },
+          "editResolveSumMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -9.177866750000002,
+            "bootstrap95Ms": [
+              -10.355827300000001,
+              -8.2231997
+            ]
+          },
+          "allResolveSumMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -12.6809214,
+            "bootstrap95Ms": [
+              -14.509138150000002,
+              -11.523582
+            ]
+          },
+          "editPrimarySumMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -68.50749404999999,
+            "bootstrap95Ms": [
+              -69.49335004999999,
+              -67.64725455
+            ]
+          },
+          "coldToFinalDiagnosticMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -57.55219154999999,
+            "bootstrap95Ms": [
+              -60.901335049999965,
+              -54.21304785000001
+            ]
+          },
+          "coldToAllQueriesAndDiagnosticsMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -57.55219154999999,
+            "bootstrap95Ms": [
+              -60.87600594999996,
+              -54.381108299999994
+            ]
+          }
+        }
+      },
+      {
+        "case": "W01-compare",
+        "arms": {
+          "off": {
+            "coldFirstPrimaryMs": {
+              "n": 20,
+              "p50": 101.6795415,
+              "mean": 102.85278545,
+              "p95": 110.033542,
+              "max": 123.766167
+            },
+            "firstStageResolveMs": {
+              "n": 20,
+              "p50": 309.30242150000004,
+              "mean": 314.1469451,
+              "p95": 349.087549,
+              "max": 363.768453
+            },
+            "firstEditResolveMs": {
+              "n": 20,
+              "p50": 305.414983,
+              "mean": 312.03015270000003,
+              "p95": 335.457579,
+              "max": 366.319794
+            },
+            "editResolveSumMs": {
+              "n": 20,
+              "p50": 613.2776074999999,
+              "mean": 622.1491938,
+              "p95": 658.967708,
+              "max": 683.123744
+            },
+            "allResolveSumMs": {
+              "n": 20,
+              "p50": 919.7603059999999,
+              "mean": 936.2961389,
+              "p95": 1008.055257,
+              "max": 1046.8921970000001
+            },
+            "editPrimarySumMs": {
+              "n": 20,
+              "p50": 104.05443700000001,
+              "mean": 104.80171875,
+              "p95": 109.425541,
+              "max": 109.843208
+            },
+            "coldToFinalDiagnosticMs": {
+              "n": 20,
+              "p50": 1592.802208,
+              "mean": 1596.7531104,
+              "p95": 1705.293334,
+              "max": 1757.483583
+            },
+            "coldToAllQueriesAndDiagnosticsMs": {
+              "n": 20,
+              "p50": 1592.802208,
+              "mean": 1606.6556021,
+              "p95": 1705.293334,
+              "max": 1757.483583
+            }
+          },
+          "on": {
+            "coldFirstPrimaryMs": {
+              "n": 20,
+              "p50": 110.1637295,
+              "mean": 110.22134595,
+              "p95": 116.633542,
+              "max": 118.078167
+            },
+            "firstStageResolveMs": {
+              "n": 20,
+              "p50": 277.032384,
+              "mean": 284.4969919,
+              "p95": 300.171585,
+              "max": 354.806525
+            },
+            "firstEditResolveMs": {
+              "n": 20,
+              "p50": 252.15101900000002,
+              "mean": 253.9990331,
+              "p95": 280.360548,
+              "max": 291.096632
+            },
+            "editResolveSumMs": {
+              "n": 20,
+              "p50": 506.38203350000003,
+              "mean": 512.8073337,
+              "p95": 552.6219619999999,
+              "max": 592.1926109999999
+            },
+            "allResolveSumMs": {
+              "n": 20,
+              "p50": 784.3367665,
+              "mean": 797.3043256,
+              "p95": 852.793547,
+              "max": 946.999136
+            },
+            "editPrimarySumMs": {
+              "n": 20,
+              "p50": 39.6651245,
+              "mean": 40.26632075,
+              "p95": 41.114334,
+              "max": 53.182249999999996
+            },
+            "coldToFinalDiagnosticMs": {
+              "n": 20,
+              "p50": 1416.9148335,
+              "mean": 1408.38786255,
+              "p95": 1489.147292,
+              "max": 1606.729416
+            },
+            "coldToAllQueriesAndDiagnosticsMs": {
+              "n": 20,
+              "p50": 1416.9148335,
+              "mean": 1408.38786255,
+              "p95": 1489.147292,
+              "max": 1606.729416
+            }
+          }
+        },
+        "paired": {
+          "coldFirstPrimaryMs": {
+            "blocks": 10,
+            "meanDifferenceMs": 7.368560500000003,
+            "bootstrap95Ms": [
+              3.7836499500000045,
+              10.760652200000001
+            ]
+          },
+          "firstStageResolveMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -29.649953200000017,
+            "bootstrap95Ms": [
+              -37.27423195,
+              -22.26622695000001
+            ]
+          },
+          "firstEditResolveMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -58.031119600000004,
+            "bootstrap95Ms": [
+              -63.101216949999994,
+              -52.71441545000002
+            ]
+          },
+          "editResolveSumMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -109.34186009999999,
+            "bootstrap95Ms": [
+              -115.97568125,
+              -102.67731084999997
+            ]
+          },
+          "allResolveSumMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -138.99181330000002,
+            "bootstrap95Ms": [
+              -152.4357877,
+              -125.78318740000002
+            ]
+          },
+          "editPrimarySumMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -64.535398,
+            "bootstrap95Ms": [
+              -65.77316665000001,
+              -62.7249666
+            ]
+          },
+          "coldToFinalDiagnosticMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -188.36524784999992,
+            "bootstrap95Ms": [
+              -235.26784159999997,
+              -131.16738324999994
+            ]
+          },
+          "coldToAllQueriesAndDiagnosticsMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -198.26773954999993,
+            "bootstrap95Ms": [
+              -235.76828519999998,
+              -157.08183344999992
+            ]
+          }
+        }
+      },
+      {
+        "case": "W07-pss-multidoc",
+        "arms": {
+          "off": {
+            "coldFirstPrimaryMs": {
+              "n": 20,
+              "p50": 98.8617915,
+              "mean": 99.0878187,
+              "p95": 103.394542,
+              "max": 106.103917
+            },
+            "firstStageResolveMs": {
+              "n": 20,
+              "p50": 17.2670835,
+              "mean": 18.90154245,
+              "p95": 27.457335999999998,
+              "max": 38.951377
+            },
+            "firstEditResolveMs": {
+              "n": 20,
+              "p50": 18.543228,
+              "mean": 20.29921335,
+              "p95": 31.77546,
+              "max": 41.60425
+            },
+            "editResolveSumMs": {
+              "n": 20,
+              "p50": 36.916255,
+              "mean": 39.1257138,
+              "p95": 50.196085999999994,
+              "max": 63.901626
+            },
+            "allResolveSumMs": {
+              "n": 20,
+              "p50": 54.275563500000004,
+              "mean": 58.02725625,
+              "p95": 77.423338,
+              "max": 91.35896199999999
+            },
+            "editPrimarySumMs": {
+              "n": 20,
+              "p50": 99.4220415,
+              "mean": 100.12626465,
+              "p95": 104.556583,
+              "max": 105.379584
+            },
+            "coldToFinalDiagnosticMs": {
+              "n": 20,
+              "p50": 780.0477285,
+              "mean": 785.02711445,
+              "p95": 824.900166,
+              "max": 830.473333
+            },
+            "coldToAllQueriesAndDiagnosticsMs": {
+              "n": 20,
+              "p50": 780.0477285,
+              "mean": 785.02711445,
+              "p95": 824.900166,
+              "max": 830.473333
+            }
+          },
+          "on": {
+            "coldFirstPrimaryMs": {
+              "n": 20,
+              "p50": 105.845854,
+              "mean": 108.99100435,
+              "p95": 120.705084,
+              "max": 137.513292
+            },
+            "firstStageResolveMs": {
+              "n": 20,
+              "p50": 17.788020500000002,
+              "mean": 17.991072850000002,
+              "p95": 19.456039,
+              "max": 20.699333
+            },
+            "firstEditResolveMs": {
+              "n": 20,
+              "p50": 18.7570645,
+              "mean": 19.01250075,
+              "p95": 20.583414,
+              "max": 20.659004
+            },
+            "editResolveSumMs": {
+              "n": 20,
+              "p50": 37.910418,
+              "mean": 38.1972977,
+              "p95": 40.621376,
+              "max": 41.580087
+            },
+            "allResolveSumMs": {
+              "n": 20,
+              "p50": 55.6345805,
+              "mean": 56.18837055,
+              "p95": 59.547632,
+              "max": 61.320709
+            },
+            "editPrimarySumMs": {
+              "n": 20,
+              "p50": 32.857854,
+              "mean": 32.97777905,
+              "p95": 35.083416,
+              "max": 35.249458000000004
+            },
+            "coldToFinalDiagnosticMs": {
+              "n": 20,
+              "p50": 738.1985415,
+              "mean": 743.58730845,
+              "p95": 782.841084,
+              "max": 786.873
+            },
+            "coldToAllQueriesAndDiagnosticsMs": {
+              "n": 20,
+              "p50": 738.1985415,
+              "mean": 743.58730845,
+              "p95": 782.841084,
+              "max": 786.873
+            }
+          }
+        },
+        "paired": {
+          "coldFirstPrimaryMs": {
+            "blocks": 10,
+            "meanDifferenceMs": 9.903185650000001,
+            "bootstrap95Ms": [
+              5.686991999999998,
+              15.567252350000008
+            ]
+          },
+          "firstStageResolveMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -0.9104695999999993,
+            "bootstrap95Ms": [
+              -3.12659315,
+              0.7699990000000018
+            ]
+          },
+          "firstEditResolveMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -1.2867126,
+            "bootstrap95Ms": [
+              -4.18331175,
+              0.7146689999999996
+            ]
+          },
+          "editResolveSumMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -0.9284161000000012,
+            "bootstrap95Ms": [
+              -4.118076500000002,
+              1.3913472499999997
+            ]
+          },
+          "allResolveSumMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -1.8388856999999987,
+            "bootstrap95Ms": [
+              -6.610366400000001,
+              1.8778381000000024
+            ]
+          },
+          "editPrimarySumMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -67.1484856,
+            "bootstrap95Ms": [
+              -68.05850240000001,
+              -66.21431494999999
+            ]
+          },
+          "coldToFinalDiagnosticMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -41.43980599999996,
+            "bootstrap95Ms": [
+              -47.96389774999998,
+              -35.03136424999995
+            ]
+          },
+          "coldToAllQueriesAndDiagnosticsMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -41.43980599999996,
+            "bootstrap95Ms": [
+              -47.89295384999995,
+              -35.19762694999999
+            ]
+          }
+        }
+      },
+      {
+        "case": "W08-ubus-task",
+        "arms": {
+          "off": {
+            "coldFirstPrimaryMs": {
+              "n": 20,
+              "p50": 94.92154099999999,
+              "mean": 97.4931312,
+              "p95": 106.544208,
+              "max": 132.600417
+            },
+            "firstStageResolveMs": {
+              "n": 20,
+              "p50": 45.9071475,
+              "mean": 46.46951045,
+              "p95": 54.730836,
+              "max": 56.451004
+            },
+            "firstEditResolveMs": {
+              "n": 20,
+              "p50": 43.988748,
+              "mean": 49.7689675,
+              "p95": 65.203379,
+              "max": 110.320748
+            },
+            "editResolveSumMs": {
+              "n": 20,
+              "p50": 89.8721495,
+              "mean": 96.3916669,
+              "p95": 111.416544,
+              "max": 172.53341899999998
+            },
+            "allResolveSumMs": {
+              "n": 20,
+              "p50": 136.705815,
+              "mean": 142.86117735,
+              "p95": 163.037127,
+              "max": 218.746793
+            },
+            "editPrimarySumMs": {
+              "n": 20,
+              "p50": 101.0863745,
+              "mean": 102.28277705,
+              "p95": 109.71016700000001,
+              "max": 113.981708
+            },
+            "coldToFinalDiagnosticMs": {
+              "n": 20,
+              "p50": 763.1296875,
+              "mean": 759.5615583,
+              "p95": 793.805458,
+              "max": 847.568875
+            },
+            "coldToAllQueriesAndDiagnosticsMs": {
+              "n": 20,
+              "p50": 763.1296875,
+              "mean": 759.5615583,
+              "p95": 793.805458,
+              "max": 847.568875
+            }
+          },
+          "on": {
+            "coldFirstPrimaryMs": {
+              "n": 20,
+              "p50": 101.540875,
+              "mean": 101.3299874,
+              "p95": 105.907583,
+              "max": 111.10525
+            },
+            "firstStageResolveMs": {
+              "n": 20,
+              "p50": 45.3003765,
+              "mean": 46.03811015,
+              "p95": 50.975122,
+              "max": 51.416577
+            },
+            "firstEditResolveMs": {
+              "n": 20,
+              "p50": 44.3631755,
+              "mean": 46.3087832,
+              "p95": 51.540921,
+              "max": 68.404167
+            },
+            "editResolveSumMs": {
+              "n": 20,
+              "p50": 90.89539149999999,
+              "mean": 91.274091,
+              "p95": 96.348551,
+              "max": 110.024205
+            },
+            "allResolveSumMs": {
+              "n": 20,
+              "p50": 136.925652,
+              "mean": 137.31220115,
+              "p95": 146.871037,
+              "max": 155.041829
+            },
+            "editPrimarySumMs": {
+              "n": 20,
+              "p50": 35.959292,
+              "mean": 35.44581885,
+              "p95": 36.874583,
+              "max": 37.083917
+            },
+            "coldToFinalDiagnosticMs": {
+              "n": 20,
+              "p50": 711.1709165,
+              "mean": 713.1481167,
+              "p95": 729.957708,
+              "max": 735.325625
+            },
+            "coldToAllQueriesAndDiagnosticsMs": {
+              "n": 20,
+              "p50": 711.1709165,
+              "mean": 713.1481167,
+              "p95": 729.957708,
+              "max": 735.325625
+            }
+          }
+        },
+        "paired": {
+          "coldFirstPrimaryMs": {
+            "blocks": 10,
+            "meanDifferenceMs": 3.8368562000000024,
+            "bootstrap95Ms": [
+              0.3112686500000038,
+              6.660493800000002
+            ]
+          },
+          "firstStageResolveMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -0.4314003000000007,
+            "bootstrap95Ms": [
+              -2.195469350000002,
+              1.2675725999999998
+            ]
+          },
+          "firstEditResolveMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -3.4601843000000017,
+            "bootstrap95Ms": [
+              -11.26176715,
+              3.453406449999998
+            ]
+          },
+          "editResolveSumMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -5.1175759,
+            "bootstrap95Ms": [
+              -14.636258449999998,
+              1.8020500499999996
+            ]
+          },
+          "allResolveSumMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -5.5489761999999985,
+            "bootstrap95Ms": [
+              -14.914660199999997,
+              1.580963750000001
+            ]
+          },
+          "editPrimarySumMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -66.8369582,
+            "bootstrap95Ms": [
+              -68.8262043,
+              -65.42297065
+            ]
+          },
+          "coldToFinalDiagnosticMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -46.4134416,
+            "bootstrap95Ms": [
+              -56.73085825,
+              -35.459850049999986
+            ]
+          },
+          "coldToAllQueriesAndDiagnosticsMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -46.4134416,
+            "bootstrap95Ms": [
+              -56.95046235000002,
+              -35.28069579999997
+            ]
+          }
+        }
+      },
+      {
+        "case": "W09-ubus-config",
+        "arms": {
+          "off": {
+            "coldFirstPrimaryMs": {
+              "n": 20,
+              "p50": 96.6228545,
+              "mean": 97.46916045,
+              "p95": 102.368667,
+              "max": 104.841
+            },
+            "firstStageResolveMs": {
+              "n": 20,
+              "p50": 335.996694,
+              "mean": 344.04540815,
+              "p95": 378.108595,
+              "max": 424.503038
+            },
+            "firstEditResolveMs": {
+              "n": 20,
+              "p50": 332.98104149999995,
+              "mean": 333.87102525,
+              "p95": 364.489609,
+              "max": 401.755658
+            },
+            "editResolveSumMs": {
+              "n": 20,
+              "p50": 666.074413,
+              "mean": 671.85402925,
+              "p95": 726.595572,
+              "max": 754.278994
+            },
+            "allResolveSumMs": {
+              "n": 20,
+              "p50": 1000.8414554999999,
+              "mean": 1015.8994374,
+              "p95": 1114.238789,
+              "max": 1117.034075
+            },
+            "editPrimarySumMs": {
+              "n": 20,
+              "p50": 104.081771,
+              "mean": 104.3399833,
+              "p95": 107.090333,
+              "max": 107.124459
+            },
+            "coldToFinalDiagnosticMs": {
+              "n": 20,
+              "p50": 1682.421417,
+              "mean": 1679.2797208,
+              "p95": 1815.51275,
+              "max": 1822.043333
+            },
+            "coldToAllQueriesAndDiagnosticsMs": {
+              "n": 20,
+              "p50": 1682.421417,
+              "mean": 1679.2797208,
+              "p95": 1815.51275,
+              "max": 1822.043333
+            }
+          },
+          "on": {
+            "coldFirstPrimaryMs": {
+              "n": 20,
+              "p50": 104.502646,
+              "mean": 104.822527,
+              "p95": 112.364875,
+              "max": 114.743625
+            },
+            "firstStageResolveMs": {
+              "n": 20,
+              "p50": 304.0223585,
+              "mean": 305.30202075,
+              "p95": 344.408422,
+              "max": 362.472144
+            },
+            "firstEditResolveMs": {
+              "n": 20,
+              "p50": 266.065563,
+              "mean": 272.46057335,
+              "p95": 292.768419,
+              "max": 345.374844
+            },
+            "editResolveSumMs": {
+              "n": 20,
+              "p50": 574.3278664999999,
+              "mean": 585.9307014,
+              "p95": 630.681326,
+              "max": 706.541248
+            },
+            "allResolveSumMs": {
+              "n": 20,
+              "p50": 879.276706,
+              "mean": 891.23272215,
+              "p95": 976.376089,
+              "max": 991.584932
+            },
+            "editPrimarySumMs": {
+              "n": 20,
+              "p50": 40.928979,
+              "mean": 40.86949785,
+              "p95": 41.515917,
+              "max": 41.855166
+            },
+            "coldToFinalDiagnosticMs": {
+              "n": 20,
+              "p50": 1386.5590204999999,
+              "mean": 1381.9940604,
+              "p95": 1492.495541,
+              "max": 1521.496959
+            },
+            "coldToAllQueriesAndDiagnosticsMs": {
+              "n": 20,
+              "p50": 1386.5590204999999,
+              "mean": 1381.9940604,
+              "p95": 1492.495541,
+              "max": 1521.496959
+            }
+          }
+        },
+        "paired": {
+          "coldFirstPrimaryMs": {
+            "blocks": 10,
+            "meanDifferenceMs": 7.35336655,
+            "bootstrap95Ms": [
+              5.925422850000001,
+              8.719912449999999
+            ]
+          },
+          "firstStageResolveMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -38.7433874,
+            "bootstrap95Ms": [
+              -47.693664650000024,
+              -32.05083294999999
+            ]
+          },
+          "firstEditResolveMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -61.410451900000005,
+            "bootstrap95Ms": [
+              -69.41736334999999,
+              -53.40667719999999
+            ]
+          },
+          "editResolveSumMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -85.92332785,
+            "bootstrap95Ms": [
+              -97.36679125000003,
+              -75.00118055
+            ]
+          },
+          "allResolveSumMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -124.66671524999997,
+            "bootstrap95Ms": [
+              -140.45965094999997,
+              -110.08411089999997
+            ]
+          },
+          "editPrimarySumMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -63.47048545,
+            "bootstrap95Ms": [
+              -64.2486271,
+              -62.67655625
+            ]
+          },
+          "coldToFinalDiagnosticMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -297.2856604,
+            "bootstrap95Ms": [
+              -342.50924790000005,
+              -255.61757084999994
+            ]
+          },
+          "coldToAllQueriesAndDiagnosticsMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -297.2856604,
+            "bootstrap95Ms": [
+              -341.80438520000007,
+              -256.06434344999997
+            ]
+          }
+        }
+      },
+      {
+        "case": "W13-continuous",
+        "arms": {
+          "off": {
+            "coldFirstPrimaryMs": {
+              "n": 20,
+              "p50": 100.99418750000001,
+              "mean": 102.27118115,
+              "p95": 110.069,
+              "max": 113.021625
+            },
+            "firstStageResolveMs": {
+              "n": 20,
+              "p50": 306.4052445,
+              "mean": 314.81865275,
+              "p95": 349.01471,
+              "max": 365.22526
+            },
+            "firstEditResolveMs": {
+              "n": 20,
+              "p50": 303.515085,
+              "mean": 306.16062955,
+              "p95": 331.512093,
+              "max": 340.654099
+            },
+            "editResolveSumMs": {
+              "n": 20,
+              "p50": 3103.154919,
+              "mean": 3092.0680284,
+              "p95": 3145.756398,
+              "max": 3338.739745
+            },
+            "allResolveSumMs": {
+              "n": 20,
+              "p50": 3408.9636655,
+              "mean": 3406.88668115,
+              "p95": 3484.508359,
+              "max": 3687.7544550000002
+            },
+            "editPrimarySumMs": {
+              "n": 20,
+              "p50": 523.1033755000001,
+              "mean": 523.6580446,
+              "p95": 534.368169,
+              "max": 536.59796
+            },
+            "coldToFinalDiagnosticMs": {
+              "n": 20,
+              "p50": 5743.6483124999995,
+              "mean": 5751.07460615,
+              "p95": 5857.825209,
+              "max": 6131.83675
+            },
+            "coldToAllQueriesAndDiagnosticsMs": {
+              "n": 20,
+              "p50": 5743.6483124999995,
+              "mean": 5751.07460615,
+              "p95": 5857.825209,
+              "max": 6131.83675
+            }
+          },
+          "on": {
+            "coldFirstPrimaryMs": {
+              "n": 20,
+              "p50": 109.76125,
+              "mean": 110.56501265,
+              "p95": 115.767334,
+              "max": 118.038459
+            },
+            "firstStageResolveMs": {
+              "n": 20,
+              "p50": 281.4031235,
+              "mean": 285.42530485,
+              "p95": 304.472461,
+              "max": 342.357086
+            },
+            "firstEditResolveMs": {
+              "n": 20,
+              "p50": 253.0155615,
+              "mean": 254.31425035,
+              "p95": 270.284286,
+              "max": 278.089126
+            },
+            "editResolveSumMs": {
+              "n": 20,
+              "p50": 2577.57484,
+              "mean": 2592.66627355,
+              "p95": 2711.4058769999997,
+              "max": 2924.3594829999997
+            },
+            "allResolveSumMs": {
+              "n": 20,
+              "p50": 2855.68794,
+              "mean": 2878.0915784,
+              "p95": 3015.878338,
+              "max": 3216.0855779999997
+            },
+            "editPrimarySumMs": {
+              "n": 20,
+              "p50": 200.229292,
+              "mean": 198.9468313,
+              "p95": 201.849499,
+              "max": 202.006374
+            },
+            "coldToFinalDiagnosticMs": {
+              "n": 20,
+              "p50": 4962.998229000001,
+              "mean": 4946.7271396,
+              "p95": 5120.39025,
+              "max": 5127.84625
+            },
+            "coldToAllQueriesAndDiagnosticsMs": {
+              "n": 20,
+              "p50": 4962.998229000001,
+              "mean": 4951.99848335,
+              "p95": 5120.39025,
+              "max": 5127.84625
+            }
+          }
+        },
+        "paired": {
+          "coldFirstPrimaryMs": {
+            "blocks": 10,
+            "meanDifferenceMs": 8.2938315,
+            "bootstrap95Ms": [
+              6.651681399999998,
+              9.896498200000003
+            ]
+          },
+          "firstStageResolveMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -29.39334789999998,
+            "bootstrap95Ms": [
+              -38.19034759999998,
+              -18.932782850000002
+            ]
+          },
+          "firstEditResolveMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -51.846379199999994,
+            "bootstrap95Ms": [
+              -58.243382700000005,
+              -45.91851714999999
+            ]
+          },
+          "editResolveSumMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -499.40175485,
+            "bootstrap95Ms": [
+              -529.0785525499999,
+              -467.10010405000014
+            ]
+          },
+          "allResolveSumMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -528.79510275,
+            "bootstrap95Ms": [
+              -559.9177686,
+              -495.0978726499998
+            ]
+          },
+          "editPrimarySumMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -324.7112133,
+            "bootstrap95Ms": [
+              -328.37079035,
+              -321.79065729999996
+            ]
+          },
+          "coldToFinalDiagnosticMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -804.34746655,
+            "bootstrap95Ms": [
+              -863.9051999000001,
+              -750.4600979499999
+            ]
+          },
+          "coldToAllQueriesAndDiagnosticsMs": {
+            "blocks": 10,
+            "meanDifferenceMs": -799.0761227999999,
+            "bootstrap95Ms": [
+              -857.8014374000002,
+              -750.5369039
+            ]
+          }
+        }
+      }
+    ],
+    "inference": "n20 each arm/cell, 10 balanced four-process blocks. Bootstrap intervals resample block mean differences, on minus off; descriptive p95 at n20 is not a p99/tail guarantee. Multiple metrics, no multiplicity correction. All failures/outliers kept; no replacements. Positive isolated diagnostics checked. Long sessions/memory separately assessed."
+  },
+  "longAndMemory": {
+    "fallbackProcesses": 240,
+    "fallback": [
+      {
+        "variant": "config-watch",
+        "enabled": false,
+        "metrics": {
+          "firstEditMs": {
+            "n": 20,
+            "median": 171.8202085,
+            "mean": 173.3837354,
+            "p95": 181.199958,
+            "max": 182.541875
+          },
+          "editResponseSumMs": {
+            "n": 20,
+            "median": 221.46520900000002,
+            "mean": 223.3418543,
+            "p95": 234.559625,
+            "max": 234.579208
+          },
+          "recoveryMs": {
+            "n": 20,
+            "median": 49.438041999999996,
+            "mean": 49.9581189,
+            "p95": 52.365708,
+            "max": 53.37925
+          },
+          "coldToFinalDiagnosticMs": {
+            "n": 20,
+            "median": 721.65175,
+            "mean": 723.05675415,
+            "p95": 737.162458,
+            "max": 737.426292
+          }
+        }
+      },
+      {
+        "variant": "config-watch",
+        "enabled": true,
+        "metrics": {
+          "firstEditMs": {
+            "n": 20,
+            "median": 148.295854,
+            "mean": 149.24049165,
+            "p95": 158.361417,
+            "max": 158.379333
+          },
+          "editResponseSumMs": {
+            "n": 20,
+            "median": 164.3897915,
+            "mean": 165.6869522,
+            "p95": 175.328251,
+            "max": 175.808042
+          },
+          "recoveryMs": {
+            "n": 20,
+            "median": 16.520249999999997,
+            "mean": 16.44646055,
+            "p95": 16.966834,
+            "max": 17.428709
+          },
+          "coldToFinalDiagnosticMs": {
+            "n": 20,
+            "median": 690.9263960000001,
+            "mean": 691.293352,
+            "p95": 700.435167,
+            "max": 708.598333
+          }
+        }
+      },
+      {
+        "variant": "library-watch",
+        "enabled": false,
+        "metrics": {
+          "firstEditMs": {
+            "n": 20,
+            "median": 137.27722899999998,
+            "mean": 140.80406035,
+            "p95": 145.850083,
+            "max": 207.223375
+          },
+          "editResponseSumMs": {
+            "n": 20,
+            "median": 188.329604,
+            "mean": 191.7555581,
+            "p95": 196.007542,
+            "max": 261.75675
+          },
+          "recoveryMs": {
+            "n": 20,
+            "median": 50.9818955,
+            "mean": 50.95149775,
+            "p95": 54.145041,
+            "max": 54.533375
+          },
+          "coldToFinalDiagnosticMs": {
+            "n": 20,
+            "median": 690.1225625,
+            "mean": 695.4482897,
+            "p95": 717.252709,
+            "max": 816.477458
+          }
+        }
+      },
+      {
+        "variant": "library-watch",
+        "enabled": true,
+        "metrics": {
+          "firstEditMs": {
+            "n": 20,
+            "median": 108.9243335,
+            "mean": 109.2407291,
+            "p95": 112.234083,
+            "max": 112.362667
+          },
+          "editResponseSumMs": {
+            "n": 20,
+            "median": 127.2232495,
+            "mean": 127.34868335,
+            "p95": 130.378208,
+            "max": 131.68425100000002
+          },
+          "recoveryMs": {
+            "n": 20,
+            "median": 18.1410835,
+            "mean": 18.10795425,
+            "p95": 19.052708,
+            "max": 19.321584
+          },
+          "coldToFinalDiagnosticMs": {
+            "n": 20,
+            "median": 656.1630210000001,
+            "mean": 656.8774853,
+            "p95": 669.994583,
+            "max": 673.472166
+          }
+        }
+      },
+      {
+        "variant": "macro-override",
+        "enabled": false,
+        "metrics": {
+          "firstEditMs": {
+            "n": 20,
+            "median": 50.165771,
+            "mean": 50.7996668,
+            "p95": 54.828667,
+            "max": 54.983167
+          },
+          "editResponseSumMs": {
+            "n": 20,
+            "median": 100.68293750000001,
+            "mean": 102.9961084,
+            "p95": 111.82662400000001,
+            "max": 112.932834
+          },
+          "recoveryMs": {
+            "n": 20,
+            "median": 51.2870205,
+            "mean": 52.1964416,
+            "p95": 57.461041,
+            "max": 58.954292
+          },
+          "coldToFinalDiagnosticMs": {
+            "n": 20,
+            "median": 602.571396,
+            "mean": 605.56730195,
+            "p95": 621.938625,
+            "max": 624.404416
+          }
+        }
+      },
+      {
+        "variant": "macro-override",
+        "enabled": true,
+        "metrics": {
+          "firstEditMs": {
+            "n": 20,
+            "median": 60.488625,
+            "mean": 60.75538545,
+            "p95": 63.878834,
+            "max": 63.910792
+          },
+          "editResponseSumMs": {
+            "n": 20,
+            "median": 118.134354,
+            "mean": 119.15908765,
+            "p95": 124.753334,
+            "max": 125.41258400000001
+          },
+          "recoveryMs": {
+            "n": 20,
+            "median": 57.8990835,
+            "mean": 58.4037022,
+            "p95": 61.501792,
+            "max": 62.308791
+          },
+          "coldToFinalDiagnosticMs": {
+            "n": 20,
+            "median": 642.5023335,
+            "mean": 644.7607041,
+            "p95": 662.813666,
+            "max": 666.768583
+          }
+        }
+      },
+      {
+        "variant": "nonprefix-order",
+        "enabled": false,
+        "metrics": {
+          "firstEditMs": {
+            "n": 20,
+            "median": 50.227125,
+            "mean": 50.4856562,
+            "p95": 52.343292,
+            "max": 52.385292
+          },
+          "editResponseSumMs": {
+            "n": 20,
+            "median": 101.484479,
+            "mean": 102.04825,
+            "p95": 105.42708400000001,
+            "max": 105.693708
+          },
+          "recoveryMs": {
+            "n": 20,
+            "median": 51.3482915,
+            "mean": 51.5625938,
+            "p95": 53.751625,
+            "max": 54.218333
+          },
+          "coldToFinalDiagnosticMs": {
+            "n": 20,
+            "median": 599.5918745,
+            "mean": 602.24803535,
+            "p95": 615.065083,
+            "max": 630.936583
+          }
+        }
+      },
+      {
+        "variant": "nonprefix-order",
+        "enabled": true,
+        "metrics": {
+          "firstEditMs": {
+            "n": 20,
+            "median": 50.492270500000004,
+            "mean": 50.438993599999996,
+            "p95": 52.683333,
+            "max": 53.58825
+          },
+          "editResponseSumMs": {
+            "n": 20,
+            "median": 102.16185399999999,
+            "mean": 102.4901415,
+            "p95": 106.51220799999999,
+            "max": 108.68266600000001
+          },
+          "recoveryMs": {
+            "n": 20,
+            "median": 51.533521,
+            "mean": 52.0511479,
+            "p95": 54.300459,
+            "max": 55.094416
+          },
+          "coldToFinalDiagnosticMs": {
+            "n": 20,
+            "median": 599.9003535,
+            "mean": 602.8990936,
+            "p95": 608.872542,
+            "max": 633.654583
+          }
+        }
+      },
+      {
+        "variant": "tail-resetall",
+        "enabled": false,
+        "metrics": {
+          "firstEditMs": {
+            "n": 20,
+            "median": 50.445229499999996,
+            "mean": 50.9930874,
+            "p95": 53.135,
+            "max": 54.713709
+          },
+          "editResponseSumMs": {
+            "n": 20,
+            "median": 103.1776875,
+            "mean": 103.1725666,
+            "p95": 107.001125,
+            "max": 111.13570899999999
+          },
+          "recoveryMs": {
+            "n": 20,
+            "median": 52.5050835,
+            "mean": 52.1794792,
+            "p95": 54.630875,
+            "max": 56.422
+          },
+          "coldToFinalDiagnosticMs": {
+            "n": 20,
+            "median": 602.6097910000001,
+            "mean": 602.43663735,
+            "p95": 610.603708,
+            "max": 612.068167
+          }
+        }
+      },
+      {
+        "variant": "tail-resetall",
+        "enabled": true,
+        "metrics": {
+          "firstEditMs": {
+            "n": 20,
+            "median": 56.2959375,
+            "mean": 56.5372354,
+            "p95": 58.915083,
+            "max": 59.449042
+          },
+          "editResponseSumMs": {
+            "n": 20,
+            "median": 113.48947899999999,
+            "mean": 114.59603535000001,
+            "p95": 118.996708,
+            "max": 119.78366700000001
+          },
+          "recoveryMs": {
+            "n": 20,
+            "median": 57.808125000000004,
+            "mean": 58.05879995,
+            "p95": 60.280917,
+            "max": 61.102958
+          },
+          "coldToFinalDiagnosticMs": {
+            "n": 20,
+            "median": 636.8503125,
+            "mean": 638.44138535,
+            "p95": 645.857458,
+            "max": 652.19
+          }
+        }
+      },
+      {
+        "variant": "tail-timescale",
+        "enabled": false,
+        "metrics": {
+          "firstEditMs": {
+            "n": 20,
+            "median": 50.015208,
+            "mean": 50.75379155,
+            "p95": 54.221833,
+            "max": 54.687792
+          },
+          "editResponseSumMs": {
+            "n": 20,
+            "median": 101.757083,
+            "mean": 102.97269155,
+            "p95": 109.29329200000001,
+            "max": 109.877833
+          },
+          "recoveryMs": {
+            "n": 20,
+            "median": 51.744646,
+            "mean": 52.2189,
+            "p95": 55.656,
+            "max": 56.926875
+          },
+          "coldToFinalDiagnosticMs": {
+            "n": 20,
+            "median": 605.4470005000001,
+            "mean": 604.94072905,
+            "p95": 620.513625,
+            "max": 620.525333
+          }
+        }
+      },
+      {
+        "variant": "tail-timescale",
+        "enabled": true,
+        "metrics": {
+          "firstEditMs": {
+            "n": 20,
+            "median": 55.688145500000005,
+            "mean": 56.20038745,
+            "p95": 59.021292,
+            "max": 59.124667
+          },
+          "editResponseSumMs": {
+            "n": 20,
+            "median": 112.68674949999999,
+            "mean": 113.5941041,
+            "p95": 116.66916599999999,
+            "max": 119.552458
+          },
+          "recoveryMs": {
+            "n": 20,
+            "median": 57.083167,
+            "mean": 57.39371665,
+            "p95": 60.342666,
+            "max": 61.134375
+          },
+          "coldToFinalDiagnosticMs": {
+            "n": 20,
+            "median": 640.6702915000001,
+            "mean": 640.56233345,
+            "p95": 649.943417,
+            "max": 658.079958
+          }
+        }
+      }
+    ],
+    "longLatencyProcesses": 18,
+    "longLatency": [
+      {
+        "case": "W07-pss-multidoc",
+        "enabled": false,
+        "processes": 3,
+        "metrics": {
+          "editResponseSumMs": {
+            "n": 3,
+            "median": 48501.166886,
+            "mean": 48581.720176,
+            "p95": 49036.932385,
+            "max": 49036.932385
+          },
+          "coldToFinalDiagnosticMs": {
+            "n": 3,
+            "median": 52712.729125,
+            "mean": 52852.56741633333,
+            "p95": 53418.844458,
+            "max": 53418.844458
+          },
+          "sequenceWithDiagnosticsMs": {
+            "n": 3,
+            "median": 52622.468541,
+            "mean": 52739.73752733333,
+            "p95": 53297.748541,
+            "max": 53297.748541
+          }
+        },
+        "perProcessPrimary": [
+          {
+            "n": 1000,
+            "median": 47.979479,
+            "mean": 48.501166886,
+            "p95": 52.171667,
+            "max": 119.313916
+          },
+          {
+            "n": 1000,
+            "median": 48.261417,
+            "mean": 49.036932385,
+            "p95": 53.732167,
+            "max": 136.909375
+          },
+          {
+            "n": 1000,
+            "median": 47.656479000000004,
+            "mean": 48.207061257,
+            "p95": 52.799041,
+            "max": 112.063875
+          }
+        ],
+        "retirementCounts": [
+          0,
+          0,
+          0
+        ],
+        "retirementPrimaryMs": null
+      },
+      {
+        "case": "W07-pss-multidoc",
+        "enabled": true,
+        "processes": 3,
+        "metrics": {
+          "editResponseSumMs": {
+            "n": 3,
+            "median": 15983.705746,
+            "mean": 16003.988641,
+            "p95": 16087.048448,
+            "max": 16087.048448
+          },
+          "coldToFinalDiagnosticMs": {
+            "n": 3,
+            "median": 18196.539833,
+            "mean": 18239.239694,
+            "p95": 18328.006833,
+            "max": 18328.006833
+          },
+          "sequenceWithDiagnosticsMs": {
+            "n": 3,
+            "median": 18070.517542,
+            "mean": 18110.106708666666,
+            "p95": 18195.619917,
+            "max": 18195.619917
+          }
+        },
+        "perProcessPrimary": [
+          {
+            "n": 1000,
+            "median": 15.355229,
+            "mean": 15.983705746,
+            "p95": 16.195,
+            "max": 92.968542
+          },
+          {
+            "n": 1000,
+            "median": 15.314083,
+            "mean": 15.941211729,
+            "p95": 16.293834,
+            "max": 87.836375
+          },
+          {
+            "n": 1000,
+            "median": 15.4703125,
+            "mean": 16.087048448,
+            "p95": 16.7205,
+            "max": 85.089667
+          }
+        ],
+        "retirementCounts": [
+          8,
+          8,
+          8
+        ],
+        "retirementPrimaryMs": {
+          "n": 24,
+          "median": 82.62299999999999,
+          "mean": 83.51960420833333,
+          "p95": 89.532167,
+          "max": 92.968542
+        }
+      },
+      {
+        "case": "W08-ubus-task",
+        "enabled": false,
+        "processes": 3,
+        "metrics": {
+          "editResponseSumMs": {
+            "n": 3,
+            "median": 48380.085689,
+            "mean": 48282.36133133333,
+            "p95": 48383.53929,
+            "max": 48383.53929
+          },
+          "coldToFinalDiagnosticMs": {
+            "n": 3,
+            "median": 53452.570708,
+            "mean": 53379.98691666667,
+            "p95": 53475.364583,
+            "max": 53475.364583
+          },
+          "sequenceWithDiagnosticsMs": {
+            "n": 3,
+            "median": 53364.052958,
+            "mean": 53282.74716666667,
+            "p95": 53388.86825,
+            "max": 53388.86825
+          }
+        },
+        "perProcessPrimary": [
+          {
+            "n": 1000,
+            "median": 47.775082999999995,
+            "mean": 48.380085689,
+            "p95": 51.146542,
+            "max": 186.307083
+          },
+          {
+            "n": 1000,
+            "median": 47.840728999999996,
+            "mean": 48.38353929,
+            "p95": 51.94275,
+            "max": 113.45175
+          },
+          {
+            "n": 1000,
+            "median": 47.6231045,
+            "mean": 48.083459015,
+            "p95": 50.989417,
+            "max": 115.440709
+          }
+        ],
+        "retirementCounts": [
+          0,
+          0,
+          0
+        ],
+        "retirementPrimaryMs": null
+      },
+      {
+        "case": "W08-ubus-task",
+        "enabled": true,
+        "processes": 3,
+        "metrics": {
+          "editResponseSumMs": {
+            "n": 3,
+            "median": 18596.719999,
+            "mean": 18579.184741666668,
+            "p95": 18626.362676,
+            "max": 18626.362676
+          },
+          "coldToFinalDiagnosticMs": {
+            "n": 3,
+            "median": 23575.083291,
+            "mean": 23546.727055666666,
+            "p95": 23600.355292,
+            "max": 23600.355292
+          },
+          "sequenceWithDiagnosticsMs": {
+            "n": 3,
+            "median": 23459.368209,
+            "mean": 23425.674985999998,
+            "p95": 23471.493958,
+            "max": 23471.493958
+          }
+        },
+        "perProcessPrimary": [
+          {
+            "n": 1000,
+            "median": 16.517771,
+            "mean": 18.626362676,
+            "p95": 17.270917,
+            "max": 94.079958
+          },
+          {
+            "n": 1000,
+            "median": 16.447937500000002,
+            "mean": 18.51447155,
+            "p95": 17.271416,
+            "max": 84.092333
+          },
+          {
+            "n": 1000,
+            "median": 16.480020500000002,
+            "mean": 18.596719999,
+            "p95": 17.64775,
+            "max": 89.082833
+          }
+        ],
+        "retirementCounts": [
+          32,
+          32,
+          32
+        ],
+        "retirementPrimaryMs": {
+          "n": 96,
+          "median": 79.960604,
+          "mean": 80.633821625,
+          "p95": 86.411958,
+          "max": 94.079958
+        }
+      },
+      {
+        "case": "W13-continuous",
+        "enabled": false,
+        "processes": 3,
+        "metrics": {
+          "editResponseSumMs": {
+            "n": 3,
+            "median": 51102.079861,
+            "mean": 51920.149225,
+            "p95": 53585.807284,
+            "max": 53585.807284
+          },
+          "coldToFinalDiagnosticMs": {
+            "n": 3,
+            "median": 73515.654667,
+            "mean": 75155.04636133333,
+            "p95": 79201.104084,
+            "max": 79201.104084
+          },
+          "sequenceWithDiagnosticsMs": {
+            "n": 3,
+            "median": 73421.7295,
+            "mean": 75056.423736,
+            "p95": 79114.507,
+            "max": 79114.507
+          }
+        },
+        "perProcessPrimary": [
+          {
+            "n": 1000,
+            "median": 50.619479,
+            "mean": 51.07256053,
+            "p95": 54.453167,
+            "max": 111.13275
+          },
+          {
+            "n": 1000,
+            "median": 52.754104,
+            "mean": 53.585807284,
+            "p95": 59.062,
+            "max": 132.2965
+          },
+          {
+            "n": 1000,
+            "median": 50.775125,
+            "mean": 51.102079861,
+            "p95": 54.250542,
+            "max": 113.019125
+          }
+        ],
+        "retirementCounts": [
+          0,
+          0,
+          0
+        ],
+        "retirementPrimaryMs": null
+      },
+      {
+        "case": "W13-continuous",
+        "enabled": true,
+        "processes": 3,
+        "metrics": {
+          "editResponseSumMs": {
+            "n": 3,
+            "median": 18473.296796,
+            "mean": 18471.746539,
+            "p95": 18485.093454,
+            "max": 18485.093454
+          },
+          "coldToFinalDiagnosticMs": {
+            "n": 3,
+            "median": 27185.340833,
+            "mean": 27182.29741633333,
+            "p95": 27235.909666,
+            "max": 27235.909666
+          },
+          "sequenceWithDiagnosticsMs": {
+            "n": 3,
+            "median": 27093.520042,
+            "mean": 27077.23715333333,
+            "p95": 27105.827959,
+            "max": 27105.827959
+          }
+        },
+        "perProcessPrimary": [
+          {
+            "n": 1000,
+            "median": 17.841625,
+            "mean": 18.473296796,
+            "p95": 18.750167,
+            "max": 93.859666
+          },
+          {
+            "n": 1000,
+            "median": 17.850020999999998,
+            "mean": 18.456849367,
+            "p95": 18.705125,
+            "max": 88.689292
+          },
+          {
+            "n": 1000,
+            "median": 17.866500000000002,
+            "mean": 18.485093454,
+            "p95": 18.847375,
+            "max": 91.97725
+          }
+        ],
+        "retirementCounts": [
+          8,
+          8,
+          8
+        ],
+        "retirementPrimaryMs": {
+          "n": 24,
+          "median": 84.8118125,
+          "mean": 85.17173766666667,
+          "p95": 91.97725,
+          "max": 93.859666
+        }
+      }
+    ],
+    "memoryProcesses": 51,
+    "memory": [
+      {
+        "stage": "long-burst",
+        "case": "W07-pss-multidoc",
+        "method": "completion",
+        "arm": "off",
+        "outcomes": {
+          "success": 1
+        },
+        "peakFamilyMiB": {
+          "n": 1,
+          "median": 1505.015625,
+          "mean": 1505.015625,
+          "p95": 1505.015625,
+          "max": 1505.015625
+        },
+        "endParentMiB": {
+          "n": 1,
+          "median": 1138.359375,
+          "mean": 1138.359375,
+          "p95": 1138.359375,
+          "max": 1138.359375
+        },
+        "retirementCounts": [
+          0
+        ],
+        "retiredParentMiB": [
+          []
+        ]
+      },
+      {
+        "stage": "long-burst",
+        "case": "W07-pss-multidoc",
+        "method": "completion",
+        "arm": "on",
+        "outcomes": {
+          "success": 1
+        },
+        "peakFamilyMiB": {
+          "n": 1,
+          "median": 211.578125,
+          "mean": 211.578125,
+          "p95": 211.578125,
+          "max": 211.578125
+        },
+        "endParentMiB": {
+          "n": 1,
+          "median": 113.203125,
+          "mean": 113.203125,
+          "p95": 113.203125,
+          "max": 113.203125
+        },
+        "retirementCounts": [
+          8
+        ],
+        "retiredParentMiB": [
+          [
+            92.703125,
+            112.734375,
+            104.5,
+            104.5,
+            96.65625,
+            104.65625,
+            104.65625,
+            104.953125
+          ]
+        ]
+      },
+      {
+        "stage": "long-burst",
+        "case": "W07-pss-multidoc",
+        "method": "completion",
+        "arm": "prefix-only",
+        "outcomes": {
+          "success": 1
+        },
+        "peakFamilyMiB": {
+          "n": 1,
+          "median": 252.921875,
+          "mean": 252.921875,
+          "p95": 252.921875,
+          "max": 252.921875
+        },
+        "endParentMiB": {
+          "n": 1,
+          "median": 153.71875,
+          "mean": 153.71875,
+          "p95": 153.71875,
+          "max": 153.71875
+        },
+        "retirementCounts": [
+          0
+        ],
+        "retiredParentMiB": [
+          []
+        ]
+      },
+      {
+        "stage": "long-burst",
+        "case": "W08-ubus-task",
+        "method": "completion",
+        "arm": "off",
+        "outcomes": {
+          "success": 1
+        },
+        "peakFamilyMiB": {
+          "n": 1,
+          "median": 2147.3125,
+          "mean": 2147.3125,
+          "p95": 2147.3125,
+          "max": 2147.3125
+        },
+        "endParentMiB": {
+          "n": 1,
+          "median": 1414.0,
+          "mean": 1414.0,
+          "p95": 1414.0,
+          "max": 1414.0
+        },
+        "retirementCounts": [
+          0
+        ],
+        "retiredParentMiB": [
+          []
+        ]
+      },
+      {
+        "stage": "long-burst",
+        "case": "W08-ubus-task",
+        "method": "completion",
+        "arm": "on",
+        "outcomes": {
+          "success": 1
+        },
+        "peakFamilyMiB": {
+          "n": 1,
+          "median": 206.09375,
+          "mean": 206.09375,
+          "p95": 206.09375,
+          "max": 206.09375
+        },
+        "endParentMiB": {
+          "n": 1,
+          "median": 127.140625,
+          "mean": 127.140625,
+          "p95": 127.140625,
+          "max": 127.140625
+        },
+        "retirementCounts": [
+          32
+        ],
+        "retiredParentMiB": [
+          [
+            105.171875,
+            123.484375,
+            123.53125,
+            123.53125,
+            123.53125,
+            123.53125,
+            124.03125,
+            124.03125,
+            124.03125,
+            124.03125,
+            124.03125,
+            124.03125,
+            124.03125,
+            124.03125,
+            124.03125,
+            124.03125,
+            124.03125,
+            124.046875,
+            124.046875,
+            124.046875,
+            124.0625,
+            124.0625,
+            127.09375,
+            127.09375,
+            127.09375,
+            127.09375,
+            127.09375,
+            127.09375,
+            127.09375,
+            124.125,
+            124.125,
+            124.125
+          ]
+        ]
+      },
+      {
+        "stage": "long-burst",
+        "case": "W08-ubus-task",
+        "method": "completion",
+        "arm": "prefix-only",
+        "outcomes": {
+          "success": 1
+        },
+        "peakFamilyMiB": {
+          "n": 1,
+          "median": 725.015625,
+          "mean": 725.015625,
+          "p95": 725.015625,
+          "max": 725.015625
+        },
+        "endParentMiB": {
+          "n": 1,
+          "median": 544.84375,
+          "mean": 544.84375,
+          "p95": 544.84375,
+          "max": 544.84375
+        },
+        "retirementCounts": [
+          0
+        ],
+        "retiredParentMiB": [
+          []
+        ]
+      },
+      {
+        "stage": "long-burst",
+        "case": "W13-continuous",
+        "method": "completion",
+        "arm": "off",
+        "outcomes": {
+          "success": 1
+        },
+        "peakFamilyMiB": {
+          "n": 1,
+          "median": 1694.765625,
+          "mean": 1694.765625,
+          "p95": 1694.765625,
+          "max": 1694.765625
+        },
+        "endParentMiB": {
+          "n": 1,
+          "median": 1163.1875,
+          "mean": 1163.1875,
+          "p95": 1163.1875,
+          "max": 1163.1875
+        },
+        "retirementCounts": [
+          0
+        ],
+        "retiredParentMiB": [
+          []
+        ]
+      },
+      {
+        "stage": "long-burst",
+        "case": "W13-continuous",
+        "method": "completion",
+        "arm": "on",
+        "outcomes": {
+          "success": 1
+        },
+        "peakFamilyMiB": {
+          "n": 1,
+          "median": 212.984375,
+          "mean": 212.984375,
+          "p95": 212.984375,
+          "max": 212.984375
+        },
+        "endParentMiB": {
+          "n": 1,
+          "median": 125.125,
+          "mean": 125.125,
+          "p95": 125.125,
+          "max": 125.125
+        },
+        "retirementCounts": [
+          8
+        ],
+        "retiredParentMiB": [
+          [
+            100.859375,
+            120.984375,
+            121.046875,
+            124.640625,
+            124.640625,
+            125.0,
+            125.125,
+            125.125
+          ]
+        ]
+      },
+      {
+        "stage": "long-burst",
+        "case": "W13-continuous",
+        "method": "completion",
+        "arm": "prefix-only",
+        "outcomes": {
+          "success": 1
+        },
+        "peakFamilyMiB": {
+          "n": 1,
+          "median": 314.828125,
+          "mean": 314.828125,
+          "p95": 314.828125,
+          "max": 314.828125
+        },
+        "endParentMiB": {
+          "n": 1,
+          "median": 227.421875,
+          "mean": 227.421875,
+          "p95": 227.421875,
+          "max": 227.421875
+        },
+        "retirementCounts": [
+          0
+        ],
+        "retiredParentMiB": [
+          []
+        ]
+      },
+      {
+        "stage": "long-drained",
+        "case": "W07-pss-multidoc",
+        "method": "definition",
+        "arm": "on",
+        "outcomes": {
+          "success": 1
+        },
+        "peakFamilyMiB": {
+          "n": 1,
+          "median": 211.78125,
+          "mean": 211.78125,
+          "p95": 211.78125,
+          "max": 211.78125
+        },
+        "endParentMiB": {
+          "n": 1,
+          "median": 91.984375,
+          "mean": 91.984375,
+          "p95": 91.984375,
+          "max": 91.984375
+        },
+        "retirementCounts": [
+          4
+        ],
+        "retiredParentMiB": [
+          [
+            95.6875,
+            107.3125,
+            110.328125,
+            107.609375
+          ]
+        ]
+      },
+      {
+        "stage": "long-drained",
+        "case": "W07-pss-multidoc",
+        "method": "definition",
+        "arm": "prefix-only",
+        "outcomes": {
+          "success": 1
+        },
+        "peakFamilyMiB": {
+          "n": 1,
+          "median": 207.546875,
+          "mean": 207.546875,
+          "p95": 207.546875,
+          "max": 207.546875
+        },
+        "endParentMiB": {
+          "n": 1,
+          "median": 108.171875,
+          "mean": 108.171875,
+          "p95": 108.171875,
+          "max": 108.171875
+        },
+        "retirementCounts": [
+          0
+        ],
+        "retiredParentMiB": [
+          []
+        ]
+      },
+      {
+        "stage": "long-drained",
+        "case": "W08-ubus-task",
+        "method": "definition",
+        "arm": "on",
+        "outcomes": {
+          "success": 1
+        },
+        "peakFamilyMiB": {
+          "n": 1,
+          "median": 223.875,
+          "mean": 223.875,
+          "p95": 223.875,
+          "max": 223.875
+        },
+        "endParentMiB": {
+          "n": 1,
+          "median": 124.21875,
+          "mean": 124.21875,
+          "p95": 124.21875,
+          "max": 124.21875
+        },
+        "retirementCounts": [
+          16
+        ],
+        "retiredParentMiB": [
+          [
+            108.15625,
+            126.359375,
+            126.421875,
+            126.46875,
+            126.46875,
+            126.46875,
+            126.96875,
+            126.96875,
+            126.96875,
+            126.96875,
+            126.96875,
+            126.96875,
+            126.96875,
+            126.96875,
+            126.96875,
+            124.21875
+          ]
+        ]
+      },
+      {
+        "stage": "long-drained",
+        "case": "W08-ubus-task",
+        "method": "definition",
+        "arm": "prefix-only",
+        "outcomes": {
+          "success": 1
+        },
+        "peakFamilyMiB": {
+          "n": 1,
+          "median": 381.890625,
+          "mean": 381.890625,
+          "p95": 381.890625,
+          "max": 381.890625
+        },
+        "endParentMiB": {
+          "n": 1,
+          "median": 244.546875,
+          "mean": 244.546875,
+          "p95": 244.546875,
+          "max": 244.546875
+        },
+        "retirementCounts": [
+          0
+        ],
+        "retiredParentMiB": [
+          []
+        ]
+      },
+      {
+        "stage": "long-drained",
+        "case": "W13-continuous",
+        "method": "definition",
+        "arm": "on",
+        "outcomes": {
+          "success": 1
+        },
+        "peakFamilyMiB": {
+          "n": 1,
+          "median": 213.953125,
+          "mean": 213.953125,
+          "p95": 213.953125,
+          "max": 213.953125
+        },
+        "endParentMiB": {
+          "n": 1,
+          "median": 113.3125,
+          "mean": 113.3125,
+          "p95": 113.3125,
+          "max": 113.3125
+        },
+        "retirementCounts": [
+          4
+        ],
+        "retiredParentMiB": [
+          [
+            95.640625,
+            116.0,
+            113.03125,
+            113.3125
+          ]
+        ]
+      },
+      {
+        "stage": "long-drained",
+        "case": "W13-continuous",
+        "method": "definition",
+        "arm": "prefix-only",
+        "outcomes": {
+          "success": 1
+        },
+        "peakFamilyMiB": {
+          "n": 1,
+          "median": 220.453125,
+          "mean": 220.453125,
+          "p95": 220.453125,
+          "max": 220.453125
+        },
+        "endParentMiB": {
+          "n": 1,
+          "median": 107.734375,
+          "mean": 107.734375,
+          "p95": 107.734375,
+          "max": 107.734375
+        },
+        "retirementCounts": [
+          0
+        ],
+        "retiredParentMiB": [
+          []
+        ]
+      },
+      {
+        "stage": "short",
+        "case": "W07-pss-multidoc",
+        "method": "completion",
+        "arm": "off",
+        "outcomes": {
+          "success": 3
+        },
+        "peakFamilyMiB": {
+          "n": 3,
+          "median": 201.53125,
+          "mean": 201.54166666666666,
+          "p95": 201.578125,
+          "max": 201.578125
+        },
+        "endParentMiB": {
+          "n": 3,
+          "median": 103.4375,
+          "mean": 103.43229166666667,
+          "p95": 103.484375,
+          "max": 103.484375
+        },
+        "retirementCounts": [
+          0,
+          0,
+          0
+        ],
+        "retiredParentMiB": [
+          [],
+          [],
+          []
+        ]
+      },
+      {
+        "stage": "short",
+        "case": "W07-pss-multidoc",
+        "method": "completion",
+        "arm": "on",
+        "outcomes": {
+          "success": 3
+        },
+        "peakFamilyMiB": {
+          "n": 3,
+          "median": 162.109375,
+          "mean": 162.11458333333334,
+          "p95": 162.21875,
+          "max": 162.21875
+        },
+        "endParentMiB": {
+          "n": 3,
+          "median": 63.90625,
+          "mean": 63.890625,
+          "p95": 63.96875,
+          "max": 63.96875
+        },
+        "retirementCounts": [
+          0,
+          0,
+          0
+        ],
+        "retiredParentMiB": [
+          [],
+          [],
+          []
+        ]
+      },
+      {
+        "stage": "short",
+        "case": "W07-pss-multidoc",
+        "method": "definition",
+        "arm": "off",
+        "outcomes": {
+          "success": 3
+        },
+        "peakFamilyMiB": {
+          "n": 3,
+          "median": 201.40625,
+          "mean": 201.44791666666666,
+          "p95": 201.546875,
+          "max": 201.546875
+        },
+        "endParentMiB": {
+          "n": 3,
+          "median": 103.25,
+          "mean": 103.29166666666667,
+          "p95": 103.375,
+          "max": 103.375
+        },
+        "retirementCounts": [
+          0,
+          0,
+          0
+        ],
+        "retiredParentMiB": [
+          [],
+          [],
+          []
+        ]
+      },
+      {
+        "stage": "short",
+        "case": "W07-pss-multidoc",
+        "method": "definition",
+        "arm": "on",
+        "outcomes": {
+          "success": 3
+        },
+        "peakFamilyMiB": {
+          "n": 3,
+          "median": 161.8125,
+          "mean": 161.82291666666666,
+          "p95": 161.890625,
+          "max": 161.890625
+        },
+        "endParentMiB": {
+          "n": 3,
+          "median": 63.65625,
+          "mean": 63.645833333333336,
+          "p95": 63.671875,
+          "max": 63.671875
+        },
+        "retirementCounts": [
+          0,
+          0,
+          0
+        ],
+        "retiredParentMiB": [
+          [],
+          [],
+          []
+        ]
+      },
+      {
+        "stage": "short",
+        "case": "W08-ubus-task",
+        "method": "completion",
+        "arm": "off",
+        "outcomes": {
+          "success": 3
+        },
+        "peakFamilyMiB": {
+          "n": 3,
+          "median": 189.5,
+          "mean": 189.9375,
+          "p95": 193.3125,
+          "max": 193.3125
+        },
+        "endParentMiB": {
+          "n": 3,
+          "median": 112.6875,
+          "mean": 112.68229166666667,
+          "p95": 112.84375,
+          "max": 112.84375
+        },
+        "retirementCounts": [
+          0,
+          0,
+          0
+        ],
+        "retiredParentMiB": [
+          [],
+          [],
+          []
+        ]
+      },
+      {
+        "stage": "short",
+        "case": "W08-ubus-task",
+        "method": "completion",
+        "arm": "on",
+        "outcomes": {
+          "success": 3
+        },
+        "peakFamilyMiB": {
+          "n": 3,
+          "median": 175.046875,
+          "mean": 169.47395833333334,
+          "p95": 175.421875,
+          "max": 175.421875
+        },
+        "endParentMiB": {
+          "n": 3,
+          "median": 78.65625,
+          "mean": 78.640625,
+          "p95": 78.75,
+          "max": 78.75
+        },
+        "retirementCounts": [
+          0,
+          0,
+          0
+        ],
+        "retiredParentMiB": [
+          [],
+          [],
+          []
+        ]
+      },
+      {
+        "stage": "short",
+        "case": "W08-ubus-task",
+        "method": "definition",
+        "arm": "off",
+        "outcomes": {
+          "success": 3
+        },
+        "peakFamilyMiB": {
+          "n": 3,
+          "median": 191.875,
+          "mean": 190.41145833333334,
+          "p95": 194.625,
+          "max": 194.625
+        },
+        "endParentMiB": {
+          "n": 3,
+          "median": 112.328125,
+          "mean": 112.33333333333333,
+          "p95": 112.34375,
+          "max": 112.34375
+        },
+        "retirementCounts": [
+          0,
+          0,
+          0
+        ],
+        "retiredParentMiB": [
+          [],
+          [],
+          []
+        ]
+      },
+      {
+        "stage": "short",
+        "case": "W08-ubus-task",
+        "method": "definition",
+        "arm": "on",
+        "outcomes": {
+          "success": 3
+        },
+        "peakFamilyMiB": {
+          "n": 3,
+          "median": 154.953125,
+          "mean": 156.234375,
+          "p95": 163.59375,
+          "max": 163.59375
+        },
+        "endParentMiB": {
+          "n": 3,
+          "median": 78.28125,
+          "mean": 78.28125,
+          "p95": 78.390625,
+          "max": 78.390625
+        },
+        "retirementCounts": [
+          0,
+          0,
+          0
+        ],
+        "retiredParentMiB": [
+          [],
+          [],
+          []
+        ]
+      },
+      {
+        "stage": "short",
+        "case": "W13-continuous",
+        "method": "completion",
+        "arm": "off",
+        "outcomes": {
+          "success": 3
+        },
+        "peakFamilyMiB": {
+          "n": 3,
+          "median": 213.90625,
+          "mean": 213.92708333333334,
+          "p95": 217.59375,
+          "max": 217.59375
+        },
+        "endParentMiB": {
+          "n": 3,
+          "median": 131.59375,
+          "mean": 131.66145833333334,
+          "p95": 131.90625,
+          "max": 131.90625
+        },
+        "retirementCounts": [
+          0,
+          0,
+          0
+        ],
+        "retiredParentMiB": [
+          [],
+          [],
+          []
+        ]
+      },
+      {
+        "stage": "short",
+        "case": "W13-continuous",
+        "method": "completion",
+        "arm": "on",
+        "outcomes": {
+          "success": 3
+        },
+        "peakFamilyMiB": {
+          "n": 3,
+          "median": 169.328125,
+          "mean": 168.20833333333334,
+          "p95": 169.59375,
+          "max": 169.59375
+        },
+        "endParentMiB": {
+          "n": 3,
+          "median": 71.625,
+          "mean": 71.59895833333333,
+          "p95": 71.703125,
+          "max": 71.703125
+        },
+        "retirementCounts": [
+          0,
+          0,
+          0
+        ],
+        "retiredParentMiB": [
+          [],
+          [],
+          []
+        ]
+      },
+      {
+        "stage": "short",
+        "case": "W13-continuous",
+        "method": "definition",
+        "arm": "off",
+        "outcomes": {
+          "success": 3
+        },
+        "peakFamilyMiB": {
+          "n": 3,
+          "median": 218.359375,
+          "mean": 218.95833333333334,
+          "p95": 226.453125,
+          "max": 226.453125
+        },
+        "endParentMiB": {
+          "n": 3,
+          "median": 128.4375,
+          "mean": 128.515625,
+          "p95": 128.6875,
+          "max": 128.6875
+        },
+        "retirementCounts": [
+          0,
+          0,
+          0
+        ],
+        "retiredParentMiB": [
+          [],
+          [],
+          []
+        ]
+      },
+      {
+        "stage": "short",
+        "case": "W13-continuous",
+        "method": "definition",
+        "arm": "on",
+        "outcomes": {
+          "success": 3
+        },
+        "peakFamilyMiB": {
+          "n": 3,
+          "median": 164.5,
+          "mean": 164.34375,
+          "p95": 164.53125,
+          "max": 164.53125
+        },
+        "endParentMiB": {
+          "n": 3,
+          "median": 66.765625,
+          "mean": 66.77604166666667,
+          "p95": 66.875,
+          "max": 66.875
+        },
+        "retirementCounts": [
+          0,
+          0,
+          0
+        ],
+        "retiredParentMiB": [
+          [],
+          [],
+          []
+        ]
+      }
+    ],
+    "limits": "Fallback n20 each arm/variant. Long ordinary latency n3 each arm/case; retirement p95/max descriptive over actual epochs returned in ordinary completion data. Sampled memory 20ms may miss peaks and family RSS double-counts shared pages; short n3 and long n1 per arm. Budget-exceeded runs retained. No unlimited-session or arbitrary-workload RSS guarantee."
+  },
+  "limitations": [
+    "Fresh processes and warm filesystem; no cache flush, CPU pinning or frequency control; other apps not stopped.",
+    "No builds, tests or RSS sampling concurrent with ordinary latency measurements. Memory is a separate instrumented replay.",
+    "n20 each ordinary short cell, paired balanced block inference; n3 long latency, n3 short memory, n1 long memory. p95/max are descriptive, not tail guarantees.",
+    "Native W12 UTF16 query issue predates the candidate and is excluded; negotiated UTF8 and CRLF alternatives are included.",
+    "Independent diagnostic workers continue full native parsing; default-off correctness matches original Native, but timing compares Config off/on in current binary.",
+    "Local educational SPI/PSS plus official UVM 1.2 UBUS are not production designs; no simulation, GUI editor or new Linux acceptance.",
+    "The 20ms RSS sampler can miss peaks; process-family sums count shared pages repeatedly; threshold bounds source generations, not arbitrary process RSS.",
+    "Completion memory sessions resolve only the selected item; every-candidate resolve latency is separately measured and is not an RSS measurement of the fully populated resolver cache.",
+    "Project source files and complete oracle response bodies stay local. Archived drivers require the original local fixture layout and private workload specifications.",
+    "No cross-process or on-disk serialization implemented; old prototype/old retirement measurements are retained separately and do not establish final-candidate performance. Earlier long-memory scripts did not record an explicit last-step RSS mark; final-candidate measurements fix that marker."
+  ],
+  "nextStrategies": [
+    {
+      "priority": 1,
+      "strategy": "Stop capturing unused prefix state after permanent native fallback and in diagnostic-only workers",
+      "reason": "Macro override and unsupported tail directives still cost about 35\u201340 ms per short sequence; cold first response costs 6\u20139 ms.",
+      "status": "proposed, not implemented or measured"
+    },
+    {
+      "priority": 2,
+      "strategy": "Reduce retirement boundary reconstruction and overlapping owners while preserving unsaved documents and epochs",
+      "reason": "Whole sessions improve but natural retirement still has ~94 ms maximum observed query latency.",
+      "status": "further work requires new frozen candidate and long-session replay"
+    },
+    {
+      "priority": 3,
+      "strategy": "Reduce native diagnostic snapshot/parse costs with a separately validated immutable library representation",
+      "reason": "Workers still do native parsing; parent-only caching cannot remove this end-to-end component.",
+      "status": "research only; do not reuse mutable AST or source IDs across workers"
+    }
+  ],
+  "evidence": {
+    "archive": "validation/artifacts/uvm-prefix-2026-10-19-v4.tar.gz",
+    "sha256": "d1e431e95e52234b0b095dc6b41631dac1b27673ae32d75f8f4baea03520f7fa",
+    "bytes": 6626734,
+    "members": 142,
+    "verified": true,
+    "rawProcesses": 949,
+    "allOutcomes": "success"
+  }
+}

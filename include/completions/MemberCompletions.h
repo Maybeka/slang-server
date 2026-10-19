@@ -41,6 +41,9 @@ public:
         bool followedByCall);
 
     /// Resolve a member completion received through completionItem/resolve.
+    static void resolveLogical(CompletionDispatch& dispatch, lsp::CompletionItem& item,
+                               const lsp::RequestContext& ctx);
+
     static void resolve(CompletionDispatch& dispatch, lsp::CompletionItem& item,
                         const lsp::RequestContext& ctx);
 

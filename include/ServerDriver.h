@@ -43,7 +43,8 @@ public:
     static std::unique_ptr<ServerDriver> createForExplore(
         Indexer& indexer, SlangLspClient& client, const Config& config,
         std::optional<std::string_view> workspaceFolder = std::nullopt,
-        const ServerDriver* oldDriver = nullptr, bool requireValidConfig = false);
+        const ServerDriver* oldDriver = nullptr, bool requireValidConfig = false,
+        bool deferOpenDiagnostics = false);
 
     /// Create a build driver; failed loads return null when requireValidConfig is set.
     static std::unique_ptr<ServerDriver> createFromFileLists(
@@ -72,10 +73,16 @@ public:
     CompletionDispatch completions;
     CodeActionDispatch codeActions;
 
+    /// Release disposable models before constructing a replacement at a quiescent boundary.
+    void prepareForContextRetirement();
+
+    bool isUvmPrefixCacheEnabled() const { return m_config.experimentalUvmPrefixCache.value(); }
+
     /// @brief Destructor
     ~ServerDriver() {
         // Clear diags from this driver
         diagClient->clearAndPush();
+        docs.clear(); // Release document owners before the SDK Driver / SourceManager.
     };
 
     /// @brief Gets a document by URI, creating it if it doesn't exist
@@ -380,7 +387,8 @@ private:
     /// Explicit include selections by canonical header path, preserved across driver reloads.
     std::unordered_map<std::filesystem::path, IncludeContextSelection> m_includeSelections;
 
-    void copyOpenDocumentsFrom(const ServerDriver* oldDriver);
+    void copyOpenDocumentsFrom(const ServerDriver* oldDriver,
+                               bool deferConfiguredDiagnostics = false);
 
     /// @brief Run shallow analysis and publish diagnostics and inactive regions for one document
     void analyzeDocument(SlangDoc& doc, const lsp::RequestContext& ctx = {},

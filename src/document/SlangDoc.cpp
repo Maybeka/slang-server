@@ -16,12 +16,15 @@
 #include "util/Logging.h"
 #include "util/SlangExtensions.h"
 #include <algorithm>
+#include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <fmt/format.h>
 #include <fmt/ranges.h>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 
 #include "slang/ast/Compilation.h"
 #include "slang/diagnostics/CompilationDiags.h"
@@ -33,9 +36,11 @@
 #include "slang/parsing/Preprocessor.h"
 #include "slang/syntax/AllSyntax.h"
 #include "slang/syntax/SyntaxTree.h"
+#include "slang/syntax/SyntaxVisitor.h"
 #include "slang/text/SourceLocation.h"
 #include "slang/text/SourceManager.h"
 #include "slang/util/FlatMap.h"
+#include "slang/util/OS.h"
 #include "slang/util/String.h"
 namespace server {
 
@@ -48,6 +53,101 @@ static SourceLocation diagnosticLocation(const SourceManager& sm, SourceLocation
         loc = sm.isMacroArgLoc(loc) ? sm.getOriginalLoc(loc) : sm.getExpansionLoc(loc);
     return loc;
 }
+
+namespace {
+// This prototype rejects prefix directives whose preprocessor state cannot be resumed by API.
+struct PrefixDirectives : syntax::SyntaxVisitor<PrefixDirectives> {
+    bool unsupported = false;
+    void visitToken(parsing::Token token) {
+        for (auto t : token.trivia())
+            if (t.kind == parsing::TriviaKind::Directive) {
+                using K = syntax::SyntaxKind;
+                switch (t.syntax()->kind) {
+                    case K::TimeScaleDirective:
+                    case K::DefaultNetTypeDirective:
+                    case K::UnconnectedDriveDirective:
+                    case K::NoUnconnectedDriveDirective:
+                    case K::CellDefineDirective:
+                    case K::EndCellDefineDirective:
+                    case K::ResetAllDirective:
+                    case K::BeginKeywordsDirective:
+                    case K::EndKeywordsDirective:
+                    case K::PragmaDirective:
+                        unsupported = true;
+                        break;
+                    default:
+                        break;
+                }
+            }
+    }
+};
+bool prefixResumeSafe(const syntax::SyntaxTree& tree) {
+    if (auto recorded = tree.isPrefixResumeSafe())
+        return *recorded;
+    PrefixDirectives directives;
+    tree.root().visit(directives);
+    return !directives.unsupported;
+}
+void cacheTrace(const char* event) {
+    if (const char* path = std::getenv("SLANG_UVM_CACHE_TRACE"))
+        if (auto* f = std::fopen(path, "a")) {
+            std::fprintf(f, "%ld\t%s\n", long(slang::OS::getpid()), event);
+            std::fclose(f);
+        }
+}
+void prepareUvmPrefix(std::shared_ptr<syntax::SyntaxTree>& prefix, const SourceBuffer& buffer,
+                      SourceManager& sm, const Bag& options) {
+    auto filename = sm.getFullPath(buffer.id).filename().string();
+    if (filename != "uvm.sv" && filename != "uvm_pkg.sv")
+        throw std::runtime_error("first root is not UVM");
+    auto pp = options.getOrDefault<parsing::PreprocessorOptions>();
+    if (pp.bufferChangeCB || !pp.keywordMapping.empty())
+        throw std::runtime_error("callback / keyword mapping unsupported");
+    if (!prefix || !hasValidBuffers(sm, prefix)) {
+        prefix = syntax::SyntaxTree::fromBuffer(buffer, sm, options);
+        auto& root = prefix->root().as<syntax::CompilationUnitSyntax>();
+        if (root.members.size() != 1 ||
+            root.members[0]->kind != syntax::SyntaxKind::PackageDeclaration ||
+            root.members[0]->as<syntax::ModuleDeclarationSyntax>().header->name.valueText() !=
+                "uvm_pkg")
+            throw std::runtime_error("prefix must contain only uvm_pkg");
+        if (!prefixResumeSafe(*prefix))
+            throw std::runtime_error("prefix directive state unsupported");
+        cacheTrace("prefix-built");
+    }
+}
+std::shared_ptr<syntax::SyntaxTree> cachedUvmTree(std::shared_ptr<syntax::SyntaxTree>& prefix,
+                                                  std::span<const SourceBuffer> buffers,
+                                                  SourceManager& sm, const Bag& options) {
+    if (buffers.size() < 2)
+        throw std::runtime_error("multiple ordered roots required");
+    prepareUvmPrefix(prefix, buffers[0], sm, options);
+    auto pp = options.getOrDefault<parsing::PreprocessorOptions>();
+    Bag suffixOptions = options;
+    pp.predefines.clear();
+    suffixOptions.set(pp);
+    auto suffix = syntax::SyntaxTree::afterCachedPrefix(prefix, buffers.subspan(1), suffixOptions);
+    // Contract: user source must not replace or undefine the external/UVM macro environment.
+    std::unordered_map<std::string_view, const syntax::DefineDirectiveSyntax*> macros;
+    for (auto* d : suffix->getDefinedMacros())
+        macros[d->name.valueText()] = d;
+    for (auto* d : prefix->getDefinedMacros()) {
+        auto name = d->name.valueText();
+        if (!d->name.location().valid() || d->name.location() == SourceLocation::NoLocation)
+            continue;
+        auto it = macros.find(name);
+        if (it == macros.end() || it->second != d)
+            throw std::runtime_error("UVM / external macro overridden by user source");
+    }
+    for (const auto& ref : suffix->getMacroRefs())
+        if (ref.syntax && ref.syntax->kind == syntax::SyntaxKind::UndefDirective && ref.definition)
+            for (auto* d : prefix->getDefinedMacros())
+                if (ref.definition == d)
+                    throw std::runtime_error("UVM macro undefined by user source");
+    cacheTrace("prefix-reused");
+    return syntax::SyntaxTree::withCachedPrefix(prefix, suffix);
+}
+} // namespace
 
 SlangDoc::SlangDoc(ServerDriver& driver, URI uri, SourceBuffer buffer) :
     m_driver(driver), m_sourceManager(driver.sm), m_options(driver.options), m_uri(uri),
@@ -122,6 +222,38 @@ std::shared_ptr<SlangDoc> SlangDoc::fromTree(ServerDriver& driver,
     }
     ret->m_nativeCompilationUnit = std::move(unit);
     ret->m_tree = tree;
+    if (driver.isUvmPrefixCacheEnabled() && ret->m_nativeCompilationUnit->rootPaths.size() > 1 &&
+        !ret->requiresNativeReplay()) {
+        try {
+            auto buffer = driver.sm.readSource(ret->m_nativeCompilationUnit->rootPaths[0],
+                                               ret->m_nativeCompilationUnit->library,
+                                               ret->m_nativeCompilationUnit->rootSortKeys[0]);
+            if (!buffer)
+                throw std::runtime_error("missing UVM prefix root");
+            auto prepared = syntax::SyntaxTree::preparedUvmPrefix(tree);
+            if (prepared) {
+                auto& root = prepared->root().as<syntax::CompilationUnitSyntax>();
+                if (root.members.size() != 1 ||
+                    root.members[0]->kind != syntax::SyntaxKind::PackageDeclaration ||
+                    root.members[0]
+                            ->as<syntax::ModuleDeclarationSyntax>()
+                            .header->name.valueText() != "uvm_pkg")
+                    throw std::runtime_error("captured prefix must contain only uvm_pkg");
+                if (!prefixResumeSafe(*prepared))
+                    throw std::runtime_error("captured prefix directive state unsupported");
+                ret->m_uvmPrefixTree = std::move(prepared);
+                cacheTrace("prefix-captured");
+                cacheTrace("prefix-built");
+            }
+            else
+                prepareUvmPrefix(ret->m_uvmPrefixTree, *buffer, driver.sm,
+                                 ret->m_nativeCompilationUnit->options);
+        }
+        catch (const std::exception& error) {
+            ret->m_uvmPrefixDisabled = true;
+            cacheTrace(error.what());
+        }
+    }
     return ret;
 }
 
@@ -162,6 +294,8 @@ void SlangDoc::adoptNativeCompilationUnit(const SlangDoc& unit) {
         m_sourceManager.getFullPath(m_buffer.id) != m_sourceManager.getFullPath(unit.m_buffer.id))
         throw std::invalid_argument("Native unit does not match editor document");
     m_nativeCompilationUnit = unit.m_nativeCompilationUnit;
+    m_uvmPrefixTree = unit.m_uvmPrefixTree;
+    m_uvmPrefixDisabled = unit.m_uvmPrefixDisabled;
     m_tree = unit.m_tree;
     m_buffer = unit.m_buffer;
     m_options = unit.m_options;
@@ -254,7 +388,19 @@ std::shared_ptr<syntax::SyntaxTree> SlangDoc::getSyntaxTree(const lsp::RequestCo
                 if (unit.rootPaths[i] == std::filesystem::path(m_uri.getPath()))
                     m_buffer = *buffer;
             }
-            auto tree = syntax::SyntaxTree::fromBuffers(buffers, m_sourceManager, unit.options);
+            std::shared_ptr<syntax::SyntaxTree> tree;
+            if (m_driver.isUvmPrefixCacheEnabled() && !m_uvmPrefixDisabled) {
+                try {
+                    tree = cachedUvmTree(m_uvmPrefixTree, buffers, m_sourceManager, unit.options);
+                }
+                catch (const std::exception& error) {
+                    m_uvmPrefixTree.reset();
+                    m_uvmPrefixDisabled = true;
+                    cacheTrace(error.what());
+                }
+            }
+            if (!tree)
+                tree = syntax::SyntaxTree::fromBuffers(buffers, m_sourceManager, unit.options);
             tree->isLibraryUnit = unit.isLibraryUnit;
             m_tree = std::move(tree);
         }
@@ -276,6 +422,11 @@ std::shared_ptr<syntax::SyntaxTree> SlangDoc::getSyntaxTree(const lsp::RequestCo
     }
     cwdPhase.finish();
     return m_tree;
+}
+
+void SlangDoc::releaseSemanticCaches() {
+    m_analysis.reset();
+    m_includeCompilation.reset();
 }
 
 SlangDoc::AnalysisInputs SlangDoc::getAnalysisInputs(const lsp::RequestContext& ctx) {

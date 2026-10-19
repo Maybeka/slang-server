@@ -1,5 +1,18 @@
 # Validation records
 
+## macOS 2026-10-19: parsed UVM prefix reuse
+
+The opt-in UVM prefix implementation is evaluated in the
+[acceptance report](macos-uvm-prefix-2026-10-19.md), with
+[machine-readable results](macos-uvm-prefix-2026-10-19.json) and hash-verified raw
+evidence. It covers first and continuous edits, every completion resolve, native
+fallback, natural context retirement and separate short/long memory replay on
+SPI/PSS and official UBUS workloads. The report includes cold-start overhead,
+unsupported-input penalties and retirement spikes. The experiment remains
+**default off**. This evaluation supersedes the earlier method-overlay fallback
+observations below for the new prefix experiment; the historical records remain
+separate.
+
 ## macOS 2026-10-19: sparse method values and real UVM
 
 Product commit `bd4cf37` passed CTest **609/609**, Python **15/15**, and

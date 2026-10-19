@@ -37,6 +37,7 @@ TEST_CASE("SDK driver option identities survive server snapshot capture") {
     driver.addStandardArgs();
     REQUIRE(driver.parseCommandLine("slang --single-unit --threads 1"));
     REQUIRE(driver.processOptions(false));
+    driver.options.captureUvmPrefix = true;
     auto options = driver.createOptionBag();
     options.set(driver.getAnalysisOptions());
     REQUIRE(options.size() == 6);
@@ -46,7 +47,8 @@ TEST_CASE("SDK driver option identities survive server snapshot capture") {
     CHECK(captured.source->numThreads == 1);
     CHECK(captured.lexer);
     CHECK(captured.parser);
-    CHECK(captured.preprocessor);
+    REQUIRE(captured.preprocessor);
+    CHECK(captured.preprocessor->captureUvmPrefix);
     CHECK(captured.compilation);
     CHECK(captured.analysis);
     server::diagnostic_snapshot::ReconstructedOptions restored(captured);

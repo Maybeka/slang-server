@@ -71,6 +71,9 @@ private:
     };
     std::optional<NativeCompilationUnit> m_nativeCompilationUnit;
 
+    std::shared_ptr<syntax::SyntaxTree> m_uvmPrefixTree;
+    bool m_uvmPrefixDisabled = false;
+
     /// Document analysis for syntax and symbol analysis.
     /// Shared so that callers can hold the analysis alive even if getAnalysis() recreates it.
     std::shared_ptr<ShallowAnalysis> m_analysis;
@@ -142,6 +145,11 @@ public:
     /// @brief Get the syntax tree, creating it if necessary
     std::shared_ptr<slang::syntax::SyntaxTree> getSyntaxTree(const lsp::RequestContext& ctx = {});
 
+    /// Read-only library artifact; callers must not modify shared syntax.
+    std::shared_ptr<slang::syntax::SyntaxTree> getPreparedLibraryPrefix() const {
+        return !m_uvmPrefixDisabled && !requiresNativeReplay() ? m_uvmPrefixTree : nullptr;
+    }
+
     /// Inspect an already-parsed tree without loading unrelated documents.
     std::shared_ptr<slang::syntax::SyntaxTree> getCachedSyntaxTree() const { return m_tree; }
 
@@ -173,6 +181,10 @@ public:
     /// Used when an external change (e.g. active-instance selection) means cached
     /// goto/hover results must be recomputed.
     void invalidateAnalysis() { m_analysis.reset(); }
+
+    /// At a serialized retirement boundary, release only recomputable bound models.
+    /// Source text, versions, syntax and include selections remain available for rollback.
+    void releaseSemanticCaches();
 
     /// Global exploration preprocessing inputs changed, including a file that may
     /// have entered or left the preinclude graph.

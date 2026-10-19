@@ -33,6 +33,8 @@ repos:
       - id: mixed-line-ending
         args: [--fix, lf]
       - id: trailing-whitespace
+        # Preserve required blank context lines in the generated SDK patch.
+        exclude: ^restoration/.*\.patch$
 
   # CMake formatting
   - repo: https://github.com/cheshirekow/cmake-format-precommit

@@ -327,3 +327,27 @@ These flags are **appended** to whichever base flags won (workspace or user), so
 closed flat `int` methods with equal-length ASCII edits, fixed line layout and
 local count, and a literal single-unit filelist. See
 [the experiment's boundaries and validation tools](../features/method-scope-overlay.md).
+
+### Experimental UVM prefix reuse
+
+`experimentalUvmPrefixCache` defaults to `false`. Enable it explicitly to evaluate
+reuse of a first-root `uvm_pkg` package in large single-unit exploration projects:
+
+```json
+{
+  "experimentalUvmPrefixCache": true
+}
+```
+
+Keep external macros that affect UVM in the ordered command-line/configuration
+flags. UVM's own macro definitions and ordinary macro invocations are supported.
+Source overrides, changed dependencies, unsupported directives and incompatible
+parse contexts invalidate reuse or use native parsing. Compilation-unit ordering
+and diagnostic behavior remain the same.
+
+This experiment also caches compatible library parses for completion resolution
+and retires oversized source contexts. Retirement can add a query latency spike;
+memory and total latency benefits depend on the workload. See the
+[eligibility and ownership rules](../features/uvm-prefix-cache.md) and the
+[Mac performance acceptance](../../validation/macos-uvm-prefix-2026-10-19.md).
+It remains disabled by default.

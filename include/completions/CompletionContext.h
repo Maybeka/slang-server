@@ -29,7 +29,8 @@ class SourceManager;
 
 namespace slang::syntax {
 class SyntaxNode;
-}
+class SyntaxTree;
+} // namespace slang::syntax
 
 struct Indexer;
 
@@ -82,6 +83,8 @@ protected:
     static const Indexer& getIndexer(const CompletionDispatch& dispatch);
     static slang::SourceManager& getSourceManager(CompletionDispatch& dispatch);
     static slang::Bag& getOptions(CompletionDispatch& dispatch);
+    static std::shared_ptr<slang::syntax::SyntaxTree> getIndexedSyntaxTree(
+        CompletionDispatch& dispatch, std::string_view path);
     static bool resolvesCompletionEdits(const CompletionDispatch& dispatch);
     static void updateCompletionEditText(lsp::CompletionItem& item);
 

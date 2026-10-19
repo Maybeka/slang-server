@@ -141,12 +141,11 @@ void MacroCompletionQuery::resolve(CompletionDispatch& dispatch, lsp::Completion
         return;
     }
 
-    auto maybeTree = syntax::SyntaxTree::fromFile(paths[0].string(), getSourceManager(dispatch),
-                                                  getOptions(dispatch));
+    auto maybeTree = getIndexedSyntaxTree(dispatch, paths[0].string());
     if (!maybeTree)
         return;
 
-    for (auto macro : maybeTree.value()->getDefinedMacros()) {
+    for (auto macro : maybeTree->getDefinedMacros()) {
         if (macro->name.valueText() == item.label.substr(1)) {
             completions::resolve(*macro, item);
             updateCompletionEditText(item);

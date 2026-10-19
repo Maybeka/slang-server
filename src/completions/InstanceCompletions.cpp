@@ -291,14 +291,13 @@ void InstanceCompletionQuery::resolve(CompletionDispatch& dispatch, lsp::Complet
         modulePath = *symbolLoc->uri;
     }
 
-    auto maybeTree = syntax::SyntaxTree::fromFile(modulePath->string(), getSourceManager(dispatch),
-                                                  getOptions(dispatch));
+    auto maybeTree = getIndexedSyntaxTree(dispatch, modulePath->string());
     if (!maybeTree) {
         WARN("Failed to load syntax tree for module {} from {}", name, modulePath->string());
         return;
     }
 
-    resolve(*maybeTree.value(), name, item, excludeName);
+    resolve(*maybeTree, name, item, excludeName);
     item.data.reset();
     updateCompletionEditText(item);
 }

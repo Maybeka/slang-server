@@ -144,7 +144,8 @@ void SyntaxIndexer::processTrivia(std::span<const slang::parsing::Trivia> trivia
             visit(*trivia.syntax());
             // Macro args need to lookup in a scope; we could add a new map, but it's better
             // to keep the same process as normal nodes
-            trivia.syntax()->parent = const_cast<slang::syntax::SyntaxNode*>(&parent);
+            if (trivia.syntax()->parent.get() != &parent)
+                trivia.syntax()->parent = const_cast<slang::syntax::SyntaxNode*>(&parent);
 
             // Track macro usage for expansion text collection
             if (trivia.syntax()->kind == syntax::SyntaxKind::MacroUsage &&

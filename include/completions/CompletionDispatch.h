@@ -33,6 +33,8 @@ private:
     const Indexer& m_indexer;
     SourceManager& m_sourceManager;
     slang::Bag& m_options;
+    struct ParsedLibraryCacheState;
+    std::unique_ptr<ParsedLibraryCacheState> m_parsedLibraryCache;
 
 public:
     bool resolveEdits = false;
@@ -40,10 +42,16 @@ public:
     CompletionDispatch(ServerDriver& driver, const Indexer& indexer, SourceManager& sourceManager,
                        slang::Bag& options);
 
+    ~CompletionDispatch();
+
     /// Top-level completion entry point. The semantic target is derived from source around the
     /// cursor; trigger characters only control when clients invoke this method.
     void getCompletions(std::vector<lsp::CompletionItem>& results, std::shared_ptr<SlangDoc> doc,
                         const CompletionContext& ctx);
+
+    uint64_t getCompletionEpoch();
+    void requireCompletionEpoch();
+    void invalidateParsedLibraryCache();
 
     void getCompletionItemResolve(lsp::CompletionItem& item, const lsp::RequestContext& ctx);
 };
