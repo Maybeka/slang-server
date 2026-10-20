@@ -375,7 +375,10 @@ std::shared_ptr<syntax::SyntaxTree> SlangDoc::getSyntaxTree(const lsp::RequestCo
                     m_buffer = *buffer;
             }
             std::shared_ptr<syntax::SyntaxTree> tree;
-            if (m_driver.isUvmPrefixCacheEnabled() && !m_uvmPrefixDisabled) {
+            if (m_driver.isFrozenSourcesEnabled())
+                tree = m_driver.resumeFrozenSources(unit.rootPaths, buffers, unit.options,
+                                                    unit.requiresNativeReplay);
+            if (!tree && m_driver.isUvmPrefixCacheEnabled() && !m_uvmPrefixDisabled) {
                 try {
                     tree = cachedUvmTree(m_uvmPrefixTree, buffers, m_sourceManager, unit.options);
                 }
@@ -400,6 +403,7 @@ std::shared_ptr<syntax::SyntaxTree> SlangDoc::getSyntaxTree(const lsp::RequestCo
             }
             tree->isLibraryUnit = unit.isLibraryUnit;
             m_tree = std::move(tree);
+            m_driver.updateFrozenSourcePlans(unit.rootPaths, m_tree);
         }
         else {
             auto buffers = m_driver.getExplorePreincludeBuffers(m_buffer.id);

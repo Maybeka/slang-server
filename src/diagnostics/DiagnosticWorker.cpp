@@ -3,6 +3,7 @@
 #include "ServerDiagClient.h"
 #include "diagnostics/DiagnosticProcess.h"
 #include "diagnostics/DiagnosticSnapshotCodec.h"
+#include "document/FrozenSourceRegistry.h"
 #include "document/ShallowAnalysis.h"
 #include "util/Converters.h"
 #include "util/SlangExtensions.h"
@@ -60,14 +61,35 @@ struct DiagnosticLibraryContext {
     std::string signature, root;
     uint64_t sortKey = 0;
     size_t budget = 0;
+    size_t roots = 1;
+    bool generic = false;
+    size_t metadataBytes = 0;
 };
 struct DiagnosticLibrarySessionState {
     std::unique_ptr<DiagnosticLibraryContext> context;
     bool declined = false;
 };
 struct PrefixReuseFailure : std::runtime_error {
-    using std::runtime_error::runtime_error;
+    bool generic;
+    explicit PrefixReuseFailure(const std::string& reason, bool generic = false) :
+        std::runtime_error(reason), generic(generic) {}
 };
+size_t retainedContextBytes(const DiagnosticLibraryContext& context) {
+    auto bytes = context.sm->getSourceLocationTableBytes() + context.sm->getMemoryUsage();
+    if (context.generic)
+        bytes += context.prefix->getRetainedSyntaxBytes() +
+                 context.prefix->getRetainedSourceBytes() + context.metadataBytes;
+    return bytes;
+}
+size_t genericMetadataBytes(
+    const std::string& signature, const std::string& root,
+    const std::vector<std::shared_ptr<diagnostic_snapshot::ReconstructedOptions>>& treeOptions) {
+    // Charge both the key and an options-payload estimate, plus fixed owners.
+    // This is cache accounting, not an allocator or whole-process RSS limit.
+    return sizeof(DiagnosticLibraryContext) + 2 * signature.capacity() + root.capacity() +
+           treeOptions.capacity() * sizeof(treeOptions.front()) +
+           (1 + treeOptions.size()) * sizeof(diagnostic_snapshot::ReconstructedOptions);
+}
 void workerCacheTrace(const char* event) {
     if (auto* path = std::getenv("SLANG_UVM_WORKER_CACHE_TRACE"))
         if (auto* file = std::fopen(path, "a")) {
@@ -102,33 +124,68 @@ static DiagnosticJobOutput executeJob(std::string_view bytes,
         throw std::runtime_error("truncated diagnostic metadata");
     auto metadata = rfl::json::read<DiagnosticJobMetadata, rfl::UnderlyingEnums>(json).value();
     auto input = diagnostic_snapshot::readInput(in, workerLimits());
-    if (in.peek() != EOF || metadata.schema != 1 ||
+    if (in.peek() != EOF || metadata.schema != 2 ||
         metadata.trees.size() != input.treeOptions.size() || metadata.targets.empty())
         throw std::runtime_error("invalid diagnostic job schema");
 
+    for (const auto& tree : metadata.trees) {
+        if (const auto& hint = tree.frozenPrefix;
+            hint && (!hint->roots || hint->roots > tree.roots.size() ||
+                     (hint->packages.empty() && hint->modules.empty()) || !hint->maxBytes ||
+                     hint->maxBytes > uint64_t(512) * 1024 * 1024))
+            throw std::runtime_error("invalid frozen diagnostic prefix hint");
+        for (const auto& root : tree.roots)
+            if (!root.file || root.file > input.sources.files.size())
+                throw std::runtime_error("invalid diagnostic root identity");
+    }
+
     bool eligible = false;
+    bool generic = false;
+    size_t prefixRoots = 1;
     std::string signature, rootPath;
     uint64_t sortKey = 0;
-    if (session && !session->declined && metadata.trees.size() == 1 &&
-        metadata.trees[0].roots.size() > 1 && input.treeOptions[0].preprocessor &&
-        input.treeOptions[0].preprocessor->captureUvmPrefix &&
+    const bool parentDeclined = metadata.trees.size() == 1 && metadata.trees[0].frozenPrefix &&
+                                metadata.trees[0].frozenPrefix->nativeOnly;
+    if (parentDeclined && session)
+        workerCacheTrace("generic-native-parent-declined");
+    if (session && !session->declined && metadata.trees.size() == 1 && !parentDeclined &&
+        !metadata.trees[0].roots.empty() && input.treeOptions[0].preprocessor &&
         input.treeOptions[0].preprocessor->keywordMapping.empty()) {
+        const auto& spec = metadata.trees[0];
+        generic = spec.frozenPrefix.has_value();
+        if (generic)
+            prefixRoots = spec.frozenPrefix->roots;
         const auto& root = metadata.trees[0].roots[0];
         if (root.file && root.file <= input.sources.files.size()) {
             rootPath = input.sources.files[root.file - 1].fullPath;
             auto filename = std::filesystem::path(rootPath).filename();
             auto& explicitRoot = input.treeOptions[0].preprocessor->uvmPrefixRoot;
-            eligible = explicitRoot.empty() ? filename == "uvm.sv" || filename == "uvm_pkg.sv"
-                                            : rootPath == explicitRoot;
+            eligible = generic ||
+                       (metadata.trees[0].roots.size() > 1 &&
+                        input.treeOptions[0].preprocessor->captureUvmPrefix &&
+                        (explicitRoot.empty() ? filename == "uvm.sv" || filename == "uvm_pkg.sv"
+                                              : rootPath == explicitRoot));
             sortKey = root.sortKey;
         }
-        if (eligible)
+        if (eligible) {
             signature = rfl::json::write(input.options) + rfl::json::write(input.treeOptions);
+            if (generic) {
+                struct RootIdentity {
+                    std::string path;
+                    uint64_t sortKey;
+                };
+                std::vector<RootIdentity> identities;
+                for (auto root : spec.roots)
+                    identities.push_back(
+                        {input.sources.files[root.file - 1].fullPath, root.sortKey});
+                signature += rfl::json::write(spec.frozenPrefix) + rfl::json::write(identities);
+            }
+        }
     }
     bool reused = false;
     if (session && session->context) {
         auto& context = *session->context;
-        auto bytes = context.sm->getSourceLocationTableBytes() + context.sm->getMemoryUsage();
+        auto bytes = retainedContextBytes(context);
         bool samePredefines = eligible;
         if (samePredefines) {
             auto ids = context.prefix->getPredefineBufferIds();
@@ -139,7 +196,8 @@ static DiagnosticJobOutput executeJob(std::string_view bytes,
                                  context.sm->getFullPath(ids[n]).string() ==
                                      input.sources.files[expected[n] - 1].fullPath;
         }
-        if (eligible && context.signature == signature && context.root == rootPath &&
+        if (eligible && context.generic == generic && context.roots == prefixRoots &&
+            context.signature == signature && context.root == rootPath &&
             context.sortKey == sortKey && bytes <= context.budget && samePredefines) {
             auto ids = context.prefix->getSourceBufferIds();
             std::vector<BufferID> retained(ids.begin(), ids.end());
@@ -148,6 +206,8 @@ static DiagnosticJobOutput executeJob(std::string_view bytes,
             reused = context.sm->tryUpdateSnapshot(input.sources, retained);
         }
         if (!reused) {
+            if (context.generic && jobStatistics)
+                ++jobStatistics->genericContextResets;
             workerCacheTrace(!eligible                        ? "miss-ineligible"
                              : context.signature != signature ? "miss-options"
                              : context.root != rootPath       ? "miss-root"
@@ -165,7 +225,7 @@ static DiagnosticJobOutput executeJob(std::string_view bytes,
         input.options.preprocessor->captureUvmPrefix = false;
     for (auto& opt : input.treeOptions)
         if (opt.preprocessor)
-            opt.preprocessor->captureUvmPrefix = eligible && !reused;
+            opt.preprocessor->captureUvmPrefix = eligible && !generic && !reused;
 
     // Backing option storage precedes every tree / context retaining its views.
     auto options = std::make_shared<diagnostic_snapshot::ReconstructedOptions>(
@@ -174,10 +234,13 @@ static DiagnosticJobOutput executeJob(std::string_view bytes,
     for (auto& opt : input.treeOptions)
         treeOptions.push_back(
             std::make_shared<diagnostic_snapshot::ReconstructedOptions>(std::move(opt)));
+    // A context retired after this job must outlive its local trees / analyses.
+    std::unique_ptr<DiagnosticLibraryContext> retiredContext;
     auto fresh = reused ? nullptr : std::make_unique<SourceManager>();
     if (fresh)
         fresh->loadSnapshot(input.sources);
     SourceManager& sm = reused ? *session->context->sm : *fresh;
+    std::shared_ptr<syntax::SyntaxTree> preparedPrefix;
     std::vector<std::shared_ptr<syntax::SyntaxTree>> trees;
     for (size_t i = 0; i < metadata.trees.size(); ++i) {
         const auto& spec = metadata.trees[i];
@@ -189,25 +252,52 @@ static DiagnosticJobOutput executeJob(std::string_view bytes,
         std::shared_ptr<syntax::SyntaxTree> tree;
         try {
             sm.setSnapshotGeneratedSequence(spec.predefines);
-            if (reused) {
+            if (reused || (eligible && generic)) {
                 // Recreate the recorded CLI inputs, validating bytes and generated-source
                 // order, before resuming with the retained macro definitions.
-                BumpAllocator arena;
-                Diagnostics diagnostics;
-                parsing::Preprocessor proof(sm, arena, diagnostics, treeOptions[i]->bag());
-                if (!diagnostics.empty())
-                    throw PrefixReuseFailure("generated CLI proof emitted diagnostics");
+                if (reused) {
+                    BumpAllocator arena;
+                    Diagnostics diagnostics;
+                    parsing::Preprocessor proof(sm, arena, diagnostics, treeOptions[i]->bag());
+                    if (!diagnostics.empty())
+                        throw PrefixReuseFailure("generated CLI proof emitted diagnostics",
+                                                 generic);
+                    preparedPrefix = session->context->prefix;
+                }
+                else {
+                    preparedPrefix = syntax::SyntaxTree::fromBuffersWithCheckpoint(
+                        std::span<const SourceBuffer>(roots).first(prefixRoots), sm,
+                        treeOptions[i]->bag());
+                    if (jobStatistics)
+                        ++jobStatistics->genericPrefixCaptureParses;
+                    const auto binding = planFrozenSources(std::vector{preparedPrefix},
+                                                           spec.frozenPrefix->packages,
+                                                           spec.frozenPrefix->modules);
+                    if (std::ranges::any_of(binding.selections,
+                                            [](const auto& item) { return !item.resolved; }) ||
+                        std::ranges::any_of(preparedPrefix->diagnostics(),
+                                            [](const auto& diag) { return diag.isError(); }) ||
+                        !preparedPrefix->isPrefixResumeSafe().value_or(false) ||
+                        preparedPrefix->getPrefixSourceEffects().value_or(true))
+                        throw PrefixReuseFailure("frozen diagnostic prefix is not resumable", true);
+                }
                 sm.finishSnapshotGeneratedSequence();
                 sm.setSnapshotGeneratedSequence({});
                 auto suffixOptions = treeOptions[i]->bag();
                 auto pp = suffixOptions.getOrDefault<parsing::PreprocessorOptions>();
                 pp.predefines.clear();
+                pp.captureUvmPrefix = false;
                 suffixOptions.set(pp);
-                auto prefix = session->context->prefix;
-                auto suffix = syntax::SyntaxTree::afterCachedPrefix(
-                    prefix, std::span<const SourceBuffer>(roots).subspan(1), suffixOptions);
-                validateUvmMacroEnvironment(*prefix, *suffix);
-                tree = syntax::SyntaxTree::withCachedPrefix(prefix, suffix);
+                tree = preparedPrefix;
+                if (prefixRoots < roots.size()) {
+                    auto suffix = syntax::SyntaxTree::afterCachedPrefix(
+                        preparedPrefix, std::span<const SourceBuffer>(roots).subspan(prefixRoots),
+                        suffixOptions);
+                    if (generic && jobStatistics)
+                        ++jobStatistics->genericSuffixParses;
+                    validateUvmMacroEnvironment(*preparedPrefix, *suffix);
+                    tree = syntax::SyntaxTree::withCachedPrefix(preparedPrefix, suffix);
+                }
             }
             else {
                 tree = syntax::SyntaxTree::fromBuffers(roots, sm, treeOptions[i]->bag());
@@ -222,14 +312,14 @@ static DiagnosticJobOutput executeJob(std::string_view bytes,
             sm.finishSnapshotGeneratedSequence();
         }
         catch (const std::exception& error) {
-            if (reused)
-                throw PrefixReuseFailure(error.what());
+            if (reused || (eligible && generic))
+                throw PrefixReuseFailure(error.what(), generic);
             throw;
         }
         auto ids = tree->getSourceBufferIds();
         auto graphFailure = [&](const char* reason) {
-            if (reused)
-                throw PrefixReuseFailure(reason);
+            if (reused || (eligible && generic))
+                throw PrefixReuseFailure(reason, generic);
             throw std::runtime_error(reason);
         };
         if (ids.size() != spec.sources.size())
@@ -345,11 +435,41 @@ static DiagnosticJobOutput executeJob(std::string_view bytes,
         result.documents.push_back({uri, version, diagnostics});
     }
     if (reused) {
-        workerCacheTrace("prefix-reused");
+        workerCacheTrace(generic ? "generic-prefix-reused" : "prefix-reused");
         if (jobStatistics)
             ++jobStatistics->reusedPrefixes;
+        if (generic && jobStatistics)
+            ++jobStatistics->reusedGenericPrefixes;
     }
-    if (eligible && !reused) {
+    if (eligible && generic && !reused) {
+        auto budget = metadata.trees[0].frozenPrefix->maxBytes;
+        auto metadataBytes = genericMetadataBytes(signature, rootPath, treeOptions);
+        auto charge = sm.getSourceLocationTableBytes() + sm.getMemoryUsage() +
+                      preparedPrefix->getRetainedSyntaxBytes() +
+                      preparedPrefix->getRetainedSourceBytes() + metadataBytes;
+        if (charge <= budget) {
+            auto context = std::make_unique<DiagnosticLibraryContext>();
+            context->options = options;
+            context->treeOptions = treeOptions;
+            context->prefix = std::move(preparedPrefix);
+            context->signature = std::move(signature);
+            context->root = std::move(rootPath);
+            context->sortKey = sortKey;
+            context->roots = prefixRoots;
+            context->generic = true;
+            context->metadataBytes = metadataBytes;
+            context->budget = budget;
+            context->sm = std::move(fresh);
+            session->context = std::move(context);
+            workerCacheTrace("generic-prefix-captured");
+        }
+        else {
+            workerCacheTrace("generic-budget-declined");
+            if (jobStatistics)
+                ++jobStatistics->genericDeclines;
+        }
+    }
+    else if (eligible && !reused) {
         auto prefix = syntax::SyntaxTree::preparedUvmPrefix(trees[0]);
         if (prefix && prefix->isPrefixResumeSafe().value_or(false) &&
             !prefix->getPrefixSourceEffects().value_or(true) &&
@@ -385,6 +505,18 @@ static DiagnosticJobOutput executeJob(std::string_view bytes,
             workerCacheTrace("capture-declined");
         }
     }
+    if (session && session->context && session->context->generic &&
+        retainedContextBytes(*session->context) > session->context->budget) {
+        retiredContext = std::move(session->context);
+        workerCacheTrace("generic-budget-released");
+        if (jobStatistics)
+            ++jobStatistics->genericContextResets;
+    }
+    if (jobStatistics)
+        jobStatistics->retainedGenericBytes = session && session->context &&
+                                                      session->context->generic
+                                                  ? retainedContextBytes(*session->context)
+                                                  : 0;
     return result;
 }
 
@@ -397,7 +529,8 @@ struct DiagnosticJobSession::Impl : DiagnosticLibrarySessionState {};
 DiagnosticJobSession::DiagnosticJobSession() : impl(std::make_unique<Impl>()) {
     // Mechanism control: retain session transport while measuring native parsing.
     // Ordinary runs leave this unset. It cannot enable the experiment.
-    impl->declined = std::getenv("SLANG_UVM_WORKER_PREFIX_DISABLE") != nullptr;
+    impl->declined = std::getenv("SLANG_UVM_WORKER_PREFIX_DISABLE") != nullptr ||
+                     std::getenv("SLANG_FROZEN_WORKER_PREFIX_DISABLE") != nullptr;
 }
 DiagnosticJobSession::~DiagnosticJobSession() = default;
 DiagnosticJobOutput DiagnosticJobSession::execute(std::string_view input,
@@ -406,11 +539,13 @@ DiagnosticJobOutput DiagnosticJobSession::execute(std::string_view input,
     try {
         return executeJob(input, beforeSemantic, statistics, impl.get());
     }
-    catch (const PrefixReuseFailure&) {
+    catch (const PrefixReuseFailure& error) {
         // A failed resume can poison replay lookups. Restart the whole local job
         // with a fresh native manager, never reuse its partially parsed state.
         impl->context.reset();
-        impl->declined = true;
+        impl->declined |= !error.generic;
+        if (error.generic && statistics)
+            ++statistics->genericDeclines;
         workerCacheTrace("native-fallback");
         return executeJob(input, beforeSemantic, statistics, nullptr);
     }

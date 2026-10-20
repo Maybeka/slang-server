@@ -38,7 +38,33 @@ public:
 };
 
 class RequestContext {
+    struct State;
+
 public:
+    /// Protocol-worker-only lifetime for evidence obtained during this dispatch.
+    /// Cancellation still uses its existing independent atomic state.
+    class InputWitnessScope {
+    public:
+        explicit InputWitnessScope(std::shared_ptr<State> state) noexcept;
+        ~InputWitnessScope();
+        InputWitnessScope(const InputWitnessScope&) = delete;
+        InputWitnessScope& operator=(const InputWitnessScope&) = delete;
+
+    private:
+        std::shared_ptr<State> m_state;
+    };
+    InputWitnessScope inputWitnessScope() const { return InputWitnessScope(m_state); }
+    void recordInputWitness(const std::shared_ptr<const void>& owner, uint64_t revision) const {
+        if (owner && m_state && m_rpcId && m_state->inputWitnessActive) {
+            m_state->inputWitnessOwner = owner;
+            m_state->inputWitnessRevision = revision;
+        }
+    }
+    bool hasInputWitness(const std::shared_ptr<const void>& owner, uint64_t revision) const {
+        return owner && m_state && m_rpcId && m_state->inputWitnessActive &&
+               m_state->inputWitnessRevision == revision &&
+               m_state->inputWitnessOwner.lock() == owner;
+    }
     RequestContext() = default;
 
     RequestContext(std::string_view method, std::optional<ID_t> rpcId,
@@ -161,6 +187,10 @@ private:
     struct State {
         std::atomic_bool cancelled = false;
         std::atomic_bool started = false;
+        // Accessed only on the protocol worker, never by the cancellation reader.
+        bool inputWitnessActive = false;
+        std::weak_ptr<const void> inputWitnessOwner;
+        uint64_t inputWitnessRevision = 0;
     };
 
     static std::string makeLogId(uint64_t contextId, const std::optional<ID_t>& rpcId) {
@@ -183,4 +213,17 @@ private:
     std::shared_ptr<const std::function<void(std::string_view)>> m_checkpointObserver;
 };
 
+inline RequestContext::InputWitnessScope::InputWitnessScope(std::shared_ptr<State> state) noexcept :
+    m_state(std::move(state)) {
+    if (m_state) {
+        m_state->inputWitnessActive = true;
+        m_state->inputWitnessOwner.reset();
+    }
+}
+inline RequestContext::InputWitnessScope::~InputWitnessScope() {
+    if (m_state) {
+        m_state->inputWitnessActive = false;
+        m_state->inputWitnessOwner.reset();
+    }
+}
 } // namespace lsp

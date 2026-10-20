@@ -259,6 +259,10 @@ jobs:
             fi
           fi
 
+          # Keep the existing root binary layout used by editor installers.
+          mkdir -p release-artifacts/resources/uvm
+          cp -R resources/uvm/1.2 release-artifacts/resources/uvm/1.2
+
           cat > release-artifacts/README.txt <<EOF
           Slang Server - SystemVerilog Language Server
 
@@ -268,6 +272,7 @@ jobs:
           1. Extract this archive
           2. Add the binary to your PATH, or
           3. Configure your editor to use the absolute path to this binary
+          4. Keep resources/ beside the binary to use optional uvm.useBundled
 
           For more information, visit:
           https://github.com/hudson-trading/slang-server

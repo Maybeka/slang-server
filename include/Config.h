@@ -59,6 +59,11 @@ struct Config {
                          "Otherwise locate uvm_pkg.sv directly or under src.",
                          std::optional<std::string>>
             entryFile;
+        rfl::Description<"Explicitly select the shipped UVM 1.2 sources. Default false. "
+                         "Mutually exclusive with sourceDirectory and entryFile. Conflicting "
+                         "project UVM inputs are rejected; no automatic injection or download.",
+                         bool>
+            useBundled = false;
     };
     rfl::Description<"Explicit UVM library inputs. No library is injected unless configured. "
                      "Source loading is independent of experimentalUvmPrefixCache.",
@@ -85,6 +90,41 @@ struct Config {
                      "source changes or preprocessing state use native parsing.",
                      bool>
         experimentalUvmPrefixCache = false;
+
+    struct FrozenSourcesConfig {
+        rfl::Description<
+            "Exact package names in configured compilation inputs. The complete "
+            "ordered roots through each selected package are retained, including "
+            "preceding dependencies. Missing or ambiguous names are reported in status.",
+            std::vector<std::string>>
+            packages;
+        rfl::Description<"Exact module definition names in configured compilation inputs. "
+                         "Retains complete ordered source roots; instance parameterizations "
+                         "are elaborated independently. Does not enable the experiment.",
+                         std::vector<std::string>>
+            modules;
+        rfl::Description<"Exact canonical RTL instance paths. Selects the instance and its "
+                         "descendants. Certified hierarchy values can survive supported class "
+                         "task body edits; other semantic changes rebuild natively. Requires "
+                         "a full design and does not enable the experiment.",
+                         std::vector<std::string>>
+            instances;
+        rfl::Description<"Maximum charged retained cache size in MiB (0 to 512). With instance "
+                         "selectors, one quarter is reserved for certified hierarchy values. "
+                         "Current compilations can still own syntax after eviction; this is not "
+                         "a process RSS limit.",
+                         uint32_t>
+            maxMiB = 64;
+    };
+    rfl::Description<"Frozen source selections and cache budget. Does not enable the experiment.",
+                     std::optional<FrozenSourcesConfig>>
+        frozenSources;
+    rfl::Description<
+        "Experimental package/module syntax and instance hierarchy reuse. Default off. Exact "
+        "source and include lookup certification can cost filesystem I/O; changed "
+        "inputs rebuild the native context while preserving editor overlays.",
+        bool>
+        experimentalFrozenSources = false;
 
     // Legacy indexing globs, kept for backwards compatibility
     rfl::Deprecated<"Use 'index' instead.",
@@ -146,6 +186,12 @@ struct Config {
 
     struct HoverConfig {
         enum class DocCommentFormat { plaintext, markdown, raw };
+        enum class MacroView { source, expanded, both };
+        rfl::Description<"Macro code in hovers: 'source' preserves written source, 'expanded' "
+                         "shows generated code, 'both' keeps expanded code and its macro origin. "
+                         "Default both preserves the existing display.",
+                         MacroView>
+            macroView = MacroView::both;
         rfl::Description<"How to render leading doc comments in hovers: 'markdown' renders as "
                          "markdown, 'plaintext' escapes markdown characters, 'raw' shows the "
                          "comment text verbatim including comment markers.",

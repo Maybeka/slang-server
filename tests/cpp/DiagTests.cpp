@@ -9,6 +9,7 @@
 
 #include "slang/diagnostics/CompilationDiags.h"
 #include "slang/diagnostics/ExpressionsDiags.h"
+#include "slang/diagnostics/SysFuncsDiags.h"
 
 TEST_CASE("SingleFileDiag") {
     ServerHarness server;
@@ -760,4 +761,42 @@ TEST_CASE("Saved full diagnostics lose coverage when a sibling buffer changes",
     CHECK(std::ranges::any_of(child.getDiagnostics(), [](const auto& diagnostic) {
         return diagnostic.message.find("invalid_width_token") != std::string::npos;
     }));
+}
+
+TEST_CASE("Generic class diagnostics have stable specialization order", "[diagnostic-order]") {
+    // Parameter-specialization hash order must not choose arbitrary representative
+    // messages or change the number of diagnostics coalesced at one source location.
+    std::string text = "class base; endclass\n";
+    for (int i = 0; i < 12; ++i)
+        text += fmt::format("class C{:02}{}; endclass\n", i, i % 2 ? "" : " extends base");
+    text += R"(
+class holder #(type T=base);
+    function void check(T source);
+        base dest;
+        void'($cast(dest,source));
+    endfunction
+endclass
+module top;
+)";
+    for (int i = 0; i < 12; ++i)
+        text += fmt::format("holder#(C{:02}) value{};\n", i, i);
+    text += "endmodule\n";
+    slang::SourceManager sm;
+    auto tree = slang::syntax::SyntaxTree::fromText(text, sm);
+    slang::ast::Compilation compilation;
+    compilation.addSyntaxTree(tree);
+    INFO(slang::DiagnosticEngine::reportAll(sm, compilation.getAllDiagnostics()));
+    slang::Diagnostics diagnostics;
+    for (const auto& diagnostic : compilation.getAllDiagnostics()) {
+        CHECK_FALSE(diagnostic.isError());
+        if (diagnostic.code == slang::diag::DynamicCastConst)
+            diagnostics.push_back(diagnostic);
+    }
+    REQUIRE(diagnostics.size() == 12);
+    for (int i = 0; i < 12; ++i) {
+        const auto& arg = std::get<slang::Diagnostic::CustomArgType>(diagnostics[i].args[0]);
+        auto* type = std::any_cast<const slang::ast::Type*>(arg.second);
+        CHECK(type->getCanonicalType().name == fmt::format("C{:02}", i));
+        CHECK(std::get<std::string>(diagnostics[i].args.back()) == (i % 2 ? "fail" : "succeed"));
+    }
 }

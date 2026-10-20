@@ -60,8 +60,9 @@ struct DefinitionInfo {
         }
 
         /// Append the formatted code and macro usage for this syntax to `paragraph`.
-        void renderCode(markup::Paragraph& paragraph, const slang::SourceManager& sm,
-                        bool rawDocComments) const;
+        void renderCode(
+            markup::Paragraph& paragraph, const slang::SourceManager& sm, bool rawDocComments,
+            Config::HoverConfig::MacroView macroView = Config::HoverConfig::MacroView::both) const;
 
         /// Goto-definition link pointing at the name token (or macro usage range, if applicable).
         std::vector<lsp::LocationLink> getDefinition(const slang::SourceManager& sm) const;
@@ -124,6 +125,7 @@ struct DefinitionInfo {
         Definition definition;
         // Expanded text for macro usages (what the macro expands to at this call site).
         std::string macroExpansionText;
+        std::string macroUsageText;
 
         MacroTarget(Definition definition, const slang::syntax::SyntaxNode& referenceSyntax,
                     const ShallowAnalysis& analysis);
@@ -141,7 +143,9 @@ struct DefinitionInfo {
         }
 
         bool operator==(const MacroTarget& other) const {
-            return definition == other.definition && macroExpansionText == other.macroExpansionText;
+            return definition == other.definition &&
+                   macroExpansionText == other.macroExpansionText &&
+                   macroUsageText == other.macroUsageText;
         }
 
         markup::Document getHover(const slang::SourceManager& sm, slang::BufferID docBuffer,

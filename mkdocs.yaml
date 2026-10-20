@@ -87,6 +87,9 @@ nav:
       - Versioning and releases: development/versioning.md
   - Features:
       - features/features.md
+      - UVM sources and prefix reuse: features/uvm-prefix-cache.md
+      - Experimental frozen scopes: features/frozen-sources.md
+      - Macro hover views: features/macro-hover.md
       - features/formatting.md
       - features/limitations.md
       - HDL Features:

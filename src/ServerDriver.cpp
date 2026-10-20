@@ -69,6 +69,8 @@ ServerDriver::ServerDriver(Indexer& indexer, SlangLspClient& client, const Confi
     diagClient(std::make_shared<ServerDiagClient>(sm, client)),
     completions(*this, indexer, sm, options), codeActions(*this, sm, indexer), m_indexer(indexer),
     m_config(config), m_workspacePathPrefix(workspaceFolder.value_or("")) {
+    if (isFrozenSourcesEnabled())
+        completions.requireCompletionEpoch();
     diagClient->setUriResolver([this](const URI& physical) {
         // Exact open URIs win; otherwise bind the known physical source to its
         // client's spelling. Never canonicalize arbitrary publication URIs.
@@ -94,7 +96,15 @@ ServerDriver::ServerDriver(Indexer& indexer, SlangLspClient& client, const Confi
             auto text = found->second->getText();
             if (!text.empty() && text.back() == '\0')
                 text.remove_suffix(1);
-            sm.assignText(overlays->sm.getFullPath(found->second->getBuffer()).string(), text);
+            auto path = overlays->sm.getFullPath(found->second->getBuffer());
+            if (isFrozenSourcesEnabled()) {
+                std::error_code error;
+                auto current = std::filesystem::weakly_canonical(uri.getPath(), error);
+                if (!error)
+                    path = current;
+                driver.sourceLoader.addInputOverlay(path);
+            }
+            sm.assignText(path.string(), text);
         }
     }
 
@@ -204,7 +214,14 @@ bool ServerDriver::parseAndLoadSources(const std::vector<std::string>& buildfile
     diagEngine.setIgnoreAllWarnings(false);
     diagEngine.setIgnoreAllNotes(false);
 
-    driver.options.captureUvmPrefix = isUvmPrefixCacheEnabled();
+    const auto frozen = m_config.frozenSources.value().value_or(Config::FrozenSourcesConfig{});
+    m_captureFrozenNativeSeed = isFrozenSourcesEnabled() && frozen.maxMiB.value() &&
+                                frozen.maxMiB.value() <= 512 &&
+                                (!frozen.packages.value().empty() ||
+                                 !frozen.modules.value().empty() ||
+                                 !frozen.instances.value().empty()) &&
+                                !std::getenv("SLANG_FROZEN_NATIVE_SEED_DISABLE");
+    driver.options.captureUvmPrefix = isUvmPrefixCacheEnabled() || m_captureFrozenNativeSeed;
     options = driver.createOptionBag();
     options.set(driver.getAnalysisOptions());
     // Native command files can change cwd and install include paths. Only the
@@ -233,6 +250,11 @@ bool ServerDriver::parseAndLoadSources(const std::vector<std::string>& buildfile
         diagEngine.addClient(diagClient);
     }
     m_nativeInputsFailed = !ok;
+    // Initial native capture is separate from independent completion-file parsing.
+    // Keep those query parses under the explicitly enabled older UVM contract only.
+    auto queryPP = options.getOrDefault<parsing::PreprocessorOptions>();
+    queryPP.captureUvmPrefix = isUvmPrefixCacheEnabled();
+    options.set(std::move(queryPP));
     installConfiguredUnits(driver.syntaxTrees);
     return ok;
 }
@@ -340,6 +362,27 @@ void ServerDriver::analyzeDocument(SlangDoc& doc, const lsp::RequestContext& ctx
                                    SemanticDiagnosticBatch* batch) {
     ctx.throwIfCancelled("before diagnostics");
 
+    if (comp) {
+        auto previousUnits = m_configuredUnits;
+        refreshConfiguredUnits();
+        if (m_designUsesConfiguredUnits && previousUnits != m_configuredUnits)
+            comp->refreshDocuments(m_configuredUnits);
+        auto design = comp->createActiveDesignContext({});
+        auto path = sm.getFullPath(doc.getBuffer());
+        bool covered = false;
+        for (const auto& tree : design.getAnalysis().compilation.getSyntaxTrees())
+            for (auto id : tree->getSourceBufferIds())
+                covered |= sm.getFullPath(id) == path;
+        if (covered) {
+            // A shallow view cannot validate bind targets and cross-hierarchy
+            // references. Publish from the current full design for its sources.
+            publishCompilationDiagnostics(&doc.getURI(), &ctx);
+            m_fullDiagnosticGeneration = m_diagnosticGeneration;
+            publishInactiveRegions(doc, ctx);
+            return;
+        }
+    }
+
     auto cwdPhase = sm.beginFastCwdPhase();
     // Clear and re-issue diagnostics for this document
     auto update = diagClient->beginUpdate();
@@ -391,8 +434,7 @@ void ServerDriver::onDocDidSave(SlangDoc& doc) {
         }
     }
     else {
-        diagClient->clear();
-        if (hasConfiguredCompilationInputs())
+        if (m_designUsesConfiguredUnits)
             comp->refreshDocuments(m_configuredUnits);
         else
             comp->refresh();
@@ -405,30 +447,53 @@ void ServerDriver::onDocDidSave(SlangDoc& doc) {
     }
 }
 
-void ServerDriver::publishCompilationDiagnostics(const URI* priorityUri) {
+void ServerDriver::publishCompilationDiagnostics(const URI* priorityUri,
+                                                 const lsp::RequestContext* ctx) {
     auto cwdPhase = sm.beginFastCwdPhase();
+    auto update = diagClient->beginUpdate();
+    auto design = comp->createActiveDesignContext({});
+    const auto trees = design.getAnalysis().compilation.getSyntaxTrees();
+    flat_hash_set<URI> currentSources;
+    for (const auto& tree : trees)
+        for (auto id : tree->getSourceBufferIds())
+            if (auto path = sm.getFullPath(id); !path.empty())
+                currentSources.emplace(URI::fromFile(path));
+    auto clearSources = m_buildSourceUris;
+    clearSources.insert(currentSources.begin(), currentSources.end());
+    for (const auto& uri : clearSources)
+        diagClient->clear(uri);
+    for (const auto& [uri, doc] : docs)
+        if (clearSources.contains(URI::fromFile(sm.getFullPath(doc->getBuffer()))))
+            diagClient->clear(uri);
     diagEngine.setMappingsFromPragmas();
-    if (hasConfiguredCompilationInputs()) {
-        for (const auto& tree : m_currentConfiguredTrees)
-            for (const auto& diagnostic : tree->diagnostics())
-                diagEngine.issue(diagnostic);
-    }
-    else
-        for (const auto& entry : docs)
-            entry.second->issueParseDiagnostics(diagEngine);
+    for (const auto& tree : trees)
+        for (const auto& diagnostic : tree->diagnostics())
+            diagEngine.issue(diagnostic);
     comp->issueDiagnosticsTo(diagEngine);
     for (const auto& [uri, doc] : docs) {
-        issueExplicitContextDiagnostics(uri);
-        diagClient->setVersion(uri, doc->getVersion());
+        if (currentSources.contains(URI::fromFile(sm.getFullPath(doc->getBuffer())))) {
+            issueExplicitContextDiagnostics(uri);
+            diagClient->setVersion(uri, doc->getVersion());
+        }
     }
+    if (ctx)
+        ctx->throwIfCancelled("before publishing full-design diagnostics");
     cwdPhase.finish();
+    update.commit();
+    m_buildSourceUris = std::move(currentSources);
     if (priorityUri)
         diagClient->pushDiags(*priorityUri);
     else
         diagClient->pushDiags();
+    // Generation zero is reserved for an unpublished full-design result.
+    if (!m_diagnosticGeneration)
+        ++m_diagnosticGeneration;
+    m_fullDiagnosticGeneration = m_diagnosticGeneration;
 }
 
 void ServerDriver::prepareForContextRetirement() {
+    if (m_frozenSources)
+        m_frozenSources->clear("context retirement");
     completions.invalidateParsedLibraryCache();
     for (auto& [uri, doc] : docs)
         doc->releaseSemanticCaches();
@@ -490,15 +555,22 @@ std::unique_ptr<ServerDriver> ServerDriver::createFromFileLists(
     }
 
     if (buildDocuments.empty()) {
+        if (requireValidConfig)
+            return nullptr;
         newDriver->copyOpenDocumentsFrom(oldDriver);
         ERROR("No documents available for compilation");
         return newDriver;
     }
 
-    newDriver->comp = std::make_unique<ServerCompilation>(std::move(buildDocuments),
-                                                          newDriver->options, newDriver->sm,
-                                                          newDriver->client);
+    newDriver->m_designUsesConfiguredUnits = true;
+    newDriver->comp = std::make_unique<ServerCompilation>(
+        std::move(buildDocuments), newDriver->options, newDriver->sm, newDriver->client,
+        std::nullopt,
+        (newDriver->isFrozenSourcesEnabled() || newDriver->isUvmPrefixCacheEnabled()) && oldDriver
+            ? oldDriver->comp.get()
+            : nullptr);
 
+    newDriver->configureFrozenInstances();
     newDriver->diagClient->clear();
     newDriver->copyOpenDocumentsFrom(oldDriver);
     newDriver->publishCompilationDiagnostics();
@@ -558,6 +630,12 @@ void ServerDriver::openDocument(const URI& uri, const std::string_view text,
     doc->setVersion(version);
     m_openDocs.insert(uri);
     auto physicalUri = URI::fromFile(sm.getFullPath(doc->getBuffer()));
+    if (comp && !matchesBuildSource && m_buildSourceUris.contains(physicalUri)) {
+        ++m_diagnosticGeneration;
+        comp->invalidate();
+        m_fullDiagnosticGeneration = 0;
+        invalidateAnalysesAndRefreshClient();
+    }
     if (!m_openDocs.contains(physicalUri))
         diagClient->adoptDocumentUri(physicalUri, uri);
     // Protocol callers with an idle diagnostic loop can postpone complete
@@ -568,9 +646,21 @@ void ServerDriver::openDocument(const URI& uri, const std::string_view text,
         m_pendingIncludedDiagnostics.insert_or_assign(uri, ++m_diagnosticGeneration);
     }
     else if (comp && matchesBuildSource) {
-        // File is already part of the compilation — compilation diags were
-        // already published, so skip shallow diags. Still publish inactive regions.
-        publishInactiveRegions(*doc);
+        if (m_fullDiagnosticGeneration && m_fullDiagnosticGeneration == m_diagnosticGeneration &&
+            comp->containsCurrentSource(sm.getFullPath(doc->getBuffer()))) {
+            // Reuse the complete current publication, with this editor version,
+            // including an explicit empty list when the source has no diagnostics.
+            auto found = diagClient->renderedDiagnostics().find(uri);
+            auto rendered = found == diagClient->renderedDiagnostics().end()
+                                ? std::vector<lsp::Diagnostic>{}
+                                : found->second;
+            diagClient->replaceRendered(uri, std::move(rendered));
+            diagClient->setVersion(uri, doc->getVersion());
+            diagClient->pushDiags(uri);
+            publishInactiveRegions(*doc);
+        }
+        else
+            analyzeDocument(*doc);
     }
     else {
         analyzeDocument(*doc);
@@ -1465,17 +1555,27 @@ std::vector<std::string> ServerDriver::getModulesInFile(const std::string& path)
 
 std::unique_ptr<ServerDriver> ServerDriver::createFromTop(
     Indexer& indexer, SlangLspClient& client, const Config& config, const URI& topUri,
-    std::optional<std::string_view> workspaceFolder, const ServerDriver* oldDriver) {
-    auto newDriver = createForExplore(indexer, client, config, workspaceFolder, oldDriver);
+    std::optional<std::string_view> workspaceFolder, const ServerDriver* oldDriver,
+    bool requireValidConfig) {
+    auto newDriver = createForExplore(indexer, client, config, workspaceFolder, oldDriver,
+                                      requireValidConfig);
+    if (!newDriver)
+        return nullptr;
     auto doc = newDriver->getDocument(topUri);
     if (!doc) {
+        if (requireValidConfig)
+            return nullptr;
         client.showError("Document not found: " + std::string(topUri.getPath()));
         return newDriver;
     }
 
     auto topTree = doc->getSyntaxTree();
     std::string topName;
-    if (topTree->getMetadata().nodeMeta.size() == 1) {
+    const auto& metadata = topTree->getMetadata().nodeMeta;
+    if (metadata.size() == 1 &&
+        (metadata[0].first->kind == syntax::SyntaxKind::ModuleDeclaration ||
+         metadata[0].first->kind == syntax::SyntaxKind::InterfaceDeclaration ||
+         metadata[0].first->kind == syntax::SyntaxKind::ProgramDeclaration)) {
         topName = topTree->getMetadata().nodeMeta[0].first->header->name.valueText();
     }
     else {
@@ -1483,6 +1583,8 @@ std::unique_ptr<ServerDriver> ServerDriver::createFromTop(
         shallowCompilation.addSyntaxTree(topTree);
         auto& topInstances = shallowCompilation.getRoot().topInstances;
         if (topInstances.empty()) {
+            if (requireValidConfig)
+                return nullptr;
             client.showError("No top modules found in: " + std::string(topUri.getPath()));
             return newDriver;
         }
@@ -1503,13 +1605,19 @@ std::unique_ptr<ServerDriver> ServerDriver::createFromTop(
         documents.push_back(SlangDoc::fromTree(*newDriver, tree));
     }
     for (const auto& dependency : documents) {
+        if (auto previous = newDriver->docs.find(dependency->getURI());
+            previous != newDriver->docs.end())
+            dependency->setVersion(previous->second->getVersion());
         newDriver->docs[dependency->getURI()] = dependency;
     }
 
-    newDriver->comp = std::make_unique<ServerCompilation>(documents, newDriver->options,
-                                                          newDriver->sm, newDriver->client,
-                                                          std::move(topName));
+    newDriver->comp = std::make_unique<ServerCompilation>(
+        documents, newDriver->options, newDriver->sm, newDriver->client, std::move(topName),
+        (newDriver->isFrozenSourcesEnabled() || newDriver->isUvmPrefixCacheEnabled()) && oldDriver
+            ? oldDriver->comp.get()
+            : nullptr);
 
+    newDriver->configureFrozenInstances();
     newDriver->publishCompilationDiagnostics();
     return newDriver;
 }
@@ -1961,8 +2069,9 @@ std::optional<std::string> ServerDriver::getDesignInstancePathAt(const URI& uri,
     return analysis->getDesignInstancePathAtToken(analysis->syntaxes.getWordTokenAt(*loc));
 }
 
-std::optional<lsp::Hover> ServerDriver::getDocHover(const URI& uri, const lsp::Position& position,
-                                                    const lsp::RequestContext& ctx) {
+std::optional<lsp::Hover> ServerDriver::getDocHover(
+    const URI& uri, const lsp::Position& position, const lsp::RequestContext& ctx,
+    std::optional<Config::HoverConfig::MacroView> macroView) {
     const auto doc = getDocument(uri);
     if (!doc) {
         return {};
@@ -1983,7 +2092,10 @@ std::optional<lsp::Hover> ServerDriver::getDocHover(const URI& uri, const lsp::P
         return {};
     }
     const auto& info = *maybeInfo;
-    return lsp::Hover{.contents = info.getHover(analysis->getBuffer(), m_config.hovers.value())};
+    auto hovers = m_config.hovers.value();
+    if (macroView)
+        hovers.macroView = *macroView;
+    return lsp::Hover{.contents = info.getHover(analysis->getBuffer(), hovers)};
 }
 
 std::optional<std::vector<lsp::DocumentHighlight>> ServerDriver::getDocDocumentHighlight(
@@ -2049,6 +2161,12 @@ void ServerDriver::addMemberReferences(std::vector<lsp::Location>& references,
         if (!fileDoc) {
             continue;
         }
+
+        // The workspace index can include files outside a complete compilation
+        // filelist. They are search candidates, not additional semantic inputs.
+        getIncludeContext(fileUri);
+        if (hasExplicitContextError(fileUri))
+            continue;
 
         // if a package, check if we can just use the package ref syntaxes to save on
         // making analysis
@@ -2241,6 +2359,9 @@ std::optional<std::vector<lsp::Location>> ServerDriver::getDocReferences(
                 URI fileUri = URI::fromFile(filePath.string());
                 auto fileDoc = getDocument(fileUri);
                 if (fileDoc) {
+                    getIncludeContext(fileUri);
+                    if (hasExplicitContextError(fileUri))
+                        continue;
                     finder(fileDoc->getSyntaxTree()->getMetadata(), fileUri);
                 }
                 else {

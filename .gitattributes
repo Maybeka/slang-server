@@ -2,3 +2,6 @@
 
 # Unified diff context lines contain a required leading space.
 restoration/*.patch -whitespace
+
+# Byte-identical third-party sources are verified against their SHA-256 inventory.
+resources/uvm/** -text -whitespace

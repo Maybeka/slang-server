@@ -339,6 +339,10 @@ std::shared_ptr<slang::syntax::SyntaxTree> CompletionQuery::getIndexedSyntaxTree
         auto result = syntax::SyntaxTree::fromFile(path, sm, settings);
         return result ? result.value() : std::shared_ptr<syntax::SyntaxTree>{};
     };
+    if (getDriver(dispatch).isFrozenSourcesEnabled()) {
+        if (auto tree = getDriver(dispatch).getFrozenIndependentTree(path, options))
+            return tree;
+    }
     if (!getDriver(dispatch).isUvmPrefixCacheEnabled())
         return parse(options);
     if (options.getOrDefault<parsing::PreprocessorOptions>().bufferChangeCB) {
@@ -497,7 +501,8 @@ void CompletionDispatch::getCompletions(std::vector<lsp::CompletionItem>& result
         if (item.kind == lsp::CompletionItemKind::Module)
             item.data = std::string(doc->getURI().str());
         context.query->setCompletionEdit(item);
-        if (m_driver.isUvmPrefixCacheEnabled() && item.data && item.data->to_object())
+        if ((m_driver.isUvmPrefixCacheEnabled() || m_driver.isFrozenSourcesEnabled()) &&
+            item.data && item.data->to_object())
             item.data = rfl::to_generic(
                 CompletionEpochPayload{getCompletionEpoch(), std::move(*item.data)});
     }
@@ -511,7 +516,14 @@ void CompletionDispatch::getCompletionItemResolve(lsp::CompletionItem& item,
     INFO("Resolving completion item: {}", item.label);
     ctx.throwIfCancelled("before resolving completion item");
     bool wrapped = false;
-    if (m_driver.isUvmPrefixCacheEnabled() && item.data && item.data->to_object()) {
+    const auto* dataObject = item.data ? std::get_if<rfl::Generic::Object>(&item.data->variant())
+                                       : nullptr;
+    const bool expectsEpoch = m_driver.isUvmPrefixCacheEnabled() ||
+                              m_driver.isFrozenSourcesEnabled() ||
+                              (m_parsedLibraryCache && m_parsedLibraryCache->requireEpoch);
+    if (dataObject && (expectsEpoch || std::ranges::any_of(*dataObject, [](const auto& entry) {
+                           return entry.first == "contextEpoch";
+                       }))) {
         auto owner = rfl::from_generic<CompletionEpochPayload>(*item.data);
         if (owner) {
             if (owner->contextEpoch != getCompletionEpoch()) {

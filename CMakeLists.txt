@@ -240,6 +240,8 @@ set(SLANG_INCLUDE_TESTS
     ${SLANG_SERVER_INCLUDE_SDK_TESTS}
     CACHE BOOL "Don't build slang tests" FORCE)
 
+include(cmake/VerifyBundledUvm.cmake)
+
 if(SLANG_SERVER_INCLUDE_TESTS)
   # Set up Catch2 for testing
   set(find_pkg_args "")
@@ -311,6 +313,7 @@ add_library(
   src/ast/ActiveDesignContext.cpp
   src/ast/ConeResult.cpp
   src/ast/ServerCompilation.cpp
+  src/ast/FrozenInstanceCache.cpp
   src/ast/ServerCompilationAnalysis.cpp
   src/ast/ShallowCompilation.cpp
   src/ast/WcpClient.cpp
@@ -346,6 +349,8 @@ add_library(
   src/Indexer.cpp
   src/ServerDriver.cpp
   src/UvmLibrary.cpp
+  src/FrozenSources.cpp
+  src/document/FrozenSourceRegistry.cpp
   src/SlangServer.cpp
   src/ServerDiagClient.cpp
   src/diagnostics/DiagnosticProcess.cpp
@@ -353,6 +358,8 @@ add_library(
   src/diagnostics/DiagnosticSnapshotCapture.cpp
   src/diagnostics/DiagnosticWorker.cpp)
 
+target_compile_definitions(slang_server_obj_lib PRIVATE
+  SLANG_SERVER_BUNDLED_UVM_RELATIVE_PATH="${SLANG_SERVER_BUNDLED_UVM_RELATIVE_PATH}")
 target_include_directories(slang_server_obj_lib PUBLIC include)
 target_include_directories(slang_server_obj_lib SYSTEM
                            PRIVATE external/reflect-cpp/include)
@@ -399,6 +406,7 @@ add_executable(slang::server ALIAS slang_server)
 target_link_libraries(slang_server PRIVATE reflectcpp)
 target_link_libraries(slang_server PRIVATE slang_server_obj_lib)
 set_target_properties(slang_server PROPERTIES OUTPUT_NAME "slang-server")
+stageBundledUvm(slang_server)
 
 # Build the gen_config_schema tool (standalone tool to generate config schema)
 add_executable(gen_config_schema src/gen_config_main.cpp)
@@ -421,4 +429,6 @@ endif()
 
 if(SLANG_SERVER_INCLUDE_INSTALL)
   install(TARGETS slang_server RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+  install(DIRECTORY "${SLANG_SERVER_BUNDLED_UVM_SOURCE}/"
+          DESTINATION "${CMAKE_INSTALL_DATADIR}/slang-server/uvm/1.2")
 endif()

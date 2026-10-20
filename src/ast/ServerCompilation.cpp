@@ -17,6 +17,8 @@
 #include <cctype>
 #include <memory>
 #include <ranges>
+#include <rfl/NoExtraFields.hpp>
+#include <rfl/json.hpp>
 #include <tuple>
 
 #include "slang/ast/Compilation.h"
@@ -464,7 +466,8 @@ const slang::ast::Symbol* ServerCompilation::toShallowSymbol(
 
 ServerCompilation::ServerCompilation(std::vector<std::shared_ptr<SlangDoc>> documents, Bag options,
                                      SourceManager& sourceManager, lsp::LspClient& client,
-                                     std::optional<std::string> top) :
+                                     std::optional<std::string> top,
+                                     const ServerCompilation* previous) :
     m_options(std::move(options)), m_top(std::move(top)), m_sourceManager(sourceManager),
     m_client(client) {
 
@@ -477,6 +480,24 @@ ServerCompilation::ServerCompilation(std::vector<std::shared_ptr<SlangDoc>> docu
         m_options.insertOrGet<slang::ast::CompilationOptions>().topModules = {*m_top};
     }
     refresh();
+    if (previous) {
+        // Copy value-only paths, never symbols from the retiring compilation.
+        // Parent selections precede nested selections; disappeared paths decline
+        // locally while still-valid module / generate choices remain selected.
+        std::vector<std::string> paths;
+        for (const auto& [_, selected] : previous->m_activeInstancesByModule)
+            paths.push_back(selected.instPath);
+        for (const auto& [_, selected] : previous->m_activeGenerateScopesByArray)
+            paths.push_back(selected);
+        std::sort(paths.begin(), paths.end(), [](const auto& a, const auto& b) {
+            auto da = std::count(a.begin(), a.end(), '.');
+            auto db = std::count(b.begin(), b.end(), '.');
+            return da != db ? da < db : a < b;
+        });
+        paths.erase(std::unique(paths.begin(), paths.end()), paths.end());
+        for (const auto& path : paths)
+            setActiveInstance(path);
+    }
 }
 
 void ServerCompilation::indexModuleDocs() {
@@ -503,6 +524,44 @@ void ServerCompilation::refresh() {
     m_hierarchySearchIndexed = false;
     syncActiveInstances();
     m_dirty = false;
+    if (m_frozenInstances) {
+        m_frozenInstances->resolveSelections(m_analysis->compilation);
+        if (m_frozenModulesChanged)
+            m_frozenModulesChanged(m_frozenInstances->modules());
+    }
+}
+
+void ServerCompilation::configureFrozenInstances(
+    std::vector<std::string> paths, size_t budgetBytes, FrozenInstanceCache::Witness witness,
+    std::function<void(const std::vector<std::string>&)> changed,
+    FrozenInstanceCache::Witness requestWitness) {
+    m_frozenInstances = std::make_unique<FrozenInstanceCache>(std::move(paths), budgetBytes,
+                                                              m_sourceManager, std::move(witness),
+                                                              std::move(requestWitness));
+    m_frozenModulesChanged = std::move(changed);
+    m_frozenInstances->resolveSelections(m_analysis->compilation);
+    if (m_frozenModulesChanged)
+        m_frozenModulesChanged(m_frozenInstances->modules());
+}
+
+void ServerCompilation::clearFrozenInstances(std::string reason) {
+    if (m_frozenInstances)
+        m_frozenInstances->clear(std::move(reason));
+}
+
+std::optional<FrozenInstanceCache::Certificate> ServerCompilation::certifyFrozenInstance(
+    const std::string& path, const lsp::RequestContext& ctx) {
+    if (!m_frozenInstances || !m_frozenInstances->selected(path))
+        return {};
+    std::vector<std::shared_ptr<syntax::SyntaxTree>> trees;
+    bool syntaxUnchanged = true;
+    for (const auto& [_, document] : m_documents) {
+        const auto previous = document->getCachedSyntaxTree();
+        auto tree = document->getSyntaxTree(ctx);
+        syntaxUnchanged &= document->isNativeCompilationUnit() && previous == tree;
+        trees.push_back(std::move(tree));
+    }
+    return m_frozenInstances->certify(trees, ctx, syntaxUnchanged);
 }
 
 void ServerCompilation::ensureCurrent() const {
@@ -753,14 +812,46 @@ void ServerCompilation::syncActiveInstances() {
     m_activeInstancesByModule = std::move(nextActiveInstances);
 }
 
-std::vector<hier::HierItem_t> ServerCompilation::getScope(const std::string& hierPath) {
+std::vector<hier::HierItem_t> ServerCompilation::getScope(const std::string& hierPath,
+                                                          const lsp::RequestContext& ctx) {
+    auto certificate = certifyFrozenInstance(hierPath, ctx);
+    const auto key = "scope:" + hierPath;
+    if (certificate) {
+        if (auto payload = m_frozenInstances->find(key, *certificate)) {
+            auto values = rfl::json::read<std::vector<hier::HierItem_t>, rfl::NoExtraFields>(
+                *payload);
+            if (values)
+                return std::move(*values);
+            m_frozenInstances->clear("cached hierarchy values could not be decoded");
+            certificate.reset();
+        }
+    }
     ensureCurrent();
     auto scopeChildren = tryGetScopeChildren(m_analysis->compilation, m_sourceManager, hierPath);
-    return scopeChildren.value_or(std::vector<hier::HierItem_t>{});
+    auto result = scopeChildren.value_or(std::vector<hier::HierItem_t>{});
+    if (certificate && m_frozenInstances->selected(hierPath)) {
+        const auto payload = rfl::json::write(result);
+        const auto decoded = rfl::json::read<decltype(result), rfl::NoExtraFields>(payload);
+        if (decoded && rfl::json::write(*decoded) == payload)
+            m_frozenInstances->store(key, payload, result, *certificate, ctx);
+    }
+    return result;
 }
 
 std::vector<hier::ScopeStep> ServerCompilation::getScopes(const std::string& hierPath,
                                                           const lsp::RequestContext& ctx) {
+    auto certificate = certifyFrozenInstance(hierPath, ctx);
+    const auto key = "scopes:" + hierPath;
+    if (certificate) {
+        if (auto payload = m_frozenInstances->find(key, *certificate)) {
+            auto values = rfl::json::read<std::vector<hier::ScopeStep>, rfl::NoExtraFields>(
+                *payload);
+            if (values)
+                return std::move(*values);
+            m_frozenInstances->clear("cached hierarchy steps could not be decoded");
+            certificate.reset();
+        }
+    }
     ensureCurrent();
     std::vector<hier::ScopeStep> result;
     auto& compilation = m_analysis->compilation;
@@ -784,6 +875,16 @@ std::vector<hier::ScopeStep> ServerCompilation::getScopes(const std::string& hie
         });
     }
 
+    if (certificate && m_frozenInstances->selected(hierPath)) {
+        const auto payload = rfl::json::write(result);
+        const auto decoded = rfl::json::read<decltype(result), rfl::NoExtraFields>(payload);
+        if (decoded && rfl::json::write(*decoded) == payload) {
+            std::vector<hier::HierItem_t> locations;
+            for (const auto& step : result)
+                locations.insert(locations.end(), step.children.begin(), step.children.end());
+            m_frozenInstances->store(key, payload, locations, *certificate, ctx);
+        }
+    }
     return result;
 }
 

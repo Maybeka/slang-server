@@ -6,6 +6,90 @@
 #include "utils/ServerHarness.h"
 #include <catch2/generators/catch_generators.hpp>
 #include <cstdlib>
+#include <rfl/from_generic.hpp>
+
+TEST_CASE("Macro hover views distinguish source and generated code", "[macro-hover]") {
+    using View = Config::HoverConfig::MacroView;
+    const auto view = GENERATE(View::source, View::expanded, View::both);
+    CAPTURE(int(view));
+    ServerHarness server;
+    Config config;
+    config.hovers.value().macroView = view;
+    REQUIRE(server.loadConfig(config));
+    auto doc = server.openFile("macro_views.sv", R"(
+`define WIDTH 8
+`define ADD(a, b) a + b
+`define DECL(name) logic [7:0] sig_``name;
+`define OUTER(name) `DECL(name)
+module top;
+    `OUTER(foo)
+    logic [`WIDTH-1:0] ordinary;
+    localparam int result = `ADD(3, 4);
+    initial sig_foo = 0;
+endmodule
+)");
+    auto textAt = [&](const std::string& token) {
+        auto hover = doc.getHoverAt(doc.before(token).m_offset);
+        REQUIRE(hover);
+        return rfl::get<lsp::MarkupContent>(hover->contents).value;
+    };
+    const auto call = textAt("`ADD(3");
+    CHECK((call.find("Expands to") != std::string::npos) == (view != View::source));
+    CHECK((call.find("`ADD(3, 4)") != std::string::npos) == (view == View::source));
+    CHECK((call.find("`define ADD") != std::string::npos) == (view != View::expanded));
+    const auto generated = textAt("sig_foo =");
+    CAPTURE(generated);
+    CHECK((generated.find("logic [7:0] sig_foo;") != std::string::npos) == (view != View::source));
+    CHECK((generated.find("`OUTER(foo)") != std::string::npos) == (view != View::expanded));
+    CHECK((generated.find("Expanded from") != std::string::npos) == (view == View::both));
+    const auto ordinary = textAt("ordinary;");
+    CHECK((ordinary.find("`WIDTH-1:0") != std::string::npos) == (view == View::source));
+}
+
+TEST_CASE("Temporary macro hover preview preserves configuration and current analysis",
+          "[macro-hover]") {
+    ServerHarness server;
+    auto doc = server.openFile("preview.sv", R"(
+`define VALUE 3
+module top;
+    localparam int value = `VALUE;
+endmodule
+)");
+    const auto cursor = doc.before("`VALUE;");
+    auto before = doc.doc->getAnalysis();
+    const auto original = doc.getHoverAt(cursor.m_offset);
+    REQUIRE(original);
+    auto preview = [&](const std::string& mode) {
+        auto result = server.executeCommand(
+            {.command = "slang.previewHover",
+             .arguments = std::vector<lsp::LSPAny>{rfl::to_generic(
+                 server::SlangServer::PreviewHoverArgs{.textDocument = {.uri = doc.m_uri},
+                                                       .position = cursor.getPosition(),
+                                                       .macroView = mode})}});
+        REQUIRE(result);
+        auto hover = rfl::from_generic<lsp::Hover>(*result);
+        REQUIRE(hover);
+        return rfl::get<lsp::MarkupContent>(hover.value().contents).value;
+    };
+    CHECK(preview("source").find("Expands to") == std::string::npos);
+    CHECK(preview("expanded").find("Expands to") != std::string::npos);
+    CHECK(preview("both") == rfl::get<lsp::MarkupContent>(original->contents).value);
+    CHECK(doc.doc->getAnalysis() == before);
+    CHECK(server.getConfig().hovers.value().macroView.value() ==
+          Config::HoverConfig::MacroView::both);
+    auto unchanged = doc.getHoverAt(cursor.m_offset);
+    REQUIRE(unchanged);
+    CHECK(rfl::get<lsp::MarkupContent>(unchanged->contents).value ==
+          rfl::get<lsp::MarkupContent>(original->contents).value);
+    CHECK_THROWS_WITH(preview("invalid"), "macroView must be source, expanded or both");
+
+    auto offset = doc.before("VALUE 3").m_offset + std::string("VALUE ").size();
+    doc.erase(offset, offset + 1);
+    doc.insert(offset, "9");
+    doc.publishChanges();
+    CHECK(preview("expanded").find("9") != std::string::npos);
+    CHECK(preview("expanded").find("\n3\n") == std::string::npos);
+}
 
 static size_t countSubstring(std::string_view text, std::string_view substring) {
     size_t count = 0;

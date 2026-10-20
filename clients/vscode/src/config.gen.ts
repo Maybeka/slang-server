@@ -14,12 +14,18 @@ export interface Config {
   compilationFilelist?: string | null
   /** Ordered files prepended to separately parsed exploration-mode sources. Use real shared macro headers; relative paths are workspace-relative. Full builds retain their own compilation-unit preprocessing. */
   explorePreincludeFiles?: string[]
+  /** Explicit UVM library inputs. No library is injected unless configured. Source loading is independent of experimentalUvmPrefixCache. */
+  uvm?: Config__UvmConfig | null
   /** Opt-in fast snapshot cwd checks (default false = strict). Requires the process working directory and its ancestors not to be moved, deleted or renamed during analysis. Ordinary source edits remain allowed. Checks phase boundaries; transient changes restored between checks are undetected. A changed/unavailable cwd discards the result and requires configuration reload. Filesystem lookup rules are unchanged. */
   fastCwdSnapshotChecks?: boolean
   /** Experimental closed flat int method overlay. Default off. Phase one requires equal-length ASCII edits with fixed line layout and local count; unknown contexts and unsupported queries use the complete native path. */
   experimentalMethodScopeOverlay?: boolean
   /** Experimental immutable UVM prefix reuse. Default off. External macros affecting UVM must come from command-line/configuration flags. Unsupported source changes or preprocessing state use native parsing. */
   experimentalUvmPrefixCache?: boolean
+  /** Frozen source selections and cache budget. Does not enable the experiment. */
+  frozenSources?: Config__FrozenSourcesConfig | null
+  /** Experimental package/module syntax and instance hierarchy reuse. Default off. Exact source and include lookup certification can cost filesystem I/O; changed inputs rebuild the native context while preserving editor overlays. */
+  experimentalFrozenSources?: boolean
   /**
    * @deprecated
    * Globs of what to index. By default will index all sv and svh files in the workspace.
@@ -61,7 +67,20 @@ export interface Config__Build {
   command?: string
 }
 
+export interface Config__FrozenSourcesConfig {
+  /** Exact package names in configured compilation inputs. The complete ordered roots through each selected package are retained, including preceding dependencies. Missing or ambiguous names are reported in status. */
+  packages?: string[]
+  /** Exact module definition names in configured compilation inputs. Retains complete ordered source roots; instance parameterizations are elaborated independently. Does not enable the experiment. */
+  modules?: string[]
+  /** Exact canonical RTL instance paths. Selects the instance and its descendants. Certified hierarchy values can survive supported class task body edits; other semantic changes rebuild natively. Requires a full design and does not enable the experiment. */
+  instances?: string[]
+  /** Maximum charged retained cache size in MiB (0 to 512). With instance selectors, one quarter is reserved for certified hierarchy values. Current compilations can still own syntax after eviction; this is not a process RSS limit. */
+  maxMiB?: number
+}
+
 export interface Config__HoverConfig {
+  /** Macro code in hovers: 'source' preserves written source, 'expanded' shows generated code, 'both' keeps expanded code and its macro origin. Default both preserves the existing display. */
+  macroView?: "source" | "expanded" | "both"
   /** How to render leading doc comments in hovers: 'markdown' renders as markdown, 'plaintext' escapes markdown characters, 'raw' shows the comment text verbatim including comment markers. */
   docCommentFormat?: "plaintext" | "markdown" | "raw"
 }
@@ -88,4 +107,13 @@ export interface Config__InlayHints {
   funcArgNames?: number
   /** Macro argument hints: 0=off, N=only calls with >=N args */
   macroArgNames?: number
+}
+
+export interface Config__UvmConfig {
+  /** UVM source directory or distribution root, relative to the workspace. An existing project UVM is validated and retained; another version is never silently substituted. */
+  sourceDirectory?: string
+  /** Optional UVM entry file, relative to sourceDirectory unless absolute. Otherwise locate uvm_pkg.sv directly or under src. */
+  entryFile?: string | null
+  /** Explicitly select the shipped UVM 1.2 sources. Default false. Mutually exclusive with sourceDirectory and entryFile. Conflicting project UVM inputs are rejected; no automatic injection or download. */
+  useBundled?: boolean
 }

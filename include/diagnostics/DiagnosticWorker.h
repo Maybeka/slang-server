@@ -16,12 +16,24 @@ struct DiagnosticRootInput {
     uint32_t file;
     uint64_t sortKey;
 };
+struct DiagnosticFrozenPrefix {
+    uint32_t roots = 0;
+    std::vector<std::string> packages;
+    uint64_t maxBytes = 0;
+    // A current parent parse already declined this prefix. This only disables
+    // reuse; false still requires the worker's independent positive proof.
+    bool nativeOnly = false;
+    std::vector<std::string> modules;
+};
 struct DiagnosticTreeInput {
     std::vector<DiagnosticRootInput> roots;
     // File identities in SyntaxTree::getSourceBufferIds order. Reparse must
     // reproduce this graph, including repeated occurrences of one header.
     std::vector<uint32_t> sources;
     std::vector<uint32_t> predefines;
+    // Eligibility hint only. The worker independently proves declarations,
+    // preprocessing safety, options, source identity and its own retention budget.
+    std::optional<DiagnosticFrozenPrefix> frozenPrefix;
 };
 struct DiagnosticTargetInput {
     URI uri;
@@ -32,7 +44,7 @@ struct DiagnosticTargetInput {
     bool packageOnly = false;
 };
 struct DiagnosticJobMetadata {
-    uint32_t schema = 1;
+    uint32_t schema = 2;
     int parentPid = 0;
     bool utf8Positions = false;
     std::vector<DiagnosticTreeInput> trees;
@@ -63,6 +75,9 @@ struct DiagnosticJobStatistics {
     size_t parsedTrees = 0;
     size_t prefixCaptureParses = 0;
     size_t reusedPrefixes = 0;
+    size_t genericPrefixCaptureParses = 0, genericSuffixParses = 0;
+    size_t reusedGenericPrefixes = 0, genericDeclines = 0, genericContextResets = 0;
+    size_t retainedGenericBytes = 0;
 };
 DiagnosticJobOutput executeDiagnosticJob(std::string_view input,
                                          const std::function<void()>& beforeSemantic = {},

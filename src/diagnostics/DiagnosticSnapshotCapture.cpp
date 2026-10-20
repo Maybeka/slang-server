@@ -38,6 +38,8 @@ std::optional<ServerDriver::DiagnosticSnapshot> ServerDriver::captureDiagnosticS
     snapshot.metadata.utf8Positions = client.capabilities.utf8Positions;
     auto input = std::make_shared<diagnostic_snapshot::Input>();
     input->options = diagnostic_snapshot::captureOptions(options);
+    if (input->options.preprocessor)
+        input->options.preprocessor->captureUvmPrefix &= isUvmPrefixCacheEnabled();
     input->settings = diagEngine.captureSettings();
     std::vector<std::shared_ptr<syntax::SyntaxTree>> trees;
     std::unordered_map<const syntax::SyntaxTree*, uint32_t> treeIndices;
@@ -118,11 +120,30 @@ std::optional<ServerDriver::DiagnosticSnapshot> ServerDriver::captureDiagnosticS
                 spec.roots.push_back({index, sm.getSortKey(id)});
         }
         std::reverse(spec.roots.begin(), spec.roots.end());
+        if (isFrozenSourcesEnabled() && m_frozenWitnessUsable && m_frozenSources) {
+            const auto config = m_config.frozenSources.value().value_or(
+                Config::FrozenSourcesConfig{});
+            std::vector<std::filesystem::path> paths;
+            for (const auto& root : spec.roots)
+                paths.push_back(sm.getFullPath(snapshot.buffers.at(root.file)));
+            auto plan = std::ranges::find_if(m_frozenPlans.units, [&](const auto& candidate) {
+                return candidate.roots == paths;
+            });
+            if (config.maxMiB.value() && config.maxMiB.value() <= 512 &&
+                plan != m_frozenPlans.units.end() && plan->frozenRootCount) {
+                spec.frozenPrefix =
+                    DiagnosticFrozenPrefix{uint32_t(plan->frozenRootCount), plan->packages,
+                                           uint64_t(config.maxMiB.value()) * 1024 * 1024,
+                                           m_frozenDeclinedUnits.contains(paths), plan->modules};
+            }
+        }
         for (auto id : tree->getPredefineBufferIds()) {
             spec.predefines.push_back(uint32_t(snapshot.buffers.size()));
             snapshot.buffers.push_back(id);
         }
         input->treeOptions.push_back(diagnostic_snapshot::captureOptions(tree->options()));
+        if (input->treeOptions.back().preprocessor)
+            input->treeOptions.back().preprocessor->captureUvmPrefix &= isUvmPrefixCacheEnabled();
         snapshot.metadata.trees.push_back(std::move(spec));
     }
     input->sources = sm.captureSnapshot(snapshot.buffers);

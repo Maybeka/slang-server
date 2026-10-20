@@ -414,8 +414,8 @@ bool appendSourceLink(markup::Paragraph& paragraph, SourceLocation location,
 
 void appendSyntaxTargets(markup::Document& doc,
                          std::span<const DefinitionInfo::SyntaxTarget> targets,
-                         const SourceManager& sm,
-                         Config::HoverConfig::DocCommentFormat docCommentFormat) {
+                         const SourceManager& sm, const Config::HoverConfig& hovers) {
+    const auto docCommentFormat = hovers.docCommentFormat.value();
     SmallVector<DefinitionInfo::SyntaxTarget, 4> renderedTargets;
     const bool rawDocComments = docCommentFormat == Config::HoverConfig::DocCommentFormat::raw;
     for (const auto& target : targets) {
@@ -429,13 +429,13 @@ void appendSyntaxTargets(markup::Document& doc,
             if (!docComments.empty())
                 doc.addParagraph().appendText(docComments).newLine();
         }
-        target.renderCode(doc.addParagraph(), sm, rawDocComments);
+        target.renderCode(doc.addParagraph(), sm, rawDocComments, hovers.macroView.value());
     }
 }
 
 void renderDrivers(markup::Document& doc, const ast::Symbol& symbol, ShallowAnalysis& analysis,
-                   const SourceManager& sourceManager, bool renderInputPortDriver,
-                   bool followPortDriver,
+                   const SourceManager& sourceManager, const Config::HoverConfig& hovers,
+                   bool renderInputPortDriver, bool followPortDriver,
                    SmallVector<const syntax::SyntaxNode*, 4>* renderedGroupSyntaxes = nullptr) {
     if (!ast::ValueSymbol::isKind(symbol.kind) || symbol.kind == ast::SymbolKind::EnumValue)
         return;
@@ -530,14 +530,14 @@ void renderDrivers(markup::Document& doc, const ast::Symbol& symbol, ShallowAnal
         }
 
         for (const auto& target : group.displayTargets) {
-            target.renderCode(paragraph, sourceManager, true);
+            target.renderCode(paragraph, sourceManager, true, hovers.macroView.value());
             doc.addParagraph(std::move(paragraph));
             paragraph = {};
         }
     }
 
     for (const auto* connectedSymbol : connectedPortSymbols)
-        renderDrivers(doc, *connectedSymbol, analysis, sourceManager, false, false,
+        renderDrivers(doc, *connectedSymbol, analysis, sourceManager, hovers, false, false,
                       renderedGroupSyntaxes);
 }
 
@@ -630,7 +630,7 @@ const ast::Symbol& getDriverSymbol(const DefinitionInfo::SymbolTarget& target) {
 
 void renderSymbolSyntaxes(markup::Document& doc, const DefinitionInfo::SymbolTarget& target,
                           const SourceManager& sm, const Config::HoverConfig& hovers) {
-    appendSyntaxTargets(doc, target.syntaxes, sm, hovers.docCommentFormat.value());
+    appendSyntaxTargets(doc, target.syntaxes, sm, hovers);
 }
 
 struct RenderedSymbolHover {
@@ -687,7 +687,7 @@ RenderedSymbolHover renderSymbolHover(const DefinitionInfo::SymbolTarget& target
     }
     renderSymbolValue(result.value, *target.symbol, sm);
     renderSymbolSyntaxes(result.syntaxes, target, sm, hovers);
-    renderDrivers(result.drivers, getDriverSymbol(target), *target.analysis, sm,
+    renderDrivers(result.drivers, getDriverSymbol(target), *target.analysis, sm, hovers,
                   target.renderInputPortDriver, followPortDriver);
     return result;
 }
@@ -803,7 +803,7 @@ std::optional<lsp::MarkupContent> renderElaboratedParameterSummary(
     for (const auto* target : parameters) {
         syntaxes.insert(syntaxes.end(), target->syntaxes.begin(), target->syntaxes.end());
     }
-    appendSyntaxTargets(doc, syntaxes, sm, hovers.docCommentFormat.value());
+    appendSyntaxTargets(doc, syntaxes, sm, hovers);
     return doc.build();
 }
 
@@ -894,13 +894,29 @@ DefinitionInfo::SyntaxTarget DefinitionInfo::SyntaxTarget::fromNode(
 }
 
 void DefinitionInfo::SyntaxTarget::renderCode(markup::Paragraph& paragraph, const SourceManager& sm,
-                                              bool rawDocComments) const {
+                                              bool rawDocComments,
+                                              Config::HoverConfig::MacroView macroView) const {
     if (!paragraph.isEmpty())
         paragraph.newLine();
     const auto& displayNode = selectDisplayNode(*node);
+    if (macroView == Config::HoverConfig::MacroView::source) {
+        // Read the retained editor buffer, not disk and not formatted expanded tokens.
+        auto range = macroUsageRange != SourceRange::NoLocation
+                         ? macroUsageRange
+                         : sm.getFullyExpandedRange(displayNode.sourceRange());
+        auto source = sm.getSourceText(range);
+        if (!source.empty()) {
+            auto comments = rawDocComments ? formatDocComment(displayNode) : std::string{};
+            paragraph.appendCodeBlock(comments + std::string(source));
+            return;
+        }
+        paragraph.appendText("Source unavailable");
+        return;
+    }
     paragraph.appendCodeBlock(rawDocComments ? formatCodeWithLeadingComments(displayNode)
                                              : formatCode(displayNode));
-    if (macroUsageRange != SourceRange::NoLocation) {
+    if (macroView == Config::HoverConfig::MacroView::both &&
+        macroUsageRange != SourceRange::NoLocation) {
         paragraph.newLine()
             .appendText("Expanded from ")
             .newLine()
@@ -918,6 +934,7 @@ DefinitionInfo::MacroTarget::MacroTarget(Definition definition,
     auto it = analysis.syntaxes.macroExpansions.find(&referenceSyntax);
     if (it != analysis.syntaxes.macroExpansions.end())
         macroExpansionText = it->second.getText();
+    macroUsageText = analysis.getSourceManager().getSourceText(referenceSyntax.sourceRange());
 }
 
 markup::Document DefinitionInfo::SymbolTarget::getHover(const SourceManager& sm,
@@ -946,11 +963,13 @@ markup::Document DefinitionInfo::MacroTarget::getHover(const SourceManager& sm, 
     renderMacroHeader(doc.addParagraph(), *this, sm, docBuffer);
 
     const auto* syntax = syntaxTarget();
-    if (syntax)
-        appendSyntaxTargets(doc, std::span<const SyntaxTarget>(syntax, 1), sm,
-                            hovers.docCommentFormat.value());
+    const auto mode = hovers.macroView.value();
+    if (syntax && (mode != Config::HoverConfig::MacroView::expanded || macroUsageText.empty()))
+        appendSyntaxTargets(doc, std::span<const SyntaxTarget>(syntax, 1), sm, hovers);
+    if (mode == Config::HoverConfig::MacroView::source && !macroUsageText.empty())
+        doc.addParagraph().appendText("Source").newLine().appendCodeBlock(macroUsageText);
 
-    if (!macroExpansionText.empty()) {
+    if (mode != Config::HoverConfig::MacroView::source && !macroExpansionText.empty()) {
         // Macro usage: show the expanded text at this call site
         doc.addParagraph()
             .appendText("Expands to ")

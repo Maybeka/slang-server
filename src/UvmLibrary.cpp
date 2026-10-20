@@ -1,7 +1,14 @@
 // SPDX-License-Identifier: MIT
 #include "ServerDriver.h"
+#include "diagnostics/DiagnosticProcess.h"
 #include "util/Logging.h"
 #include <set>
+#ifdef _WIN32
+#    ifndef NOMINMAX
+#        define NOMINMAX
+#    endif
+#    include <windows.h>
+#endif
 
 #include "slang/driver/SourceLoader.h"
 #include "slang/parsing/ParserMetadata.h"
@@ -9,6 +16,31 @@
 
 namespace server {
 namespace fs = std::filesystem;
+namespace {
+fs::path bundledUvmDirectory() {
+    fs::path executable;
+#ifdef _WIN32
+    std::wstring path(32768, L'\0');
+    const auto size = GetModuleFileNameW(nullptr, path.data(), DWORD(path.size()));
+    if (!size || size >= path.size())
+        throw std::runtime_error("cannot determine executable path for bundled UVM");
+    path.resize(size);
+    executable = path;
+#elif defined(__linux__)
+    executable = fs::canonical("/proc/self/exe");
+#else
+    executable = isolated_diagnostics::currentDiagnosticExecutable();
+#endif
+    executable = fs::canonical(executable);
+    // Release archives keep the executable at their root for existing editor
+    // installers. CMake build/install trees use bin plus a sibling share tree.
+    const auto adjacent = executable.parent_path() / "resources/uvm/1.2";
+    std::error_code error;
+    if (fs::is_directory(adjacent, error))
+        return adjacent / "src";
+    return executable.parent_path() / SLANG_SERVER_BUNDLED_UVM_RELATIVE_PATH / "src";
+}
+} // namespace
 
 bool ServerDriver::isUvmConfigurationInput(const fs::path& path) const {
     for (const auto& candidate : m_uvmWatchPaths) {
@@ -35,11 +67,35 @@ bool ServerDriver::configureUvmLibrary(const fs::path& base, bool requireValidCo
     if (!m_config.uvm.value())
         return true;
     const auto& config = *m_config.uvm.value();
-    if (config.sourceDirectory.value().empty())
+    if (config.useBundled.value() &&
+        (!config.sourceDirectory.value().empty() || config.entryFile.value()))
+        return uvmConfigurationError(
+            "useBundled cannot be combined with sourceDirectory or entryFile", requireValidConfig);
+    if (!config.useBundled.value() && config.sourceDirectory.value().empty())
         return uvmConfigurationError("sourceDirectory must not be empty", requireValidConfig);
     auto directory = fs::path(config.sourceDirectory.value());
+    if (config.useBundled.value()) {
+        try {
+            directory = bundledUvmDirectory();
+        }
+        catch (const std::exception& error) {
+            return uvmConfigurationError(error.what(), requireValidConfig);
+        }
+        for (const auto* name : {"MANIFEST.json", "LICENSE.txt", "NOTICE.txt"}) {
+            std::error_code error;
+            if (!fs::is_regular_file(directory.parent_path() / name, error))
+                return uvmConfigurationError(
+                    "bundled UVM resources are missing; install slang-server together with "
+                    "its share directory, or configure uvm.sourceDirectory",
+                    requireValidConfig);
+        }
+    }
     if (directory.is_relative())
         directory = base / directory;
+    // Keep the requested path, including directory aliases, for subsequent
+    // entry-resolution witnesses. Keeping only its canonical target would miss
+    // a symlink retarget between requests.
+    m_uvmDirectory = directory;
     std::error_code ec;
     directory = fs::weakly_canonical(directory, ec);
     if (ec)
@@ -65,7 +121,9 @@ bool ServerDriver::configureUvmLibrary(const fs::path& base, bool requireValidCo
         return sm.isCached(path) || fs::is_regular_file(path, error);
     };
     fs::path entry;
-    if (config.entryFile.value()) {
+    if (config.useBundled.value())
+        entry = directory / "uvm_pkg.sv";
+    else if (config.entryFile.value()) {
         if (config.entryFile.value()->empty())
             return uvmConfigurationError("entryFile must not be empty", requireValidConfig);
         entry = fs::path(*config.entryFile.value());

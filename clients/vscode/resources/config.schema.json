@@ -57,6 +57,21 @@
           "description": "Experimental immutable UVM prefix reuse. Default off. External macros affecting UVM must come from command-line/configuration flags. Unsupported source changes or preprocessing state use native parsing.",
           "type": "boolean"
         },
+        "frozenSources": {
+          "description": "Frozen source selections and cache budget. Does not enable the experiment.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Config__FrozenSourcesConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "experimentalFrozenSources": {
+          "description": "Experimental package/module syntax and instance hierarchy reuse. Default off. Exact source and include lookup certification can cost filesystem I/O; changed inputs rebuild the native context while preserving editor overlays.",
+          "type": "boolean"
+        },
         "indexGlobs": {
           "type": "array",
           "description": "Globs of what to index. By default will index all sv and svh files in the workspace.",
@@ -177,9 +192,49 @@
       },
       "required": []
     },
+    "Config__FrozenSourcesConfig": {
+      "type": "object",
+      "properties": {
+        "packages": {
+          "type": "array",
+          "description": "Exact package names in configured compilation inputs. The complete ordered roots through each selected package are retained, including preceding dependencies. Missing or ambiguous names are reported in status.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "modules": {
+          "type": "array",
+          "description": "Exact module definition names in configured compilation inputs. Retains complete ordered source roots; instance parameterizations are elaborated independently. Does not enable the experiment.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "instances": {
+          "type": "array",
+          "description": "Exact canonical RTL instance paths. Selects the instance and its descendants. Certified hierarchy values can survive supported class task body edits; other semantic changes rebuild natively. Requires a full design and does not enable the experiment.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "maxMiB": {
+          "type": "integer",
+          "description": "Maximum charged retained cache size in MiB (0 to 512). With instance selectors, one quarter is reserved for certified hierarchy values. Current compilations can still own syntax after eviction; this is not a process RSS limit."
+        }
+      },
+      "required": []
+    },
     "Config__HoverConfig": {
       "type": "object",
       "properties": {
+        "macroView": {
+          "type": "string",
+          "description": "Macro code in hovers: 'source' preserves written source, 'expanded' shows generated code, 'both' keeps expanded code and its macro origin. Default both preserves the existing display.",
+          "enum": [
+            "source",
+            "expanded",
+            "both"
+          ]
+        },
         "docCommentFormat": {
           "description": "How to render leading doc comments in hovers: 'markdown' renders as markdown, 'plaintext' escapes markdown characters, 'raw' shows the comment text verbatim including comment markers.",
           "oneOf": [
@@ -278,6 +333,10 @@
               "type": "null"
             }
           ]
+        },
+        "useBundled": {
+          "description": "Explicitly select the shipped UVM 1.2 sources. Default false. Mutually exclusive with sourceDirectory and entryFile. Conflicting project UVM inputs are rejected; no automatic injection or download.",
+          "type": "boolean"
         }
       },
       "required": []

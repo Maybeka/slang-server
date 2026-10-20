@@ -723,6 +723,10 @@ public:
     }
 
 protected:
+    std::chrono::milliseconds backgroundGracePeriod() const override {
+        return std::chrono::milliseconds(2);
+    }
+
     bool hasBackgroundWork() const override {
         if (shuttingDown) {
             record("shutdown:idle-disabled");

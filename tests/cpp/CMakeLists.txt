@@ -8,6 +8,7 @@ file(GLOB SERVER_TESTS "*.cpp")
 file(GLOB TEST_UTILS "utils/*.cpp")
 
 add_executable(server_unittests ${TEST_UTILS} main.cpp ${SERVER_TESTS})
+stageBundledUvm(server_unittests)
 
 target_link_libraries(server_unittests PRIVATE slang_server_obj_lib)
 
@@ -43,6 +44,7 @@ endif()
 
 # Same LSP entry point with a test-only held-child hook. Never installed.
 add_executable(diagnostic_test_server ${PROJECT_SOURCE_DIR}/src/server_main.cpp)
+stageBundledUvm(diagnostic_test_server)
 target_compile_definitions(diagnostic_test_server PRIVATE SLANG_SERVER_TEST_DIAGNOSTIC_GATE)
 target_link_libraries(diagnostic_test_server PRIVATE slang_server_obj_lib reflectcpp)
 
@@ -73,4 +75,7 @@ elseif(APPLE AND NOT BUILD_SHARED_LIBS)
   target_include_directories(slang_server_counted PRIVATE
     "${PROJECT_SOURCE_DIR}/tests/instrumentation")
   target_link_libraries(slang_server_counted PRIVATE slang_server_obj_lib reflectcpp)
+endif()
+if(TARGET slang_server_counted)
+  stageBundledUvm(slang_server_counted)
 endif()

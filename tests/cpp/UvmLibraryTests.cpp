@@ -333,3 +333,119 @@ TEST_CASE("UVM entry disk reload preserves unsaved user and library overlays", "
         CHECK(entry->getText().find("X=5") != std::string::npos);
     }
 }
+
+TEST_CASE("Bundled UVM is explicit and independently supports native and cached analysis",
+          "[uvm-library][bundled-uvm]") {
+    const bool cache = GENERATE(false, true);
+    LibraryWorkspace files;
+    files.write(files.root / "consumer.sv",
+                "`include \"uvm_macros.svh\"\nimport uvm_pkg::*;\n"
+                "class item extends uvm_sequence_item; `uvm_object_utils(item)\n"
+                "function new(string name=\"item\"); super.new(name); endfunction endclass\n"
+                "module consumer; item obj; initial begin obj=new(); obj.print(); end endmodule\n");
+    files.write(files.root / "design.f", "consumer.sv\n");
+    auto config = files.config(cache);
+    config.uvm = Config::UvmConfig{.useBundled = true};
+    config.compilationFilelist = "design.f";
+    config.experimentalFrozenSources = true;
+    config.frozenSources = Config::FrozenSourcesConfig{
+        .packages = std::vector<std::string>{"uvm_pkg"}};
+    Indexer indexer;
+    ClientHarness client;
+    auto driver = server::ServerDriver::createForExplore(indexer, client, config,
+                                                         files.root.string(), nullptr, true);
+    REQUIRE(driver);
+    CHECK_FALSE(driver->frozenInputWitnessFailure());
+    REQUIRE(driver->driver.syntaxTrees.size() == 1);
+    ast::Compilation compilation(driver->options);
+    compilation.addSyntaxTree(driver->driver.syntaxTrees.front());
+    REQUIRE(compilation.getPackage("uvm_pkg"));
+    CHECK(compilation.getRoot().lookupName("consumer.obj"));
+    for (const auto& diagnostic : compilation.getAllDiagnostics())
+        CHECK_FALSE(diagnostic.isError());
+    auto paths = driver->driver.sourceLoader.getFilePaths();
+    REQUIRE(paths.size() == 2);
+    CHECK(paths.front().filename() == "uvm_pkg.sv");
+    CHECK(paths.back() == files.root / "consumer.sv");
+    CHECK(bool(prepared(*driver)) == cache);
+}
+
+TEST_CASE("Bundled UVM rejects conflicting input choices and project libraries",
+          "[uvm-library][bundled-uvm]") {
+    const auto mode = GENERATE("path", "entry", "project");
+    CAPTURE(mode);
+    LibraryWorkspace files;
+    Config config;
+    config.uvm = Config::UvmConfig{.useBundled = true};
+    if (std::string_view(mode) == "path")
+        config.uvm.value()->sourceDirectory = files.library.string();
+    else if (std::string_view(mode) == "entry")
+        config.uvm.value()->entryFile = "uvm_pkg.sv";
+    else {
+        files.write(files.root / "project.sv", "package uvm_pkg; endpackage\n");
+        files.write(files.root / "design.f", "project.sv\n");
+        config.compilationFilelist = "design.f";
+    }
+    Indexer indexer;
+    ClientHarness client;
+    CHECK_FALSE(server::ServerDriver::createForExplore(indexer, client, config, files.root.string(),
+                                                       nullptr, true));
+}
+
+TEST_CASE("Bundled UVM does not activate with ordinary default project inputs",
+          "[uvm-library][bundled-uvm]") {
+    const bool explicitFalse = GENERATE(false, true);
+    LibraryWorkspace files;
+    files.write(files.root / "project.sv", "package uvm_pkg; localparam int USER=42; endpackage\n");
+    files.write(files.root / "design.f", "project.sv\n");
+    Config config;
+    config.compilationFilelist = "design.f";
+    if (explicitFalse)
+        config.uvm = Config::UvmConfig{.sourceDirectory = files.root.string(),
+                                       .entryFile = "project.sv",
+                                       .useBundled = false};
+    Indexer indexer;
+    ClientHarness client;
+    auto driver = server::ServerDriver::createForExplore(indexer, client, config,
+                                                         files.root.string(), nullptr, true);
+    REQUIRE(driver);
+    CHECK(driver->driver.sourceLoader.getFilePaths() ==
+          std::vector<fs::path>{files.root / "project.sv"});
+    ast::Compilation compilation;
+    compilation.addSyntaxTree(driver->driver.syntaxTrees.front());
+    auto* package = compilation.getPackage("uvm_pkg");
+    REQUIRE(package);
+    REQUIRE(package->find("USER"));
+    CHECK_FALSE(package->find("uvm_object"));
+    CHECK_FALSE(Config{}.experimentalUvmPrefixCache.value());
+    CHECK_FALSE(Config{}.experimentalFrozenSources.value());
+    CHECK_FALSE(Config::UvmConfig{}.useBundled.value());
+}
+
+TEST_CASE("UVM directory aliases remain part of exact entry resolution",
+          "[uvm-library][bundled-uvm]") {
+    LibraryWorkspace files;
+    auto config = files.config(false);
+    config.experimentalFrozenSources = true;
+    files.write(files.library / "uvm_pkg.sv", files.source);
+    auto other = files.root / "other-version";
+    files.write(other / "uvm_pkg.sv", files.source);
+    const auto alias = files.root / "selected";
+    std::error_code error;
+    fs::create_directory_symlink(files.library, alias, error);
+    if (error)
+        SKIP("Directory symlinks are unavailable on this host: " << error.message());
+    config.uvm.value()->sourceDirectory = alias.string();
+    config.uvm.value()->entryFile = std::nullopt;
+    Indexer indexer;
+    ClientHarness client;
+    auto driver = server::ServerDriver::createForExplore(indexer, client, config,
+                                                         files.root.string(), nullptr, true);
+    REQUIRE(driver);
+    CHECK_FALSE(driver->frozenInputWitnessFailure());
+    fs::remove(alias);
+    fs::create_directory_symlink(other, alias);
+    auto reason = driver->frozenInputWitnessFailure();
+    REQUIRE(reason);
+    CHECK(reason->find("UVM entry resolution changed") != std::string::npos);
+}

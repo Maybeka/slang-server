@@ -45,10 +45,15 @@ protected:
     SlangLspClient& m_client;
     bool m_shutdownRequested = false;
     void onForegroundComplete() override;
+    void onBeforeMessage(const lsp::RequestContext& ctx) override;
+    void certifyFrozenInputs(const lsp::RequestContext* ctx = nullptr);
+    uint64_t m_frozenContextReloads = 0;
+    std::string m_frozenContextReason;
     void onMessageException(const std::exception& error) override;
     void reportFastCwdFailure(const slang::SourceManager::FastCwdContextError& error);
     void onProtocolStopped() override;
     bool hasBackgroundWork() const override;
+    std::chrono::milliseconds backgroundGracePeriod() const override;
     struct DiagnosticWakeState {
         std::atomic<bool> ready{false};
     };
@@ -141,12 +146,13 @@ public:
     /// ./slang/server.json
     /// ./slang/local/server.json
     /// Automatic reloads require valid files and retain the current driver on failure.
-    bool loadConfig(bool requireValidConfig = false);
+    bool loadConfig(bool requireValidConfig = false, bool preserveDesign = false);
 
     /// Load the configuration from a given config object, reindex if needed or forced
     /// Returns false when an automatic reload cannot construct a valid replacement.
     bool loadConfig(const Config& config, bool forceIndexing = false,
-                    bool requireValidConfig = false, bool deferOpenDiagnostics = false);
+                    bool requireValidConfig = false, bool deferOpenDiagnostics = false,
+                    bool preserveDesign = false);
 
     const Config& getConfig() const { return m_config; }
 
@@ -185,7 +191,8 @@ public:
     std::vector<std::string> getFilesContainingModule(const std::string moduleName);
 
     // Return the item at this path
-    std::vector<hier::HierItem_t> getScope(const std::string& hierPath);
+    std::vector<hier::HierItem_t> getScope(const std::string& hierPath,
+                                           const lsp::RequestContext& ctx = {});
 
     // Return root-to-focus scope steps with child lists for each hierarchy segment.
     std::vector<hier::ScopeStep> getScopes(const std::string& hierPath,
@@ -213,6 +220,14 @@ public:
     };
     // Expand macros in a file
     bool expandMacros(ExpandMacroArgs args);
+
+    struct PreviewHoverArgs {
+        lsp::TextDocumentIdentifier textDocument;
+        lsp::Position position;
+        std::string macroView;
+    };
+    std::optional<lsp::Hover> previewHover(const PreviewHoverArgs& args,
+                                           const lsp::RequestContext& ctx = {});
 
     // Add a -D define to .slang/local/server.json and reload config
     std::monostate addDefine(const std::string& macroName);

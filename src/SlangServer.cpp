@@ -58,6 +58,26 @@ extern "C" uint64_t slang_server_parser_units() __attribute__((weak));
 namespace fs = std::filesystem;
 
 namespace server {
+namespace {
+void republishDriverDiagnostics(ServerDriver& driver) {
+    // A candidate can publish during construction. The retired owner's final
+    // clears must precede the current owner's authoritative publication.
+    slang::flat_hash_set<URI> uris;
+    for (const auto& [uri, _] : driver.diagClient->renderedDiagnostics())
+        uris.insert(uri);
+    for (const auto& [uri, _] : driver.docs)
+        if (driver.isDocumentOpen(uri))
+            uris.insert(uri);
+    for (const auto& uri : uris) {
+        auto found = driver.diagClient->renderedDiagnostics().find(uri);
+        auto rendered = found == driver.diagClient->renderedDiagnostics().end()
+                            ? std::vector<lsp::Diagnostic>{}
+                            : found->second;
+        driver.diagClient->replaceRendered(uri, std::move(rendered));
+    }
+    driver.diagClient->pushDiags();
+}
+} // namespace
 
 SlangServer::SlangServer(SlangLspClient& client) : m_client(client), m_config(Config()) {
 
@@ -160,6 +180,26 @@ lsp::InitializeResult SlangServer::getInitialize(const lsp::InitializeParams& pa
                     &SlangServer::getActiveInstance>("slang.getActiveInstance");
     // File features
     registerCommand<ExpandMacroArgs, bool, &SlangServer::expandMacros>("slang.expandMacros");
+    registerCommand<PreviewHoverArgs, std::optional<lsp::Hover>, &SlangServer::previewHover>(
+        "slang.previewHover");
+    registerCommand<std::monostate, rfl::Generic>("slang.frozenSourcesStatus", [this](
+                                                                                   std::monostate) {
+        struct Status {
+            rfl::Generic sources;
+            uint64_t witnessReloads;
+            std::string witnessReason;
+        };
+        return rfl::to_generic(
+            Status{m_driver->frozenSourcesStatus(), m_frozenContextReloads, m_frozenContextReason});
+    });
+    registerCommand<std::monostate, bool>("slang.refreshFrozenSources", [this](std::monostate) {
+        m_driver->refreshFrozenSources();
+        if (m_diagnosticProcess)
+            m_diagnosticProcess->cancel();
+        m_activeDiagnosticSnapshot.reset();
+        m_methodScope.reset();
+        return true;
+    });
     registerCommand<lsp::Location, std::monostate, &SlangServer::showLocation>(
         "slang.showLocation");
 
@@ -500,6 +540,7 @@ void SlangServer::setExplore() {
                                                  : std::nullopt;
     m_driver = ServerDriver::createForExplore(m_indexer, m_client, m_config, workspacePath,
                                               m_driver.get());
+    republishDriverDiagnostics(*m_driver);
     m_driver->diagClient->pushDiags();
     m_contextWatchesDirty = true;
     refreshContextFileWatches();
@@ -536,6 +577,7 @@ std::monostate SlangServer::setTopLevel(const std::string& path) {
 
     m_driver = ServerDriver::createFromTop(m_indexer, m_client, m_config, URI::fromFile(topPath),
                                            workspacePath, m_driver.get());
+    republishDriverDiagnostics(*m_driver);
     m_contextWatchesDirty = true;
     refreshContextFileWatches();
 
@@ -556,6 +598,7 @@ std::monostate SlangServer::setBuildFile(const std::string& path) {
     m_driver = ServerDriver::createFromFileLists(m_indexer, m_client, m_config,
                                                  std::vector<std::string>{path}, workspacePath,
                                                  m_driver.get());
+    republishDriverDiagnostics(*m_driver);
     m_contextWatchesDirty = true;
     refreshContextFileWatches();
     return std::monostate{};
@@ -636,12 +679,13 @@ std::vector<std::string> SlangServer::getFilesContainingModule(const std::string
     return std::vector<std::string>(transformed.begin(), transformed.end());
 }
 
-std::vector<hier::HierItem_t> SlangServer::getScope(const std::string& hierPath) {
+std::vector<hier::HierItem_t> SlangServer::getScope(const std::string& hierPath,
+                                                    const lsp::RequestContext& ctx) {
     if (!m_driver->comp) {
         ERROR("No compilation available, cannot get scope for {}", hierPath);
         return {};
     }
-    return m_driver->comp->getScope(hierPath);
+    return m_driver->comp->getScope(hierPath, ctx);
 }
 
 // Returns scopes up to the last resolvable segment of the provided hierarchical path.
@@ -918,13 +962,19 @@ std::vector<std::string> SlangServer::getLoads(const std::string& path) {
 }
 
 bool SlangServer::loadConfig(const Config& config, bool forceIndexing, bool requireValidConfig,
-                             bool deferOpenDiagnostics) {
+                             bool deferOpenDiagnostics, bool preserveDesign) {
     const auto workspacePath = m_workspaceFolder ? std::optional<std::string_view>(
                                                        m_workspaceFolder->uri.getPath())
                                                  : std::nullopt;
-    auto buildfile = requireValidConfig && m_buildfile ? m_buildfile : config.build.value();
+    auto buildfile = (requireValidConfig || preserveDesign) && m_buildfile ? m_buildfile
+                                                                           : config.build.value();
     std::unique_ptr<ServerDriver> newDriver;
-    if (buildfile) {
+    if (preserveDesign && m_topFile) {
+        newDriver = ServerDriver::createFromTop(m_indexer, m_client, config,
+                                                URI::fromFile(*m_topFile), workspacePath,
+                                                m_driver.get(), requireValidConfig);
+    }
+    else if (buildfile) {
         newDriver = ServerDriver::createFromFileLists(m_indexer, m_client, config, {*buildfile},
                                                       workspacePath, m_driver.get(),
                                                       requireValidConfig);
@@ -937,13 +987,18 @@ bool SlangServer::loadConfig(const Config& config, bool forceIndexing, bool requ
     if (!newDriver)
         return false;
 
+    const bool replacingDriver = bool(m_driver);
     auto old_config = m_config;
     m_config = config;
     m_driver = std::move(newDriver);
     m_buildfile = std::move(buildfile);
-    m_topFile.reset();
+    if (!preserveDesign)
+        m_topFile.reset();
     m_configReloadPending = false;
-    m_driver->diagClient->pushDiags();
+    if (replacingDriver)
+        republishDriverDiagnostics(*m_driver);
+    else
+        m_driver->diagClient->pushDiags();
 
     if (!m_config.indexGlobs.get().empty() || !m_config.excludeDirs.get().empty()) {
         // Deprecated config globs
@@ -996,7 +1051,7 @@ bool SlangServer::loadConfig(const Config& config, bool forceIndexing, bool requ
     return true;
 }
 
-bool SlangServer::loadConfig(bool requireValidConfig) {
+bool SlangServer::loadConfig(bool requireValidConfig, bool preserveDesign) {
     std::optional<std::string> workspaceConf, userConf, localConf;
 
     if (m_workspaceFolder) {
@@ -1021,7 +1076,7 @@ bool SlangServer::loadConfig(bool requireValidConfig) {
         m_client.showError(config.error().what());
         return m_driver ? false : loadConfig(Config{}, true);
     }
-    return loadConfig(*config, true, requireValidConfig);
+    return loadConfig(*config, true, requireValidConfig, false, preserveDesign);
 }
 
 std::monostate SlangServer::addDefine(const std::string& macroName) {
@@ -1404,6 +1459,21 @@ std::optional<lsp::Hover> SlangServer::getDocHover(const lsp::HoverParams& param
     return m_driver->getDocHover(params.textDocument.uri, params.position, ctx);
 }
 
+std::optional<lsp::Hover> SlangServer::previewHover(const PreviewHoverArgs& args,
+                                                    const lsp::RequestContext& ctx) {
+    using View = Config::HoverConfig::MacroView;
+    std::optional<View> view;
+    if (args.macroView == "source")
+        view = View::source;
+    else if (args.macroView == "expanded")
+        view = View::expanded;
+    else if (args.macroView == "both")
+        view = View::both;
+    else
+        throw lsp::RequestFailed("macroView must be source, expanded or both");
+    return m_driver->getDocHover(args.textDocument.uri, args.position, ctx, view);
+}
+
 std::optional<std::vector<rfl::Variant<lsp::Command, lsp::CodeAction>>> SlangServer::
     getDocCodeAction(const lsp::CodeActionParams& params) {
     auto results = m_driver->codeActions.getCodeActions(params);
@@ -1450,6 +1520,64 @@ void SlangServer::onProtocolStopped() {
     m_activeDiagnosticSnapshot.reset();
 }
 
+void SlangServer::onBeforeMessage(const lsp::RequestContext& ctx) {
+    // Notifications must synchronize every incremental edit, including superseded
+    // ones. Certification can rebuild or fail, so it belongs before requests and
+    // background analysis, never before a text notification's synchronization.
+    if (!ctx.rpcId())
+        return;
+    if (ctx.method() == "initialize" || ctx.method() == "shutdown" || ctx.method() == "exit" ||
+        ctx.method().starts_with("$/") || ctx.method() == "workspace/didChangeWatchedFiles" ||
+        ctx.method() == "workspace/didChangeConfiguration")
+        return;
+    certifyFrozenInputs(&ctx);
+}
+
+void SlangServer::certifyFrozenInputs(const lsp::RequestContext* ctx) {
+    if (!m_driver || !m_driver->isFrozenSourcesEnabled())
+        return;
+    auto checkCancelled = [ctx] {
+        if (ctx)
+            ctx->throwIfCancelled("during frozen input certification");
+    };
+    auto reason = m_driver->frozenInputWitnessFailure(checkCancelled);
+    if (!reason || reason->starts_with("source context cannot")) {
+        m_driver->setFrozenWitnessFailure(reason);
+        if (!reason && ctx)
+            m_driver->noteSuccessfulFrozenInputWitness(*ctx);
+        return; // Discard composed views too before returning to native parsing.
+    }
+    m_frozenContextReason = *reason;
+    m_methodScope.reset();
+    if (m_diagnosticProcess)
+        m_diagnosticProcess->cancel();
+    m_activeDiagnosticSnapshot.reset();
+    // A fresh SourceManager is essential: a native parse through the old cache
+    // could otherwise preserve a failed include lookup or deleted file's bytes.
+    bool layersChanged = false;
+    constexpr std::string_view commandChange = "compilation command input changed: ";
+    if (reason->starts_with(commandChange)) {
+        auto changed = fs::path(reason->substr(commandChange.size()));
+        if (m_workspaceFolder) {
+            auto root = fs::path(m_workspaceFolder->uri.getPath());
+            layersChanged = changed == root / ".slang/server.json" ||
+                            changed == root / ".slang/local/server.json";
+        }
+        if (const auto* home = std::getenv("HOME"))
+            layersChanged |= changed == fs::path(home) / ".slang/server.json";
+    }
+    if (!(layersChanged ? loadConfig(false, true) : loadConfig(m_config, false, false, true, true)))
+        throw lsp::RequestFailed("Changed frozen inputs could not be reloaded: " + *reason);
+    ++m_frozenContextReloads;
+    if (auto failure = m_driver->frozenInputWitnessFailure(checkCancelled)) {
+        m_driver->setFrozenWitnessFailure(failure);
+        if (!failure->starts_with("source context cannot"))
+            throw lsp::RequestFailed("Frozen inputs changed during reload; retry: " + *failure);
+    }
+    else if (ctx)
+        m_driver->noteSuccessfulFrozenInputWitness(*ctx);
+}
+
 void SlangServer::onForegroundComplete() {
     if (m_shutdownRequested) {
         if (m_diagnosticProcess)
@@ -1471,6 +1599,12 @@ bool SlangServer::hasBackgroundWork() const {
             (!m_activeDiagnosticSnapshot && m_driver->hasPendingDiagnostics()));
 }
 
+std::chrono::milliseconds SlangServer::backgroundGracePeriod() const {
+    // Full-design diagnostics bind on the state worker. Exploration snapshots
+    // use their existing isolated-worker scheduling without a settling delay.
+    return std::chrono::milliseconds(m_driver && m_driver->comp ? 2 : 0);
+}
+
 void SlangServer::reportFastCwdFailure(const slang::SourceManager::FastCwdContextError& error) {
     if (m_activeDiagnosticSnapshot && m_diagnosticProcess)
         m_diagnosticProcess->cancel();
@@ -1490,6 +1624,9 @@ void SlangServer::onMessageException(const std::exception& error) {
 void SlangServer::runBackgroundWork(const lsp::RequestContext& ctx) {
     if (m_shutdownRequested || !m_driver)
         return;
+    ctx.throwIfCancelled("before frozen input certification");
+    certifyFrozenInputs(&ctx);
+    ctx.throwIfCancelled("after frozen input certification");
     auto reportFallback = [&](std::string_view reason) {
         if (((!m_driver->comp && m_driver->hasConfiguredCompilationInputs()) ||
              m_driver->hasSourceContextHints()) &&
@@ -1577,7 +1714,10 @@ void SlangServer::runBackgroundWork(const lsp::RequestContext& ctx) {
                 isolated_diagnostics::Job job;
                 job.generation = snapshot->diagnosticGeneration;
                 job.jobId = ++m_diagnosticJobId;
-                if (m_config.experimentalUvmPrefixCache.value())
+                if (m_config.experimentalUvmPrefixCache.value() ||
+                    std::ranges::any_of(snapshot->metadata.trees, [](const auto& tree) {
+                        return tree.frozenPrefix.has_value();
+                    }))
                     job.sessionKey = m_driver->completions.getCompletionEpoch();
                 job.encode = [metadata = std::move(metadata), input] {
                     return encodeDiagnosticJob(metadata, *input);
@@ -1613,9 +1753,9 @@ void SlangServer::onDocDidOpen(const lsp::DidOpenTextDocumentParams& params) {
 }
 
 void SlangServer::maybeRetireParsedContext() {
-    if (!m_config.experimentalUvmPrefixCache.value() ||
-        std::getenv("SLANG_UVM_GENERATION_DISABLE") || !m_driver || m_driver->comp || m_buildfile ||
-        m_topFile)
+    if ((!m_config.experimentalUvmPrefixCache.value() &&
+         !m_config.experimentalFrozenSources.value()) ||
+        std::getenv("SLANG_UVM_GENERATION_DISABLE") || !m_driver)
         return;
     auto epoch = m_driver->completions.getCompletionEpoch();
     auto table = m_driver->sm.getSourceLocationTableBytes();
@@ -1652,7 +1792,7 @@ void SlangServer::maybeRetireParsedContext() {
     m_driver->prepareForContextRetirement();
     phases.mark("retirement-release");
     try {
-        if (!loadConfig(m_config, false, true, true)) {
+        if (!loadConfig(m_config, false, true, true, true)) {
             ++m_contextEdits;
             trace("replacement-failed", epoch, bytes);
             return;

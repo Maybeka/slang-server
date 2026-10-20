@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: MIT
 
 import asyncio
+import json
 from pathlib import Path
 
 import pytest
@@ -23,8 +24,9 @@ class DiagnosticProtocol(LanguageClientProtocol):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("frozen_sources", [False, True])
 async def test_incremental_sibling_burst_preserves_requests_and_versions(
-    my_options: Flags, tmp_path: Path
+    my_options: Flags, tmp_path: Path, frozen_sources: bool
 ) -> None:
     (tmp_path / "owner.sv").write_text(
         "package p; typedef int value_t;\n"
@@ -38,6 +40,18 @@ async def test_incremental_sibling_burst_preserves_requests_and_versions(
     ]
     for path, text in zip(paths, originals):
         path.write_text(text)
+    if frozen_sources:
+        (tmp_path / "design.f").write_text("owner.sv\n")
+        (tmp_path / ".slang").mkdir()
+        (tmp_path / ".slang/server.json").write_text(
+            json.dumps(
+                {
+                    "compilationFilelist": "design.f",
+                    "experimentalFrozenSources": True,
+                    "frozenSources": {"packages": ["p"]},
+                }
+            )
+        )
     client = SlangClient(protocol_cls=DiagnosticProtocol, workspace_root=str(tmp_path))
     await client.start(my_options)
     try:

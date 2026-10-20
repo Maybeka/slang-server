@@ -11,6 +11,7 @@
 #include "LspTypes.h"
 #include "RequestContext.h"
 #include "util/Log.h"
+#include <chrono>
 #include <condition_variable>
 #include <deque>
 #include <functional>
@@ -137,8 +138,10 @@ protected:
 
     // Called only by the state-owning worker, never under the queue mutex.
     virtual void onForegroundComplete() {}
+    virtual void onBeforeMessage(const RequestContext&) {}
     virtual void onProtocolStopped() {}
     virtual bool hasBackgroundWork() const { return false; }
+    virtual std::chrono::milliseconds backgroundGracePeriod() const { return {}; }
     virtual void runBackgroundWork(const RequestContext&) {}
     // Foreground requests and notifications report exceptions under the state lock.
     virtual void onMessageException(const std::exception&) {}
@@ -279,12 +282,14 @@ protected:
 
         if (!ctx)
             ctx = createContext(request);
+        auto inputWitnessScope = ctx.inputWitnessScope();
 
         if (!request.id) {
             auto it = notifications.find(request.method);
             if (it != notifications.end()) {
                 MessageLog messageLog(ctx, logStart);
                 try {
+                    onBeforeMessage(messageLog.ctx);
                     if (request.params)
                         it->second(*request.params, messageLog.ctx);
                     else
@@ -318,6 +323,7 @@ protected:
         MessageLog messageLog(ctx, logStart);
         try {
             startRequest(messageLog.ctx);
+            onBeforeMessage(messageLog.ctx);
 
             rfl::Generic response;
             if (request.params)
@@ -462,6 +468,22 @@ public:
                         return inputFinished || !queue.empty() || backgroundPending ||
                                wakeState->requested;
                     });
+                    // Only work with expensive, non-interruptible foreground-state
+                    // analysis needs to coalesce response-triggered query bursts.
+                    if (queue.empty() && !inputFinished) {
+                        lock.unlock();
+                        std::chrono::milliseconds delay;
+                        {
+                            std::lock_guard stateLock(serverStateMutex);
+                            delay = backgroundGracePeriod();
+                        }
+                        lock.lock();
+                        if (delay.count() > 0 && queue.empty() && !inputFinished) {
+                            queueCondition.wait_for(lock, delay, [&] {
+                                return inputFinished || !queue.empty();
+                            });
+                        }
+                    }
                     if (!queue.empty()) {
                         message = std::move(queue.front());
                         queue.pop_front();

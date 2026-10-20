@@ -67,6 +67,7 @@ std::optional<BufferID> ServerDriver::findPackageInclude(
 }
 
 void ServerDriver::installConfiguredUnits(std::vector<std::shared_ptr<syntax::SyntaxTree>> trees) {
+    configureFrozenSources(trees);
     auto previous = std::move(m_configuredUnits);
     m_configuredUnits.clear();
     m_currentConfiguredTrees = trees;
@@ -242,8 +243,8 @@ uint64_t ServerDriver::getExplicitContextRevision(const URI& uri) const {
 }
 
 std::vector<std::filesystem::path> ServerDriver::getContextWatchPaths() const {
-    if ((comp || !hasConfiguredCompilationInputs()) && !hasSourceContextHints() &&
-        !m_config.uvm.value())
+    if (!isFrozenSourcesEnabled() && (comp || !hasConfiguredCompilationInputs()) &&
+        !hasSourceContextHints() && !m_config.uvm.value())
         return {};
     std::set<std::filesystem::path> paths;
     paths.insert(m_uvmWatchPaths.begin(), m_uvmWatchPaths.end());

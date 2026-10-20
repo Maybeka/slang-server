@@ -9,6 +9,7 @@
 
 #include "ActiveDesignContext.h"
 #include "ConeResult.h"
+#include "FrozenInstanceCache.h"
 #include "HierarchicalView.h"
 #include "ServerCompilationAnalysis.h"
 #include "document/SlangDoc.h"
@@ -47,13 +48,21 @@ public:
     /// @param top Optional top module name (owned by this compilation)
     ServerCompilation(std::vector<std::shared_ptr<SlangDoc>> documents, Bag options,
                       SourceManager& sourceManager, lsp::LspClient& client,
-                      std::optional<std::string> top = std::nullopt);
+                      std::optional<std::string> top = std::nullopt,
+                      const ServerCompilation* previous = nullptr);
 
     ~ServerCompilation() = default;
 
     /// Update the compilation based by requesting all syntax trees from the documents
     void refresh();
     void refreshDocuments(const std::vector<std::shared_ptr<SlangDoc>>& documents);
+
+    void configureFrozenInstances(std::vector<std::string> paths, size_t budgetBytes,
+                                  FrozenInstanceCache::Witness witness,
+                                  std::function<void(const std::vector<std::string>&)> changed,
+                                  FrozenInstanceCache::Witness requestWitness = {});
+    const FrozenInstanceCache* frozenInstances() const { return m_frozenInstances.get(); }
+    void clearFrozenInstances(std::string reason);
 
     /// Defer rebuilding until a semantic consumer needs the latest editor text.
     void invalidate() { m_dirty = true; }
@@ -97,7 +106,8 @@ public:
         std::string_view moduleName, const slang::syntax::LoopGenerateSyntax& loop) const;
 
     /// Retrun the children of the scope at the given hierarchical path
-    std::vector<hier::HierItem_t> getScope(const std::string& hierPath);
+    std::vector<hier::HierItem_t> getScope(const std::string& hierPath,
+                                           const lsp::RequestContext& ctx = {});
 
     /// Return root-to-focus scope steps with populated child lists for each path segment.
     std::vector<hier::ScopeStep> getScopes(const std::string& hierPath,
@@ -137,6 +147,10 @@ private:
     void ensureCurrent() const;
     bool m_dirty = false;
     bool m_refreshing = false;
+    std::unique_ptr<FrozenInstanceCache> m_frozenInstances;
+    std::function<void(const std::vector<std::string>&)> m_frozenModulesChanged;
+    std::optional<FrozenInstanceCache::Certificate> certifyFrozenInstance(
+        const std::string& path, const lsp::RequestContext& ctx);
 
     /// Return the stored active selection for a module, if any.
     std::optional<hier::QualifiedInstance> getActiveInstanceSelection(

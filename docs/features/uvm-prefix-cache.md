@@ -5,6 +5,14 @@ library in exploration mode. It defaults to `false`. Each process owns its
 parsed-library cache in memory; this does not create a portable or persistent UVM
 database.
 
+This dedicated UVM route remains independent of generic package/module freezing.
+Using a common implementation is optional; UVM is not required to pay the cost
+of a general frozen-input group. For a UVM-only evaluation, enable this setting
+and keep `experimentalFrozenSources` disabled. General scope and RTL experiments
+can be evaluated separately. Turning on both settings currently allows a generic
+group to take precedence, so it must not be assumed to preserve the dedicated
+route's performance.
+
 ## Select a UVM library
 
 Configure sources independently of enabling the cache:
@@ -30,7 +38,7 @@ the source inputs. It requires exactly one `uvm_pkg` reached through the selecte
 entry; a different library, missing entry or ambiguous choice reports a
 configuration error. Set `entryFile` to the entry used by the project, such as
 `uvm.sv` when the filelist uses that wrapper. No configuration means no automatic
-UVM injection. This setting does not select a bundled library.
+UVM injection. Use the separate `useBundled` choice below to select the shipped kit.
 
 A library configured without a complete compilation filelist also supplies the
 package to independently opened user sources. Filelist projects retain their
@@ -115,3 +123,52 @@ See the [worker and retirement follow-up report](../../validation/macos-uvm-foll
 and the [initial Mac acceptance and performance report](../../validation/macos-uvm-prefix-2026-10-19.md)
 for measured first-query, continuous-edit, full-resolve, fallback and memory
 tradeoffs, including negative results. The setting remains opt-in.
+
+The [current Mac class-session comparison](../../validation/macos-native-idle-class-sessions-2026-10-20.md)
+also compares the dedicated route with generic package freezing on real
+SPI/PSS/UBUS. Generic freezing remains slower than dedicated UVM in ordinary
+class editing and macro-fallback sessions. Retain the dedicated route for those
+workloads rather than assuming that the more general implementation is faster.
+The current [RTL comparison](../../validation/macos-native-idle-rtl-2026-10-20.md)
+describes the separate hierarchy workload where generic instance-value reuse
+helps. These are workload-specific measurements, not an automatic route selector
+or evidence that enabling both switches combines their benefits.
+
+## Optional shipped UVM
+
+The server distribution includes an unchanged UVM 1.2 source kit. Activate it
+explicitly when the project does not supply UVM:
+
+```json
+{
+  "uvm": {"useBundled": true},
+  "experimentalUvmPrefixCache": false
+}
+```
+
+`useBundled` defaults to `false` and cannot be combined with `sourceDirectory` or
+`entryFile`. Existing projects retain their source choices by default. A project
+that supplies a different UVM while requesting the shipped kit receives a
+configuration error rather than mixing or replacing libraries. Selecting the kit
+does not enable either experimental cache. Macro flags remain project inputs;
+the server does not add simulator or DPI defines on the user's behalf.
+
+The fixed upstream revision is
+`71f30a7473118b3cea582d7673c3af8e161fce71` from Accellera's UVM repository.
+`resources/uvm/1.2/MANIFEST.json` records the exact source/version/SHA-256 inventory;
+configuration checks every source file against it before staging the build.
+The original `LICENSE.txt`, `NOTICE.txt` and source headers accompany the kit.
+The server does not download a library while opening a project.
+
+CMake installation places the binary in `bin` and the kit under
+`share/slang-server/uvm/1.2`. Keep those directories together when moving an
+installation. A copied executable without its resources remains usable with
+normal project inputs or `sourceDirectory`; selecting a missing shipped kit
+reports how to repair the installation. Library source edits and unsaved overlays
+still participate in the normal freshness checks; "shipped" does not authorize
+stale results.
+
+Release archives keep the executable at their root and carry
+`resources/uvm/1.2` beside it for existing editor installers. Keep that folder
+when moving a release. See the [Mac packaging validation](../../validation/macos-bundled-uvm-2026-10-20.md)
+for relocation, missing-resource and compatibility checks.

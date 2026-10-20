@@ -14,12 +14,14 @@
 #include "completions/CompletionDispatch.h"
 #include "diagnostics/DiagnosticWorker.h"
 #include "document/DefinitionInfo.h"
+#include "document/FrozenSourceRegistry.h"
 #include "lsp/RequestContext.h"
 #include "lsp/URI.h"
 #include "util/SourceContextHints.h"
 #include <filesystem>
 #include <map>
 #include <memory>
+#include <set>
 #include <unordered_map>
 #include <vector>
 
@@ -76,7 +78,27 @@ public:
     /// Release disposable models before constructing a replacement at a quiescent boundary.
     void prepareForContextRetirement();
 
-    bool isUvmPrefixCacheEnabled() const { return m_config.experimentalUvmPrefixCache.value(); }
+    bool isUvmPrefixCacheEnabled() const {
+        return m_config.experimentalUvmPrefixCache.value() &&
+               (!m_config.experimentalFrozenSources.value() || m_frozenWitnessUsable);
+    }
+    bool isFrozenSourcesEnabled() const { return m_config.experimentalFrozenSources.value(); }
+    std::optional<std::string> frozenInputWitnessFailure(
+        slang::function_ref<void()> checkCancelled = {}) const;
+    /// Only call after the complete current-input witness succeeds in this dispatch.
+    void noteSuccessfulFrozenInputWitness(const lsp::RequestContext& ctx) const {
+        ctx.recordInputWitness(m_snapshotOwner, m_snapshotRevision);
+    }
+    std::shared_ptr<syntax::SyntaxTree> resumeFrozenSources(
+        std::span<const std::filesystem::path> paths, std::span<const SourceBuffer> buffers,
+        const Bag& options, bool nativeReplay);
+    rfl::Generic frozenSourcesStatus() const;
+    void refreshFrozenSources();
+    void setFrozenWitnessFailure(const std::optional<std::string>& reason);
+    void updateFrozenSourcePlans(std::span<const std::filesystem::path> paths,
+                                 const std::shared_ptr<syntax::SyntaxTree>& tree);
+    std::shared_ptr<syntax::SyntaxTree> getFrozenIndependentTree(std::string_view path,
+                                                                 const Bag& options);
 
     /// @brief Destructor
     ~ServerDriver() {
@@ -232,8 +254,9 @@ public:
     /// @param uri The URI of the document
     /// @param position The LSP position to query
     /// @return Optional hover information, or nullopt if none available
-    std::optional<lsp::Hover> getDocHover(const URI& uri, const lsp::Position& position,
-                                          const lsp::RequestContext& ctx = {});
+    std::optional<lsp::Hover> getDocHover(
+        const URI& uri, const lsp::Position& position, const lsp::RequestContext& ctx = {},
+        std::optional<Config::HoverConfig::MacroView> macroView = {});
 
     /// @brief Gets highlight positions for a symbol and all its references in a document
     /// @param uri The URI of the document
@@ -262,7 +285,8 @@ public:
 
     static std::unique_ptr<ServerDriver> createFromTop(
         Indexer& indexer, SlangLspClient& client, const Config& config, const URI& topUri,
-        std::optional<std::string_view> workspaceFolder, const ServerDriver* oldDriver);
+        std::optional<std::string_view> workspaceFolder, const ServerDriver* oldDriver,
+        bool requireValidConfig = false);
 
     /// @brief Constructs a new ServerDriver instance by creating and configuring a driver
     /// internally
@@ -305,6 +329,22 @@ private:
 
     /// Configuration owned by this driver, including while a replacement is being validated.
     Config m_config;
+    std::unique_ptr<FrozenSourceRegistry> m_frozenSources;
+    FrozenSourcePlans m_frozenPlans;
+    std::vector<std::string> m_frozenInstanceModules;
+    std::map<std::vector<std::filesystem::path>, std::string> m_frozenDeclinedUnits;
+    std::set<std::string> m_frozenAllowedPaths;
+    bool m_frozenWitnessUsable = true;
+    bool m_captureFrozenNativeSeed = false;
+    void updateFrozenAllowedPaths(std::span<const std::shared_ptr<syntax::SyntaxTree>> trees);
+    struct FrozenCommandInput {
+        std::filesystem::path path;
+        std::string bytes;
+        std::error_code error;
+    };
+    std::vector<FrozenCommandInput> m_frozenCommandInputs;
+    void configureFrozenSources(std::span<const std::shared_ptr<syntax::SyntaxTree>> trees);
+    void configureFrozenInstances();
 
     /// Whether config flags, command files, and source files loaded successfully.
     bool m_configLoaded = false;
@@ -353,10 +393,12 @@ private:
 
     /// Every source file covered by the build, including secondary single-unit buffers.
     flat_hash_set<URI> m_buildSourceUris;
+    bool m_designUsesConfiguredUnits = false;
     std::vector<std::shared_ptr<SlangDoc>> m_configuredUnits;
     bool m_nativeInputsFailed = false;
     bool m_configurationInputsFailed = false;
     std::filesystem::path m_uvmEntryPath;
+    std::filesystem::path m_uvmDirectory;
     bool m_uvmLibraryOnly = false;
     std::vector<std::filesystem::path> m_uvmWatchPaths;
     bool configureUvmLibrary(const std::filesystem::path& base, bool requireValidConfig);
@@ -403,7 +445,8 @@ private:
                          SemanticDiagnosticBatch* batch = nullptr);
 
     /// @brief Publish diagnostics for the active full compilation, optionally prioritizing a URI
-    void publishCompilationDiagnostics(const URI* priorityUri = nullptr);
+    void publishCompilationDiagnostics(const URI* priorityUri = nullptr,
+                                       const lsp::RequestContext* ctx = nullptr);
 
     /// Helper to add member references to the references vector
     void addMemberReferences(std::vector<lsp::Location>& references,
