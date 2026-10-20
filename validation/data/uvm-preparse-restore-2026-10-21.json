@@ -1,0 +1,5011 @@
+{
+  "date": "2026-10-21",
+  "candidateBinarySha256": "7161a7691913414d041238f7b3596ce8479007014f68cd7d4298c6a3d56510db",
+  "previousSemanticBinarySha256": "261c36a22edbd8447c4188518c4d97616be5029146fad82bfdc30a8b96c6acc3",
+  "sdkBase": "151a801ceaf6faf23d79a42d210ff67e50eb4660",
+  "sdkPatchSha256": "b739c851c7bfc4b8e504af178ab565c09ccb5e069116a3fcf6c402a58b24ae18",
+  "sdkFiles": 709,
+  "defaultArchiveBytes": 12125798,
+  "defaultArchiveSha256": "39234ae568ca7ca1759f9e924477579ca0a80983bfa94cb4c45682d7d40bd486",
+  "tests": {
+    "ctest": 689,
+    "python": 16,
+    "transport": 43,
+    "serverFocusedAssertions": 4406,
+    "sdkArchiveAssertions": 41
+  },
+  "micro": {
+    "n": 30,
+    "totalRuns": 360,
+    "method": "Independent processes; Release -O3; sequential shuffled schedule; warm filesystem; no OS cache flush; write includes close+rename, no fsync; excludes server initialization/project parsing; no runtime dependency scan; PackageAnalysis semantic diagnostics forced",
+    "summary": [
+      {
+        "profile": "default",
+        "mode": "parse",
+        "n": 30,
+        "metrics": {
+          "parse_ms": {
+            "median": 42.95505,
+            "p95": 51.7022,
+            "min": 41.9749,
+            "max": 60.2237
+          },
+          "serialize_ms": {
+            "median": 0.0,
+            "p95": 0,
+            "min": 0,
+            "max": 0
+          },
+          "save_ms": {
+            "median": 0.0,
+            "p95": 0,
+            "min": 0,
+            "max": 0
+          },
+          "read_ms": {
+            "median": 0.0,
+            "p95": 0,
+            "min": 0,
+            "max": 0
+          },
+          "decode_ms": {
+            "median": 0.0,
+            "p95": 0,
+            "min": 0,
+            "max": 0
+          },
+          "syntax_ready_ms": {
+            "median": 43.0243,
+            "p95": 51.7754,
+            "min": 42.0478,
+            "max": 60.3013
+          },
+          "semantic_ms": {
+            "median": 29.6456,
+            "p95": 33.9639,
+            "min": 28.6026,
+            "max": 44.0434
+          },
+          "total_ms": {
+            "median": 73.4785,
+            "p95": 81.2436,
+            "min": 70.6983,
+            "max": 104.345
+          },
+          "process_wall_ms": {
+            "median": 80.87881247047335,
+            "p95": 88.84350000880659,
+            "min": 77.50091701745987,
+            "max": 113.29574999399483
+          },
+          "max_rss_bytes": {
+            "median": 74514432.0,
+            "p95": 74694656,
+            "min": 74366976,
+            "max": 74760192
+          }
+        },
+        "cache_bytes": 0
+      },
+      {
+        "profile": "default",
+        "mode": "save",
+        "n": 30,
+        "metrics": {
+          "parse_ms": {
+            "median": 42.82385,
+            "p95": 47.8767,
+            "min": 41.9272,
+            "max": 48.2414
+          },
+          "serialize_ms": {
+            "median": 39.0215,
+            "p95": 59.5731,
+            "min": 37.6575,
+            "max": 63.643
+          },
+          "save_ms": {
+            "median": 3.8914799999999996,
+            "p95": 5.27129,
+            "min": 3.23854,
+            "max": 5.72633
+          },
+          "read_ms": {
+            "median": 0.0,
+            "p95": 0,
+            "min": 0,
+            "max": 0
+          },
+          "decode_ms": {
+            "median": 0.0,
+            "p95": 0,
+            "min": 0,
+            "max": 0
+          },
+          "syntax_ready_ms": {
+            "median": 86.20755,
+            "p95": 111.373,
+            "min": 83.4705,
+            "max": 115.264
+          },
+          "semantic_ms": {
+            "median": 29.571550000000002,
+            "p95": 34.0181,
+            "min": 28.9261,
+            "max": 47.0917
+          },
+          "total_ms": {
+            "median": 115.803,
+            "p95": 145.391,
+            "min": 112.465,
+            "max": 145.98
+          },
+          "process_wall_ms": {
+            "median": 123.9781251642853,
+            "p95": 154.42920895293355,
+            "min": 120.35720911808312,
+            "max": 155.03387502394617
+          },
+          "max_rss_bytes": {
+            "median": 134291456.0,
+            "p95": 134447104,
+            "min": 134119424,
+            "max": 134856704
+          }
+        },
+        "cache_bytes": 12124344
+      },
+      {
+        "profile": "default",
+        "mode": "load",
+        "n": 30,
+        "metrics": {
+          "parse_ms": {
+            "median": 0.0,
+            "p95": 0,
+            "min": 0,
+            "max": 0
+          },
+          "serialize_ms": {
+            "median": 0.0,
+            "p95": 0,
+            "min": 0,
+            "max": 0
+          },
+          "save_ms": {
+            "median": 0.0,
+            "p95": 0,
+            "min": 0,
+            "max": 0
+          },
+          "read_ms": {
+            "median": 3.38373,
+            "p95": 4.01667,
+            "min": 3.28104,
+            "max": 7.68833
+          },
+          "decode_ms": {
+            "median": 25.80275,
+            "p95": 28.9598,
+            "min": 25.3183,
+            "max": 83.0577
+          },
+          "syntax_ready_ms": {
+            "median": 29.274749999999997,
+            "p95": 32.4783,
+            "min": 28.6943,
+            "max": 90.9341
+          },
+          "semantic_ms": {
+            "median": 29.5113,
+            "p95": 34.2219,
+            "min": 28.8071,
+            "max": 66.3205
+          },
+          "total_ms": {
+            "median": 58.8328,
+            "p95": 65.8528,
+            "min": 57.6652,
+            "max": 157.255
+          },
+          "process_wall_ms": {
+            "median": 66.32645800709724,
+            "p95": 75.0463749282062,
+            "min": 64.82320814393461,
+            "max": 170.45412515290082
+          },
+          "max_rss_bytes": {
+            "median": 89227264.0,
+            "p95": 89571328,
+            "min": 89128960,
+            "max": 89604096
+          }
+        },
+        "cache_bytes": 12124344
+      },
+      {
+        "profile": "no-dpi",
+        "mode": "parse",
+        "n": 30,
+        "metrics": {
+          "parse_ms": {
+            "median": 42.680099999999996,
+            "p95": 44.5802,
+            "min": 42.0455,
+            "max": 61.9889
+          },
+          "serialize_ms": {
+            "median": 0.0,
+            "p95": 0,
+            "min": 0,
+            "max": 0
+          },
+          "save_ms": {
+            "median": 0.0,
+            "p95": 0,
+            "min": 0,
+            "max": 0
+          },
+          "read_ms": {
+            "median": 0.0,
+            "p95": 0,
+            "min": 0,
+            "max": 0
+          },
+          "decode_ms": {
+            "median": 0.0,
+            "p95": 0,
+            "min": 0,
+            "max": 0
+          },
+          "syntax_ready_ms": {
+            "median": 42.75255,
+            "p95": 44.658,
+            "min": 42.1158,
+            "max": 62.0689
+          },
+          "semantic_ms": {
+            "median": 29.221600000000002,
+            "p95": 32.2955,
+            "min": 28.6137,
+            "max": 101.894
+          },
+          "total_ms": {
+            "median": 72.02785,
+            "p95": 76.9327,
+            "min": 71.0293,
+            "max": 163.963
+          },
+          "process_wall_ms": {
+            "median": 79.12172935903072,
+            "p95": 84.77754192426801,
+            "min": 77.88249989971519,
+            "max": 183.24512499384582
+          },
+          "max_rss_bytes": {
+            "median": 74514432.0,
+            "p95": 74661888,
+            "min": 74399744,
+            "max": 74776576
+          }
+        },
+        "cache_bytes": 0
+      },
+      {
+        "profile": "no-dpi",
+        "mode": "save",
+        "n": 30,
+        "metrics": {
+          "parse_ms": {
+            "median": 42.81395,
+            "p95": 55.9808,
+            "min": 41.9337,
+            "max": 67.5584
+          },
+          "serialize_ms": {
+            "median": 38.828199999999995,
+            "p95": 49.2321,
+            "min": 37.4437,
+            "max": 52.4101
+          },
+          "save_ms": {
+            "median": 3.80152,
+            "p95": 4.73704,
+            "min": 3.44596,
+            "max": 5.40792
+          },
+          "read_ms": {
+            "median": 0.0,
+            "p95": 0,
+            "min": 0,
+            "max": 0
+          },
+          "decode_ms": {
+            "median": 0.0,
+            "p95": 0,
+            "min": 0,
+            "max": 0
+          },
+          "syntax_ready_ms": {
+            "median": 85.51485,
+            "p95": 113.321,
+            "min": 83.5675,
+            "max": 119.956
+          },
+          "semantic_ms": {
+            "median": 29.50295,
+            "p95": 32.081,
+            "min": 28.9676,
+            "max": 33.8167
+          },
+          "total_ms": {
+            "median": 115.07300000000001,
+            "p95": 144.441,
+            "min": 112.535,
+            "max": 153.772
+          },
+          "process_wall_ms": {
+            "median": 123.45335411373526,
+            "p95": 160.4584171436727,
+            "min": 120.2431668061763,
+            "max": 180.21587515249848
+          },
+          "max_rss_bytes": {
+            "median": 134316032.0,
+            "p95": 134660096,
+            "min": 134184960,
+            "max": 134742016
+          }
+        },
+        "cache_bytes": 12125002
+      },
+      {
+        "profile": "no-dpi",
+        "mode": "load",
+        "n": 30,
+        "metrics": {
+          "parse_ms": {
+            "median": 0.0,
+            "p95": 0,
+            "min": 0,
+            "max": 0
+          },
+          "serialize_ms": {
+            "median": 0.0,
+            "p95": 0,
+            "min": 0,
+            "max": 0
+          },
+          "save_ms": {
+            "median": 0.0,
+            "p95": 0,
+            "min": 0,
+            "max": 0
+          },
+          "read_ms": {
+            "median": 3.35825,
+            "p95": 3.80729,
+            "min": 3.27583,
+            "max": 4.57517
+          },
+          "decode_ms": {
+            "median": 25.87225,
+            "p95": 28.4665,
+            "min": 25.4049,
+            "max": 29.1332
+          },
+          "syntax_ready_ms": {
+            "median": 29.26775,
+            "p95": 32.2562,
+            "min": 28.7643,
+            "max": 32.9229
+          },
+          "semantic_ms": {
+            "median": 29.4605,
+            "p95": 33.2981,
+            "min": 28.4667,
+            "max": 33.389
+          },
+          "total_ms": {
+            "median": 58.8407,
+            "p95": 65.6451,
+            "min": 57.231,
+            "max": 65.7162
+          },
+          "process_wall_ms": {
+            "median": 66.3493333850056,
+            "p95": 73.93550011329353,
+            "min": 63.978832913562655,
+            "max": 74.18866688385606
+          },
+          "max_rss_bytes": {
+            "median": 89194496.0,
+            "p95": 89440256,
+            "min": 89128960,
+            "max": 89751552
+          }
+        },
+        "cache_bytes": 12125002
+      },
+      {
+        "profile": "resource-converter",
+        "mode": "parse",
+        "n": 30,
+        "metrics": {
+          "parse_ms": {
+            "median": 42.9688,
+            "p95": 48.0992,
+            "min": 42.3177,
+            "max": 48.8667
+          },
+          "serialize_ms": {
+            "median": 0.0,
+            "p95": 0,
+            "min": 0,
+            "max": 0
+          },
+          "save_ms": {
+            "median": 0.0,
+            "p95": 0,
+            "min": 0,
+            "max": 0
+          },
+          "read_ms": {
+            "median": 0.0,
+            "p95": 0,
+            "min": 0,
+            "max": 0
+          },
+          "decode_ms": {
+            "median": 0.0,
+            "p95": 0,
+            "min": 0,
+            "max": 0
+          },
+          "syntax_ready_ms": {
+            "median": 43.0396,
+            "p95": 48.2544,
+            "min": 42.3873,
+            "max": 48.9543
+          },
+          "semantic_ms": {
+            "median": 30.283050000000003,
+            "p95": 34.816,
+            "min": 29.307,
+            "max": 54.5557
+          },
+          "total_ms": {
+            "median": 73.321,
+            "p95": 83.7703,
+            "min": 71.7214,
+            "max": 101.577
+          },
+          "process_wall_ms": {
+            "median": 80.61510464176536,
+            "p95": 92.27237501181662,
+            "min": 78.40220793150365,
+            "max": 112.31537512503564
+          },
+          "max_rss_bytes": {
+            "median": 76103680.0,
+            "p95": 76267520,
+            "min": 75890688,
+            "max": 76316672
+          }
+        },
+        "cache_bytes": 0
+      },
+      {
+        "profile": "resource-converter",
+        "mode": "save",
+        "n": 30,
+        "metrics": {
+          "parse_ms": {
+            "median": 43.1122,
+            "p95": 49.3967,
+            "min": 41.9822,
+            "max": 65.9158
+          },
+          "serialize_ms": {
+            "median": 39.80665,
+            "p95": 57.47,
+            "min": 37.5364,
+            "max": 71.6205
+          },
+          "save_ms": {
+            "median": 3.893665,
+            "p95": 5.75867,
+            "min": 3.40579,
+            "max": 7.11929
+          },
+          "read_ms": {
+            "median": 0.0,
+            "p95": 0,
+            "min": 0,
+            "max": 0
+          },
+          "decode_ms": {
+            "median": 0.0,
+            "p95": 0,
+            "min": 0,
+            "max": 0
+          },
+          "syntax_ready_ms": {
+            "median": 87.35345000000001,
+            "p95": 111.472,
+            "min": 83.7079,
+            "max": 141.808
+          },
+          "semantic_ms": {
+            "median": 30.5297,
+            "p95": 40.593,
+            "min": 29.5192,
+            "max": 50.8086
+          },
+          "total_ms": {
+            "median": 118.063,
+            "p95": 152.065,
+            "min": 113.653,
+            "max": 180.832
+          },
+          "process_wall_ms": {
+            "median": 126.40145805198699,
+            "p95": 163.07579120621085,
+            "min": 121.17408285848796,
+            "max": 190.6345000024885
+          },
+          "max_rss_bytes": {
+            "median": 136052736.0,
+            "p95": 137019392,
+            "min": 135872512,
+            "max": 137297920
+          }
+        },
+        "cache_bytes": 12157137
+      },
+      {
+        "profile": "resource-converter",
+        "mode": "load",
+        "n": 30,
+        "metrics": {
+          "parse_ms": {
+            "median": 0.0,
+            "p95": 0,
+            "min": 0,
+            "max": 0
+          },
+          "serialize_ms": {
+            "median": 0.0,
+            "p95": 0,
+            "min": 0,
+            "max": 0
+          },
+          "save_ms": {
+            "median": 0.0,
+            "p95": 0,
+            "min": 0,
+            "max": 0
+          },
+          "read_ms": {
+            "median": 3.38998,
+            "p95": 3.85271,
+            "min": 3.26717,
+            "max": 4.02096
+          },
+          "decode_ms": {
+            "median": 26.0455,
+            "p95": 29.0075,
+            "min": 25.4595,
+            "max": 30.0235
+          },
+          "syntax_ready_ms": {
+            "median": 29.5107,
+            "p95": 32.8703,
+            "min": 28.8034,
+            "max": 33.8743
+          },
+          "semantic_ms": {
+            "median": 30.23555,
+            "p95": 36.3679,
+            "min": 29.3106,
+            "max": 46.7568
+          },
+          "total_ms": {
+            "median": 59.8328,
+            "p95": 69.2382,
+            "min": 58.1739,
+            "max": 80.6311
+          },
+          "process_wall_ms": {
+            "median": 67.14831257704645,
+            "p95": 77.84933317452669,
+            "min": 65.29612489975989,
+            "max": 88.68499984964728
+          },
+          "max_rss_bytes": {
+            "median": 90849280.0,
+            "p95": 91095040,
+            "min": 90750976,
+            "max": 91160576
+          }
+        },
+        "cache_bytes": 12157137
+      },
+      {
+        "profile": "no-dpi-resource-converter",
+        "mode": "parse",
+        "n": 30,
+        "metrics": {
+          "parse_ms": {
+            "median": 42.8946,
+            "p95": 47.8317,
+            "min": 42.1845,
+            "max": 73.8935
+          },
+          "serialize_ms": {
+            "median": 0.0,
+            "p95": 0,
+            "min": 0,
+            "max": 0
+          },
+          "save_ms": {
+            "median": 0.0,
+            "p95": 0,
+            "min": 0,
+            "max": 0
+          },
+          "read_ms": {
+            "median": 0.0,
+            "p95": 0,
+            "min": 0,
+            "max": 0
+          },
+          "decode_ms": {
+            "median": 0.0,
+            "p95": 0,
+            "min": 0,
+            "max": 0
+          },
+          "syntax_ready_ms": {
+            "median": 42.96545,
+            "p95": 47.9178,
+            "min": 42.2629,
+            "max": 73.9765
+          },
+          "semantic_ms": {
+            "median": 30.16675,
+            "p95": 34.5205,
+            "min": 29.289,
+            "max": 35.7421
+          },
+          "total_ms": {
+            "median": 73.31784999999999,
+            "p95": 82.4383,
+            "min": 71.5519,
+            "max": 107.846
+          },
+          "process_wall_ms": {
+            "median": 80.81693749409169,
+            "p95": 92.23604202270508,
+            "min": 78.54025019332767,
+            "max": 119.27324999123812
+          },
+          "max_rss_bytes": {
+            "median": 76136448.0,
+            "p95": 76349440,
+            "min": 75956224,
+            "max": 76480512
+          }
+        },
+        "cache_bytes": 0
+      },
+      {
+        "profile": "no-dpi-resource-converter",
+        "mode": "save",
+        "n": 30,
+        "metrics": {
+          "parse_ms": {
+            "median": 43.03795,
+            "p95": 46.2319,
+            "min": 42.3968,
+            "max": 47.4574
+          },
+          "serialize_ms": {
+            "median": 39.1822,
+            "p95": 49.9262,
+            "min": 37.2641,
+            "max": 50.5765
+          },
+          "save_ms": {
+            "median": 3.895895,
+            "p95": 5.32008,
+            "min": 3.33983,
+            "max": 5.4275
+          },
+          "read_ms": {
+            "median": 0.0,
+            "p95": 0,
+            "min": 0,
+            "max": 0
+          },
+          "decode_ms": {
+            "median": 0.0,
+            "p95": 0,
+            "min": 0,
+            "max": 0
+          },
+          "syntax_ready_ms": {
+            "median": 86.3335,
+            "p95": 100.967,
+            "min": 83.405,
+            "max": 101.386
+          },
+          "semantic_ms": {
+            "median": 30.4498,
+            "p95": 34.4208,
+            "min": 29.7891,
+            "max": 108.501
+          },
+          "total_ms": {
+            "median": 116.898,
+            "p95": 135.013,
+            "min": 113.431,
+            "max": 194.746
+          },
+          "process_wall_ms": {
+            "median": 125.65754156094044,
+            "p95": 171.24712513759732,
+            "min": 120.8943328820169,
+            "max": 212.66929083503783
+          },
+          "max_rss_bytes": {
+            "median": 135987200.0,
+            "p95": 136560640,
+            "min": 135856128,
+            "max": 136970240
+          }
+        },
+        "cache_bytes": 12157796
+      },
+      {
+        "profile": "no-dpi-resource-converter",
+        "mode": "load",
+        "n": 30,
+        "metrics": {
+          "parse_ms": {
+            "median": 0.0,
+            "p95": 0,
+            "min": 0,
+            "max": 0
+          },
+          "serialize_ms": {
+            "median": 0.0,
+            "p95": 0,
+            "min": 0,
+            "max": 0
+          },
+          "save_ms": {
+            "median": 0.0,
+            "p95": 0,
+            "min": 0,
+            "max": 0
+          },
+          "read_ms": {
+            "median": 3.385185,
+            "p95": 3.75167,
+            "min": 3.27233,
+            "max": 3.82388
+          },
+          "decode_ms": {
+            "median": 25.9446,
+            "p95": 29.3574,
+            "min": 25.4312,
+            "max": 30.1796
+          },
+          "syntax_ready_ms": {
+            "median": 29.45065,
+            "p95": 33.2891,
+            "min": 28.7904,
+            "max": 33.7938
+          },
+          "semantic_ms": {
+            "median": 30.19095,
+            "p95": 36.1565,
+            "min": 29.5715,
+            "max": 36.954
+          },
+          "total_ms": {
+            "median": 59.5343,
+            "p95": 69.9503,
+            "min": 58.4318,
+            "max": 70.2431
+          },
+          "process_wall_ms": {
+            "median": 67.10277032107115,
+            "p95": 78.47275002859533,
+            "min": 65.58337504975498,
+            "max": 79.48516705073416
+          },
+          "max_rss_bytes": {
+            "median": 90849280.0,
+            "p95": 91029504,
+            "min": 90800128,
+            "max": 91111424
+          }
+        },
+        "cache_bytes": 12157796
+      }
+    ]
+  },
+  "continuous": {
+    "source": "continuous-publish.json",
+    "n": 20,
+    "cycles": 10,
+    "mode": "selected",
+    "cases": {
+      "W01-compare": {
+        "arms": {
+          "previous-semantic": {
+            "wholeMs": {
+              "median": 367.58495849999997,
+              "min": 362.903,
+              "max": 452.911083
+            },
+            "startupFirstMs": {
+              "median": 135.02866649999999,
+              "min": 132.971167,
+              "max": 210.663208
+            },
+            "firstEditMs": {
+              "median": 13.8262505,
+              "min": 13.552542,
+              "max": 17.040167
+            },
+            "continuousPrimaryMs": {
+              "median": 13.478895999999999,
+              "min": 13.397959,
+              "max": 14.423584
+            },
+            "continuousDiagnosticMs": {
+              "median": 21.920792,
+              "min": 21.792667,
+              "max": 23.639125
+            },
+            "resolveSumMs": {
+              "median": 0.0,
+              "min": 0,
+              "max": 0
+            }
+          },
+          "current-off": {
+            "wholeMs": {
+              "median": 2064.1835005000003,
+              "min": 2009.878333,
+              "max": 2108.942917
+            },
+            "startupFirstMs": {
+              "median": 99.383479,
+              "min": 97.430833,
+              "max": 106.684209
+            },
+            "firstEditMs": {
+              "median": 47.703875,
+              "min": 46.9615,
+              "max": 49.41725
+            },
+            "continuousPrimaryMs": {
+              "median": 46.757583,
+              "min": 46.474208,
+              "max": 47.404208
+            },
+            "continuousDiagnosticMs": {
+              "median": 182.060979,
+              "min": 180.598666,
+              "max": 185.143167
+            },
+            "resolveSumMs": {
+              "median": 0.0,
+              "min": 0,
+              "max": 0
+            }
+          },
+          "current-semantic": {
+            "wholeMs": {
+              "median": 352.50518750000003,
+              "min": 348.162167,
+              "max": 392.917458
+            },
+            "startupFirstMs": {
+              "median": 119.172771,
+              "min": 117.547333,
+              "max": 136.681667
+            },
+            "firstEditMs": {
+              "median": 13.6724165,
+              "min": 13.412959,
+              "max": 14.769417
+            },
+            "continuousPrimaryMs": {
+              "median": 13.516,
+              "min": 13.327333,
+              "max": 14.722584
+            },
+            "continuousDiagnosticMs": {
+              "median": 22.0748125,
+              "min": 21.71125,
+              "max": 23.79825
+            },
+            "resolveSumMs": {
+              "median": 0.0,
+              "min": 0,
+              "max": 0
+            }
+          }
+        },
+        "semanticComparedWith": {
+          "previous-semantic": {
+            "wholeMs": {
+              "pairedMedianSavingPercent": 4.258909500638136,
+              "pairedMeanSavingPercent": 5.095880199566564,
+              "pairedMeanBootstrap95": [
+                3.729353814705527,
+                7.201664409540074
+              ],
+              "n": 20
+            },
+            "startupFirstMs": {
+              "pairedMedianSavingPercent": 11.533911568534737,
+              "pairedMeanSavingPercent": 13.51496167011552,
+              "pairedMeanBootstrap95": [
+                11.26777746655086,
+                17.130165156502912
+              ],
+              "n": 20
+            },
+            "firstEditMs": {
+              "pairedMedianSavingPercent": 0.6030980051448921,
+              "pairedMeanSavingPercent": 1.0715231971142436,
+              "pairedMeanBootstrap95": [
+                -0.9572801679343773,
+                3.198948830966109
+              ],
+              "n": 20
+            },
+            "continuousPrimaryMs": {
+              "pairedMedianSavingPercent": -0.07682252204491916,
+              "pairedMeanSavingPercent": 0.23645576589335765,
+              "pairedMeanBootstrap95": [
+                -0.5376512276989923,
+                1.0636823096373007
+              ],
+              "n": 20
+            },
+            "continuousDiagnosticMs": {
+              "pairedMedianSavingPercent": -0.5490056581928391,
+              "pairedMeanSavingPercent": -0.053541020605154394,
+              "pairedMeanBootstrap95": [
+                -0.8012235990123533,
+                0.7422955020421512
+              ],
+              "n": 20
+            }
+          },
+          "current-off": {
+            "wholeMs": {
+              "pairedMedianSavingPercent": 82.92386951467549,
+              "pairedMeanSavingPercent": 82.78667384463064,
+              "pairedMeanBootstrap95": [
+                82.58933786505331,
+                82.94264377565045
+              ],
+              "n": 20
+            },
+            "startupFirstMs": {
+              "pairedMedianSavingPercent": -20.22244305992028,
+              "pairedMeanSavingPercent": -20.487472268494173,
+              "pairedMeanBootstrap95": [
+                -21.66967906289004,
+                -19.439261864942818
+              ],
+              "n": 20
+            },
+            "firstEditMs": {
+              "pairedMedianSavingPercent": 71.23229703705704,
+              "pairedMeanSavingPercent": 71.02819255958768,
+              "pairedMeanBootstrap95": [
+                70.64352270004,
+                71.379874101647
+              ],
+              "n": 20
+            },
+            "continuousPrimaryMs": {
+              "pairedMedianSavingPercent": 71.1749599007317,
+              "pairedMeanSavingPercent": 70.93991767723767,
+              "pairedMeanBootstrap95": [
+                70.59918345738848,
+                71.20373155355708
+              ],
+              "n": 20
+            },
+            "continuousDiagnosticMs": {
+              "pairedMedianSavingPercent": 87.86409637826347,
+              "pairedMeanSavingPercent": 87.79386935371495,
+              "pairedMeanBootstrap95": [
+                87.68155936205495,
+                87.8938111359427
+              ],
+              "n": 20
+            }
+          }
+        }
+      },
+      "W07-pss-multidoc": {
+        "arms": {
+          "previous-semantic": {
+            "wholeMs": {
+              "median": 405.838083,
+              "min": 401.535917,
+              "max": 508.600167
+            },
+            "startupFirstMs": {
+              "median": 135.15979149999998,
+              "min": 133.39375,
+              "max": 140.199584
+            },
+            "firstEditMs": {
+              "median": 15.0751665,
+              "min": 14.834125,
+              "max": 46.777292
+            },
+            "continuousPrimaryMs": {
+              "median": 14.806958,
+              "min": 14.64075,
+              "max": 15.633375
+            },
+            "continuousDiagnosticMs": {
+              "median": 23.8770835,
+              "min": 23.574542,
+              "max": 25.500375
+            },
+            "resolveSumMs": {
+              "median": 17.919291,
+              "min": 16.668834,
+              "max": 19.363167
+            }
+          },
+          "current-off": {
+            "wholeMs": {
+              "median": 2548.5443539999997,
+              "min": 2506.873666,
+              "max": 2582.365625
+            },
+            "startupFirstMs": {
+              "median": 100.5101665,
+              "min": 98.915292,
+              "max": 102.903
+            },
+            "firstEditMs": {
+              "median": 48.0929375,
+              "min": 47.390542,
+              "max": 49.119333
+            },
+            "continuousPrimaryMs": {
+              "median": 47.0756455,
+              "min": 46.859542,
+              "max": 47.41775
+            },
+            "continuousDiagnosticMs": {
+              "median": 225.5120625,
+              "min": 224.614833,
+              "max": 227.400292
+            },
+            "resolveSumMs": {
+              "median": 16.0843965,
+              "min": 15.981377,
+              "max": 16.545625
+            }
+          },
+          "current-semantic": {
+            "wholeMs": {
+              "median": 391.3675835,
+              "min": 386.853375,
+              "max": 405.91875
+            },
+            "startupFirstMs": {
+              "median": 120.7882085,
+              "min": 118.701208,
+              "max": 125.287833
+            },
+            "firstEditMs": {
+              "median": 15.022479,
+              "min": 14.629958,
+              "max": 15.751833
+            },
+            "continuousPrimaryMs": {
+              "median": 14.8294165,
+              "min": 14.65375,
+              "max": 15.515875
+            },
+            "continuousDiagnosticMs": {
+              "median": 23.884937,
+              "min": 23.574833,
+              "max": 25.115583
+            },
+            "resolveSumMs": {
+              "median": 17.8,
+              "min": 15.382835,
+              "max": 18.253417
+            }
+          }
+        },
+        "semanticComparedWith": {
+          "previous-semantic": {
+            "wholeMs": {
+              "pairedMedianSavingPercent": 3.6935287980039515,
+              "pairedMeanSavingPercent": 4.528950877593479,
+              "pairedMeanBootstrap95": [
+                3.2495033021090896,
+                6.623403011541825
+              ],
+              "n": 20
+            },
+            "startupFirstMs": {
+              "pairedMedianSavingPercent": 10.778486895726802,
+              "pairedMeanSavingPercent": 10.599344568704057,
+              "pairedMeanBootstrap95": [
+                10.106641832770126,
+                11.081934374363168
+              ],
+              "n": 20
+            },
+            "firstEditMs": {
+              "pairedMedianSavingPercent": 0.18310421835861157,
+              "pairedMeanSavingPercent": 3.7103516017685134,
+              "pairedMeanBootstrap95": [
+                -0.40312019832502555,
+                10.99929938751352
+              ],
+              "n": 20
+            },
+            "continuousPrimaryMs": {
+              "pairedMedianSavingPercent": -0.093275354072826,
+              "pairedMeanSavingPercent": -0.10084606750481293,
+              "pairedMeanBootstrap95": [
+                -0.6937858319310631,
+                0.45873509530884765
+              ],
+              "n": 20
+            },
+            "continuousDiagnosticMs": {
+              "pairedMedianSavingPercent": -0.16175480248624194,
+              "pairedMeanSavingPercent": -0.027790287923615268,
+              "pairedMeanBootstrap95": [
+                -0.6553059365374574,
+                0.6157246691458526
+              ],
+              "n": 20
+            },
+            "resolveSumMs": {
+              "pairedMedianSavingPercent": 0.5113362297183454,
+              "pairedMeanSavingPercent": 2.2048449339799987,
+              "pairedMeanBootstrap95": [
+                -0.33276322005332154,
+                4.781192655304624
+              ],
+              "n": 20
+            }
+          },
+          "current-off": {
+            "wholeMs": {
+              "pairedMedianSavingPercent": 84.6402715958222,
+              "pairedMeanSavingPercent": 84.60123223390873,
+              "pairedMeanBootstrap95": [
+                84.51584115235757,
+                84.68049438962706
+              ],
+              "n": 20
+            },
+            "startupFirstMs": {
+              "pairedMedianSavingPercent": -20.600802915590727,
+              "pairedMeanSavingPercent": -20.36698624182658,
+              "pairedMeanBootstrap95": [
+                -21.24540147218287,
+                -19.479649849172155
+              ],
+              "n": 20
+            },
+            "firstEditMs": {
+              "pairedMedianSavingPercent": 68.64135557333046,
+              "pairedMeanSavingPercent": 68.70468150156977,
+              "pairedMeanBootstrap95": [
+                68.3812288580853,
+                68.99672751447034
+              ],
+              "n": 20
+            },
+            "continuousPrimaryMs": {
+              "pairedMedianSavingPercent": 68.51207562955358,
+              "pairedMeanSavingPercent": 68.36995511103139,
+              "pairedMeanBootstrap95": [
+                68.17658373790265,
+                68.54337595614136
+              ],
+              "n": 20
+            },
+            "continuousDiagnosticMs": {
+              "pairedMedianSavingPercent": 89.4244915632657,
+              "pairedMeanSavingPercent": 89.3673274791419,
+              "pairedMeanBootstrap95": [
+                89.2938390574616,
+                89.43363533487954
+              ],
+              "n": 20
+            },
+            "resolveSumMs": {
+              "pairedMedianSavingPercent": -10.199656819986082,
+              "pairedMeanSavingPercent": -8.728305285553041,
+              "pairedMeanBootstrap95": [
+                -10.480937658123807,
+                -6.6368198413928425
+              ],
+              "n": 20
+            }
+          }
+        }
+      },
+      "W08-ubus-task": {
+        "arms": {
+          "previous-semantic": {
+            "wholeMs": {
+              "median": 376.174208,
+              "min": 370.385083,
+              "max": 480.862625
+            },
+            "startupFirstMs": {
+              "median": 131.437979,
+              "min": 129.658458,
+              "max": 187.104
+            },
+            "firstEditMs": {
+              "median": 15.7335625,
+              "min": 15.476125,
+              "max": 31.9875
+            },
+            "continuousPrimaryMs": {
+              "median": 15.267791500000001,
+              "min": 15.029291,
+              "max": 16.163458
+            },
+            "continuousDiagnosticMs": {
+              "median": 22.315728999999997,
+              "min": 22.083875,
+              "max": 23.924917
+            },
+            "resolveSumMs": {
+              "median": 4.089937,
+              "min": 3.802582,
+              "max": 5.684872
+            }
+          },
+          "current-off": {
+            "wholeMs": {
+              "median": 2120.7308544999996,
+              "min": 2109.888667,
+              "max": 2195.859083
+            },
+            "startupFirstMs": {
+              "median": 94.86875,
+              "min": 93.405334,
+              "max": 97.385334
+            },
+            "firstEditMs": {
+              "median": 48.692563,
+              "min": 48.251417,
+              "max": 50.838917
+            },
+            "continuousPrimaryMs": {
+              "median": 47.571458,
+              "min": 47.069,
+              "max": 49.107959
+            },
+            "continuousDiagnosticMs": {
+              "median": 186.8351455,
+              "min": 185.954042,
+              "max": 190.939875
+            },
+            "resolveSumMs": {
+              "median": 14.1114395,
+              "min": 13.165459,
+              "max": 14.856705999999999
+            }
+          },
+          "current-semantic": {
+            "wholeMs": {
+              "median": 360.8110835,
+              "min": 358.294209,
+              "max": 454.057292
+            },
+            "startupFirstMs": {
+              "median": 117.1583125,
+              "min": 116.039958,
+              "max": 206.366959
+            },
+            "firstEditMs": {
+              "median": 15.685583,
+              "min": 15.481459,
+              "max": 16.347834
+            },
+            "continuousPrimaryMs": {
+              "median": 15.270271000000001,
+              "min": 15.130584,
+              "max": 15.771458
+            },
+            "continuousDiagnosticMs": {
+              "median": 22.357583499999997,
+              "min": 22.095417,
+              "max": 23.381333
+            },
+            "resolveSumMs": {
+              "median": 3.9128125,
+              "min": 3.724665,
+              "max": 4.397917
+            }
+          }
+        },
+        "semanticComparedWith": {
+          "previous-semantic": {
+            "wholeMs": {
+              "pairedMedianSavingPercent": 3.6206283517315287,
+              "pairedMeanSavingPercent": 3.7672846022492057,
+              "pairedMeanBootstrap95": [
+                0.802132308126399,
+                6.541240579248861
+              ],
+              "n": 20
+            },
+            "startupFirstMs": {
+              "pairedMedianSavingPercent": 10.521443102922174,
+              "pairedMeanSavingPercent": 8.566609190387252,
+              "pairedMeanBootstrap95": [
+                0.857202804766064,
+                13.974312865880382
+              ],
+              "n": 20
+            },
+            "firstEditMs": {
+              "pairedMedianSavingPercent": -0.07701590015817777,
+              "pairedMeanSavingPercent": 2.613147632228993,
+              "pairedMeanBootstrap95": [
+                -0.7838979261312642,
+                8.020504799183502
+              ],
+              "n": 20
+            },
+            "continuousPrimaryMs": {
+              "pairedMedianSavingPercent": 0.19708092918155384,
+              "pairedMeanSavingPercent": 0.2983470594783136,
+              "pairedMeanBootstrap95": [
+                -0.36812932895851486,
+                1.0059715920668735
+              ],
+              "n": 20
+            },
+            "continuousDiagnosticMs": {
+              "pairedMedianSavingPercent": 0.003171114635721624,
+              "pairedMeanSavingPercent": 0.28702492665634727,
+              "pairedMeanBootstrap95": [
+                -0.3981021909548328,
+                1.03382067823513
+              ],
+              "n": 20
+            },
+            "resolveSumMs": {
+              "pairedMedianSavingPercent": 3.9317749166400664,
+              "pairedMeanSavingPercent": 5.685555523643351,
+              "pairedMeanBootstrap95": [
+                2.4207069528323277,
+                9.439018963627635
+              ],
+              "n": 20
+            }
+          },
+          "current-off": {
+            "wholeMs": {
+              "pairedMedianSavingPercent": 82.93865987522338,
+              "pairedMeanSavingPercent": 82.75334797627815,
+              "pairedMeanBootstrap95": [
+                82.35930664888784,
+                82.98635638141869
+              ],
+              "n": 20
+            },
+            "startupFirstMs": {
+              "pairedMedianSavingPercent": -24.03871656887154,
+              "pairedMeanSavingPercent": -28.804564903014363,
+              "pairedMeanBootstrap95": [
+                -38.589476584354344,
+                -23.506843151341293
+              ],
+              "n": 20
+            },
+            "firstEditMs": {
+              "pairedMedianSavingPercent": 67.83074023514156,
+              "pairedMeanSavingPercent": 67.75408536057515,
+              "pairedMeanBootstrap95": [
+                67.4338121255001,
+                68.07955355156584
+              ],
+              "n": 20
+            },
+            "continuousPrimaryMs": {
+              "pairedMedianSavingPercent": 67.88462628178752,
+              "pairedMeanSavingPercent": 67.83949558978465,
+              "pairedMeanBootstrap95": [
+                67.6891954635169,
+                67.9875794808962
+              ],
+              "n": 20
+            },
+            "continuousDiagnosticMs": {
+              "pairedMedianSavingPercent": 88.04921244902644,
+              "pairedMeanSavingPercent": 88.0021507653094,
+              "pairedMeanBootstrap95": [
+                87.93222764596896,
+                88.06528395804818
+              ],
+              "n": 20
+            },
+            "resolveSumMs": {
+              "pairedMedianSavingPercent": 72.25806753718196,
+              "pairedMeanSavingPercent": 71.97108137161214,
+              "pairedMeanBootstrap95": [
+                71.37878541394137,
+                72.51005432139381
+              ],
+              "n": 20
+            }
+          }
+        }
+      }
+    }
+  },
+  "cacheLifecycle": {
+    "scope": "Functional cold/cache-hit/manual-rebuild proof with parser tracing; n3 timings are descriptive, not the controlled n30 benchmark",
+    "summary": [
+      {
+        "profile": "default",
+        "hit": false,
+        "n": 3,
+        "parse_ms": 0.0,
+        "write_ms": 0.0,
+        "load_ms": 31.579417,
+        "startup_through_status_ms": 111.755375
+      },
+      {
+        "profile": "default",
+        "hit": true,
+        "n": 3,
+        "parse_ms": 0.0,
+        "write_ms": 0.0,
+        "load_ms": 30.963458,
+        "startup_through_status_ms": 114.5875
+      },
+      {
+        "profile": "no-dpi",
+        "hit": false,
+        "n": 3,
+        "parse_ms": 48.870666,
+        "write_ms": 51.02175,
+        "load_ms": 27.002167,
+        "startup_through_status_ms": 235.414292
+      },
+      {
+        "profile": "no-dpi",
+        "hit": true,
+        "n": 3,
+        "parse_ms": 0.0,
+        "write_ms": 0.0,
+        "load_ms": 31.583208,
+        "startup_through_status_ms": 114.19875
+      },
+      {
+        "profile": "converter",
+        "hit": false,
+        "n": 3,
+        "parse_ms": 48.647417,
+        "write_ms": 55.001458,
+        "load_ms": 28.345917,
+        "startup_through_status_ms": 219.556833
+      },
+      {
+        "profile": "converter",
+        "hit": true,
+        "n": 3,
+        "parse_ms": 0.0,
+        "write_ms": 0.0,
+        "load_ms": 32.526708,
+        "startup_through_status_ms": 116.41875
+      },
+      {
+        "profile": "both",
+        "hit": false,
+        "n": 3,
+        "parse_ms": 49.065666,
+        "write_ms": 45.114208,
+        "load_ms": 27.555958,
+        "startup_through_status_ms": 203.260791
+      },
+      {
+        "profile": "both",
+        "hit": true,
+        "n": 3,
+        "parse_ms": 0.0,
+        "write_ms": 0.0,
+        "load_ms": 31.045209,
+        "startup_through_status_ms": 113.218375
+      }
+    ],
+    "processes": 24,
+    "manualRebuildChecks": 3
+  },
+  "memory": {
+    "cycles": 300,
+    "repeats": 1,
+    "scope": "20ms sampled parent/family memory, no semantic diagnostic children; ordinary sequence cut at final edit; complete cut includes error/repair, suffix macros, save and explicit rebuild in BOTH arms; observations not statistical bounds",
+    "rows": [
+      {
+        "case": "W01-compare",
+        "arm": "previous-semantic",
+        "retirements": 3,
+        "corePeakRssMiB": 176.21875,
+        "corePeakFootprintMiB": 162.95372009277344,
+        "completePeakRssMiB": 220.34375,
+        "completePeakFootprintMiB": 190.32876586914062,
+        "marks": [
+          {
+            "step": 0,
+            "serverPid": 27277,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 0,
+              "chargedBytes": 58409356,
+              "astBytes": 26533888,
+              "fixedSourceFiles": 142,
+              "diagnosticsShareOwner": true,
+              "reason": "prepared immutable UVM semantics; rebuild explicitly after library changes"
+            },
+            "sample": {
+              "seconds": 0.15621245792135596,
+              "roots": [
+                27277
+              ],
+              "pids": {
+                "27277": {
+                  "rss": 87736320,
+                  "footprint": 76661240
+                }
+              },
+              "parentRss": 87736320,
+              "familyRss": 87736320,
+              "parentFootprint": 76661240,
+              "familyFootprint": 76661240
+            }
+          },
+          {
+            "step": 1,
+            "serverPid": 27277,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 1,
+              "chargedBytes": 58409356,
+              "astBytes": 26533888,
+              "fixedSourceFiles": 142,
+              "diagnosticsShareOwner": true,
+              "reason": "prepared immutable UVM semantics; rebuild explicitly after library changes"
+            },
+            "sample": {
+              "seconds": 0.17489691684022546,
+              "roots": [
+                27277
+              ],
+              "pids": {
+                "27277": {
+                  "rss": 101138432,
+                  "footprint": 89588216
+                }
+              },
+              "parentRss": 101138432,
+              "familyRss": 101138432,
+              "parentFootprint": 89588216,
+              "familyFootprint": 89588216
+            }
+          },
+          {
+            "step": 2,
+            "serverPid": 27277,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 2,
+              "chargedBytes": 58409356,
+              "astBytes": 26533888,
+              "fixedSourceFiles": 142,
+              "diagnosticsShareOwner": true,
+              "reason": "prepared immutable UVM semantics; rebuild explicitly after library changes"
+            },
+            "sample": {
+              "seconds": 0.19910704181529582,
+              "roots": [
+                27277
+              ],
+              "pids": {
+                "27277": {
+                  "rss": 105431040,
+                  "footprint": 93716984
+                }
+              },
+              "parentRss": 105431040,
+              "familyRss": 105431040,
+              "parentFootprint": 93716984,
+              "familyFootprint": 93716984
+            }
+          },
+          {
+            "step": 11,
+            "serverPid": 27277,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 11,
+              "chargedBytes": 58409356,
+              "astBytes": 26533888,
+              "fixedSourceFiles": 142,
+              "diagnosticsShareOwner": true,
+              "reason": "prepared immutable UVM semantics; rebuild explicitly after library changes"
+            },
+            "sample": {
+              "seconds": 0.4042478329502046,
+              "roots": [
+                27277
+              ],
+              "pids": {
+                "27277": {
+                  "rss": 108167168,
+                  "footprint": 96453112
+                }
+              },
+              "parentRss": 108167168,
+              "familyRss": 108167168,
+              "parentFootprint": 96453112,
+              "familyFootprint": 96453112
+            }
+          },
+          {
+            "step": 21,
+            "serverPid": 27277,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 21,
+              "chargedBytes": 58409356,
+              "astBytes": 26533888,
+              "fixedSourceFiles": 142,
+              "diagnosticsShareOwner": true,
+              "reason": "prepared immutable UVM semantics; rebuild explicitly after library changes"
+            },
+            "sample": {
+              "seconds": 0.629128749947995,
+              "roots": [
+                27277
+              ],
+              "pids": {
+                "27277": {
+                  "rss": 109051904,
+                  "footprint": 97337848
+                }
+              },
+              "parentRss": 109051904,
+              "familyRss": 109051904,
+              "parentFootprint": 97337848,
+              "familyFootprint": 97337848
+            }
+          },
+          {
+            "step": 51,
+            "serverPid": 27277,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 51,
+              "chargedBytes": 58409356,
+              "astBytes": 26533888,
+              "fixedSourceFiles": 142,
+              "diagnosticsShareOwner": true,
+              "reason": "prepared immutable UVM semantics; rebuild explicitly after library changes"
+            },
+            "sample": {
+              "seconds": 1.3127895419020206,
+              "roots": [
+                27277
+              ],
+              "pids": {
+                "27277": {
+                  "rss": 114737152,
+                  "footprint": 103039504
+                }
+              },
+              "parentRss": 114737152,
+              "familyRss": 114737152,
+              "parentFootprint": 103039504,
+              "familyFootprint": 103039504
+            }
+          },
+          {
+            "step": 101,
+            "serverPid": 27277,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 101,
+              "chargedBytes": 58409356,
+              "astBytes": 26533888,
+              "fixedSourceFiles": 142,
+              "diagnosticsShareOwner": true,
+              "reason": "prepared immutable UVM semantics; rebuild explicitly after library changes"
+            },
+            "sample": {
+              "seconds": 2.4324997919611633,
+              "roots": [
+                27277
+              ],
+              "pids": {
+                "27277": {
+                  "rss": 124993536,
+                  "footprint": 113312296
+                }
+              },
+              "parentRss": 124993536,
+              "familyRss": 124993536,
+              "parentFootprint": 113312296,
+              "familyFootprint": 113312296
+            }
+          },
+          {
+            "step": 201,
+            "serverPid": 27277,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 201,
+              "chargedBytes": 58409356,
+              "astBytes": 26533888,
+              "fixedSourceFiles": 142,
+              "diagnosticsShareOwner": true,
+              "reason": "retained immutable UVM semantic generation"
+            },
+            "sample": {
+              "seconds": 4.735435707960278,
+              "roots": [
+                27277
+              ],
+              "pids": {
+                "27277": {
+                  "rss": 170475520,
+                  "footprint": 139002480
+                }
+              },
+              "parentRss": 170475520,
+              "familyRss": 170475520,
+              "parentFootprint": 139002480,
+              "familyFootprint": 139002480
+            }
+          },
+          {
+            "step": 301,
+            "serverPid": 27277,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 301,
+              "chargedBytes": 58409356,
+              "astBytes": 26533888,
+              "fixedSourceFiles": 142,
+              "diagnosticsShareOwner": true,
+              "reason": "retained immutable UVM semantic generation"
+            },
+            "sample": {
+              "seconds": 6.997695207828656,
+              "roots": [
+                27277
+              ],
+              "pids": {
+                "27277": {
+                  "rss": 181862400,
+                  "footprint": 150356592
+                }
+              },
+              "parentRss": 181862400,
+              "familyRss": 181862400,
+              "parentFootprint": 150356592,
+              "familyFootprint": 150356592
+            }
+          }
+        ],
+        "outcome": "success"
+      },
+      {
+        "case": "W01-compare",
+        "arm": "current-semantic",
+        "retirements": 3,
+        "corePeakRssMiB": 146.375,
+        "corePeakFootprintMiB": 134.85994720458984,
+        "completePeakRssMiB": 210.9375,
+        "completePeakFootprintMiB": 199.40686798095703,
+        "marks": [
+          {
+            "step": 0,
+            "serverPid": 27292,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 0,
+              "chargedBytes": 53862085,
+              "astBytes": 26533888,
+              "fixedSourceFiles": 142,
+              "diagnosticsShareOwner": true,
+              "shippedPreparse": true,
+              "shippedProfile": "default",
+              "projectCacheHit": false,
+              "projectCachePath": "",
+              "syntaxParseMs": 0.0,
+              "archiveWriteMs": 0.0,
+              "archiveLoadMs": 36.4345,
+              "reason": "prepared immutable UVM semantics; rebuild explicitly after library changes"
+            },
+            "sample": {
+              "seconds": 0.11939937504939735,
+              "roots": [
+                27292
+              ],
+              "pids": {
+                "27292": {
+                  "rss": 103497728,
+                  "footprint": 91816464
+                }
+              },
+              "parentRss": 103497728,
+              "familyRss": 103497728,
+              "parentFootprint": 91816464,
+              "familyFootprint": 91816464
+            }
+          },
+          {
+            "step": 1,
+            "serverPid": 27292,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 1,
+              "chargedBytes": 53862085,
+              "astBytes": 26533888,
+              "fixedSourceFiles": 142,
+              "diagnosticsShareOwner": true,
+              "shippedPreparse": true,
+              "shippedProfile": "default",
+              "projectCacheHit": false,
+              "projectCachePath": "",
+              "syntaxParseMs": 0.0,
+              "archiveWriteMs": 0.0,
+              "archiveLoadMs": 36.4345,
+              "reason": "prepared immutable UVM semantics; rebuild explicitly after library changes"
+            },
+            "sample": {
+              "seconds": 0.1369579159654677,
+              "roots": [
+                27292
+              ],
+              "pids": {
+                "27292": {
+                  "rss": 116228096,
+                  "footprint": 104137232
+                }
+              },
+              "parentRss": 116228096,
+              "familyRss": 116228096,
+              "parentFootprint": 104137232,
+              "familyFootprint": 104137232
+            }
+          },
+          {
+            "step": 2,
+            "serverPid": 27292,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 2,
+              "chargedBytes": 53862085,
+              "astBytes": 26533888,
+              "fixedSourceFiles": 142,
+              "diagnosticsShareOwner": true,
+              "shippedPreparse": true,
+              "shippedProfile": "default",
+              "projectCacheHit": false,
+              "projectCachePath": "",
+              "syntaxParseMs": 0.0,
+              "archiveWriteMs": 0.0,
+              "archiveLoadMs": 36.4345,
+              "reason": "prepared immutable UVM semantics; rebuild explicitly after library changes"
+            },
+            "sample": {
+              "seconds": 0.15957570797763765,
+              "roots": [
+                27292
+              ],
+              "pids": {
+                "27292": {
+                  "rss": 119390208,
+                  "footprint": 107282960
+                }
+              },
+              "parentRss": 119390208,
+              "familyRss": 119390208,
+              "parentFootprint": 107282960,
+              "familyFootprint": 107282960
+            }
+          },
+          {
+            "step": 11,
+            "serverPid": 27292,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 11,
+              "chargedBytes": 53862085,
+              "astBytes": 26533888,
+              "fixedSourceFiles": 142,
+              "diagnosticsShareOwner": true,
+              "shippedPreparse": true,
+              "shippedProfile": "default",
+              "projectCacheHit": false,
+              "projectCachePath": "",
+              "syntaxParseMs": 0.0,
+              "archiveWriteMs": 0.0,
+              "archiveLoadMs": 36.4345,
+              "reason": "prepared immutable UVM semantics; rebuild explicitly after library changes"
+            },
+            "sample": {
+              "seconds": 0.35790641605854034,
+              "roots": [
+                27292
+              ],
+              "pids": {
+                "27292": {
+                  "rss": 122077184,
+                  "footprint": 109969936
+                }
+              },
+              "parentRss": 122077184,
+              "familyRss": 122077184,
+              "parentFootprint": 109969936,
+              "familyFootprint": 109969936
+            }
+          },
+          {
+            "step": 21,
+            "serverPid": 27292,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 21,
+              "chargedBytes": 53862085,
+              "astBytes": 26533888,
+              "fixedSourceFiles": 142,
+              "diagnosticsShareOwner": true,
+              "shippedPreparse": true,
+              "shippedProfile": "default",
+              "projectCacheHit": false,
+              "projectCachePath": "",
+              "syntaxParseMs": 0.0,
+              "archiveWriteMs": 0.0,
+              "archiveLoadMs": 36.4345,
+              "reason": "prepared immutable UVM semantics; rebuild explicitly after library changes"
+            },
+            "sample": {
+              "seconds": 0.5771024581044912,
+              "roots": [
+                27292
+              ],
+              "pids": {
+                "27292": {
+                  "rss": 122978304,
+                  "footprint": 110871056
+                }
+              },
+              "parentRss": 122978304,
+              "familyRss": 122978304,
+              "parentFootprint": 110871056,
+              "familyFootprint": 110871056
+            }
+          },
+          {
+            "step": 51,
+            "serverPid": 27292,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 51,
+              "chargedBytes": 53862085,
+              "astBytes": 26533888,
+              "fixedSourceFiles": 142,
+              "diagnosticsShareOwner": true,
+              "shippedPreparse": true,
+              "shippedProfile": "default",
+              "projectCacheHit": false,
+              "projectCachePath": "",
+              "syntaxParseMs": 0.0,
+              "archiveWriteMs": 0.0,
+              "archiveLoadMs": 36.4345,
+              "reason": "prepared immutable UVM semantics; rebuild explicitly after library changes"
+            },
+            "sample": {
+              "seconds": 1.2407801251392812,
+              "roots": [
+                27292
+              ],
+              "pids": {
+                "27292": {
+                  "rss": 128598016,
+                  "footprint": 116507176
+                }
+              },
+              "parentRss": 128598016,
+              "familyRss": 128598016,
+              "parentFootprint": 116507176,
+              "familyFootprint": 116507176
+            }
+          },
+          {
+            "step": 101,
+            "serverPid": 27292,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 101,
+              "chargedBytes": 53862085,
+              "astBytes": 26533888,
+              "fixedSourceFiles": 142,
+              "diagnosticsShareOwner": true,
+              "shippedPreparse": true,
+              "shippedProfile": "default",
+              "projectCacheHit": false,
+              "projectCachePath": "",
+              "syntaxParseMs": 0.0,
+              "archiveWriteMs": 0.0,
+              "archiveLoadMs": 36.4345,
+              "reason": "prepared immutable UVM semantics; rebuild explicitly after library changes"
+            },
+            "sample": {
+              "seconds": 2.337509958073497,
+              "roots": [
+                27292
+              ],
+              "pids": {
+                "27292": {
+                  "rss": 128909312,
+                  "footprint": 116818472
+                }
+              },
+              "parentRss": 128909312,
+              "familyRss": 128909312,
+              "parentFootprint": 116818472,
+              "familyFootprint": 116818472
+            }
+          },
+          {
+            "step": 201,
+            "serverPid": 27292,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 201,
+              "chargedBytes": 53862085,
+              "astBytes": 26533888,
+              "fixedSourceFiles": 142,
+              "diagnosticsShareOwner": true,
+              "shippedPreparse": true,
+              "shippedProfile": "default",
+              "projectCacheHit": false,
+              "projectCachePath": "",
+              "syntaxParseMs": 0.0,
+              "archiveWriteMs": 0.0,
+              "archiveLoadMs": 0.0,
+              "reason": "retained immutable UVM semantic generation"
+            },
+            "sample": {
+              "seconds": 4.5277712910901755,
+              "roots": [
+                27292
+              ],
+              "pids": {
+                "27292": {
+                  "rss": 144343040,
+                  "footprint": 132252224
+                }
+              },
+              "parentRss": 144343040,
+              "familyRss": 144343040,
+              "parentFootprint": 132252224,
+              "familyFootprint": 132252224
+            }
+          },
+          {
+            "step": 301,
+            "serverPid": 27292,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 301,
+              "chargedBytes": 53862085,
+              "astBytes": 26533888,
+              "fixedSourceFiles": 142,
+              "diagnosticsShareOwner": true,
+              "shippedPreparse": true,
+              "shippedProfile": "default",
+              "projectCacheHit": false,
+              "projectCachePath": "",
+              "syntaxParseMs": 0.0,
+              "archiveWriteMs": 0.0,
+              "archiveLoadMs": 0.0,
+              "reason": "retained immutable UVM semantic generation"
+            },
+            "sample": {
+              "seconds": 6.724870416102931,
+              "roots": [
+                27292
+              ],
+              "pids": {
+                "27292": {
+                  "rss": 153485312,
+                  "footprint": 141410904
+                }
+              },
+              "parentRss": 153485312,
+              "familyRss": 153485312,
+              "parentFootprint": 141410904,
+              "familyFootprint": 141410904
+            }
+          }
+        ],
+        "outcome": "success"
+      },
+      {
+        "case": "W07-pss-multidoc",
+        "arm": "previous-semantic",
+        "retirements": 3,
+        "corePeakRssMiB": 173.953125,
+        "corePeakFootprintMiB": 156.01622009277344,
+        "completePeakRssMiB": 219.953125,
+        "completePeakFootprintMiB": 189.92249298095703,
+        "marks": [
+          {
+            "step": 0,
+            "serverPid": 27295,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 0,
+              "chargedBytes": 58414530,
+              "astBytes": 26533888,
+              "fixedSourceFiles": 142,
+              "diagnosticsShareOwner": true,
+              "reason": "prepared immutable UVM semantics; rebuild explicitly after library changes"
+            },
+            "sample": {
+              "seconds": 0.12793366704136133,
+              "roots": [
+                27295
+              ],
+              "pids": {
+                "27295": {
+                  "rss": 87769088,
+                  "footprint": 76710416
+                }
+              },
+              "parentRss": 87769088,
+              "familyRss": 87769088,
+              "parentFootprint": 76710416,
+              "familyFootprint": 76710416
+            }
+          },
+          {
+            "step": 1,
+            "serverPid": 27295,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 1,
+              "chargedBytes": 58414530,
+              "astBytes": 26533888,
+              "fixedSourceFiles": 142,
+              "diagnosticsShareOwner": true,
+              "reason": "prepared immutable UVM semantics; rebuild explicitly after library changes"
+            },
+            "sample": {
+              "seconds": 0.14984595798887312,
+              "roots": [
+                27295
+              ],
+              "pids": {
+                "27295": {
+                  "rss": 101810176,
+                  "footprint": 90210856
+                }
+              },
+              "parentRss": 101810176,
+              "familyRss": 101810176,
+              "parentFootprint": 90210856,
+              "familyFootprint": 90210856
+            }
+          },
+          {
+            "step": 2,
+            "serverPid": 27295,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 2,
+              "chargedBytes": 58414530,
+              "astBytes": 26533888,
+              "fixedSourceFiles": 142,
+              "diagnosticsShareOwner": true,
+              "reason": "prepared immutable UVM semantics; rebuild explicitly after library changes"
+            },
+            "sample": {
+              "seconds": 0.17605666699819267,
+              "roots": [
+                27295
+              ],
+              "pids": {
+                "27295": {
+                  "rss": 106053632,
+                  "footprint": 94290472
+                }
+              },
+              "parentRss": 106053632,
+              "familyRss": 106053632,
+              "parentFootprint": 94290472,
+              "familyFootprint": 94290472
+            }
+          },
+          {
+            "step": 11,
+            "serverPid": 27295,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 11,
+              "chargedBytes": 58414530,
+              "astBytes": 26533888,
+              "fixedSourceFiles": 142,
+              "diagnosticsShareOwner": true,
+              "reason": "prepared immutable UVM semantics; rebuild explicitly after library changes"
+            },
+            "sample": {
+              "seconds": 0.4043814579490572,
+              "roots": [
+                27295
+              ],
+              "pids": {
+                "27295": {
+                  "rss": 108773376,
+                  "footprint": 97010216
+                }
+              },
+              "parentRss": 108773376,
+              "familyRss": 108773376,
+              "parentFootprint": 97010216,
+              "familyFootprint": 97010216
+            }
+          },
+          {
+            "step": 21,
+            "serverPid": 27295,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 21,
+              "chargedBytes": 58414530,
+              "astBytes": 26533888,
+              "fixedSourceFiles": 142,
+              "diagnosticsShareOwner": true,
+              "reason": "prepared immutable UVM semantics; rebuild explicitly after library changes"
+            },
+            "sample": {
+              "seconds": 0.6621151671279222,
+              "roots": [
+                27295
+              ],
+              "pids": {
+                "27295": {
+                  "rss": 109674496,
+                  "footprint": 97911336
+                }
+              },
+              "parentRss": 109674496,
+              "familyRss": 109674496,
+              "parentFootprint": 97911336,
+              "familyFootprint": 97911336
+            }
+          },
+          {
+            "step": 51,
+            "serverPid": 27295,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 51,
+              "chargedBytes": 58414530,
+              "astBytes": 26533888,
+              "fixedSourceFiles": 142,
+              "diagnosticsShareOwner": true,
+              "reason": "prepared immutable UVM semantics; rebuild explicitly after library changes"
+            },
+            "sample": {
+              "seconds": 1.4227420829702169,
+              "roots": [
+                27295
+              ],
+              "pids": {
+                "27295": {
+                  "rss": 115310592,
+                  "footprint": 103547432
+                }
+              },
+              "parentRss": 115310592,
+              "familyRss": 115310592,
+              "parentFootprint": 103547432,
+              "familyFootprint": 103547432
+            }
+          },
+          {
+            "step": 101,
+            "serverPid": 27295,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 101,
+              "chargedBytes": 58414530,
+              "astBytes": 26533888,
+              "fixedSourceFiles": 142,
+              "diagnosticsShareOwner": true,
+              "reason": "prepared immutable UVM semantics; rebuild explicitly after library changes"
+            },
+            "sample": {
+              "seconds": 2.694928958080709,
+              "roots": [
+                27295
+              ],
+              "pids": {
+                "27295": {
+                  "rss": 125632512,
+                  "footprint": 113869352
+                }
+              },
+              "parentRss": 125632512,
+              "familyRss": 125632512,
+              "parentFootprint": 113869352,
+              "familyFootprint": 113869352
+            }
+          },
+          {
+            "step": 201,
+            "serverPid": 27295,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 201,
+              "chargedBytes": 58414530,
+              "astBytes": 26533888,
+              "fixedSourceFiles": 142,
+              "diagnosticsShareOwner": true,
+              "reason": "retained immutable UVM semantic generation"
+            },
+            "sample": {
+              "seconds": 5.337830417091027,
+              "roots": [
+                27295
+              ],
+              "pids": {
+                "27295": {
+                  "rss": 170934272,
+                  "footprint": 139461232
+                }
+              },
+              "parentRss": 170934272,
+              "familyRss": 170934272,
+              "parentFootprint": 139461232,
+              "familyFootprint": 139461232
+            }
+          },
+          {
+            "step": 301,
+            "serverPid": 27295,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 301,
+              "chargedBytes": 58414530,
+              "astBytes": 26533888,
+              "fixedSourceFiles": 142,
+              "diagnosticsShareOwner": true,
+              "reason": "retained immutable UVM semantic generation"
+            },
+            "sample": {
+              "seconds": 7.9367118331138045,
+              "roots": [
+                27295
+              ],
+              "pids": {
+                "27295": {
+                  "rss": 182403072,
+                  "footprint": 150897264
+                }
+              },
+              "parentRss": 182403072,
+              "familyRss": 182403072,
+              "parentFootprint": 150897264,
+              "familyFootprint": 150897264
+            }
+          }
+        ],
+        "outcome": "success"
+      },
+      {
+        "case": "W07-pss-multidoc",
+        "arm": "current-semantic",
+        "retirements": 3,
+        "corePeakRssMiB": 147.28125,
+        "corePeakFootprintMiB": 135.68809509277344,
+        "completePeakRssMiB": 205.8125,
+        "completePeakFootprintMiB": 194.23499298095703,
+        "marks": [
+          {
+            "step": 0,
+            "serverPid": 27298,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 0,
+              "chargedBytes": 53862628,
+              "astBytes": 26533888,
+              "fixedSourceFiles": 142,
+              "diagnosticsShareOwner": true,
+              "shippedPreparse": true,
+              "shippedProfile": "default",
+              "projectCacheHit": false,
+              "projectCachePath": "",
+              "syntaxParseMs": 0.0,
+              "archiveWriteMs": 0.0,
+              "archiveLoadMs": 31.161667,
+              "reason": "prepared immutable UVM semantics; rebuild explicitly after library changes"
+            },
+            "sample": {
+              "seconds": 0.11248174984939396,
+              "roots": [
+                27298
+              ],
+              "pids": {
+                "27298": {
+                  "rss": 103432192,
+                  "footprint": 91750928
+                }
+              },
+              "parentRss": 103432192,
+              "familyRss": 103432192,
+              "parentFootprint": 91750928,
+              "familyFootprint": 91750928
+            }
+          },
+          {
+            "step": 1,
+            "serverPid": 27298,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 1,
+              "chargedBytes": 53862628,
+              "astBytes": 26533888,
+              "fixedSourceFiles": 142,
+              "diagnosticsShareOwner": true,
+              "shippedPreparse": true,
+              "shippedProfile": "default",
+              "projectCacheHit": false,
+              "projectCachePath": "",
+              "syntaxParseMs": 0.0,
+              "archiveWriteMs": 0.0,
+              "archiveLoadMs": 31.161667,
+              "reason": "prepared immutable UVM semantics; rebuild explicitly after library changes"
+            },
+            "sample": {
+              "seconds": 0.13426966685801744,
+              "roots": [
+                27298
+              ],
+              "pids": {
+                "27298": {
+                  "rss": 116916224,
+                  "footprint": 104727056
+                }
+              },
+              "parentRss": 116916224,
+              "familyRss": 116916224,
+              "parentFootprint": 104727056,
+              "familyFootprint": 104727056
+            }
+          },
+          {
+            "step": 2,
+            "serverPid": 27298,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 2,
+              "chargedBytes": 53862628,
+              "astBytes": 26533888,
+              "fixedSourceFiles": 142,
+              "diagnosticsShareOwner": true,
+              "shippedPreparse": true,
+              "shippedProfile": "default",
+              "projectCacheHit": false,
+              "projectCachePath": "",
+              "syntaxParseMs": 0.0,
+              "archiveWriteMs": 0.0,
+              "archiveLoadMs": 31.161667,
+              "reason": "prepared immutable UVM semantics; rebuild explicitly after library changes"
+            },
+            "sample": {
+              "seconds": 0.16201849980279803,
+              "roots": [
+                27298
+              ],
+              "pids": {
+                "27298": {
+                  "rss": 120127488,
+                  "footprint": 107921936
+                }
+              },
+              "parentRss": 120127488,
+              "familyRss": 120127488,
+              "parentFootprint": 107921936,
+              "familyFootprint": 107921936
+            }
+          },
+          {
+            "step": 11,
+            "serverPid": 27298,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 11,
+              "chargedBytes": 53862628,
+              "astBytes": 26533888,
+              "fixedSourceFiles": 142,
+              "diagnosticsShareOwner": true,
+              "shippedPreparse": true,
+              "shippedProfile": "default",
+              "projectCacheHit": false,
+              "projectCachePath": "",
+              "syntaxParseMs": 0.0,
+              "archiveWriteMs": 0.0,
+              "archiveLoadMs": 31.161667,
+              "reason": "prepared immutable UVM semantics; rebuild explicitly after library changes"
+            },
+            "sample": {
+              "seconds": 0.3928933748975396,
+              "roots": [
+                27298
+              ],
+              "pids": {
+                "27298": {
+                  "rss": 122863616,
+                  "footprint": 110658064
+                }
+              },
+              "parentRss": 122863616,
+              "familyRss": 122863616,
+              "parentFootprint": 110658064,
+              "familyFootprint": 110658064
+            }
+          },
+          {
+            "step": 21,
+            "serverPid": 27298,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 21,
+              "chargedBytes": 53862628,
+              "astBytes": 26533888,
+              "fixedSourceFiles": 142,
+              "diagnosticsShareOwner": true,
+              "shippedPreparse": true,
+              "shippedProfile": "default",
+              "projectCacheHit": false,
+              "projectCachePath": "",
+              "syntaxParseMs": 0.0,
+              "archiveWriteMs": 0.0,
+              "archiveLoadMs": 31.161667,
+              "reason": "prepared immutable UVM semantics; rebuild explicitly after library changes"
+            },
+            "sample": {
+              "seconds": 0.6479891249909997,
+              "roots": [
+                27298
+              ],
+              "pids": {
+                "27298": {
+                  "rss": 123764736,
+                  "footprint": 111559184
+                }
+              },
+              "parentRss": 123764736,
+              "familyRss": 123764736,
+              "parentFootprint": 111559184,
+              "familyFootprint": 111559184
+            }
+          },
+          {
+            "step": 51,
+            "serverPid": 27298,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 51,
+              "chargedBytes": 53862628,
+              "astBytes": 26533888,
+              "fixedSourceFiles": 142,
+              "diagnosticsShareOwner": true,
+              "shippedPreparse": true,
+              "shippedProfile": "default",
+              "projectCacheHit": false,
+              "projectCachePath": "",
+              "syntaxParseMs": 0.0,
+              "archiveWriteMs": 0.0,
+              "archiveLoadMs": 31.161667,
+              "reason": "prepared immutable UVM semantics; rebuild explicitly after library changes"
+            },
+            "sample": {
+              "seconds": 1.413845666917041,
+              "roots": [
+                27298
+              ],
+              "pids": {
+                "27298": {
+                  "rss": 129417216,
+                  "footprint": 117228072
+                }
+              },
+              "parentRss": 129417216,
+              "familyRss": 129417216,
+              "parentFootprint": 117228072,
+              "familyFootprint": 117228072
+            }
+          },
+          {
+            "step": 101,
+            "serverPid": 27298,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 101,
+              "chargedBytes": 53862628,
+              "astBytes": 26533888,
+              "fixedSourceFiles": 142,
+              "diagnosticsShareOwner": true,
+              "shippedPreparse": true,
+              "shippedProfile": "default",
+              "projectCacheHit": false,
+              "projectCachePath": "",
+              "syntaxParseMs": 0.0,
+              "archiveWriteMs": 0.0,
+              "archiveLoadMs": 31.161667,
+              "reason": "prepared immutable UVM semantics; rebuild explicitly after library changes"
+            },
+            "sample": {
+              "seconds": 2.6891684578731656,
+              "roots": [
+                27298
+              ],
+              "pids": {
+                "27298": {
+                  "rss": 129810432,
+                  "footprint": 117637696
+                }
+              },
+              "parentRss": 129810432,
+              "familyRss": 129810432,
+              "parentFootprint": 117637696,
+              "familyFootprint": 117637696
+            }
+          },
+          {
+            "step": 201,
+            "serverPid": 27298,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 201,
+              "chargedBytes": 53862628,
+              "astBytes": 26533888,
+              "fixedSourceFiles": 142,
+              "diagnosticsShareOwner": true,
+              "shippedPreparse": true,
+              "shippedProfile": "default",
+              "projectCacheHit": false,
+              "projectCachePath": "",
+              "syntaxParseMs": 0.0,
+              "archiveWriteMs": 0.0,
+              "archiveLoadMs": 0.0,
+              "reason": "retained immutable UVM semantic generation"
+            },
+            "sample": {
+              "seconds": 5.243555916938931,
+              "roots": [
+                27298
+              ],
+              "pids": {
+                "27298": {
+                  "rss": 145276928,
+                  "footprint": 133104216
+                }
+              },
+              "parentRss": 145276928,
+              "familyRss": 145276928,
+              "parentFootprint": 133104216,
+              "familyFootprint": 133104216
+            }
+          },
+          {
+            "step": 301,
+            "serverPid": 27298,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 301,
+              "chargedBytes": 53862628,
+              "astBytes": 26533888,
+              "fixedSourceFiles": 142,
+              "diagnosticsShareOwner": true,
+              "shippedPreparse": true,
+              "shippedProfile": "default",
+              "projectCacheHit": false,
+              "projectCachePath": "",
+              "syntaxParseMs": 0.0,
+              "archiveWriteMs": 0.0,
+              "archiveLoadMs": 0.0,
+              "reason": "retained immutable UVM semantic generation"
+            },
+            "sample": {
+              "seconds": 7.810413749888539,
+              "roots": [
+                27298
+              ],
+              "pids": {
+                "27298": {
+                  "rss": 154435584,
+                  "footprint": 142279280
+                }
+              },
+              "parentRss": 154435584,
+              "familyRss": 154435584,
+              "parentFootprint": 142279280,
+              "familyFootprint": 142279280
+            }
+          }
+        ],
+        "outcome": "success"
+      },
+      {
+        "case": "W08-ubus-task",
+        "arm": "previous-semantic",
+        "retirements": 11,
+        "corePeakRssMiB": 192.84375,
+        "corePeakFootprintMiB": 177.17249298095703,
+        "completePeakRssMiB": 223.96875,
+        "completePeakFootprintMiB": 194.20376586914062,
+        "marks": [
+          {
+            "step": 0,
+            "serverPid": 27300,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 0,
+              "chargedBytes": 62355880,
+              "astBytes": 27463680,
+              "fixedSourceFiles": 143,
+              "diagnosticsShareOwner": true,
+              "reason": "prepared immutable UVM semantics; rebuild explicitly after library changes"
+            },
+            "sample": {
+              "seconds": 0.12341245799325407,
+              "roots": [
+                27300
+              ],
+              "pids": {
+                "27300": {
+                  "rss": 92667904,
+                  "footprint": 81609232
+                }
+              },
+              "parentRss": 92667904,
+              "familyRss": 92667904,
+              "parentFootprint": 81609232,
+              "familyFootprint": 81609232
+            }
+          },
+          {
+            "step": 1,
+            "serverPid": 27300,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 1,
+              "chargedBytes": 62355880,
+              "astBytes": 27463680,
+              "fixedSourceFiles": 143,
+              "diagnosticsShareOwner": true,
+              "reason": "prepared immutable UVM semantics; rebuild explicitly after library changes"
+            },
+            "sample": {
+              "seconds": 0.14035191689617932,
+              "roots": [
+                27300
+              ],
+              "pids": {
+                "27300": {
+                  "rss": 100417536,
+                  "footprint": 88834576
+                }
+              },
+              "parentRss": 100417536,
+              "familyRss": 100417536,
+              "parentFootprint": 88834576,
+              "familyFootprint": 88834576
+            }
+          },
+          {
+            "step": 2,
+            "serverPid": 27300,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 2,
+              "chargedBytes": 62355880,
+              "astBytes": 27463680,
+              "fixedSourceFiles": 143,
+              "diagnosticsShareOwner": true,
+              "reason": "prepared immutable UVM semantics; rebuild explicitly after library changes"
+            },
+            "sample": {
+              "seconds": 0.16520570777356625,
+              "roots": [
+                27300
+              ],
+              "pids": {
+                "27300": {
+                  "rss": 110182400,
+                  "footprint": 98452008
+                }
+              },
+              "parentRss": 110182400,
+              "familyRss": 110182400,
+              "parentFootprint": 98452008,
+              "familyFootprint": 98452008
+            }
+          },
+          {
+            "step": 11,
+            "serverPid": 27300,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 11,
+              "chargedBytes": 62355880,
+              "astBytes": 27463680,
+              "fixedSourceFiles": 143,
+              "diagnosticsShareOwner": true,
+              "reason": "prepared immutable UVM semantics; rebuild explicitly after library changes"
+            },
+            "sample": {
+              "seconds": 0.37708758283406496,
+              "roots": [
+                27300
+              ],
+              "pids": {
+                "27300": {
+                  "rss": 120471552,
+                  "footprint": 108757568
+                }
+              },
+              "parentRss": 120471552,
+              "familyRss": 120471552,
+              "parentFootprint": 108757568,
+              "familyFootprint": 108757568
+            }
+          },
+          {
+            "step": 21,
+            "serverPid": 27300,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 21,
+              "chargedBytes": 62355880,
+              "astBytes": 27463680,
+              "fixedSourceFiles": 143,
+              "diagnosticsShareOwner": true,
+              "reason": "prepared immutable UVM semantics; rebuild explicitly after library changes"
+            },
+            "sample": {
+              "seconds": 0.6086761248297989,
+              "roots": [
+                27300
+              ],
+              "pids": {
+                "27300": {
+                  "rss": 129662976,
+                  "footprint": 117948992
+                }
+              },
+              "parentRss": 129662976,
+              "familyRss": 129662976,
+              "parentFootprint": 117948992,
+              "familyFootprint": 117948992
+            }
+          },
+          {
+            "step": 51,
+            "serverPid": 27300,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 51,
+              "chargedBytes": 62355880,
+              "astBytes": 27463680,
+              "fixedSourceFiles": 143,
+              "diagnosticsShareOwner": true,
+              "reason": "retained immutable UVM semantic generation"
+            },
+            "sample": {
+              "seconds": 1.3447934577707201,
+              "roots": [
+                27300
+              ],
+              "pids": {
+                "27300": {
+                  "rss": 171196416,
+                  "footprint": 159498840
+                }
+              },
+              "parentRss": 171196416,
+              "familyRss": 171196416,
+              "parentFootprint": 159498840,
+              "familyFootprint": 159498840
+            }
+          },
+          {
+            "step": 101,
+            "serverPid": 27300,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 101,
+              "chargedBytes": 62355880,
+              "astBytes": 27463680,
+              "fixedSourceFiles": 143,
+              "diagnosticsShareOwner": true,
+              "reason": "retained immutable UVM semantic generation"
+            },
+            "sample": {
+              "seconds": 2.591707041952759,
+              "roots": [
+                27300
+              ],
+              "pids": {
+                "27300": {
+                  "rss": 200343552,
+                  "footprint": 169116296
+                }
+              },
+              "parentRss": 200343552,
+              "familyRss": 200343552,
+              "parentFootprint": 169116296,
+              "familyFootprint": 169116296
+            }
+          },
+          {
+            "step": 201,
+            "serverPid": 27300,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 201,
+              "chargedBytes": 62355880,
+              "astBytes": 27463680,
+              "fixedSourceFiles": 143,
+              "diagnosticsShareOwner": true,
+              "reason": "retained immutable UVM semantic generation"
+            },
+            "sample": {
+              "seconds": 5.072698832955211,
+              "roots": [
+                27300
+              ],
+              "pids": {
+                "27300": {
+                  "rss": 200507392,
+                  "footprint": 169280136
+                }
+              },
+              "parentRss": 200507392,
+              "familyRss": 200507392,
+              "parentFootprint": 169280136,
+              "familyFootprint": 169280136
+            }
+          },
+          {
+            "step": 301,
+            "serverPid": 27300,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 301,
+              "chargedBytes": 62355880,
+              "astBytes": 27463680,
+              "fixedSourceFiles": 143,
+              "diagnosticsShareOwner": true,
+              "reason": "retained immutable UVM semantic generation"
+            },
+            "sample": {
+              "seconds": 7.576467166887596,
+              "roots": [
+                27300
+              ],
+              "pids": {
+                "27300": {
+                  "rss": 202211328,
+                  "footprint": 170984072
+                }
+              },
+              "parentRss": 202211328,
+              "familyRss": 202211328,
+              "parentFootprint": 170984072,
+              "familyFootprint": 170984072
+            }
+          }
+        ],
+        "outcome": "success"
+      },
+      {
+        "case": "W08-ubus-task",
+        "arm": "current-semantic",
+        "retirements": 10,
+        "corePeakRssMiB": 172.65625,
+        "corePeakFootprintMiB": 139.06309509277344,
+        "completePeakRssMiB": 230.5625,
+        "completePeakFootprintMiB": 196.98499298095703,
+        "marks": [
+          {
+            "step": 0,
+            "serverPid": 27304,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 0,
+              "chargedBytes": 54926056,
+              "astBytes": 27463680,
+              "fixedSourceFiles": 143,
+              "diagnosticsShareOwner": true,
+              "shippedPreparse": false,
+              "shippedProfile": "",
+              "projectCacheHit": false,
+              "projectCachePath": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/uvm-cache-optimized-2026-10-20/memory-publish/projects/official-ubus/.slang/cache/uvm/10878767586686089550.cst",
+              "syntaxParseMs": 46.567667,
+              "archiveWriteMs": 43.547791,
+              "archiveLoadMs": 27.548833,
+              "reason": "prepared immutable UVM semantics; rebuild explicitly after library changes"
+            },
+            "sample": {
+              "seconds": 0.19609300000593066,
+              "roots": [
+                27304
+              ],
+              "pids": {
+                "27304": {
+                  "rss": 122486784,
+                  "footprint": 87753232
+                }
+              },
+              "parentRss": 122486784,
+              "familyRss": 122486784,
+              "parentFootprint": 87753232,
+              "familyFootprint": 87753232
+            }
+          },
+          {
+            "step": 1,
+            "serverPid": 27304,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 1,
+              "chargedBytes": 54926056,
+              "astBytes": 27463680,
+              "fixedSourceFiles": 143,
+              "diagnosticsShareOwner": true,
+              "shippedPreparse": false,
+              "shippedProfile": "",
+              "projectCacheHit": false,
+              "projectCachePath": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/uvm-cache-optimized-2026-10-20/memory-publish/projects/official-ubus/.slang/cache/uvm/10878767586686089550.cst",
+              "syntaxParseMs": 46.567667,
+              "archiveWriteMs": 43.547791,
+              "archiveLoadMs": 27.548833,
+              "reason": "prepared immutable UVM semantics; rebuild explicitly after library changes"
+            },
+            "sample": {
+              "seconds": 0.21309779188595712,
+              "roots": [
+                27304
+              ],
+              "pids": {
+                "27304": {
+                  "rss": 129269760,
+                  "footprint": 94093888
+                }
+              },
+              "parentRss": 129269760,
+              "familyRss": 129269760,
+              "parentFootprint": 94093888,
+              "familyFootprint": 94093888
+            }
+          },
+          {
+            "step": 2,
+            "serverPid": 27304,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 2,
+              "chargedBytes": 54926056,
+              "astBytes": 27463680,
+              "fixedSourceFiles": 143,
+              "diagnosticsShareOwner": true,
+              "shippedPreparse": false,
+              "shippedProfile": "",
+              "projectCacheHit": false,
+              "projectCachePath": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/uvm-cache-optimized-2026-10-20/memory-publish/projects/official-ubus/.slang/cache/uvm/10878767586686089550.cst",
+              "syntaxParseMs": 46.567667,
+              "archiveWriteMs": 43.547791,
+              "archiveLoadMs": 27.548833,
+              "reason": "prepared immutable UVM semantics; rebuild explicitly after library changes"
+            },
+            "sample": {
+              "seconds": 0.23754441691562533,
+              "roots": [
+                27304
+              ],
+              "pids": {
+                "27304": {
+                  "rss": 138395648,
+                  "footprint": 103187008
+                }
+              },
+              "parentRss": 138395648,
+              "familyRss": 138395648,
+              "parentFootprint": 103187008,
+              "familyFootprint": 103187008
+            }
+          },
+          {
+            "step": 11,
+            "serverPid": 27304,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 11,
+              "chargedBytes": 54926056,
+              "astBytes": 27463680,
+              "fixedSourceFiles": 143,
+              "diagnosticsShareOwner": true,
+              "shippedPreparse": false,
+              "shippedProfile": "",
+              "projectCacheHit": false,
+              "projectCachePath": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/uvm-cache-optimized-2026-10-20/memory-publish/projects/official-ubus/.slang/cache/uvm/10878767586686089550.cst",
+              "syntaxParseMs": 46.567667,
+              "archiveWriteMs": 43.547791,
+              "archiveLoadMs": 27.548833,
+              "reason": "prepared immutable UVM semantics; rebuild explicitly after library changes"
+            },
+            "sample": {
+              "seconds": 0.449715374968946,
+              "roots": [
+                27304
+              ],
+              "pids": {
+                "27304": {
+                  "rss": 148439040,
+                  "footprint": 113214016
+                }
+              },
+              "parentRss": 148439040,
+              "familyRss": 148439040,
+              "parentFootprint": 113214016,
+              "familyFootprint": 113214016
+            }
+          },
+          {
+            "step": 21,
+            "serverPid": 27304,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 21,
+              "chargedBytes": 54926056,
+              "astBytes": 27463680,
+              "fixedSourceFiles": 143,
+              "diagnosticsShareOwner": true,
+              "shippedPreparse": false,
+              "shippedProfile": "",
+              "projectCacheHit": false,
+              "projectCachePath": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/uvm-cache-optimized-2026-10-20/memory-publish/projects/official-ubus/.slang/cache/uvm/10878767586686089550.cst",
+              "syntaxParseMs": 46.567667,
+              "archiveWriteMs": 43.547791,
+              "archiveLoadMs": 27.548833,
+              "reason": "prepared immutable UVM semantics; rebuild explicitly after library changes"
+            },
+            "sample": {
+              "seconds": 0.6814724998548627,
+              "roots": [
+                27304
+              ],
+              "pids": {
+                "27304": {
+                  "rss": 149618688,
+                  "footprint": 114377280
+                }
+              },
+              "parentRss": 149618688,
+              "familyRss": 149618688,
+              "parentFootprint": 114377280,
+              "familyFootprint": 114377280
+            }
+          },
+          {
+            "step": 51,
+            "serverPid": 27304,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 51,
+              "chargedBytes": 54926056,
+              "astBytes": 27463680,
+              "fixedSourceFiles": 143,
+              "diagnosticsShareOwner": true,
+              "shippedPreparse": false,
+              "shippedProfile": "",
+              "projectCacheHit": true,
+              "projectCachePath": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/uvm-cache-optimized-2026-10-20/memory-publish/projects/official-ubus/.slang/cache/uvm/10878767586686089550.cst",
+              "syntaxParseMs": 0.0,
+              "archiveWriteMs": 0.0,
+              "archiveLoadMs": 0.0,
+              "reason": "retained immutable UVM semantic generation"
+            },
+            "sample": {
+              "seconds": 1.386620125034824,
+              "roots": [
+                27304
+              ],
+              "pids": {
+                "27304": {
+                  "rss": 169508864,
+                  "footprint": 134267480
+                }
+              },
+              "parentRss": 169508864,
+              "familyRss": 169508864,
+              "parentFootprint": 134267480,
+              "familyFootprint": 134267480
+            }
+          },
+          {
+            "step": 101,
+            "serverPid": 27304,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 101,
+              "chargedBytes": 54926056,
+              "astBytes": 27463680,
+              "fixedSourceFiles": 143,
+              "diagnosticsShareOwner": true,
+              "shippedPreparse": false,
+              "shippedProfile": "",
+              "projectCacheHit": true,
+              "projectCachePath": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/uvm-cache-optimized-2026-10-20/memory-publish/projects/official-ubus/.slang/cache/uvm/10878767586686089550.cst",
+              "syntaxParseMs": 0.0,
+              "archiveWriteMs": 0.0,
+              "archiveLoadMs": 0.0,
+              "reason": "retained immutable UVM semantic generation"
+            },
+            "sample": {
+              "seconds": 2.5601440828759223,
+              "roots": [
+                27304
+              ],
+              "pids": {
+                "27304": {
+                  "rss": 180977664,
+                  "footprint": 145752688
+                }
+              },
+              "parentRss": 180977664,
+              "familyRss": 180977664,
+              "parentFootprint": 145752688,
+              "familyFootprint": 145752688
+            }
+          },
+          {
+            "step": 201,
+            "serverPid": 27304,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 201,
+              "chargedBytes": 54926056,
+              "astBytes": 27463680,
+              "fixedSourceFiles": 143,
+              "diagnosticsShareOwner": true,
+              "shippedPreparse": false,
+              "shippedProfile": "",
+              "projectCacheHit": true,
+              "projectCachePath": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/uvm-cache-optimized-2026-10-20/memory-publish/projects/official-ubus/.slang/cache/uvm/10878767586686089550.cst",
+              "syntaxParseMs": 0.0,
+              "archiveWriteMs": 0.0,
+              "archiveLoadMs": 0.0,
+              "reason": "retained immutable UVM semantic generation"
+            },
+            "sample": {
+              "seconds": 4.890755707863718,
+              "roots": [
+                27304
+              ],
+              "pids": {
+                "27304": {
+                  "rss": 181026816,
+                  "footprint": 145801840
+                }
+              },
+              "parentRss": 181026816,
+              "familyRss": 181026816,
+              "parentFootprint": 145801840,
+              "familyFootprint": 145801840
+            }
+          },
+          {
+            "step": 301,
+            "serverPid": 27304,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 301,
+              "chargedBytes": 54926056,
+              "astBytes": 27463680,
+              "fixedSourceFiles": 143,
+              "diagnosticsShareOwner": true,
+              "shippedPreparse": false,
+              "shippedProfile": "",
+              "projectCacheHit": true,
+              "projectCachePath": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/uvm-cache-optimized-2026-10-20/memory-publish/projects/official-ubus/.slang/cache/uvm/10878767586686089550.cst",
+              "syntaxParseMs": 0.0,
+              "archiveWriteMs": 0.0,
+              "archiveLoadMs": 0.0,
+              "reason": "retained immutable UVM semantic generation"
+            },
+            "sample": {
+              "seconds": 7.2306008748710155,
+              "roots": [
+                27304
+              ],
+              "pids": {
+                "27304": {
+                  "rss": 181043200,
+                  "footprint": 145818224
+                }
+              },
+              "parentRss": 181043200,
+              "familyRss": 181043200,
+              "parentFootprint": 145818224,
+              "familyFootprint": 145818224
+            }
+          }
+        ],
+        "outcome": "success"
+      }
+    ]
+  },
+  "receipts": {
+    "publish-build-default": {
+      "sha256": "89aa37721edc355e135a55bfccc7389960b8e0c567f1537a9630c3af1db42893",
+      "data": {
+        "binarySha256": "7161a7691913414d041238f7b3596ce8479007014f68cd7d4298c6a3d56510db",
+        "prefix": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/build-uvm",
+        "inventoryFiles": 157,
+        "equal": true,
+        "runs": [
+          {
+            "kind": "explicit",
+            "cache": false,
+            "passed": true,
+            "states": 5,
+            "completionCount": 120,
+            "status": {
+              "enabled": false,
+              "prepared": false,
+              "generation": 0,
+              "consumers": 0,
+              "chargedBytes": 0,
+              "astBytes": 0,
+              "fixedSourceFiles": 0,
+              "diagnosticsShareOwner": false,
+              "shippedPreparse": false,
+              "shippedProfile": "",
+              "projectCacheHit": false,
+              "projectCachePath": "",
+              "syntaxParseMs": 0.0,
+              "archiveWriteMs": 0.0,
+              "archiveLoadMs": 0.0,
+              "reason": ""
+            }
+          },
+          {
+            "kind": "bundled",
+            "cache": false,
+            "passed": true,
+            "states": 5,
+            "completionCount": 120,
+            "status": {
+              "enabled": false,
+              "prepared": false,
+              "generation": 0,
+              "consumers": 0,
+              "chargedBytes": 0,
+              "astBytes": 0,
+              "fixedSourceFiles": 0,
+              "diagnosticsShareOwner": false,
+              "shippedPreparse": true,
+              "shippedProfile": "default",
+              "projectCacheHit": false,
+              "projectCachePath": "",
+              "syntaxParseMs": 0.0,
+              "archiveWriteMs": 0.0,
+              "archiveLoadMs": 32.461458,
+              "reason": ""
+            }
+          },
+          {
+            "kind": "explicit",
+            "cache": true,
+            "passed": true,
+            "states": 5,
+            "completionCount": 120,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 8,
+              "chargedBytes": 53796579,
+              "astBytes": 26533888,
+              "fixedSourceFiles": 142,
+              "diagnosticsShareOwner": true,
+              "shippedPreparse": false,
+              "shippedProfile": "",
+              "projectCacheHit": true,
+              "projectCachePath": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/uvm-cache-optimized-2026-10-20/bundled-install-workspace/.slang/cache/uvm/17491958554892006472.cst",
+              "syntaxParseMs": 0.0,
+              "archiveWriteMs": 0.0,
+              "archiveLoadMs": 54.403542,
+              "reason": "prepared immutable UVM semantics; rebuild explicitly after library changes"
+            }
+          },
+          {
+            "kind": "bundled",
+            "cache": true,
+            "passed": true,
+            "states": 5,
+            "completionCount": 120,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 8,
+              "chargedBytes": 53796579,
+              "astBytes": 26533888,
+              "fixedSourceFiles": 142,
+              "diagnosticsShareOwner": true,
+              "shippedPreparse": true,
+              "shippedProfile": "default",
+              "projectCacheHit": false,
+              "projectCachePath": "",
+              "syntaxParseMs": 0.0,
+              "archiveWriteMs": 0.0,
+              "archiveLoadMs": 31.102542,
+              "reason": "prepared immutable UVM semantics; rebuild explicitly after library changes"
+            }
+          }
+        ]
+      }
+    },
+    "publish-build-no-dpi": {
+      "sha256": "d18b2b67dea31d60bb5ce3b4c50c1022de387d2e643f0b082c3a342ec2e86e43",
+      "data": {
+        "binarySha256": "7161a7691913414d041238f7b3596ce8479007014f68cd7d4298c6a3d56510db",
+        "prefix": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/build-uvm",
+        "inventoryFiles": 157,
+        "equal": true,
+        "runs": [
+          {
+            "kind": "explicit",
+            "cache": false,
+            "passed": true,
+            "states": 5,
+            "completionCount": 120,
+            "status": {
+              "enabled": false,
+              "prepared": false,
+              "generation": 0,
+              "consumers": 0,
+              "chargedBytes": 0,
+              "astBytes": 0,
+              "fixedSourceFiles": 0,
+              "diagnosticsShareOwner": false,
+              "shippedPreparse": false,
+              "shippedProfile": "",
+              "projectCacheHit": false,
+              "projectCachePath": "",
+              "syntaxParseMs": 0.0,
+              "archiveWriteMs": 0.0,
+              "archiveLoadMs": 0.0,
+              "reason": ""
+            }
+          },
+          {
+            "kind": "bundled",
+            "cache": false,
+            "passed": true,
+            "states": 5,
+            "completionCount": 120,
+            "status": {
+              "enabled": false,
+              "prepared": false,
+              "generation": 0,
+              "consumers": 0,
+              "chargedBytes": 0,
+              "astBytes": 0,
+              "fixedSourceFiles": 0,
+              "diagnosticsShareOwner": false,
+              "shippedPreparse": false,
+              "shippedProfile": "",
+              "projectCacheHit": true,
+              "projectCachePath": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/uvm-cache-optimized-2026-10-20/bundled-install-workspace/.slang/cache/uvm/2949311692674011195.cst",
+              "syntaxParseMs": 0.0,
+              "archiveWriteMs": 0.0,
+              "archiveLoadMs": 36.552125,
+              "reason": ""
+            }
+          },
+          {
+            "kind": "explicit",
+            "cache": true,
+            "passed": true,
+            "states": 5,
+            "completionCount": 120,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 8,
+              "chargedBytes": 53793569,
+              "astBytes": 26533888,
+              "fixedSourceFiles": 142,
+              "diagnosticsShareOwner": true,
+              "shippedPreparse": false,
+              "shippedProfile": "",
+              "projectCacheHit": true,
+              "projectCachePath": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/uvm-cache-optimized-2026-10-20/bundled-install-workspace/.slang/cache/uvm/2949311692674011195.cst",
+              "syntaxParseMs": 0.0,
+              "archiveWriteMs": 0.0,
+              "archiveLoadMs": 33.76525,
+              "reason": "prepared immutable UVM semantics; rebuild explicitly after library changes"
+            }
+          },
+          {
+            "kind": "bundled",
+            "cache": true,
+            "passed": true,
+            "states": 5,
+            "completionCount": 120,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 8,
+              "chargedBytes": 53793569,
+              "astBytes": 26533888,
+              "fixedSourceFiles": 142,
+              "diagnosticsShareOwner": true,
+              "shippedPreparse": false,
+              "shippedProfile": "",
+              "projectCacheHit": true,
+              "projectCachePath": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/uvm-cache-optimized-2026-10-20/bundled-install-workspace/.slang/cache/uvm/2949311692674011195.cst",
+              "syntaxParseMs": 0.0,
+              "archiveWriteMs": 0.0,
+              "archiveLoadMs": 31.492458,
+              "reason": "prepared immutable UVM semantics; rebuild explicitly after library changes"
+            }
+          }
+        ]
+      }
+    },
+    "publish-build-converter": {
+      "sha256": "b8964b52acd693d93128a5b75d1a51ff6bd351c9cddd810e84c41ac5cc6bb282",
+      "data": {
+        "binarySha256": "7161a7691913414d041238f7b3596ce8479007014f68cd7d4298c6a3d56510db",
+        "prefix": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/build-uvm",
+        "inventoryFiles": 157,
+        "equal": true,
+        "runs": [
+          {
+            "kind": "explicit",
+            "cache": false,
+            "passed": true,
+            "states": 5,
+            "completionCount": 120,
+            "status": {
+              "enabled": false,
+              "prepared": false,
+              "generation": 0,
+              "consumers": 0,
+              "chargedBytes": 0,
+              "astBytes": 0,
+              "fixedSourceFiles": 0,
+              "diagnosticsShareOwner": false,
+              "shippedPreparse": false,
+              "shippedProfile": "",
+              "projectCacheHit": false,
+              "projectCachePath": "",
+              "syntaxParseMs": 0.0,
+              "archiveWriteMs": 0.0,
+              "archiveLoadMs": 0.0,
+              "reason": ""
+            }
+          },
+          {
+            "kind": "bundled",
+            "cache": false,
+            "passed": true,
+            "states": 5,
+            "completionCount": 120,
+            "status": {
+              "enabled": false,
+              "prepared": false,
+              "generation": 0,
+              "consumers": 0,
+              "chargedBytes": 0,
+              "astBytes": 0,
+              "fixedSourceFiles": 0,
+              "diagnosticsShareOwner": false,
+              "shippedPreparse": false,
+              "shippedProfile": "",
+              "projectCacheHit": true,
+              "projectCachePath": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/uvm-cache-optimized-2026-10-20/bundled-install-workspace/.slang/cache/uvm/7661164622939765921.cst",
+              "syntaxParseMs": 0.0,
+              "archiveWriteMs": 0.0,
+              "archiveLoadMs": 36.150834,
+              "reason": ""
+            }
+          },
+          {
+            "kind": "explicit",
+            "cache": true,
+            "passed": true,
+            "states": 5,
+            "completionCount": 120,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 8,
+              "chargedBytes": 54794743,
+              "astBytes": 27463680,
+              "fixedSourceFiles": 143,
+              "diagnosticsShareOwner": true,
+              "shippedPreparse": false,
+              "shippedProfile": "",
+              "projectCacheHit": true,
+              "projectCachePath": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/uvm-cache-optimized-2026-10-20/bundled-install-workspace/.slang/cache/uvm/7661164622939765921.cst",
+              "syntaxParseMs": 0.0,
+              "archiveWriteMs": 0.0,
+              "archiveLoadMs": 30.592084,
+              "reason": "prepared immutable UVM semantics; rebuild explicitly after library changes"
+            }
+          },
+          {
+            "kind": "bundled",
+            "cache": true,
+            "passed": true,
+            "states": 5,
+            "completionCount": 120,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 8,
+              "chargedBytes": 54794743,
+              "astBytes": 27463680,
+              "fixedSourceFiles": 143,
+              "diagnosticsShareOwner": true,
+              "shippedPreparse": false,
+              "shippedProfile": "",
+              "projectCacheHit": true,
+              "projectCachePath": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/uvm-cache-optimized-2026-10-20/bundled-install-workspace/.slang/cache/uvm/7661164622939765921.cst",
+              "syntaxParseMs": 0.0,
+              "archiveWriteMs": 0.0,
+              "archiveLoadMs": 30.608667,
+              "reason": "prepared immutable UVM semantics; rebuild explicitly after library changes"
+            }
+          }
+        ]
+      }
+    },
+    "publish-build-both": {
+      "sha256": "6d088a144be4515e569894c713f3754755fafd0da470b5222a740b1a61a1bd6b",
+      "data": {
+        "binarySha256": "7161a7691913414d041238f7b3596ce8479007014f68cd7d4298c6a3d56510db",
+        "prefix": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/build-uvm",
+        "inventoryFiles": 157,
+        "equal": true,
+        "runs": [
+          {
+            "kind": "explicit",
+            "cache": false,
+            "passed": true,
+            "states": 5,
+            "completionCount": 120,
+            "status": {
+              "enabled": false,
+              "prepared": false,
+              "generation": 0,
+              "consumers": 0,
+              "chargedBytes": 0,
+              "astBytes": 0,
+              "fixedSourceFiles": 0,
+              "diagnosticsShareOwner": false,
+              "shippedPreparse": false,
+              "shippedProfile": "",
+              "projectCacheHit": false,
+              "projectCachePath": "",
+              "syntaxParseMs": 0.0,
+              "archiveWriteMs": 0.0,
+              "archiveLoadMs": 0.0,
+              "reason": ""
+            }
+          },
+          {
+            "kind": "bundled",
+            "cache": false,
+            "passed": true,
+            "states": 5,
+            "completionCount": 120,
+            "status": {
+              "enabled": false,
+              "prepared": false,
+              "generation": 0,
+              "consumers": 0,
+              "chargedBytes": 0,
+              "astBytes": 0,
+              "fixedSourceFiles": 0,
+              "diagnosticsShareOwner": false,
+              "shippedPreparse": false,
+              "shippedProfile": "",
+              "projectCacheHit": true,
+              "projectCachePath": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/uvm-cache-optimized-2026-10-20/bundled-install-workspace/.slang/cache/uvm/3848145360601900058.cst",
+              "syntaxParseMs": 0.0,
+              "archiveWriteMs": 0.0,
+              "archiveLoadMs": 33.345083,
+              "reason": ""
+            }
+          },
+          {
+            "kind": "explicit",
+            "cache": true,
+            "passed": true,
+            "states": 5,
+            "completionCount": 120,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 8,
+              "chargedBytes": 54799925,
+              "astBytes": 27471872,
+              "fixedSourceFiles": 143,
+              "diagnosticsShareOwner": true,
+              "shippedPreparse": false,
+              "shippedProfile": "",
+              "projectCacheHit": true,
+              "projectCachePath": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/uvm-cache-optimized-2026-10-20/bundled-install-workspace/.slang/cache/uvm/3848145360601900058.cst",
+              "syntaxParseMs": 0.0,
+              "archiveWriteMs": 0.0,
+              "archiveLoadMs": 30.299417,
+              "reason": "prepared immutable UVM semantics; rebuild explicitly after library changes"
+            }
+          },
+          {
+            "kind": "bundled",
+            "cache": true,
+            "passed": true,
+            "states": 5,
+            "completionCount": 120,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 8,
+              "chargedBytes": 54799925,
+              "astBytes": 27471872,
+              "fixedSourceFiles": 143,
+              "diagnosticsShareOwner": true,
+              "shippedPreparse": false,
+              "shippedProfile": "",
+              "projectCacheHit": true,
+              "projectCachePath": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/uvm-cache-optimized-2026-10-20/bundled-install-workspace/.slang/cache/uvm/3848145360601900058.cst",
+              "syntaxParseMs": 0.0,
+              "archiveWriteMs": 0.0,
+              "archiveLoadMs": 32.700417,
+              "reason": "prepared immutable UVM semantics; rebuild explicitly after library changes"
+            }
+          }
+        ]
+      }
+    },
+    "publish-install": {
+      "sha256": "148b1f69c57bbbd3f39dcaed1bd6654a29c3ee2bdf0390f288ff8029d36c14be",
+      "data": {
+        "binarySha256": "7161a7691913414d041238f7b3596ce8479007014f68cd7d4298c6a3d56510db",
+        "prefix": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/uvm-cache-optimized-2026-10-20/install",
+        "inventoryFiles": 157,
+        "equal": true,
+        "runs": [
+          {
+            "kind": "explicit",
+            "cache": false,
+            "passed": true,
+            "states": 5,
+            "completionCount": 120,
+            "status": {
+              "enabled": false,
+              "prepared": false,
+              "generation": 0,
+              "consumers": 0,
+              "chargedBytes": 0,
+              "astBytes": 0,
+              "fixedSourceFiles": 0,
+              "diagnosticsShareOwner": false,
+              "shippedPreparse": false,
+              "shippedProfile": "",
+              "projectCacheHit": false,
+              "projectCachePath": "",
+              "syntaxParseMs": 0.0,
+              "archiveWriteMs": 0.0,
+              "archiveLoadMs": 0.0,
+              "reason": ""
+            }
+          },
+          {
+            "kind": "bundled",
+            "cache": false,
+            "passed": true,
+            "states": 5,
+            "completionCount": 120,
+            "status": {
+              "enabled": false,
+              "prepared": false,
+              "generation": 0,
+              "consumers": 0,
+              "chargedBytes": 0,
+              "astBytes": 0,
+              "fixedSourceFiles": 0,
+              "diagnosticsShareOwner": false,
+              "shippedPreparse": true,
+              "shippedProfile": "default",
+              "projectCacheHit": false,
+              "projectCachePath": "",
+              "syntaxParseMs": 0.0,
+              "archiveWriteMs": 0.0,
+              "archiveLoadMs": 34.566833,
+              "reason": ""
+            }
+          },
+          {
+            "kind": "explicit",
+            "cache": true,
+            "passed": true,
+            "states": 5,
+            "completionCount": 120,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 8,
+              "chargedBytes": 53792483,
+              "astBytes": 26533888,
+              "fixedSourceFiles": 142,
+              "diagnosticsShareOwner": true,
+              "shippedPreparse": false,
+              "shippedProfile": "",
+              "projectCacheHit": true,
+              "projectCachePath": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/uvm-cache-optimized-2026-10-20/bundled-install-workspace/.slang/cache/uvm/962959387629703722.cst",
+              "syntaxParseMs": 0.0,
+              "archiveWriteMs": 0.0,
+              "archiveLoadMs": 34.402667,
+              "reason": "prepared immutable UVM semantics; rebuild explicitly after library changes"
+            }
+          },
+          {
+            "kind": "bundled",
+            "cache": true,
+            "passed": true,
+            "states": 5,
+            "completionCount": 120,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 8,
+              "chargedBytes": 53792483,
+              "astBytes": 26533888,
+              "fixedSourceFiles": 142,
+              "diagnosticsShareOwner": true,
+              "shippedPreparse": true,
+              "shippedProfile": "default",
+              "projectCacheHit": false,
+              "projectCachePath": "",
+              "syntaxParseMs": 0.0,
+              "archiveWriteMs": 0.0,
+              "archiveLoadMs": 32.116625,
+              "reason": "prepared immutable UVM semantics; rebuild explicitly after library changes"
+            }
+          }
+        ]
+      }
+    },
+    "publish-install-converter": {
+      "sha256": "4602790e22c18c1cfa6cfca7dd13cfce68444db0bc6f67fd948943607d99fc13",
+      "data": {
+        "binarySha256": "7161a7691913414d041238f7b3596ce8479007014f68cd7d4298c6a3d56510db",
+        "prefix": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/uvm-cache-optimized-2026-10-20/install",
+        "inventoryFiles": 157,
+        "equal": true,
+        "runs": [
+          {
+            "kind": "explicit",
+            "cache": false,
+            "passed": true,
+            "states": 5,
+            "completionCount": 120,
+            "status": {
+              "enabled": false,
+              "prepared": false,
+              "generation": 0,
+              "consumers": 0,
+              "chargedBytes": 0,
+              "astBytes": 0,
+              "fixedSourceFiles": 0,
+              "diagnosticsShareOwner": false,
+              "shippedPreparse": false,
+              "shippedProfile": "",
+              "projectCacheHit": false,
+              "projectCachePath": "",
+              "syntaxParseMs": 0.0,
+              "archiveWriteMs": 0.0,
+              "archiveLoadMs": 0.0,
+              "reason": ""
+            }
+          },
+          {
+            "kind": "bundled",
+            "cache": false,
+            "passed": true,
+            "states": 5,
+            "completionCount": 120,
+            "status": {
+              "enabled": false,
+              "prepared": false,
+              "generation": 0,
+              "consumers": 0,
+              "chargedBytes": 0,
+              "astBytes": 0,
+              "fixedSourceFiles": 0,
+              "diagnosticsShareOwner": false,
+              "shippedPreparse": false,
+              "shippedProfile": "",
+              "projectCacheHit": true,
+              "projectCachePath": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/uvm-cache-optimized-2026-10-20/bundled-install-workspace/.slang/cache/uvm/8919872607437857113.cst",
+              "syntaxParseMs": 0.0,
+              "archiveWriteMs": 0.0,
+              "archiveLoadMs": 34.658125,
+              "reason": ""
+            }
+          },
+          {
+            "kind": "explicit",
+            "cache": true,
+            "passed": true,
+            "states": 5,
+            "completionCount": 120,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 8,
+              "chargedBytes": 54790647,
+              "astBytes": 27463680,
+              "fixedSourceFiles": 143,
+              "diagnosticsShareOwner": true,
+              "shippedPreparse": false,
+              "shippedProfile": "",
+              "projectCacheHit": true,
+              "projectCachePath": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/uvm-cache-optimized-2026-10-20/bundled-install-workspace/.slang/cache/uvm/8919872607437857113.cst",
+              "syntaxParseMs": 0.0,
+              "archiveWriteMs": 0.0,
+              "archiveLoadMs": 30.725375,
+              "reason": "prepared immutable UVM semantics; rebuild explicitly after library changes"
+            }
+          },
+          {
+            "kind": "bundled",
+            "cache": true,
+            "passed": true,
+            "states": 5,
+            "completionCount": 120,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 8,
+              "chargedBytes": 54790647,
+              "astBytes": 27463680,
+              "fixedSourceFiles": 143,
+              "diagnosticsShareOwner": true,
+              "shippedPreparse": false,
+              "shippedProfile": "",
+              "projectCacheHit": true,
+              "projectCachePath": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/uvm-cache-optimized-2026-10-20/bundled-install-workspace/.slang/cache/uvm/8919872607437857113.cst",
+              "syntaxParseMs": 0.0,
+              "archiveWriteMs": 0.0,
+              "archiveLoadMs": 31.122042,
+              "reason": "prepared immutable UVM semantics; rebuild explicitly after library changes"
+            }
+          }
+        ]
+      }
+    },
+    "publish-archive": {
+      "sha256": "d8ac530b6a3474a182840103116a24d850d6bcaee932290cbfef31d91e08bed4",
+      "data": {
+        "binarySha256": "7161a7691913414d041238f7b3596ce8479007014f68cd7d4298c6a3d56510db",
+        "prefix": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/uvm-cache-optimized-2026-10-20/archive",
+        "inventoryFiles": 157,
+        "equal": true,
+        "runs": [
+          {
+            "kind": "explicit",
+            "cache": false,
+            "passed": true,
+            "states": 5,
+            "completionCount": 120,
+            "status": {
+              "enabled": false,
+              "prepared": false,
+              "generation": 0,
+              "consumers": 0,
+              "chargedBytes": 0,
+              "astBytes": 0,
+              "fixedSourceFiles": 0,
+              "diagnosticsShareOwner": false,
+              "shippedPreparse": false,
+              "shippedProfile": "",
+              "projectCacheHit": false,
+              "projectCachePath": "",
+              "syntaxParseMs": 0.0,
+              "archiveWriteMs": 0.0,
+              "archiveLoadMs": 0.0,
+              "reason": ""
+            }
+          },
+          {
+            "kind": "bundled",
+            "cache": false,
+            "passed": true,
+            "states": 5,
+            "completionCount": 120,
+            "status": {
+              "enabled": false,
+              "prepared": false,
+              "generation": 0,
+              "consumers": 0,
+              "chargedBytes": 0,
+              "astBytes": 0,
+              "fixedSourceFiles": 0,
+              "diagnosticsShareOwner": false,
+              "shippedPreparse": true,
+              "shippedProfile": "default",
+              "projectCacheHit": false,
+              "projectCachePath": "",
+              "syntaxParseMs": 0.0,
+              "archiveWriteMs": 0.0,
+              "archiveLoadMs": 33.738792,
+              "reason": ""
+            }
+          },
+          {
+            "kind": "explicit",
+            "cache": true,
+            "passed": true,
+            "states": 5,
+            "completionCount": 120,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 8,
+              "chargedBytes": 53786643,
+              "astBytes": 26533888,
+              "fixedSourceFiles": 142,
+              "diagnosticsShareOwner": true,
+              "shippedPreparse": false,
+              "shippedProfile": "",
+              "projectCacheHit": true,
+              "projectCachePath": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/uvm-cache-optimized-2026-10-20/bundled-install-workspace/.slang/cache/uvm/10227754006480374791.cst",
+              "syntaxParseMs": 0.0,
+              "archiveWriteMs": 0.0,
+              "archiveLoadMs": 33.485958,
+              "reason": "prepared immutable UVM semantics; rebuild explicitly after library changes"
+            }
+          },
+          {
+            "kind": "bundled",
+            "cache": true,
+            "passed": true,
+            "states": 5,
+            "completionCount": 120,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 8,
+              "chargedBytes": 53786643,
+              "astBytes": 26533888,
+              "fixedSourceFiles": 142,
+              "diagnosticsShareOwner": true,
+              "shippedPreparse": true,
+              "shippedProfile": "default",
+              "projectCacheHit": false,
+              "projectCachePath": "",
+              "syntaxParseMs": 0.0,
+              "archiveWriteMs": 0.0,
+              "archiveLoadMs": 30.542541,
+              "reason": "prepared immutable UVM semantics; rebuild explicitly after library changes"
+            }
+          }
+        ]
+      }
+    },
+    "publish-archive-converter": {
+      "sha256": "3c2ac9f2f0193ddd417818fdf81e99cfaa118d46a64fd2222e809707a156d54f",
+      "data": {
+        "binarySha256": "7161a7691913414d041238f7b3596ce8479007014f68cd7d4298c6a3d56510db",
+        "prefix": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/uvm-cache-optimized-2026-10-20/archive",
+        "inventoryFiles": 157,
+        "equal": true,
+        "runs": [
+          {
+            "kind": "explicit",
+            "cache": false,
+            "passed": true,
+            "states": 5,
+            "completionCount": 120,
+            "status": {
+              "enabled": false,
+              "prepared": false,
+              "generation": 0,
+              "consumers": 0,
+              "chargedBytes": 0,
+              "astBytes": 0,
+              "fixedSourceFiles": 0,
+              "diagnosticsShareOwner": false,
+              "shippedPreparse": false,
+              "shippedProfile": "",
+              "projectCacheHit": false,
+              "projectCachePath": "",
+              "syntaxParseMs": 0.0,
+              "archiveWriteMs": 0.0,
+              "archiveLoadMs": 0.0,
+              "reason": ""
+            }
+          },
+          {
+            "kind": "bundled",
+            "cache": false,
+            "passed": true,
+            "states": 5,
+            "completionCount": 120,
+            "status": {
+              "enabled": false,
+              "prepared": false,
+              "generation": 0,
+              "consumers": 0,
+              "chargedBytes": 0,
+              "astBytes": 0,
+              "fixedSourceFiles": 0,
+              "diagnosticsShareOwner": false,
+              "shippedPreparse": false,
+              "shippedProfile": "",
+              "projectCacheHit": true,
+              "projectCachePath": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/uvm-cache-optimized-2026-10-20/bundled-install-workspace/.slang/cache/uvm/13812307268310129024.cst",
+              "syntaxParseMs": 0.0,
+              "archiveWriteMs": 0.0,
+              "archiveLoadMs": 34.981125,
+              "reason": ""
+            }
+          },
+          {
+            "kind": "explicit",
+            "cache": true,
+            "passed": true,
+            "states": 5,
+            "completionCount": 120,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 8,
+              "chargedBytes": 54782799,
+              "astBytes": 27463680,
+              "fixedSourceFiles": 143,
+              "diagnosticsShareOwner": true,
+              "shippedPreparse": false,
+              "shippedProfile": "",
+              "projectCacheHit": true,
+              "projectCachePath": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/uvm-cache-optimized-2026-10-20/bundled-install-workspace/.slang/cache/uvm/13812307268310129024.cst",
+              "syntaxParseMs": 0.0,
+              "archiveWriteMs": 0.0,
+              "archiveLoadMs": 33.901041,
+              "reason": "prepared immutable UVM semantics; rebuild explicitly after library changes"
+            }
+          },
+          {
+            "kind": "bundled",
+            "cache": true,
+            "passed": true,
+            "states": 5,
+            "completionCount": 120,
+            "status": {
+              "enabled": true,
+              "prepared": true,
+              "generation": 1,
+              "consumers": 8,
+              "chargedBytes": 54782799,
+              "astBytes": 27463680,
+              "fixedSourceFiles": 143,
+              "diagnosticsShareOwner": true,
+              "shippedPreparse": false,
+              "shippedProfile": "",
+              "projectCacheHit": true,
+              "projectCachePath": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/uvm-cache-optimized-2026-10-20/bundled-install-workspace/.slang/cache/uvm/13812307268310129024.cst",
+              "syntaxParseMs": 0.0,
+              "archiveWriteMs": 0.0,
+              "archiveLoadMs": 31.258166,
+              "reason": "prepared immutable UVM semantics; rebuild explicitly after library changes"
+            }
+          }
+        ]
+      }
+    },
+    "negative": {
+      "sha256": "39287d48fe13516a79e9c3c02058f78f3b990fac52809f57b8c8144009401f2f",
+      "data": {
+        "binarySha256": "7161a7691913414d041238f7b3596ce8479007014f68cd7d4298c6a3d56510db",
+        "cases": [
+          {
+            "case": "missing",
+            "rejected": true,
+            "status": {
+              "enabled": true,
+              "prepared": false,
+              "generation": 0,
+              "consumers": 0,
+              "chargedBytes": 0,
+              "astBytes": 0,
+              "fixedSourceFiles": 0,
+              "diagnosticsShareOwner": false,
+              "shippedPreparse": false,
+              "shippedProfile": "",
+              "projectCacheHit": false,
+              "projectCachePath": "",
+              "syntaxParseMs": 0.0,
+              "archiveWriteMs": 0.0,
+              "archiveLoadMs": 0.0,
+              "reason": ""
+            },
+            "uvmParsedBytes": 0
+          },
+          {
+            "case": "corrupt",
+            "rejected": true,
+            "status": {
+              "enabled": true,
+              "prepared": false,
+              "generation": 0,
+              "consumers": 0,
+              "chargedBytes": 0,
+              "astBytes": 0,
+              "fixedSourceFiles": 0,
+              "diagnosticsShareOwner": false,
+              "shippedPreparse": false,
+              "shippedProfile": "",
+              "projectCacheHit": false,
+              "projectCachePath": "",
+              "syntaxParseMs": 0.0,
+              "archiveWriteMs": 0.0,
+              "archiveLoadMs": 0.0,
+              "reason": ""
+            },
+            "uvmParsedBytes": 0
+          },
+          {
+            "case": "incompatible",
+            "rejected": true,
+            "status": {
+              "enabled": true,
+              "prepared": false,
+              "generation": 0,
+              "consumers": 0,
+              "chargedBytes": 0,
+              "astBytes": 0,
+              "fixedSourceFiles": 0,
+              "diagnosticsShareOwner": false,
+              "shippedPreparse": false,
+              "shippedProfile": "",
+              "projectCacheHit": false,
+              "projectCachePath": "",
+              "syntaxParseMs": 0.0,
+              "archiveWriteMs": 0.0,
+              "archiveLoadMs": 0.0,
+              "reason": ""
+            },
+            "uvmParsedBytes": 0
+          },
+          {
+            "case": "profile-swap",
+            "rejected": true,
+            "status": {
+              "enabled": true,
+              "prepared": false,
+              "generation": 0,
+              "consumers": 0,
+              "chargedBytes": 0,
+              "astBytes": 0,
+              "fixedSourceFiles": 0,
+              "diagnosticsShareOwner": false,
+              "shippedPreparse": false,
+              "shippedProfile": "",
+              "projectCacheHit": false,
+              "projectCachePath": "",
+              "syntaxParseMs": 0.0,
+              "archiveWriteMs": 0.0,
+              "archiveLoadMs": 0.0,
+              "reason": ""
+            },
+            "uvmParsedBytes": 0
+          },
+          {
+            "case": "manifest",
+            "rejected": true,
+            "status": {
+              "enabled": true,
+              "prepared": false,
+              "generation": 0,
+              "consumers": 0,
+              "chargedBytes": 0,
+              "astBytes": 0,
+              "fixedSourceFiles": 0,
+              "diagnosticsShareOwner": false,
+              "shippedPreparse": false,
+              "shippedProfile": "",
+              "projectCacheHit": false,
+              "projectCachePath": "",
+              "syntaxParseMs": 0.0,
+              "archiveWriteMs": 0.0,
+              "archiveLoadMs": 0.0,
+              "reason": ""
+            },
+            "uvmParsedBytes": 0
+          }
+        ]
+      }
+    },
+    "real-publish-oracles": {
+      "sha256": "9c8fb40411a3443b4c42f86a8fc635d4a836dbc1c945e8c71baf5bb909714b01",
+      "data": [
+        {
+          "retirementCounts": {
+            "False": 0,
+            "True": 1
+          },
+          "case": "W01-compare",
+          "suppress": false,
+          "equal": true,
+          "staleEqual": true,
+          "extraProtocolEqual": true,
+          "states": 3,
+          "resolvedItems": 2031,
+          "cacheStatistics": {
+            "enabled": true,
+            "prepared": true,
+            "generation": 1,
+            "consumers": 15,
+            "chargedBytes": 53862085,
+            "astBytes": 26533888,
+            "fixedSourceFiles": 142,
+            "diagnosticsShareOwner": true,
+            "shippedPreparse": true,
+            "shippedProfile": "default",
+            "projectCacheHit": false,
+            "projectCachePath": "",
+            "syntaxParseMs": 0.0,
+            "archiveWriteMs": 0.0,
+            "archiveLoadMs": 0.0,
+            "reason": "retained immutable UVM semantic generation"
+          },
+          "selectedPackages": [
+            "uvm_pkg"
+          ],
+          "warningCounts": [
+            0,
+            0,
+            0
+          ],
+          "errorCounts": [
+            0,
+            0,
+            0
+          ],
+          "publicSha256": "72da096fc92a247fd2ba32d0a94fee30a70433ec79ff004cad5fee4fe0e8c712"
+        },
+        {
+          "retirementCounts": {
+            "False": 0,
+            "True": 1
+          },
+          "case": "W01-compare",
+          "suppress": true,
+          "equal": true,
+          "staleEqual": true,
+          "extraProtocolEqual": true,
+          "states": 3,
+          "resolvedItems": 2031,
+          "cacheStatistics": {
+            "enabled": true,
+            "prepared": true,
+            "generation": 1,
+            "consumers": 15,
+            "chargedBytes": 53862085,
+            "astBytes": 26533888,
+            "fixedSourceFiles": 142,
+            "diagnosticsShareOwner": true,
+            "shippedPreparse": true,
+            "shippedProfile": "default",
+            "projectCacheHit": false,
+            "projectCachePath": "",
+            "syntaxParseMs": 0.0,
+            "archiveWriteMs": 0.0,
+            "archiveLoadMs": 0.0,
+            "reason": "retained immutable UVM semantic generation"
+          },
+          "selectedPackages": [
+            "uvm_pkg"
+          ],
+          "warningCounts": [
+            0,
+            0,
+            0
+          ],
+          "errorCounts": [
+            0,
+            0,
+            0
+          ],
+          "publicSha256": "72da096fc92a247fd2ba32d0a94fee30a70433ec79ff004cad5fee4fe0e8c712"
+        },
+        {
+          "retirementCounts": {
+            "False": 0,
+            "True": 1
+          },
+          "case": "W07-pss-multidoc",
+          "suppress": false,
+          "equal": true,
+          "staleEqual": true,
+          "extraProtocolEqual": true,
+          "states": 3,
+          "resolvedItems": 171,
+          "cacheStatistics": {
+            "enabled": true,
+            "prepared": true,
+            "generation": 1,
+            "consumers": 14,
+            "chargedBytes": 53862628,
+            "astBytes": 26533888,
+            "fixedSourceFiles": 142,
+            "diagnosticsShareOwner": true,
+            "shippedPreparse": true,
+            "shippedProfile": "default",
+            "projectCacheHit": false,
+            "projectCachePath": "",
+            "syntaxParseMs": 0.0,
+            "archiveWriteMs": 0.0,
+            "archiveLoadMs": 0.0,
+            "reason": "retained immutable UVM semantic generation"
+          },
+          "selectedPackages": [
+            "uvm_pkg"
+          ],
+          "warningCounts": [
+            1,
+            1,
+            1
+          ],
+          "errorCounts": [
+            0,
+            0,
+            0
+          ],
+          "publicSha256": "a8f3bce0a444949f6ae2242e2341acb928c4dad9390612852bd82acf668315b4"
+        },
+        {
+          "retirementCounts": {
+            "False": 0,
+            "True": 1
+          },
+          "case": "W07-pss-multidoc",
+          "suppress": true,
+          "equal": true,
+          "staleEqual": true,
+          "extraProtocolEqual": true,
+          "states": 3,
+          "resolvedItems": 171,
+          "cacheStatistics": {
+            "enabled": true,
+            "prepared": true,
+            "generation": 1,
+            "consumers": 12,
+            "chargedBytes": 53862628,
+            "astBytes": 26533888,
+            "fixedSourceFiles": 142,
+            "diagnosticsShareOwner": true,
+            "shippedPreparse": true,
+            "shippedProfile": "default",
+            "projectCacheHit": false,
+            "projectCachePath": "",
+            "syntaxParseMs": 0.0,
+            "archiveWriteMs": 0.0,
+            "archiveLoadMs": 0.0,
+            "reason": "retained immutable UVM semantic generation"
+          },
+          "selectedPackages": [
+            "uvm_pkg"
+          ],
+          "warningCounts": [
+            0,
+            0,
+            0
+          ],
+          "errorCounts": [
+            0,
+            0,
+            0
+          ],
+          "publicSha256": "82a52697257bfff35f97f2b98374d512ff047effc0c98e580645e4b74b93b6ae"
+        },
+        {
+          "retirementCounts": {
+            "False": 0,
+            "True": 1
+          },
+          "case": "W08-ubus-task",
+          "suppress": false,
+          "equal": true,
+          "staleEqual": true,
+          "extraProtocolEqual": true,
+          "states": 3,
+          "resolvedItems": 393,
+          "cacheStatistics": {
+            "enabled": true,
+            "prepared": true,
+            "generation": 1,
+            "consumers": 3,
+            "chargedBytes": 54926056,
+            "astBytes": 27463680,
+            "fixedSourceFiles": 143,
+            "diagnosticsShareOwner": true,
+            "shippedPreparse": false,
+            "shippedProfile": "",
+            "projectCacheHit": true,
+            "projectCachePath": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/uvm-cache-optimized-2026-10-20/real-real-publish/projects/official-ubus/.slang/cache/uvm/12878580523062537303.cst",
+            "syntaxParseMs": 0.0,
+            "archiveWriteMs": 0.0,
+            "archiveLoadMs": 0.0,
+            "reason": "retained immutable UVM semantic generation"
+          },
+          "selectedPackages": [
+            "uvm_pkg"
+          ],
+          "warningCounts": [
+            24,
+            24,
+            24
+          ],
+          "errorCounts": [
+            0,
+            0,
+            0
+          ],
+          "publicSha256": "12ae3b414aec72ebe25aefc1fc61e289ef0991a4ad3bf7066f89ff5698d7d5c9"
+        },
+        {
+          "retirementCounts": {
+            "False": 0,
+            "True": 1
+          },
+          "case": "W08-ubus-task",
+          "suppress": true,
+          "equal": true,
+          "staleEqual": true,
+          "extraProtocolEqual": true,
+          "states": 3,
+          "resolvedItems": 393,
+          "cacheStatistics": {
+            "enabled": true,
+            "prepared": true,
+            "generation": 1,
+            "consumers": 3,
+            "chargedBytes": 54926056,
+            "astBytes": 27463680,
+            "fixedSourceFiles": 143,
+            "diagnosticsShareOwner": true,
+            "shippedPreparse": false,
+            "shippedProfile": "",
+            "projectCacheHit": true,
+            "projectCachePath": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/uvm-cache-optimized-2026-10-20/real-real-publish/projects/official-ubus/.slang/cache/uvm/12878580523062537303.cst",
+            "syntaxParseMs": 0.0,
+            "archiveWriteMs": 0.0,
+            "archiveLoadMs": 0.0,
+            "reason": "retained immutable UVM semantic generation"
+          },
+          "selectedPackages": [
+            "uvm_pkg"
+          ],
+          "warningCounts": [
+            19,
+            19,
+            19
+          ],
+          "errorCounts": [
+            0,
+            0,
+            0
+          ],
+          "publicSha256": "e303aea55ab2cedbe02ea029d81a6c1e62672414fbdd4aa97ac73838498f9fea"
+        },
+        {
+          "retirementCounts": {
+            "False": 0,
+            "True": 5
+          },
+          "case": "W13-continuous",
+          "suppress": false,
+          "equal": true,
+          "staleEqual": true,
+          "extraProtocolEqual": true,
+          "states": 11,
+          "resolvedItems": 7447,
+          "cacheStatistics": {
+            "enabled": true,
+            "prepared": true,
+            "generation": 1,
+            "consumers": 55,
+            "chargedBytes": 53862085,
+            "astBytes": 26533888,
+            "fixedSourceFiles": 142,
+            "diagnosticsShareOwner": true,
+            "shippedPreparse": true,
+            "shippedProfile": "default",
+            "projectCacheHit": false,
+            "projectCachePath": "",
+            "syntaxParseMs": 0.0,
+            "archiveWriteMs": 0.0,
+            "archiveLoadMs": 0.0,
+            "reason": "retained immutable UVM semantic generation"
+          },
+          "selectedPackages": [
+            "uvm_pkg"
+          ],
+          "warningCounts": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "errorCounts": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "publicSha256": "ce26ac2f95e77462c7c213604f21cd1a9fa8cd067c7fdb7b9703856023bba78b"
+        },
+        {
+          "retirementCounts": {
+            "False": 0,
+            "True": 5
+          },
+          "case": "W13-continuous",
+          "suppress": true,
+          "equal": true,
+          "staleEqual": true,
+          "extraProtocolEqual": true,
+          "states": 11,
+          "resolvedItems": 7447,
+          "cacheStatistics": {
+            "enabled": true,
+            "prepared": true,
+            "generation": 1,
+            "consumers": 55,
+            "chargedBytes": 53862085,
+            "astBytes": 26533888,
+            "fixedSourceFiles": 142,
+            "diagnosticsShareOwner": true,
+            "shippedPreparse": true,
+            "shippedProfile": "default",
+            "projectCacheHit": false,
+            "projectCachePath": "",
+            "syntaxParseMs": 0.0,
+            "archiveWriteMs": 0.0,
+            "archiveLoadMs": 0.0,
+            "reason": "retained immutable UVM semantic generation"
+          },
+          "selectedPackages": [
+            "uvm_pkg"
+          ],
+          "warningCounts": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "errorCounts": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "publicSha256": "ce26ac2f95e77462c7c213604f21cd1a9fa8cd067c7fdb7b9703856023bba78b"
+        }
+      ]
+    },
+    "full-publish-oracles": {
+      "sha256": "8c046b83adc7c82267010fbc016ad17db92aa43546ac717fe17dac7bcc1febbb",
+      "data": [
+        {
+          "project": "spi-block",
+          "nativeControl": false,
+          "equal": true,
+          "binarySha256": "7161a7691913414d041238f7b3596ce8479007014f68cd7d4298c6a3d56510db",
+          "fullBuild": true,
+          "states": 3,
+          "allResolvedItems": 129,
+          "bindRemovalRepair": false,
+          "statistics": {
+            "enabled": true,
+            "prepared": true,
+            "generation": 1,
+            "consumers": 7,
+            "chargedBytes": 53853893,
+            "astBytes": 26533888,
+            "fixedSourceFiles": 142,
+            "diagnosticsShareOwner": true,
+            "shippedPreparse": true,
+            "shippedProfile": "default",
+            "projectCacheHit": false,
+            "projectCachePath": "",
+            "syntaxParseMs": 0.0,
+            "archiveWriteMs": 0.0,
+            "archiveLoadMs": 32.171792,
+            "reason": "prepared immutable UVM semantics; rebuild explicitly after library changes"
+          },
+          "mode": "trusted-uvm",
+          "publicSha256": "b63ee4c3c16e87ada87065bf847d523cfe2094aa76a554633bca8a559857f8ea"
+        },
+        {
+          "project": "spi-pss",
+          "nativeControl": false,
+          "equal": true,
+          "binarySha256": "7161a7691913414d041238f7b3596ce8479007014f68cd7d4298c6a3d56510db",
+          "fullBuild": true,
+          "states": 3,
+          "allResolvedItems": 78,
+          "bindRemovalRepair": true,
+          "statistics": {
+            "enabled": true,
+            "prepared": true,
+            "generation": 1,
+            "consumers": 7,
+            "chargedBytes": 53854436,
+            "astBytes": 26533888,
+            "fixedSourceFiles": 142,
+            "diagnosticsShareOwner": true,
+            "shippedPreparse": true,
+            "shippedProfile": "default",
+            "projectCacheHit": false,
+            "projectCachePath": "",
+            "syntaxParseMs": 0.0,
+            "archiveWriteMs": 0.0,
+            "archiveLoadMs": 31.448583,
+            "reason": "prepared immutable UVM semantics; rebuild explicitly after library changes"
+          },
+          "mode": "trusted-uvm",
+          "publicSha256": "d451cf0d0d039fcac481ee51bac9a39268e5511ef1b22ba2803cc7cd46100ddc"
+        },
+        {
+          "project": "official-ubus",
+          "nativeControl": false,
+          "equal": true,
+          "binarySha256": "7161a7691913414d041238f7b3596ce8479007014f68cd7d4298c6a3d56510db",
+          "fullBuild": true,
+          "states": 3,
+          "allResolvedItems": 48,
+          "bindRemovalRepair": false,
+          "statistics": {
+            "enabled": true,
+            "prepared": true,
+            "generation": 1,
+            "consumers": 7,
+            "chargedBytes": 54917864,
+            "astBytes": 27463680,
+            "fixedSourceFiles": 143,
+            "diagnosticsShareOwner": true,
+            "shippedPreparse": false,
+            "shippedProfile": "",
+            "projectCacheHit": false,
+            "projectCachePath": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/uvm-cache-optimized-2026-10-20/full-publish/official-ubus/.slang/cache/uvm/9887354155868343587.cst",
+            "syntaxParseMs": 48.8915,
+            "archiveWriteMs": 64.650834,
+            "archiveLoadMs": 31.43975,
+            "reason": "prepared immutable UVM semantics; rebuild explicitly after library changes"
+          },
+          "mode": "trusted-uvm",
+          "publicSha256": "7240fbd61ff5b1da78302b1aed5698cdd787ccb8f32310c6510720a4e4e18870"
+        }
+      ]
+    }
+  },
+  "reconstruction": {
+    "base": "151a801ceaf6faf23d79a42d210ff67e50eb4660",
+    "patchSha256": "b739c851c7bfc4b8e504af178ab565c09ccb5e069116a3fcf6c402a58b24ae18",
+    "files": 709,
+    "equal": true,
+    "removedExportBytes": 12345755
+  },
+  "cleanup": {
+    "removedBytes": 393315045,
+    "compressionSavedBytes": 625857850,
+    "activeFixtures": "untracked/uvm-cache-optimized-2026-10-20/continuous-publish-projects",
+    "policy": "Retain original corpus, active build/project caches, baseline binary, measurements and scripts; remove unused reproduced copies and compress raw responses losslessly."
+  }
+}

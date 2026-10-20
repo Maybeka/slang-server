@@ -204,6 +204,7 @@ lsp::InitializeResult SlangServer::getInitialize(const lsp::InitializeParams& pa
         return m_driver->trustedUvmStatus();
     });
     registerCommand<std::monostate, bool>("slang.rebuildUvmLibrary", [this](std::monostate) {
+        m_driver->invalidateUvmParseCache();
         return loadConfig(m_config, true, true, true, true);
     });
     registerCommand<lsp::Location, std::monostate, &SlangServer::showLocation>(

@@ -39,6 +39,15 @@ function(stageBundledUvm target)
     COMMAND
       "${CMAKE_COMMAND}" -E copy_directory "${SLANG_SERVER_BUNDLED_UVM_SOURCE}"
       "$<TARGET_FILE_DIR:${target}>/${SLANG_SERVER_BUNDLED_UVM_RELATIVE_PATH}"
+    COMMAND "${CMAKE_COMMAND}" -E rm -f
+      "$<TARGET_FILE_DIR:${target}>/${SLANG_SERVER_BUNDLED_UVM_RELATIVE_PATH}/preparsed/no-dpi.cst"
+      "$<TARGET_FILE_DIR:${target}>/${SLANG_SERVER_BUNDLED_UVM_RELATIVE_PATH}/preparsed/resource-converter.cst"
+      "$<TARGET_FILE_DIR:${target}>/${SLANG_SERVER_BUNDLED_UVM_RELATIVE_PATH}/preparsed/no-dpi-resource-converter.cst"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory
+      "$<TARGET_FILE_DIR:${target}>/${SLANG_SERVER_BUNDLED_UVM_RELATIVE_PATH}/preparsed"
+    COMMAND "${CMAKE_COMMAND}" -E copy "${SLANG_SERVER_UVM_ARCHIVE_DIR}/default.cst"
+      "$<TARGET_FILE_DIR:${target}>/${SLANG_SERVER_BUNDLED_UVM_RELATIVE_PATH}/preparsed/default.cst"
     VERBATIM)
+  add_dependencies(${target}_bundled_uvm bundled_uvm_preparsed)
   add_dependencies(${target} ${target}_bundled_uvm)
 endfunction()

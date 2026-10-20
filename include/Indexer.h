@@ -12,6 +12,7 @@
 #include "lsp/URI.h"
 #include <concepts>
 #include <condition_variable>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <shared_mutex>
@@ -57,6 +58,10 @@ struct Indexer {
     void startIndexing(const std::vector<std::string>& globs,
                        const std::vector<std::string>& excludeDirs,
                        bool inferIncludeDirectories = false);
+
+    /// Supply immutable, already parsed library metadata to workspace indexing.
+    void installPreparsedLibrary(const std::filesystem::path& root,
+                                 const slang::syntax::SyntaxTree* tree = nullptr);
 
     // For workspace changes
     void addDocuments(const std::vector<std::filesystem::path>& paths);
@@ -181,6 +186,13 @@ private:
         /// Quoted include spellings encountered without expanding other files.
         slang::SmallVector<std::string> includes;
     };
+
+    struct PreparsedLibraryIndex {
+        std::filesystem::path root;
+        std::unordered_map<std::filesystem::path, IndexedPath> files;
+    };
+    mutable std::mutex preparsedMutex_;
+    std::shared_ptr<const PreparsedLibraryIndex> preparsedLibrary_;
 
     // Index storage
     // Using SmallVector<2> to avoid extra indirection for the common case

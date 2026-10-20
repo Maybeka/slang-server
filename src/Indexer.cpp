@@ -13,6 +13,8 @@
 #include "util/Process.h"
 #include <BS_thread_pool.hpp>
 #include <cctype>
+#include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <fmt/format.h>
 #include <iterator>
@@ -224,6 +226,44 @@ void Indexer::extractMacros(const MacroRange& macros, const slang::SourceManager
     }
 }
 
+void Indexer::installPreparsedLibrary(const fs::path& root,
+                                      const slang::syntax::SyntaxTree* input) {
+    auto index = std::make_shared<PreparsedLibraryIndex>();
+    index->root = root;
+    if (!input) {
+        std::lock_guard guard(preparsedMutex_);
+        if (!preparsedLibrary_ || preparsedLibrary_->root != root)
+            preparsedLibrary_ = std::move(index);
+        return;
+    }
+    const auto& tree = *input;
+    const auto& sm = tree.sourceManager();
+    for (auto id : tree.getSourceBufferIds()) {
+        const auto& path = sm.getFullPath(id);
+        if (!path.empty())
+            index->files.try_emplace(path);
+    }
+    auto& entry = index->files[root / "uvm_pkg.sv"];
+    extractFromRoot(tree.root().as<slang::syntax::CompilationUnitSyntax>(), tree.getMetadata(), sm,
+                    tree.getSourceBufferIds()[0], entry);
+    for (auto* macro : tree.getDefinedMacros()) {
+        auto loc = sm.getFullyExpandedLoc(macro->name.location());
+        if (loc.valid() && loc != slang::SourceLocation::NoLocation) {
+            auto it = index->files.find(sm.getFullPath(loc.buffer()));
+            if (it != index->files.end())
+                it->second.macros.emplace_back(macro->name.valueText());
+        }
+    }
+    for (const auto& include : tree.getIncludeDirectives()) {
+        auto loc = sm.getFullyExpandedLoc(include.syntax->sourceRange().start());
+        auto it = index->files.find(sm.getFullPath(loc.buffer()));
+        if (it != index->files.end() && !include.isSystem)
+            it->second.includes.emplace_back(include.path);
+    }
+    std::lock_guard guard(preparsedMutex_);
+    preparsedLibrary_ = std::move(index);
+}
+
 std::vector<Indexer::IndexedPath> Indexer::indexPaths(const std::vector<fs::path>& paths) const {
     using namespace slang;
     using namespace parsing;
@@ -236,9 +276,14 @@ std::vector<Indexer::IndexedPath> Indexer::indexPaths(const std::vector<fs::path
     std::vector<IndexedPath> loadResults;
     loadResults.resize(paths.size());
 
+    std::shared_ptr<const PreparsedLibraryIndex> preparsed;
+    {
+        std::lock_guard guard(preparsedMutex_);
+        preparsed = preparsedLibrary_;
+    }
     // Lambda that processes a range of files
     // Creates its own SourceManager and options to avoid contention when threaded
-    auto processRange = [&loadResults, &paths](size_t start, size_t end) {
+    auto processRange = [&loadResults, &paths, preparsed](size_t start, size_t end) {
         SourceManager sourceManager;
         Bag options;
         options.set(PreprocessorOptions{.maxIncludeDepth = 0});
@@ -246,6 +291,24 @@ std::vector<Indexer::IndexedPath> Indexer::indexPaths(const std::vector<fs::path
         SmallVector<char> bufferData;
         for (size_t i = start; i < end; i++) {
             auto& dest = loadResults[i];
+            if (preparsed) {
+                auto path = fs::absolute(paths[i]).lexically_normal();
+                auto relative = path.lexically_relative(preparsed->root);
+                if ((relative.empty() || relative.is_absolute() || *relative.begin() == "..") &&
+                    path.filename().string().starts_with("uvm")) {
+                    std::error_code error;
+                    auto physical = fs::weakly_canonical(path, error);
+                    if (!error) {
+                        path = std::move(physical);
+                        relative = path.lexically_relative(preparsed->root);
+                    }
+                }
+                if (!relative.empty() && !relative.is_absolute() && *relative.begin() != "..") {
+                    if (auto it = preparsed->files.find(path); it != preparsed->files.end())
+                        dest = it->second;
+                    continue;
+                }
+            }
             bufferData.clear();
             if (std::error_code ec = OS::readFile(paths[i], bufferData)) {
                 continue;
@@ -258,6 +321,18 @@ std::vector<Indexer::IndexedPath> Indexer::indexPaths(const std::vector<fs::path
             Diagnostics diagnostics;
             Preprocessor preprocessor(sourceManager, alloc, diagnostics, options, {});
             preprocessor.pushSource(buffer);
+            if (const char* trace = std::getenv("SLANG_UVM_PARSE_TRACE")) {
+                if (auto* file = std::fopen(trace, "a")) {
+                    auto bytes = bufferData.size();
+                    std::fprintf(file, "%ld\t1\t%llu\t%llu\n", long(slang::OS::getpid()),
+                                 (unsigned long long)bytes,
+                                 (unsigned long long)(paths[i].generic_string().find("/uvm/") !=
+                                                              std::string::npos
+                                                          ? bytes
+                                                          : 0));
+                    std::fclose(file);
+                }
+            }
             Parser parser(preprocessor, options);
 
             auto& root = parser.parseCompilationUnit();

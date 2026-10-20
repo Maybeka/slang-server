@@ -85,6 +85,7 @@ public:
                (!m_config.experimentalFrozenSources.value() || m_frozenWitnessUsable);
     }
     rfl::Generic trustedUvmStatus() const;
+    void invalidateUvmParseCache();
     bool isTrustedUvmSource(const std::filesystem::path& path) const;
     void preserveTrustedUvmForRetirement(bool enabled = true) { m_preserveTrustedUvm = enabled; }
     bool isFrozenSourcesEnabled() const { return m_config.experimentalFrozenSources.value(); }
@@ -406,6 +407,12 @@ private:
     std::filesystem::path m_uvmEntryPath;
     std::shared_ptr<struct TrustedUvmLibrary> m_trustedUvm;
     std::string m_trustedUvmReason;
+    std::optional<std::string> m_shippedUvmProfile;
+    std::set<std::string> m_uvmPreparseDependencies;
+    std::filesystem::path m_uvmParseCachePath;
+    std::string m_uvmPreparseKey;
+    bool m_uvmProjectCacheHit = false;
+    double m_uvmParseMs = 0, m_uvmArchiveWriteMs = 0, m_uvmArchiveLoadMs = 0;
     bool m_preserveTrustedUvm = false;
     bool prepareTrustedUvmLibrary();
     std::filesystem::path m_uvmDirectory;

@@ -200,6 +200,15 @@ bool ServerDriver::parseAndLoadSources(const std::vector<std::string>& buildfile
                                   ? previousDirectory
                                   : std::filesystem::path(m_workspacePathPrefix),
                               requireValidConfig);
+    if (m_config.uvm.value() && m_config.uvm.value()->useBundled.value() &&
+        !driver.precompiledUvm) {
+        options = driver.createOptionBag();
+        auto pp = options.getOrDefault<parsing::PreprocessorOptions>();
+        pp.precompiledSourceRoot = m_uvmDirectory;
+        options.set(pp);
+        m_configurationInputsFailed = m_nativeInputsFailed = true;
+        return false;
+    }
     if (m_config.experimentalUvmSemanticCache.value() &&
         (m_config.experimentalFrozenSources.value() ||
          m_config.experimentalMethodScopeOverlay.value()))

@@ -3,6 +3,7 @@
 .venv/
 venv/
 .cache/
+.slang/cache/
 .DS_Store
 __pycache__/
 *.pyc

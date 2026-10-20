@@ -262,6 +262,8 @@ jobs:
           # Keep the existing root binary layout used by editor installers.
           mkdir -p release-artifacts/resources/uvm
           cp -R resources/uvm/1.2 release-artifacts/resources/uvm/1.2
+          mkdir -p release-artifacts/resources/uvm/1.2/preparsed
+          cp build/${{ matrix.preset }}/uvm-preparsed/default.cst release-artifacts/resources/uvm/1.2/preparsed/default.cst
 
           cat > release-artifacts/README.txt <<EOF
           Slang Server - SystemVerilog Language Server

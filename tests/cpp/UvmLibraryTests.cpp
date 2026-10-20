@@ -151,6 +151,7 @@ TEST_CASE("Trusted UVM retains semantic identities through edits and source reti
     replacement->onWorkspaceDidChangeWatchedFiles(
         {.changes = {{.uri = URI::fromFile(files.entry), .type = lsp::FileChangeType::Changed}}});
     verify(*replacement, 4);
+    replacement->invalidateUvmParseCache();
     auto rebuilt = server::ServerDriver::createForExplore(indexer, client, config,
                                                           files.root.string(), replacement.get(),
                                                           true, true);
@@ -478,6 +479,11 @@ TEST_CASE("Bundled UVM is explicit and independently supports native and cached 
     REQUIRE(driver);
     CHECK_FALSE(driver->frozenInputWitnessFailure());
     REQUIRE(driver->driver.syntaxTrees.size() == 1);
+    REQUIRE(driver->driver.precompiledUvm);
+    // Indexing the installed library consumes its restored macro metadata.
+    indexer.startIndexing(
+        std::vector<std::string>{(driver->driver.precompiledUvmRoot / "**/*.svh").string()}, {});
+    CHECK_FALSE(indexer.getFilesForMacro("uvm_object_utils").empty());
     ast::Compilation compilation(driver->options);
     compilation.addSyntaxTree(driver->driver.syntaxTrees.front());
     REQUIRE(compilation.getPackage("uvm_pkg"));
@@ -569,4 +575,88 @@ TEST_CASE("UVM directory aliases remain part of exact entry resolution",
     auto reason = driver->frozenInputWitnessFailure();
     REQUIRE(reason);
     CHECK(reason->find("UVM entry resolution changed") != std::string::npos);
+}
+
+TEST_CASE("Project UVM parse caches survive restart and require explicit content rebuild",
+          "[uvm-library][uvm-semantic][uvm-project-cache]") {
+    LibraryWorkspace files;
+    auto config = files.config(false);
+    config.experimentalUvmSemanticCache = true;
+    Indexer indexer;
+    ClientHarness client;
+    auto open = [&] {
+        auto result = server::ServerDriver::createForExplore(indexer, client, config,
+                                                             files.root.string(), nullptr, true);
+        REQUIRE(result);
+        REQUIRE(result->driver.precompiledUvm);
+        return result;
+    };
+    auto first = open();
+    CHECK(parameterValue(first->driver.precompiledUvm) == 1);
+    CHECK(rfl::json::write(first->trustedUvmStatus()).find("\"projectCacheHit\":false") !=
+          std::string::npos);
+    first.reset();
+    fs::path cachePath;
+    for (auto& item : fs::directory_iterator(files.root / ".slang/cache/uvm"))
+        if (item.path().extension() == ".cst")
+            cachePath = item.path();
+    REQUIRE_FALSE(cachePath.empty());
+    auto again = open();
+    CHECK(rfl::json::write(again->trustedUvmStatus()).find("\"projectCacheHit\":true") !=
+          std::string::npos);
+    CHECK(parameterValue(again->driver.precompiledUvm) == 1);
+    again.reset();
+    files.write(cachePath, "damaged cache envelope");
+    auto repaired = open();
+    CHECK(parameterValue(repaired->driver.precompiledUvm) == 1);
+    CHECK(rfl::json::write(repaired->trustedUvmStatus()).find("\"projectCacheHit\":false") !=
+          std::string::npos);
+    repaired.reset();
+    config.flagsByFile = std::vector<Config::FlagSource>{
+        {(files.root / "server.json").string(), "--single-unit --threads 1 -DVALUE=2"}};
+    auto changed = open();
+    CHECK(parameterValue(changed->driver.precompiledUvm) == 2);
+    CHECK(rfl::json::write(changed->trustedUvmStatus()).find("\"projectCacheHit\":false") !=
+          std::string::npos);
+    changed.reset();
+    files.write(files.entry, "package uvm_pkg; localparam int X=7; class object; "
+                             "int field; endclass endpackage\n");
+    auto trusted = open();
+    CHECK(parameterValue(trusted->driver.precompiledUvm) == 2);
+    trusted->invalidateUvmParseCache();
+    trusted.reset();
+    auto rebuilt = open();
+    CHECK(parameterValue(rebuilt->driver.precompiledUvm) == 7);
+    CHECK(rfl::json::write(rebuilt->trustedUvmStatus()).find("\"projectCacheHit\":false") !=
+          std::string::npos);
+}
+
+TEST_CASE("Custom UVM wrappers with dependent package types retain native identities",
+          "[uvm-library][uvm-semantic][uvm-project-cache]") {
+    LibraryWorkspace files;
+    files.write(files.entry, "package helper_pkg; class T; endclass endpackage\n"
+                             "package uvm_pkg; function void consume(helper_pkg::T value); "
+                             "endfunction endpackage\n");
+    const std::string consumer = "module consumer; helper_pkg::T value; initial begin value=new(); "
+                                 "uvm_pkg::consume(value); end endmodule\n";
+    files.write(files.root / "consumer.sv", consumer);
+    files.write(files.root / "design.f",
+                "\"third party/uvm ?sources/vendor_entry.sv\"\nconsumer.sv\n");
+    auto config = files.config(false);
+    config.experimentalUvmSemanticCache = true;
+    config.compilationFilelist = "design.f";
+    Indexer indexer;
+    ClientHarness client;
+    auto driver = server::ServerDriver::createForExplore(indexer, client, config,
+                                                         files.root.string(), nullptr, true);
+    REQUIRE(driver);
+    REQUIRE(driver->driver.precompiledUvm);
+    CHECK_FALSE(driver->options.get<server::TrustedUvmImport>());
+    CHECK(rfl::json::write(driver->trustedUvmStatus()).find("additional declarations") !=
+          std::string::npos);
+    auto uri = URI::fromFile(files.root / "consumer.sv");
+    driver->openDocument(uri, consumer, 1, true);
+    auto compilation = driver->getDocument(uri)->getAnalysis()->getCompilation();
+    for (const auto& diagnostic : compilation->getAllDiagnostics())
+        CHECK_FALSE(diagnostic.isError());
 }

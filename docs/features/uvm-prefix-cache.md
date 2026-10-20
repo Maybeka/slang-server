@@ -154,8 +154,11 @@ explicitly when the project does not supply UVM:
 `entryFile`. Existing projects retain their source choices by default. A project
 that supplies a different UVM while requesting the shipped kit receives a
 configuration error rather than mixing or replacing libraries. Selecting the kit
-does not enable either experimental cache. Macro flags remain project inputs;
-the server does not add simulator or DPI defines on the user's behalf.
+does not enable either experimental cache. It loads the shipped preparsed syntax
+data for the default configuration, including on the first startup. Only that
+configuration is shipped. Other parse configurations generate a project-local
+one-time syntax cache. See
+[the persistent UVM contract](uvm-semantic-cache.md#persistent-uvm-syntax-data).
 
 The fixed upstream revision is
 `71f30a7473118b3cea582d7673c3af8e161fce71` from Accellera's UVM repository.
@@ -168,9 +171,10 @@ CMake installation places the binary in `bin` and the kit under
 `share/slang-server/uvm/1.2`. Keep those directories together when moving an
 installation. A copied executable without its resources remains usable with
 normal project inputs or `sourceDirectory`; selecting a missing shipped kit
-reports how to repair the installation. Library source edits and unsaved overlays
-still participate in the normal freshness checks; "shipped" does not authorize
-stale results.
+reports how to repair the installation. The shipped sources and `preparsed/` data
+form one immutable distribution. Rebuild the kit when changing that distribution;
+use `sourceDirectory` for a custom source-based library. Ordinary user source edits
+remain live.
 
 Release archives keep the executable at their root and carry
 `resources/uvm/1.2` beside it for existing editor installers. Keep that folder

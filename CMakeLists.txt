@@ -240,6 +240,7 @@ set(SLANG_INCLUDE_TESTS
     ${SLANG_SERVER_INCLUDE_SDK_TESTS}
     CACHE BOOL "Don't build slang tests" FORCE)
 
+set(SLANG_SERVER_UVM_ARCHIVE_DIR "${CMAKE_CURRENT_BINARY_DIR}/uvm-preparsed")
 include(cmake/VerifyBundledUvm.cmake)
 
 if(SLANG_SERVER_INCLUDE_TESTS)
@@ -294,6 +295,43 @@ if(SLANG_SERVER_USE_SYSTEM_FMT AND NOT TARGET fmt::fmt)
 endif()
 add_subdirectory(external/reflect-cpp)
 add_subdirectory(external/ctre)
+
+# Preparsed UVM is produced by the build, never by the installed server.
+file(GLOB_RECURSE uvm_sdk_identity_inputs CONFIGURE_DEPENDS
+     "${PROJECT_SOURCE_DIR}/external/slang/include/*"
+     "${PROJECT_SOURCE_DIR}/external/slang/source/*"
+     "${PROJECT_SOURCE_DIR}/external/slang/scripts/*")
+set(uvm_sdk_identity "slang-uvm-cst-1-profile-1")
+list(APPEND uvm_sdk_identity_inputs "${PROJECT_SOURCE_DIR}/src/uvm_preparse_main.cpp" "${PROJECT_SOURCE_DIR}/include/util/UvmParseArtifact.h" "${SLANG_SERVER_BUNDLED_UVM_SOURCE}/MANIFEST.json")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${uvm_sdk_identity_inputs})
+foreach(input IN LISTS uvm_sdk_identity_inputs)
+  file(SHA256 "${input}" hash)
+  file(RELATIVE_PATH relative "${PROJECT_SOURCE_DIR}/external/slang" "${input}")
+  string(APPEND uvm_sdk_identity "${relative}:${hash}\n")
+endforeach()
+string(SHA256 uvm_sdk_identity "${uvm_sdk_identity}")
+file(CONFIGURE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/UvmArchiveIdentity.h"
+     CONTENT "#define SLANG_UVM_ARCHIVE_IDENTITY \"${uvm_sdk_identity}\"\n" @ONLY)
+add_executable(uvm_preparse src/uvm_preparse_main.cpp)
+target_link_libraries(uvm_preparse PRIVATE slang::slang)
+target_include_directories(uvm_preparse PRIVATE include "${CMAKE_CURRENT_BINARY_DIR}")
+file(MAKE_DIRECTORY "${SLANG_SERVER_UVM_ARCHIVE_DIR}")
+set(uvm_preparse_outputs)
+foreach(profile IN ITEMS default)
+  set(output "${SLANG_SERVER_UVM_ARCHIVE_DIR}/${profile}.cst")
+  add_custom_command(
+    OUTPUT "${output}"
+    COMMAND $<TARGET_FILE:uvm_preparse> "${SLANG_SERVER_BUNDLED_UVM_SOURCE}/src" "${output}" "${profile}"
+    DEPENDS uvm_preparse "${SLANG_SERVER_BUNDLED_UVM_SOURCE}/MANIFEST.json"
+    VERBATIM)
+  list(APPEND uvm_preparse_outputs "${output}")
+endforeach()
+# Remove obsolete generated profiles when upgrading an existing build directory.
+foreach(profile IN ITEMS no-dpi resource-converter no-dpi-resource-converter)
+  file(REMOVE "${SLANG_SERVER_UVM_ARCHIVE_DIR}/${profile}.cst")
+endforeach()
+add_custom_target(bundled_uvm_preparsed DEPENDS ${uvm_preparse_outputs})
+
 
 # Suppress warnings in reflect-cpp library
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
@@ -360,7 +398,7 @@ add_library(
 
 target_compile_definitions(slang_server_obj_lib PRIVATE
   SLANG_SERVER_BUNDLED_UVM_RELATIVE_PATH="${SLANG_SERVER_BUNDLED_UVM_RELATIVE_PATH}")
-target_include_directories(slang_server_obj_lib PUBLIC include)
+target_include_directories(slang_server_obj_lib PUBLIC include "${CMAKE_CURRENT_BINARY_DIR}")
 target_include_directories(slang_server_obj_lib SYSTEM
                            PRIVATE external/reflect-cpp/include)
 
@@ -429,6 +467,7 @@ endif()
 
 if(SLANG_SERVER_INCLUDE_INSTALL)
   install(TARGETS slang_server RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+  install(FILES "${SLANG_SERVER_UVM_ARCHIVE_DIR}/default.cst" DESTINATION "${CMAKE_INSTALL_DATADIR}/slang-server/uvm/1.2/preparsed")
   install(DIRECTORY "${SLANG_SERVER_BUNDLED_UVM_SOURCE}/"
           DESTINATION "${CMAKE_INSTALL_DATADIR}/slang-server/uvm/1.2")
 endif()

@@ -2,6 +2,8 @@
 #pragma once
 #include <atomic>
 #include <memory>
+#include <optional>
+#include <set>
 #include <string>
 #include <unordered_set>
 
@@ -22,6 +24,10 @@ struct TrustedUvmLibrary {
     std::shared_ptr<const slang::SourceManager::ImmutablePrefix> sources;
     uint64_t generation = 0;
     size_t semanticBytes = 0;
+    std::optional<std::string> shippedProfile;
+    std::set<std::string> preparseDependencies;
+    std::filesystem::path parseCachePath;
+    std::string preparseKey;
     std::unordered_set<std::string> files;
     std::atomic<uint64_t> consumers = 0;
 };

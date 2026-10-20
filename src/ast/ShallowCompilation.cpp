@@ -32,6 +32,17 @@ ShallowCompilation::ShallowCompilation(
         if (std::find(m_allTrees.begin(), m_allTrees.end(), dependency) == m_allTrees.end())
             m_allTrees.push_back(dependency);
 
+    if (auto precompiled = options.get<syntax::PrecompiledUvmSyntax>();
+        precompiled && precompiled->tree && !options.get<TrustedUvmImport>()) {
+        bool containsLibrary = false;
+        for (const auto& tree : m_allTrees)
+            for (const auto& [node, _] : tree->getMetadata().nodeMeta)
+                containsLibrary |= node->kind == syntax::SyntaxKind::PackageDeclaration &&
+                                   node->header->name.valueText() == "uvm_pkg";
+        if (!containsLibrary)
+            m_allTrees.push_back(precompiled->tree);
+    }
+
     if (auto setting = options.get<TrustedUvmImport>();
         setting && setting->library &&
         m_tree == setting->library->compilation->getSyntaxTrees().front()) {

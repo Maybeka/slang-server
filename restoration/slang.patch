@@ -321,7 +321,7 @@ index bc43d0037..a615af8d1 100644
  
  } // namespace slang
 diff --git a/include/slang/driver/Driver.h b/include/slang/driver/Driver.h
-index 0f9cff2a3..b5d388e93 100644
+index 0f9cff2a3..7bff8a1c6 100644
 --- a/include/slang/driver/Driver.h
 +++ b/include/slang/driver/Driver.h
 @@ -18,6 +18,7 @@
@@ -351,6 +351,17 @@ index 0f9cff2a3..b5d388e93 100644
          if (!cmdLine.parse(argc, argv, parseOptions)) {
              issueCommandLineErrors(cmdLine);
              return false;
+@@ -454,6 +460,10 @@ public:
+     [[nodiscard]] Bag createOptionBag() const;
+ 
+     /// Creates an options bag from all of the currently set parse options
++    std::shared_ptr<syntax::SyntaxTree> precompiledUvm;
++    std::filesystem::path precompiledUvmRoot;
++    std::filesystem::path precompiledUvmEntry;
++    bool precompiledUvmStrict = true;
+     [[nodiscard]] Bag createParseOptionBag() const;
+ 
+     /// Creates a compilation object from all of the current loaded state of the driver.
 diff --git a/include/slang/driver/SourceLoader.h b/include/slang/driver/SourceLoader.h
 index 0913e369e..b2637c72f 100644
 --- a/include/slang/driver/SourceLoader.h
@@ -436,7 +447,7 @@ index 0913e369e..b2637c72f 100644
  
      static constexpr int MinFilesForThreading = 4;
 diff --git a/include/slang/parsing/Preprocessor.h b/include/slang/parsing/Preprocessor.h
-index 88d571c1a..7930e89c0 100644
+index 88d571c1a..f81977f25 100644
 --- a/include/slang/parsing/Preprocessor.h
 +++ b/include/slang/parsing/Preprocessor.h
 @@ -22,6 +22,7 @@
@@ -447,7 +458,15 @@ index 88d571c1a..7930e89c0 100644
  
  struct ConditionalDirectiveExpressionSyntax;
  struct DefineDirectiveSyntax;
-@@ -77,6 +78,18 @@ struct SLANG_EXPORT PreprocessorOptions {
+@@ -43,6 +44,7 @@ struct SLANG_EXPORT PreprocessorOptions {
+     /// The maximum depth of the include stack; further attempts to include
+     /// a file will result in an error.
+     uint32_t maxIncludeDepth = 1024;
++    std::filesystem::path precompiledSourceRoot;
+ 
+     /// The version of the SystemVerilog language to use.
+     LanguageVersion languageVersion = LanguageVersion::Default;
+@@ -77,6 +79,18 @@ struct SLANG_EXPORT PreprocessorOptions {
      /// module/program/package/class inside an include file with protected code has the
      /// end of scope token inside the protected code.
      bool allowMissingProtectedScopeEnd = false;
@@ -466,7 +485,7 @@ index 88d571c1a..7930e89c0 100644
  };
  
  /// Preprocessor - Interface between lexer and parser
-@@ -85,6 +98,8 @@ struct SLANG_EXPORT PreprocessorOptions {
+@@ -85,6 +99,8 @@ struct SLANG_EXPORT PreprocessorOptions {
  /// and macro expansion, and the actual SystemVerilog parser that wants a nice coherent stream
  /// of tokens to consume.
  class SLANG_EXPORT Preprocessor {
@@ -475,7 +494,7 @@ index 88d571c1a..7930e89c0 100644
  public:
      Preprocessor(SourceManager& sourceManager, BumpAllocator& alloc, Diagnostics& diagnostics,
                   const Bag& options = {},
-@@ -476,6 +491,8 @@ private:
+@@ -476,6 +492,8 @@ private:
  
      // Directives don't get handled when lexing within a macro body
      // (either define or usage).
@@ -498,8 +517,28 @@ index fc3236bf1..ce4f76927 100644
  };
  
  } // namespace slang::parsing
+diff --git a/include/slang/parsing/Token.h b/include/slang/parsing/Token.h
+index 0253f93fe..08d757877 100644
+--- a/include/slang/parsing/Token.h
++++ b/include/slang/parsing/Token.h
+@@ -25,6 +25,7 @@ class Diagnostics;
+ namespace syntax {
+ 
+ class SyntaxNode;
++class ArchiveReader;
+ enum class SyntaxKind;
+ 
+ } // namespace syntax
+@@ -342,6 +343,7 @@ public:
+     }
+ 
+ private:
++    friend class syntax::ArchiveReader;
+     struct Info;
+ 
+     void init(BumpAllocator& alloc, TokenKind kind, const TriviaView& trivia,
 diff --git a/include/slang/syntax/SyntaxTree.h b/include/slang/syntax/SyntaxTree.h
-index a8d51f774..d51c14841 100644
+index a8d51f774..81a64d6c4 100644
 --- a/include/slang/syntax/SyntaxTree.h
 +++ b/include/slang/syntax/SyntaxTree.h
 @@ -9,6 +9,7 @@
@@ -510,16 +549,26 @@ index a8d51f774..d51c14841 100644
  #include <vector>
  
  #include "slang/diagnostics/Diagnostics.h"
-@@ -58,7 +59,7 @@ public:
+@@ -58,7 +59,17 @@ public:
                 const SourceLibrary* library,
                 const std::shared_ptr<SyntaxTree>& preTransform = nullptr);
  
 -    SyntaxTree(SyntaxTree&& other) = default;
++    void writeParseArchive(std::ostream&, const std::filesystem::path& root,
++                           bool allowExternalPaths = false) const;
++    static std::shared_ptr<SyntaxTree> readParseArchive(std::istream&, SourceManager&,
++                                                        const std::filesystem::path& root,
++                                                        const Bag& options = {},
++                                                        bool allowExternalPaths = false);
++
++    static std::shared_ptr<SyntaxTree> sharedPrefixView(const std::shared_ptr<SyntaxTree>&,
++                                                        SourceManager&);
++
 +    SyntaxTree(SyntaxTree&& other);
      ~SyntaxTree();
  
      /// Creates a syntax tree from a full compilation unit.
-@@ -197,6 +198,53 @@ public:
+@@ -197,6 +208,53 @@ public:
                                                              SourceManager& sourceManager,
                                                              const Bag& options = {});
  
@@ -573,7 +622,7 @@ index a8d51f774..d51c14841 100644
      /// Gets any diagnostics generated while parsing.
      Diagnostics& diagnostics() { return diagnosticsBuffer; }
  
-@@ -233,6 +281,11 @@ public:
+@@ -233,6 +291,11 @@ public:
      /// This is empty if created from a SyntaxRewriter.
      MacroList getDefinedMacros() const { return preprocessorMetadata.definedMacros; }
  
@@ -585,7 +634,7 @@ index a8d51f774..d51c14841 100644
      /// Gets the list of include directives that were encountered while parsing.
      /// This is empty if created from a SyntaxRewriter.
      IncludeList getIncludeDirectives() const { return preprocessorMetadata.includeDirectives; }
-@@ -269,7 +322,11 @@ private:
+@@ -269,7 +332,11 @@ private:
      static std::shared_ptr<SyntaxTree> create(SourceManager& sourceManager,
                                                std::span<const SourceBuffer> source,
                                                const Bag& options, MacroList inheritedMacros,
@@ -598,11 +647,22 @@ index a8d51f774..d51c14841 100644
  
      SyntaxNode* rootNode;
      const SourceLibrary* library;
+@@ -281,4 +348,10 @@ private:
+     parsing::PreprocessorMetadata preprocessorMetadata;
+ };
+ 
++struct PrecompiledUvmSyntax {
++    std::shared_ptr<SyntaxTree> tree;
++    std::filesystem::path root;
++    std::filesystem::path entry;
++    bool forbidSourceParsing = true;
++};
+ } // namespace slang::syntax
 diff --git a/include/slang/text/SourceManager.h b/include/slang/text/SourceManager.h
-index de1d1c271..384f17c4f 100644
+index de1d1c271..66181b784 100644
 --- a/include/slang/text/SourceManager.h
 +++ b/include/slang/text/SourceManager.h
-@@ -16,12 +16,15 @@
+@@ -16,15 +16,22 @@
  #include <set>
  #include <shared_mutex>
  #include <span>
@@ -618,7 +678,14 @@ index de1d1c271..384f17c4f 100644
  #include "slang/util/SmallVector.h"
  #include "slang/util/Util.h"
  
-@@ -44,6 +47,94 @@ class SLANG_EXPORT SourceManager {
++namespace slang::syntax {
++class ArchiveWriter;
++class ArchiveReader;
++} // namespace slang::syntax
+ namespace slang {
+ 
+ enum class DiagnosticSeverity;
+@@ -44,6 +51,97 @@ class SLANG_EXPORT SourceManager {
  public:
      using BufferOrError = nonstd::expected<SourceBuffer, std::error_code>;
  
@@ -684,6 +751,9 @@ index de1d1c271..384f17c4f 100644
 +    };
 +    [[nodiscard]] FastCwdPhase beginFastCwdPhase() { return FastCwdPhase(*this); }
 +
++    void writeParseArchive(syntax::ArchiveWriter&, const std::filesystem::path& root) const;
++    void readParseArchive(syntax::ArchiveReader&, const std::filesystem::path& root);
++
 +    SourceSnapshot captureSnapshot(std::span<const BufferID> graphBuffers) const;
 +    /// Exact filesystem witness for the current recorded context. Checks successful
 +    /// bytes, failed reads and alias resolution, including negative include lookups.
@@ -713,7 +783,7 @@ index de1d1c271..384f17c4f 100644
      /// Information about a `line directive in a source buffer.
      struct LineDirectiveInfo {
          std::string name;       // File name set by directive
-@@ -60,6 +151,16 @@ public:
+@@ -60,6 +158,16 @@ public:
      SourceManager(const SourceManager&) = delete;
      SourceManager& operator=(const SourceManager&) = delete;
  
@@ -730,7 +800,7 @@ index de1d1c271..384f17c4f 100644
      /// @brief Adds one or more system include directories that match
      /// the given pattern.
      ///
-@@ -74,6 +175,9 @@ public:
+@@ -74,6 +182,9 @@ public:
      /// and that path does not exist or is not a directory.
      std::error_code addUserDirectories(std::string_view pattern);
  
@@ -740,7 +810,18 @@ index de1d1c271..384f17c4f 100644
      /// Gets the source line number for a given source location.
      size_t getLineNumber(SourceLocation location) const;
  
-@@ -259,25 +363,46 @@ public:
+@@ -256,28 +367,57 @@ public:
+     /// Returns true if the given file path is already loaded and cached in the source manager.
+     bool isCached(const std::filesystem::path& path) const;
+ 
++    struct IncludeConfiguration {
++        std::vector<std::string> userDirectories, systemDirectories;
++        bool disableProximatePaths, disableLocalIncludes, incDirFirst;
++    };
++    IncludeConfiguration getIncludeConfiguration() const;
++    /// Copies ordered, resolved include paths into an empty isolated source manager.
++    void inheritIncludeConfiguration(const IncludeConfiguration& config);
++
      /// Sets whether filenames should be made "proximate" to the current directory
      /// for diagnostic reporting purposes. This is on by default but can be
      /// disabled to always use the simple filename.
@@ -792,7 +873,7 @@ index de1d1c271..384f17c4f 100644
  
      /// Stores information specified in a pragma diagnostic directive, which alters the
      /// currently active set of diagnostic mappings.
-@@ -339,6 +464,14 @@ public:
+@@ -339,6 +479,14 @@ public:
  
      /// Returns the total bytes consumed by all loaded source files:
      /// raw file content plus any cached line-offset tables.
@@ -807,7 +888,7 @@ index de1d1c271..384f17c4f 100644
      size_t getMemoryUsage() const;
  
      /// Appends raw line-start offsets for @a text to @a offsets, using the same
-@@ -370,6 +503,7 @@ private:
+@@ -370,6 +518,7 @@ private:
          uint64_t sortKey = 0;
          BufferKind bufferKind = BufferKind::DesignFile;
          std::vector<LineDirectiveInfo> lineDirectives;
@@ -815,7 +896,7 @@ index de1d1c271..384f17c4f 100644
  
          FileInfo() = default;
  
-@@ -441,6 +575,7 @@ private:
+@@ -441,6 +590,7 @@ private:
  
      // index from BufferID to buffer metadata
      std::vector<std::variant<FileInfo, ExpansionInfo>> bufferEntries;
@@ -823,7 +904,7 @@ index de1d1c271..384f17c4f 100644
  
      // cache for file lookups; this holds on to the actual file data
      flat_hash_map<std::string, std::pair<std::shared_ptr<FileData>, std::error_code>> lookupCache;
-@@ -448,6 +583,14 @@ private:
+@@ -448,6 +598,14 @@ private:
      // directories for system and user includes
      std::vector<std::filesystem::path> systemDirectories;
      std::vector<std::filesystem::path> userDirectories;
@@ -838,7 +919,7 @@ index de1d1c271..384f17c4f 100644
  
      // uniquified backing memory for directories
      std::set<std::filesystem::path> directories;
-@@ -455,6 +598,32 @@ private:
+@@ -455,6 +613,32 @@ private:
      // map from buffer to diagnostic directive lists
      flat_hash_map<BufferID, std::vector<DiagnosticDirectiveInfo>> diagDirectives;
  
@@ -885,11 +966,85 @@ index 989512211..9998e942d 100644
      /// Adds or overwrites an existing element of type T in the bag
      /// (making a copy in the process).
      template<typename T>
+diff --git a/scripts/syntax_gen.py b/scripts/syntax_gen.py
+index eb1dbca66..69567859c 100755
+--- a/scripts/syntax_gen.py
++++ b/scripts/syntax_gen.py
+@@ -66,6 +66,7 @@ def main():
+         generatePyBindings(args.dir, alltypes)
+         generatePyFactoryBindings(args.dir, alltypes)
+     else:
++        generateSyntaxArchive(args.dir, alltypes, kindmap)
+         generateSyntaxClone(args.dir, alltypes, kindmap)
+         # generateSyntax modifies alltypes
+         generateSyntax(args.dir, alltypes.copy(), kindmap)
+@@ -1498,5 +1499,45 @@ def generateCSTJson(builddir, alltypes):
+         f.write(cppf.getvalue())
+ 
+ 
++
++
++
++def generateSyntaxArchive(builddir, alltypes, kindmap):
++    out = ['#include "slang/syntax/ParseArchive.h"', 'namespace slang::syntax {',
++           'void ArchiveWriter::node(const SyntaxNode* n) {',
++           'if (!n) { number(0); return; }',
++           'auto [it, inserted] = nodes.emplace(n, nodes.size()+1); number(it->second); number(inserted); if (!inserted) return;',
++           'number(uint64_t(n->kind)); switch(n->kind) {']
++    for kind, name in sorted(kindmap.items()):
++        v=alltypes[name]
++        out += [f'case SyntaxKind::{kind}: {{ auto& node=n->as<{name}>();']
++        for m in v.combinedMembers:
++            out += [f'field(node.{m[1]});']
++        out += ['break; }']
++    out += ['default: throw std::runtime_error("unsupported archive syntax kind"); }',
++            'node(n->previewNode()); }',
++            'SyntaxNode* ArchiveReader::node() {',
++            'auto id=number(); if(!id) return nullptr; auto fresh=number();',
++            'if(!fresh) { if(id>nodes.size() || !nodes[id-1]) throw std::runtime_error("invalid archive reference"); return nodes[id-1]; }',
++            'if(id!=nodes.size()+1 || id>16000000) throw std::runtime_error("invalid archive node id"); nodes.push_back(nullptr);',
++            'auto kind=SyntaxKind(number()); SyntaxNode* result=nullptr; switch(kind) {']
++    for kind,name in sorted(kindmap.items()):
++        v=alltypes[name];out += [f'case SyntaxKind::{kind}: {{']
++        args=['kind'] if 'kind' in v.argNames else []
++        for m in v.combinedMembers:
++            t=m[0]
++            if m[1] in v.notNullMembers or m[1] in v.optionalMembers:
++                t=m[2]+'*'
++            out += [f'auto {m[1]}=this->field<{t}>();']
++            arg=m[1]
++            if m[1] in v.notNullMembers:
++                out += [f'if(!{arg}) throw std::runtime_error("missing required archive child");']
++                arg='*'+arg
++            args.append(arg)
++        out += [f'result=arena.emplace<{name}>({", ".join(args)}); break; }}']
++    out += ['default: throw std::runtime_error("invalid archive syntax kind"); }',
++            'nodes[id-1]=result; if(auto preview=node()) result->setPreviewNode(arena, preview); return result; }', '}']
++    with open(os.path.join(builddir,'SyntaxArchive.cpp'),'w') as f: f.write('\n'.join(out)+'\n')
++
+ if __name__ == "__main__":
+     main()
 diff --git a/source/CMakeLists.txt b/source/CMakeLists.txt
-index ce1415ffd..ab8affba5 100644
+index ce1415ffd..50c6fd3ac 100644
 --- a/source/CMakeLists.txt
 +++ b/source/CMakeLists.txt
-@@ -117,6 +117,7 @@ add_library(
+@@ -38,6 +38,7 @@ add_custom_command(
+           ${CMAKE_CURRENT_BINARY_DIR} --syntax ${SCRIPTS_DIR}/syntax.txt
+   OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/slang/syntax/AllSyntax.h
+          ${CMAKE_CURRENT_BINARY_DIR}/AllSyntax.cpp
++         ${CMAKE_CURRENT_BINARY_DIR}/SyntaxArchive.cpp
+          ${CMAKE_CURRENT_BINARY_DIR}/SyntaxClone.cpp
+          ${CMAKE_CURRENT_BINARY_DIR}/slang/syntax/SyntaxKind.h
+          ${CMAKE_CURRENT_BINARY_DIR}/slang/syntax/SyntaxFwd.h
+@@ -59,6 +60,7 @@ configure_file(${CMAKE_CURRENT_SOURCE_DIR}/util/VersionInfo.cpp.in
+ add_library(
+   slang_slang
+   ${CMAKE_CURRENT_BINARY_DIR}/AllSyntax.cpp
++  ${CMAKE_CURRENT_BINARY_DIR}/SyntaxArchive.cpp
+   ${CMAKE_CURRENT_BINARY_DIR}/SyntaxClone.cpp
+   ${CMAKE_CURRENT_BINARY_DIR}/DiagCode.cpp
+   ${CMAKE_CURRENT_BINARY_DIR}/TokenKind.cpp
+@@ -117,6 +119,7 @@ add_library(
    text/SourceManager.cpp
    util/BumpAllocator.cpp
    util/CommandLine.cpp
@@ -1589,7 +1744,7 @@ index 3fa297e9c..0eb352284 100644
      for (auto& [key, formatter] : formatters)
          formatter->startMessage(diag);
 diff --git a/source/driver/Driver.cpp b/source/driver/Driver.cpp
-index d049078b0..58bb0d0a1 100644
+index d049078b0..c0f258311 100644
 --- a/source/driver/Driver.cpp
 +++ b/source/driver/Driver.cpp
 @@ -26,6 +26,7 @@
@@ -1694,7 +1849,17 @@ index d049078b0..58bb0d0a1 100644
      if (!reportLoadErrors())
          return false;
  
-@@ -1177,6 +1191,8 @@ void Driver::addParseOptions(Bag& bag) const {
+@@ -1170,6 +1184,9 @@ Bag Driver::createOptionBag() const {
+ }
+ 
+ void Driver::addParseOptions(Bag& bag) const {
++    if (precompiledUvm)
++        bag.set(syntax::PrecompiledUvmSyntax{precompiledUvm, precompiledUvmRoot,
++                                             precompiledUvmEntry, precompiledUvmStrict});
+     SourceOptions soptions;
+     soptions.numThreads = options.numThreads;
+     soptions.singleUnit = options.singleUnit == true;
+@@ -1177,6 +1194,8 @@ void Driver::addParseOptions(Bag& bag) const {
      soptions.librariesInheritMacros = options.librariesInheritMacros == true;
  
      PreprocessorOptions ppoptions;
@@ -1950,10 +2115,10 @@ index a91519cb4..cd32fd4f8 100644
      }
      SLANG_UNREACHABLE;
 diff --git a/source/parsing/Preprocessor.cpp b/source/parsing/Preprocessor.cpp
-index 5601d7e73..747dfc7d7 100644
+index 5601d7e73..4d36b2721 100644
 --- a/source/parsing/Preprocessor.cpp
 +++ b/source/parsing/Preprocessor.cpp
-@@ -99,7 +99,7 @@ void Preprocessor::pushSource(std::string_view source, std::string_view name) {
+@@ -99,11 +99,18 @@ void Preprocessor::pushSource(std::string_view source, std::string_view name) {
      pushSource(buffer);
  
      if (!name.empty())
@@ -1962,7 +2127,18 @@ index 5601d7e73..747dfc7d7 100644
  }
  
  void Preprocessor::pushSource(SourceBuffer buffer) {
-@@ -222,6 +222,13 @@ void Preprocessor::predefine(const std::string& definition, std::string_view nam
+     SLANG_ASSERT(buffer.id);
++    if (!options.precompiledSourceRoot.empty()) {
++        auto path = sourceManager.getFullPath(buffer.id).lexically_relative(
++            options.precompiledSourceRoot);
++        if (!path.empty() && !path.is_absolute() && *path.begin() != "..")
++            throw std::runtime_error(
++                "bundled UVM must be loaded from its parse archive; runtime parsing refused");
++    }
+     metadata.sourceBufferIds.push_back(buffer.id);
+ 
+     if (!options.keywordMapping.empty()) {
+@@ -222,6 +229,13 @@ void Preprocessor::predefine(const std::string& definition, std::string_view nam
          // Nothing to do but keep going.
      }
  
@@ -1976,7 +2152,7 @@ index 5601d7e73..747dfc7d7 100644
      // Look for the macro in the temporary preprocessor's macro map.
      // Any macros found that are not the built-in intrinsic macros should
      // be copied over to our own map.
-@@ -541,6 +548,9 @@ Token Preprocessor::handleDirectives(Token token) {
+@@ -541,6 +555,9 @@ Token Preprocessor::handleDirectives(Token token) {
                  return token.withTrivia(alloc, trivia);
          }
  
@@ -1986,7 +2162,7 @@ index 5601d7e73..747dfc7d7 100644
          token = nextRaw();
      }
  }
-@@ -1130,7 +1140,7 @@ Trivia Preprocessor::handleLineDirective(Token directive) {
+@@ -1130,7 +1147,7 @@ Trivia Preprocessor::handleLineDirective(Token directive) {
              // We should only notify the source manager about the line directive if it
              // is well formed, to avoid very strange line number issues.
              sourceManager.addLineDirective(directive.location(), *lineNum, fileName.valueText(),
@@ -2024,10 +2200,10 @@ index e86c15c68..0a360224a 100644
                      else {
                          addDiag(diag::ExpectedDiagPragmaArg, simple.value.range());
 diff --git a/source/syntax/SyntaxTree.cpp b/source/syntax/SyntaxTree.cpp
-index ac681a4db..895fb9229 100644
+index ac681a4db..e80e39817 100644
 --- a/source/syntax/SyntaxTree.cpp
 +++ b/source/syntax/SyntaxTree.cpp
-@@ -7,16 +7,90 @@
+@@ -7,16 +7,91 @@
  //------------------------------------------------------------------------------
  #include "slang/syntax/SyntaxTree.h"
  
@@ -2038,6 +2214,7 @@ index ac681a4db..895fb9229 100644
  #include "slang/parsing/ParserMetadata.h"
  #include "slang/parsing/Preprocessor.h"
 +#include "slang/syntax/AllSyntax.h"
++#include "slang/syntax/ParseArchive.h"
  #include "slang/syntax/SyntaxPrinter.h"
  #include "slang/text/SourceManager.h"
 +#include "slang/util/FlatMap.h"
@@ -2118,7 +2295,7 @@ index ac681a4db..895fb9229 100644
  
  SyntaxTree::SyntaxTree(SyntaxNode* root, SourceManager& sourceManager, BumpAllocator&& alloc,
                         const SourceLibrary* library,
-@@ -27,7 +101,171 @@ SyntaxTree::SyntaxTree(SyntaxNode* root, SourceManager& sourceManager, BumpAlloc
+@@ -27,7 +102,451 @@ SyntaxTree::SyntaxTree(SyntaxNode* root, SourceManager& sourceManager, BumpAlloc
          metadata.eofToken = preTransform->getMetadata().eofToken.deepClone(this->alloc);
  }
  
@@ -2146,6 +2323,283 @@ index ac681a4db..895fb9229 100644
 +        return std::nullopt;
 +    return prefixState->wholeTreeDirectives->resumeSafe;
 +}
++
++std::shared_ptr<SyntaxTree> SyntaxTree::sharedPrefixView(const std::shared_ptr<SyntaxTree>& owner,
++                                                         SourceManager& sm) {
++    if (!owner || !sm.sharesImmutablePrefix(owner->sourceMan))
++        throw std::runtime_error("precompiled library source namespace mismatch");
++    BumpAllocator arena;
++    auto result = new SyntaxTree(owner->rootNode, nullptr, sm, std::move(arena),
++                                 Diagnostics(owner->diagnosticsBuffer),
++                                 ParserMetadata(owner->metadata),
++                                 PreprocessorMetadata(owner->preprocessorMetadata),
++                                 owner->options_);
++    result->prefixState = std::make_unique<PrefixState>(*owner->prefixState);
++    return std::shared_ptr<SyntaxTree>(result, [owner](SyntaxTree* p) { delete p; });
++}
++
++void SyntaxTree::writeParseArchive(std::ostream& stream, const std::filesystem::path& rootPath,
++                                   bool allowExternalPaths) const {
++    if (std::ranges::any_of(diagnosticsBuffer, [](const auto& d) { return d.isError(); }) ||
++        !prefixState || !isPrefixResumeSafe().value_or(false))
++        throw std::runtime_error("parse archives require a prepared error-free prefix");
++    ArchiveWriter out(stream, &sourceMan);
++    out.allowExternalPaths = allowExternalPaths;
++    out.text("slang-uvm-cst-2");
++    sourceMan.writeParseArchive(out, rootPath);
++    out.node(rootNode);
++    auto writeDiag = [&](auto&& self, const Diagnostic& d) -> void {
++        if (d.symbol || d.coalesceCount)
++            throw std::runtime_error("unsupported archive diagnostic context");
++        out.number(uint64_t(d.code.getSubsystem()));
++        out.number(d.code.getCode());
++        out.location(d.location);
++        out.number(d.args.size());
++        for (auto& arg : d.args) {
++            out.number(arg.index());
++            std::visit(
++                [&](const auto& value) {
++                    using T = std::decay_t<decltype(value)>;
++                    if constexpr (std::is_same_v<T, std::string>)
++                        out.text(value);
++                    else if constexpr (std::is_integral_v<T>)
++                        out.number(uint64_t(value));
++                    else
++                        throw std::runtime_error("unsupported archive diagnostic argument");
++                },
++                arg);
++        }
++        out.number(d.ranges.size());
++        for (auto& range : d.ranges) {
++            out.location(range.start());
++            out.location(range.end());
++        }
++        out.number(d.notes.size());
++        for (auto& note : d.notes)
++            self(self, note);
++    };
++    out.number(diagnosticsBuffer.size());
++    for (auto& d : diagnosticsBuffer)
++        writeDiag(writeDiag, d);
++    const auto& pp = preprocessorMetadata;
++    auto nodes = [&](const auto& list) {
++        out.number(list.size());
++        for (auto node : list)
++            out.node(node);
++    };
++    nodes(pp.definedMacros);
++    out.number(pp.includeDirectives.size());
++    for (const auto& inc : pp.includeDirectives) {
++        out.node(inc.syntax);
++        out.text(inc.path);
++        out.number(inc.buffer.id.getId());
++        out.number(inc.isSystem);
++    }
++    out.number(pp.macroRefs.size());
++    for (const auto& ref : pp.macroRefs) {
++        out.node(ref.syntax);
++        out.node(ref.definition);
++    }
++    auto buffers = [&](const auto& list) {
++        out.number(list.size());
++        for (auto id : list)
++            out.number(id.getId());
++    };
++    buffers(pp.sourceBufferIds);
++    buffers(pp.predefineBufferIds);
++    // Store guards as physical-file indices rather than process-local char pointers.
++    out.number(prefixState->guards.size());
++    for (const auto& [key, value] : prefixState->guards) {
++        BufferID match;
++        for (auto id : pp.sourceBufferIds)
++            if (sourceMan.getSourceText(id).data() == key) {
++                match = id;
++                break;
++            }
++        if (!match)
++            throw std::runtime_error("unmapped archive header guard");
++        out.number(match.getId());
++        out.text(value);
++    }
++    // Persist the metadata and parent identities already established by parsing.
++    // Restoring must not walk the full expanded tree to rediscover either one.
++    out.number(metadata.nodeMeta.size());
++    for (const auto& [node, value] : metadata.nodeMeta) {
++        out.node(node);
++        out.number(uint64_t(value.defaultNetType));
++        out.number(uint64_t(value.unconnectedDrive));
++        out.number(value.cellDefine);
++        out.number(value.timeScale.has_value());
++        if (value.timeScale) {
++            out.number(uint64_t(value.timeScale->base.unit));
++            out.number(uint64_t(value.timeScale->base.magnitude));
++            out.number(uint64_t(value.timeScale->precision.unit));
++            out.number(uint64_t(value.timeScale->precision.magnitude));
++        }
++    }
++    nodes(metadata.globalInstances);
++    nodes(metadata.classPackageNames);
++    nodes(metadata.packageImports);
++    nodes(metadata.classDecls);
++    nodes(metadata.interfacePorts);
++    nodes(metadata.virtualInterfaceTypes);
++    nodes(metadata.namedPortTypes);
++    out.token(metadata.eofToken);
++    out.number(metadata.hasDefparams);
++    out.number(metadata.hasBindDirectives);
++    out.writeParents();
++    const auto& summary = *prefixState->wholeTreeDirectives;
++    out.number(summary.sourceEffects | (summary.resumeSafe << 1) | (summary.defparams << 2) |
++               (summary.binds << 3));
++}
++std::shared_ptr<SyntaxTree> SyntaxTree::readParseArchive(std::istream& stream, SourceManager& sm,
++                                                         const std::filesystem::path& rootPath,
++                                                         const Bag& options,
++                                                         bool allowExternalPaths) {
++    BumpAllocator arena;
++    ArchiveReader in(stream, arena, uint32_t(sm.getSourceLocationEntryCount() - 1), &sm);
++    in.allowExternalPaths = allowExternalPaths;
++    if (in.text() != "slang-uvm-cst-2")
++        throw std::runtime_error("incompatible UVM parse archive");
++    {
++        TimeTraceScope scope("restoreUvmSources", "");
++        sm.readParseArchive(in, rootPath);
++    }
++    SyntaxNode* root;
++    {
++        TimeTraceScope scope("restoreUvmSyntax", "");
++        root = in.node();
++    }
++    if (!root || root->kind != SyntaxKind::CompilationUnit)
++        throw std::runtime_error("invalid archive root");
++    auto readDiag = [&](auto&& self) -> Diagnostic {
++        auto subsystem = DiagSubsystem(in.number());
++        auto code = uint16_t(in.number());
++        auto location = in.location();
++        Diagnostic d(DiagCode(subsystem, code), location);
++        auto n = in.count();
++        for (size_t i = 0; i < n; ++i) {
++            switch (in.number()) {
++                case 0:
++                    d.args.emplace_back(in.text());
++                    break;
++                case 1:
++                    d.args.emplace_back(std::bit_cast<int64_t>(in.number()));
++                    break;
++                case 2:
++                    d.args.emplace_back(in.number());
++                    break;
++                case 3:
++                    d.args.emplace_back(char(in.number()));
++                    break;
++                default:
++                    throw std::runtime_error("unsupported archive diagnostic argument");
++            }
++        }
++        n = in.count();
++        for (size_t i = 0; i < n; ++i) {
++            auto a = in.location();
++            auto b = in.location();
++            d.ranges.emplace_back(a, b);
++        }
++        n = in.count();
++        for (size_t i = 0; i < n; ++i)
++            d.notes.push_back(self(self));
++        return d;
++    };
++    Diagnostics diagnostics;
++    auto diagnosticCount = in.count();
++    for (size_t i = 0; i < diagnosticCount; ++i)
++        diagnostics.push_back(readDiag(readDiag));
++    PreprocessorMetadata pp;
++    auto n = in.count();
++    for (size_t i = 0; i < n; ++i)
++        pp.definedMacros.push_back(in.field<const DefineDirectiveSyntax*>());
++    n = in.count();
++    for (size_t i = 0; i < n; ++i) {
++        auto syntax = in.field<const IncludeDirectiveSyntax*>();
++        auto path = in.string();
++        auto id = in.buffer();
++        auto system = in.number();
++        pp.includeDirectives.push_back(
++            {syntax, path, SourceBuffer{sm.getSourceText(id), nullptr, id}, bool(system)});
++    }
++    n = in.count();
++    for (size_t i = 0; i < n; ++i) {
++        auto use = in.node();
++        auto def = in.field<const DefineDirectiveSyntax*>();
++        pp.macroRefs.push_back({use, def});
++    }
++    n = in.count();
++    for (size_t i = 0; i < n; ++i)
++        pp.sourceBufferIds.push_back(in.buffer());
++    n = in.count();
++    for (size_t i = 0; i < n; ++i)
++        pp.predefineBufferIds.push_back(in.buffer());
++    auto state = std::make_unique<PrefixState>();
++    n = in.count();
++    for (size_t i = 0; i < n; ++i) {
++        auto id = in.buffer();
++        auto name = in.string();
++        state->guards.emplace_back(sm.getSourceText(id).data(), name);
++    }
++    ParserMetadata metadata;
++    {
++        TimeTraceScope scope("restoreUvmMetadata", "");
++        n = in.count();
++        metadata.nodeMeta.reserve(n);
++        for (size_t i = 0; i < n; ++i) {
++            auto* node = in.field<const ModuleDeclarationSyntax*>();
++            ParserMetadata::Node value;
++            value.defaultNetType = TokenKind(in.number());
++            value.unconnectedDrive = TokenKind(in.number());
++            value.cellDefine = bool(in.number());
++            if (in.number()) {
++                TimeScale scale;
++                scale.base.unit = TimeUnit(in.number());
++                scale.base.magnitude = TimeScaleMagnitude(in.number());
++                scale.precision.unit = TimeUnit(in.number());
++                scale.precision.magnitude = TimeScaleMagnitude(in.number());
++                value.timeScale = scale;
++            }
++            metadata.nodeMeta.emplace_back(node, value);
++        }
++        auto readNodes = [&]<typename T>(std::vector<const T*>& list) {
++            auto size = in.count();
++            list.reserve(size);
++            for (size_t i = 0; i < size; ++i)
++                list.push_back(in.field<const T*>());
++        };
++        readNodes(metadata.globalInstances);
++        readNodes(metadata.classPackageNames);
++        readNodes(metadata.packageImports);
++        readNodes(metadata.classDecls);
++        readNodes(metadata.interfacePorts);
++        readNodes(metadata.virtualInterfaceTypes);
++        readNodes(metadata.namedPortTypes);
++        metadata.eofToken = in.token();
++        metadata.hasDefparams = bool(in.number());
++        metadata.hasBindDirectives = bool(in.number());
++    }
++    {
++        TimeTraceScope scope("restoreUvmAncestry", "");
++        in.restoreParents();
++    }
++    const auto flags = in.number();
++    if (flags > 15)
++        throw std::runtime_error("invalid archive directive summary");
++    DirectiveSummary summary{bool(flags & 1), bool(flags & 2), bool(flags & 4), bool(flags & 8)};
++    state->wholeTreeDirectives = summary;
++    state->cwd = std::filesystem::current_path().string();
++    auto result = std::shared_ptr<SyntaxTree>(
++        new SyntaxTree(root, nullptr, sm, std::move(arena), std::move(diagnostics),
++                       std::move(metadata), std::move(pp), options));
++    result->prefixState = std::move(state);
++    if (!in.atEnd())
++        throw std::runtime_error("trailing bytes in UVM parse archive");
++    return result;
++}
++
  SyntaxTree::~SyntaxTree() = default;
 +SyntaxTree::SyntaxTree(SyntaxTree&& other) = default;
 +// A fragment has immutable physical ancestry. Compilation consumes the view's ordered
@@ -2247,9 +2701,12 @@ index ac681a4db..895fb9229 100644
 +                                prefix->preprocessorMetadata.includeDirectives.end());
 +    pp.macroRefs.insert(pp.macroRefs.begin(), prefix->preprocessorMetadata.macroRefs.begin(),
 +                        prefix->preprocessorMetadata.macroRefs.end());
-+    if (!suffix->getPredefineBufferIds().empty())
++    if (!suffix->getPredefineBufferIds().empty() && !suffix->options_.get<PrecompiledUvmSyntax>())
 +        SLANG_THROW(std::runtime_error("suffix unexpectedly created command line macros"));
 +    pp.predefineBufferIds = prefix->preprocessorMetadata.predefineBufferIds;
++    pp.predefineBufferIds.insert(pp.predefineBufferIds.end(),
++                                 suffix->getPredefineBufferIds().begin(),
++                                 suffix->getPredefineBufferIds().end());
 +    // Native pushes every root in reverse order, then visits prefix includes, then suffix includes.
 +    std::vector<BufferID> ids;
 +    auto isRoot = [&](BufferID id) { return !sm.getIncludedFrom(id).valid(); };
@@ -2290,7 +2747,7 @@ index ac681a4db..895fb9229 100644
  
  SyntaxTree::TreeOrError SyntaxTree::fromFile(std::string_view path) {
      return fromFile(path, getDefaultSourceManager());
-@@ -110,6 +348,26 @@ std::shared_ptr<SyntaxTree> SyntaxTree::fromBuffers(std::span<const SourceBuffer
+@@ -110,6 +629,26 @@ std::shared_ptr<SyntaxTree> SyntaxTree::fromBuffers(std::span<const SourceBuffer
      return create(sourceManager, buffers, options, inheritedMacros, false);
  }
  
@@ -2317,22 +2774,56 @@ index ac681a4db..895fb9229 100644
  SourceManager& SyntaxTree::getDefaultSourceManager() {
      static SourceManager instance;
      return instance;
-@@ -126,7 +384,8 @@ SyntaxTree::SyntaxTree(SyntaxNode* root, const SourceLibrary* library, SourceMan
+@@ -126,7 +665,43 @@ SyntaxTree::SyntaxTree(SyntaxNode* root, const SourceLibrary* library, SourceMan
  std::shared_ptr<SyntaxTree> SyntaxTree::create(SourceManager& sourceManager,
                                                 std::span<const SourceBuffer> sources,
                                                 const Bag& options, MacroList inheritedMacros,
 -                                               bool guess) {
 +                                               bool guess, const SyntaxTree* cachedPrefix,
 +                                               bool prepareWholePrefix) {
++    if (!cachedPrefix) {
++        if (auto compiled = options.get<PrecompiledUvmSyntax>(); compiled && compiled->tree) {
++            auto prefix = compiled->tree;
++            if (&prefix->sourceMan != &sourceManager)
++                throw std::runtime_error("precompiled prefix view uses a different source manager");
++            SmallVector<SourceBuffer> remaining;
++            bool removed = false;
++            for (auto buffer : sources) {
++                if (sourceManager.getFullPath(buffer.id) ==
++                    (compiled->entry.empty() ? compiled->root / "uvm_pkg.sv" : compiled->entry))
++                    removed = true;
++                else
++                    remaining.push_back(buffer);
++            }
++            if (remaining.empty())
++                return prefix;
++            auto suffixOptions = options;
++            auto pp = options.getOrDefault<PreprocessorOptions>();
++            // The restored prefix already contains the final macro state after
++            // command-line defines/undefines and library directives have run.
++            pp.predefines.clear();
++            pp.undefines.clear();
++            pp.precompiledSourceRoot = compiled->forbidSourceParsing ? compiled->root
++                                                                     : std::filesystem::path{};
++            suffixOptions.set(pp);
++            auto suffix = create(sourceManager, remaining, suffixOptions,
++                                 prefix->getDefinedMacros(), guess, prefix.get());
++            if (!removed)
++                return suffix;
++            auto combined = withCachedPrefix(prefix, suffix);
++            combined->options_ = options;
++            return combined;
++        }
++    }
++
      if (sources.empty())
          SLANG_THROW(std::invalid_argument("sources cannot be empty"));
  
-@@ -139,8 +398,55 @@ std::shared_ptr<SyntaxTree> SyntaxTree::create(SourceManager& sourceManager,
+@@ -139,8 +714,55 @@ std::shared_ptr<SyntaxTree> SyntaxTree::create(SourceManager& sourceManager,
  
      BumpAllocator alloc;
      Diagnostics diagnostics;
 -    Preprocessor preprocessor(sourceManager, alloc, diagnostics, options, inheritedMacros);
--
 +    Bag parseOptions = options;
 +    auto originalPP = options.getOrDefault<PreprocessorOptions>();
 +    bool capture = originalPP.captureUvmPrefix && sources.size() > 1 &&
@@ -2375,7 +2866,7 @@ index ac681a4db..895fb9229 100644
 +    active = &preprocessor;
 +    if (capture)
 +        preprocessor.afterDirectiveCB = saveCheckpoint;
-+
+ 
 +    if (cachedPrefix) {
 +        if (!cachedPrefix->prefixState)
 +            SLANG_THROW(std::runtime_error("missing prefix header-guard state"));
@@ -2385,7 +2876,7 @@ index ac681a4db..895fb9229 100644
      const SourceLibrary* library = nullptr;
      for (auto it = sources.rbegin(); it != sources.rend(); it++) {
          preprocessor.pushSource(*it);
-@@ -168,9 +474,55 @@ std::shared_ptr<SyntaxTree> SyntaxTree::create(SourceManager& sourceManager,
+@@ -168,9 +790,55 @@ std::shared_ptr<SyntaxTree> SyntaxTree::create(SourceManager& sourceManager,
              return create(sourceManager, sources, options, inheritedMacros, false);
      }
  
@@ -2442,7 +2933,7 @@ index ac681a4db..895fb9229 100644
  }
  
  std::shared_ptr<SyntaxTree> SyntaxTree::fromLibraryMapFile(std::string_view path,
-@@ -216,6 +568,218 @@ std::shared_ptr<SyntaxTree> SyntaxTree::fromLibraryMapBuffer(const SourceBuffer&
+@@ -216,6 +884,218 @@ std::shared_ptr<SyntaxTree> SyntaxTree::fromLibraryMapBuffer(const SourceBuffer&
                         parser.getMetadata(), preprocessor.getMetadata(), options));
  }
  
@@ -2661,11 +3152,185 @@ index ac681a4db..895fb9229 100644
  bool SyntaxTree::validate() const {
      auto text = SyntaxPrinter(sourceManager())
                      .setIncludeDirectives(true)
+@@ -244,3 +1124,173 @@ bool SyntaxTree::validate() const {
+ }
+ 
+ } // namespace slang::syntax
++
++namespace slang::syntax {
++using namespace parsing;
++void ArchiveWriter::token(Token tok) {
++    number(uint64_t(tok.kind));
++    number(tok.valid());
++    if (!tok)
++        return;
++    bool fileIntrinsic = false;
++    if (tok.kind == TokenKind::StringLiteral && sources)
++        for (auto loc = tok.location(); sources->isMacroLoc(loc);
++             loc = sources->getOriginalLoc(loc))
++            if (sources->getMacroName(loc) == "__FILE__") {
++                fileIntrinsic = true;
++                break;
++            }
++    number(tok.isMissing());
++    location(tok.location());
++    text(fileIntrinsic ? std::string_view{} : tok.rawText());
++    number(fileIntrinsic);
++    number(tok.trivia().size());
++    for (const auto& t : tok.trivia()) {
++        number(uint64_t(t.kind));
++        if (t.kind == TriviaKind::Directive || t.kind == TriviaKind::SkippedSyntax)
++            node(t.syntax());
++        else if (t.kind == TriviaKind::SkippedTokens) {
++            auto list = t.getSkippedTokens();
++            number(list.size());
++            for (auto e : list)
++                token(e);
++        }
++        else {
++            text(t.getRawText());
++            auto loc = t.getExplicitLocation();
++            number(bool(loc));
++            if (loc)
++                location(*loc);
++        }
++    }
++    switch (tok.kind) {
++        case TokenKind::StringLiteral:
++        case TokenKind::IncludeFileName:
++            text(fileIntrinsic ? std::string_view{} : tok.valueText());
++            break;
++        case TokenKind::IntegerLiteral: {
++            auto value = tok.intValue();
++            number(value.getBitWidth());
++            number(value.isSigned());
++            number(value.hasUnknown());
++            for (size_t i = 0; i < value.getNumWords(); ++i)
++                number(value.getRawPtr()[i]);
++            break;
++        }
++        case TokenKind::RealLiteral:
++        case TokenKind::TimeLiteral:
++            number(std::bit_cast<uint64_t>(tok.realValue()));
++            number(tok.numericFlags().raw);
++            break;
++        case TokenKind::IntegerBase:
++            number(tok.numericFlags().raw);
++            break;
++        case TokenKind::UnbasedUnsizedLiteral:
++            number(tok.bitValue().value);
++            break;
++        case TokenKind::Directive:
++            number(uint64_t(tok.directiveKind()));
++            break;
++        case TokenKind::SystemIdentifier:
++            number(uint64_t(tok.systemName()));
++            break;
++        default:
++            break;
++    }
++}
++Token ArchiveReader::token() {
++    auto kind = TokenKind(number());
++    auto valid = number();
++    if (!valid)
++        return {};
++    auto missing = number();
++    auto loc = location();
++    auto raw = string();
++    auto fileIntrinsic = number();
++    SmallVector<Trivia> trivia;
++    auto n = count();
++    for (size_t i = 0; i < n; ++i) {
++        auto k = TriviaKind(number());
++        if (k == TriviaKind::Directive || k == TriviaKind::SkippedSyntax)
++            trivia.emplace_back(k, node());
++        else if (k == TriviaKind::SkippedTokens) {
++            SmallVector<Token> list;
++            auto size = count();
++            for (size_t j = 0; j < size; ++j)
++                list.push_back(token());
++            trivia.emplace_back(k, arena.copyFrom<Token>(list));
++        }
++        else {
++            auto text = string();
++            auto explicitLoc = number();
++            Trivia t(k, text);
++            if (explicitLoc)
++                t = t.withLocation(arena, location());
++            trivia.push_back(t);
++        }
++    }
++    Token result;
++    switch (kind) {
++        case TokenKind::StringLiteral:
++        case TokenKind::IncludeFileName: {
++            auto value = string();
++            if (fileIntrinsic) {
++                if (!sources)
++                    throw std::runtime_error("missing archive source manager");
++                value = copy(sources->getFileName(loc));
++                raw = copy("\"" + std::string(value) + "\"");
++            }
++            result = Token(arena, kind, trivia, raw, loc, value);
++            break;
++        }
++        case TokenKind::IntegerLiteral: {
++            auto bits = number();
++            auto sign = number();
++            auto unknown = number();
++            if (!bits || bits > SVInt::MAX_BITS || sign > 1 || unknown > 1)
++                throw std::runtime_error("invalid archive integer literal");
++            SmallVector<uint64_t> words;
++            const size_t count = ((bits + 63) / 64) * (unknown ? 2 : 1);
++            for (size_t i = 0; i < count; ++i)
++                words.push_back(number());
++            SVIntStorage storage{bitwidth_t(bits), bool(sign), bool(unknown)};
++            if (bits <= 64 && !unknown)
++                storage.val = words[0];
++            else
++                storage.pVal = words.data();
++            result = Token(arena, kind, trivia, raw, loc, SVInt(storage));
++            break;
++        }
++        case TokenKind::RealLiteral:
++        case TokenKind::TimeLiteral: {
++            auto value = std::bit_cast<double>(number());
++            NumericTokenFlags flags;
++            flags.raw = uint8_t(number());
++            result = Token(arena, kind, trivia, raw, loc, value, flags.outOfRange(),
++                           kind == TokenKind::TimeLiteral ? std::optional(flags.unit())
++                                                          : std::nullopt);
++            break;
++        }
++        case TokenKind::IntegerBase: {
++            NumericTokenFlags flags;
++            flags.raw = uint8_t(number());
++            result = Token(arena, kind, trivia, raw, loc, flags.base(), flags.isSigned());
++            break;
++        }
++        case TokenKind::UnbasedUnsizedLiteral:
++            result = Token(arena, kind, trivia, raw, loc, logic_t(uint8_t(number())));
++            break;
++        case TokenKind::Directive:
++            result = Token(arena, kind, trivia, raw, loc, SyntaxKind(number()));
++            break;
++        case TokenKind::SystemIdentifier:
++            result = Token(arena, kind, trivia, raw, loc, KnownSystemName(number()));
++            break;
++        default:
++            result = Token(arena, kind, trivia, raw, loc);
++            break;
++    }
++    result.missing = bool(missing);
++    return result;
++}
++} // namespace slang::syntax
 diff --git a/source/text/SourceManager.cpp b/source/text/SourceManager.cpp
-index 386684b5a..1d8a42c0b 100644
+index 386684b5a..b39efb4c9 100644
 --- a/source/text/SourceManager.cpp
 +++ b/source/text/SourceManager.cpp
-@@ -7,14 +7,30 @@
+@@ -7,14 +7,32 @@
  //------------------------------------------------------------------------------
  #include "slang/text/SourceManager.h"
  
@@ -2679,6 +3344,8 @@ index 386684b5a..1d8a42c0b 100644
  #include <memory>
  #include <string>
  
++#include "slang/syntax/ParseArchive.h"
++
 +#if defined(__APPLE__)
 +#    include <fcntl.h>
 +#    include <sys/attr.h>
@@ -2696,7 +3363,7 @@ index 386684b5a..1d8a42c0b 100644
  
  namespace fs = std::filesystem;
  
-@@ -22,6 +38,770 @@ namespace slang {
+@@ -22,6 +40,770 @@ namespace slang {
  
  static const fs::path emptyPath;
  
@@ -3467,7 +4134,7 @@ index 386684b5a..1d8a42c0b 100644
  static size_t getTextEnd(const SmallVector<char>& mem) {
      size_t result = mem.size();
      if (result && mem[result - 1] == '\0')
-@@ -29,34 +809,128 @@ static size_t getTextEnd(const SmallVector<char>& mem) {
+@@ -29,34 +811,154 @@ static size_t getTextEnd(const SmallVector<char>& mem) {
      return result;
  }
  
@@ -3572,6 +4239,32 @@ index 386684b5a..1d8a42c0b 100644
      return ec;
  }
  
++SourceManager::IncludeConfiguration SourceManager::getIncludeConfiguration() const {
++    std::shared_lock includeLock(includeDirMutex);
++    std::shared_lock sourceLock(mutex);
++    IncludeConfiguration result{{}, {}, disableProximatePaths, disableLocalIncludes, incDirFirst};
++    for (const auto& path : userDirectories)
++        result.userDirectories.push_back(path.string());
++    for (const auto& path : systemDirectories)
++        result.systemDirectories.push_back(path.string());
++    return result;
++}
++
++void SourceManager::inheritIncludeConfiguration(const IncludeConfiguration& config) {
++    std::unique_lock includeLock(includeDirMutex);
++    std::unique_lock sourceLock(mutex);
++    if (bufferEntries.size() != 1 || snapshotReplay || snapshotRecording ||
++        !userDirectories.empty() || !systemDirectories.empty())
++        throw std::runtime_error("include configuration requires an empty source manager");
++    for (const auto& path : config.userDirectories)
++        userDirectories.emplace_back(path);
++    for (const auto& path : config.systemDirectories)
++        systemDirectories.emplace_back(path);
++    disableProximatePaths = config.disableProximatePaths;
++    disableLocalIncludes = config.disableLocalIncludes;
++    incDirFirst = config.incDirFirst;
++}
++
 +std::error_code SourceManager::addUserDirectory(fs::path path) {
 +    if (snapshotReplay)
 +        failSnapshot("include directories cannot change during replay");
@@ -3596,7 +4289,7 @@ index 386684b5a..1d8a42c0b 100644
  size_t SourceManager::getRawLineNumber(SourceLocation location) const {
      std::shared_lock<std::shared_mutex> lock(mutex);
      return getRawLineNumber(location, lock);
-@@ -497,8 +1371,9 @@ SourceBuffer SourceManager::assignText(std::string_view text, SourceLocation inc
+@@ -497,8 +1399,9 @@ SourceBuffer SourceManager::assignText(std::string_view text, SourceLocation inc
  
  SourceBuffer SourceManager::assignText(std::string_view path, std::string_view text,
                                         SourceLocation includedFrom, const SourceLibrary* library) {
@@ -3607,7 +4300,7 @@ index 386684b5a..1d8a42c0b 100644
          using namespace std::literals;
          temp = "<unnamed_buffer"s + std::to_string(unnamedBufferCount++) + ">"s;
          path = temp;
-@@ -509,26 +1384,70 @@ SourceBuffer SourceManager::assignText(std::string_view path, std::string_view t
+@@ -509,26 +1412,70 @@ SourceBuffer SourceManager::assignText(std::string_view path, std::string_view t
      if (buffer.empty() || buffer.back() != '\0')
          buffer.push_back('\0');
  
@@ -3688,7 +4381,7 @@ index 386684b5a..1d8a42c0b 100644
  }
  
  SourceManager::BufferOrError SourceManager::readSource(const fs::path& path,
-@@ -541,6 +1460,29 @@ SourceManager::BufferOrError SourceManager::readHeader(
+@@ -541,6 +1488,29 @@ SourceManager::BufferOrError SourceManager::readHeader(
      std::string_view path, SourceLocation includedFrom, const SourceLibrary* library,
      bool isSystemPath, std::span<std::filesystem::path const> additionalIncludePaths) {
  
@@ -3718,7 +4411,7 @@ index 386684b5a..1d8a42c0b 100644
      // if the header is specified as an absolute path, just do a straight lookup
      SLANG_ASSERT(!path.empty());
      fs::path p = path;
-@@ -614,18 +1556,25 @@ SourceManager::BufferOrError SourceManager::readHeader(
+@@ -614,18 +1584,25 @@ SourceManager::BufferOrError SourceManager::readHeader(
  }
  
  void SourceManager::addLineDirective(SourceLocation location, size_t lineNum, std::string_view name,
@@ -3746,7 +4439,7 @@ index 386684b5a..1d8a42c0b 100644
      else
          full = fs::path(info->data->name).replace_filename(linePath);
  
-@@ -634,9 +1583,15 @@ void SourceManager::addLineDirective(SourceLocation location, size_t lineNum, st
+@@ -634,9 +1611,15 @@ void SourceManager::addLineDirective(SourceLocation location, size_t lineNum, st
  }
  
  void SourceManager::addDiagnosticDirective(SourceLocation location, std::string_view name,
@@ -3763,7 +4456,7 @@ index 386684b5a..1d8a42c0b 100644
  
      size_t offset = fileLocation.offset();
      auto& vec = diagDirectives[fileLocation.buffer()];
-@@ -699,6 +1654,8 @@ std::vector<std::shared_ptr<void>> SourceManager::retainBuffers(
+@@ -699,6 +1682,8 @@ std::vector<std::shared_ptr<void>> SourceManager::retainBuffers(
  
  SourceBuffer SourceManager::replaceBufferImpl(FileInfo* oldInfo, SmallVector<char>&& buffer,
                                                std::unique_lock<std::shared_mutex>& lock) {
@@ -3772,7 +4465,7 @@ index 386684b5a..1d8a42c0b 100644
      auto oldData = oldInfo->data;
  
      // Mark old data as stale, remove reference
-@@ -713,6 +1670,12 @@ SourceBuffer SourceManager::replaceBufferImpl(FileInfo* oldInfo, SmallVector<cha
+@@ -713,6 +1698,12 @@ SourceBuffer SourceManager::replaceBufferImpl(FileInfo* oldInfo, SmallVector<cha
      lookupCache.insert_or_assign(getU8Str(newData->fullPath),
                                   std::pair{newData, std::error_code{}});
  
@@ -3785,7 +4478,7 @@ index 386684b5a..1d8a42c0b 100644
      // Create a new FileInfo entry with new data (don't modify old entry!)
      // Old data should be freed if nothing more points to it.
      return createBufferEntry(newData, oldInfo->includedFrom, oldInfo->library, oldInfo->sortKey,
-@@ -727,6 +1690,8 @@ SourceBuffer SourceManager::replaceBuffer(BufferID id, SmallVector<char>&& buffe
+@@ -727,6 +1718,8 @@ SourceBuffer SourceManager::replaceBuffer(BufferID id, SmallVector<char>&& buffe
  }
  
  SourceManager::BufferOrError SourceManager::reloadBuffer(BufferID id) {
@@ -3794,7 +4487,7 @@ index 386684b5a..1d8a42c0b 100644
      std::unique_lock<std::shared_mutex> lock(mutex);
  
      auto oldInfo = getFileInfo(id, lock);
-@@ -783,6 +1748,9 @@ SourceBuffer SourceManager::createBufferEntry(std::shared_ptr<FileData> fd,
+@@ -783,6 +1776,9 @@ SourceBuffer SourceManager::createBufferEntry(std::shared_ptr<FileData> fd,
  }
  
  bool SourceManager::isCached(const fs::path& path) const {
@@ -3804,7 +4497,7 @@ index 386684b5a..1d8a42c0b 100644
      fs::path absPath;
      if (!disableProximatePaths) {
          std::error_code ec;
-@@ -803,6 +1771,51 @@ SourceManager::BufferOrError SourceManager::openCached(const fs::path& fullPath,
+@@ -803,6 +1799,51 @@ SourceManager::BufferOrError SourceManager::openCached(const fs::path& fullPath,
                                                         SourceLocation includedFrom,
                                                         const SourceLibrary* library,
                                                         uint64_t sortKey) {
@@ -3856,7 +4549,7 @@ index 386684b5a..1d8a42c0b 100644
      fs::path absPath;
      if (!disableProximatePaths) {
          std::error_code ec;
-@@ -816,6 +1829,8 @@ SourceManager::BufferOrError SourceManager::openCached(const fs::path& fullPath,
+@@ -816,6 +1857,8 @@ SourceManager::BufferOrError SourceManager::openCached(const fs::path& fullPath,
  
      // first see if we have this file cached
      std::string pathStr = getU8Str(absPath);
@@ -3865,7 +4558,7 @@ index 386684b5a..1d8a42c0b 100644
      {
          std::unique_lock<std::shared_mutex> lock(mutex);
          auto it = lookupCache.find(pathStr);
-@@ -844,31 +1859,23 @@ SourceManager::BufferOrError SourceManager::openCached(const fs::path& fullPath,
+@@ -844,31 +1887,23 @@ SourceManager::BufferOrError SourceManager::openCached(const fs::path& fullPath,
  SourceBuffer SourceManager::cacheBuffer(fs::path&& path, std::string&& pathStr,
                                          SourceLocation includedFrom, const SourceLibrary* library,
                                          uint64_t sortKey, SmallVector<char>&& buffer) {
@@ -3907,6 +4600,134 @@ index 386684b5a..1d8a42c0b 100644
  }
  
  template<IsLock TLock>
+@@ -1039,4 +2074,127 @@ const SourceManager::LineDirectiveInfo* SourceManager::FileInfo::getPreviousLine
+     }
+ }
+ 
++void SourceManager::writeParseArchive(syntax::ArchiveWriter& out, const fs::path& root) const {
++    std::shared_lock lock(mutex);
++    if (!diagDirectives.empty())
++        throw std::runtime_error("diagnostic pragmas are unsupported in parse archives");
++    std::unordered_map<const FileData*, size_t> files;
++    out.number(bufferEntries.size() - 1);
++    for (size_t i = 1; i < bufferEntries.size(); ++i) {
++        const auto& entry = bufferEntries[i];
++        out.number(entry.index());
++        if (auto file = std::get_if<FileInfo>(&entry)) {
++            if (file->library)
++                throw std::runtime_error(
++                    "library and line directives are unsupported in parse archives");
++            auto [it, inserted] = files.emplace(file->data.get(), files.size() + 1);
++            out.number(it->second);
++            out.number(inserted);
++            if (inserted) {
++                const auto& data = *file->data;
++                if (data.fullPath.empty() || data.name.starts_with("<unnamed_buffer"))
++                    out.text("");
++                else {
++                    auto relative = data.fullPath.lexically_relative(root);
++                    if (relative.empty() || *relative.begin() == "..") {
++                        if (!out.allowExternalPaths)
++                            throw std::runtime_error("parse archive source escapes library root");
++                        relative = data.fullPath;
++                    }
++                    out.text(relative.generic_string());
++                }
++                out.text(data.name.starts_with("<unnamed_buffer") ? std::string_view(data.name)
++                                                                  : std::string_view{});
++                out.text({data.mem.data(), data.mem.size()});
++            }
++            out.location(file->includedFrom);
++            out.number(file->sortKey);
++            out.number(uint64_t(file->bufferKind));
++            out.number(file->lineDirectives.size());
++            for (auto& line : file->lineDirectives) {
++                out.text(line.name);
++                out.number(line.lineInFile);
++                out.number(line.lineOfDirective);
++                out.number(line.level);
++            }
++            out.number(file->hasExternalDirectives);
++        }
++        else {
++            const auto& expansion = std::get<ExpansionInfo>(entry);
++            out.location(expansion.originalLoc);
++            out.location(expansion.expansionRange.start());
++            out.location(expansion.expansionRange.end());
++            out.number(expansion.isMacroArg);
++            out.text(expansion.macroName);
++        }
++    }
++    out.number(unnamedBufferCount);
++}
++void SourceManager::readParseArchive(syntax::ArchiveReader& in, const fs::path& root) {
++    std::unique_lock lock(mutex);
++    if (snapshotReplay || snapshotRecording)
++        throw std::runtime_error("load parse archive before source recording");
++    std::vector<std::shared_ptr<FileData>> files;
++    const auto n = in.count();
++    for (size_t i = 0; i < n; ++i) {
++        auto kind = in.number();
++        if (kind == 0) {
++            auto id = in.number();
++            auto fresh = in.number();
++            if (fresh) {
++                if (id != files.size() + 1)
++                    throw std::runtime_error("invalid archive file identity");
++                auto relative = fs::path(in.text());
++                auto name = in.text();
++                auto bytes = in.text();
++                if ((!in.allowExternalPaths && relative.is_absolute()) ||
++                    (!relative.empty() && *relative.begin() == ".."))
++                    throw std::runtime_error("invalid archive source path");
++                auto path = relative.empty() ? fs::path{} : (root / relative).lexically_normal();
++                if (!path.empty())
++                    name = getBufferName(path, disableProximatePaths);
++                auto directory = &*directories.insert(path.parent_path()).first;
++                SmallVector<char> mem;
++                mem.append(bytes.begin(), bytes.end());
++                auto data = std::make_shared<FileData>(directory, std::move(name), std::move(mem),
++                                                       path);
++                files.push_back(data);
++                if (!path.empty())
++                    lookupCache.insert_or_assign(getU8Str(path),
++                                                 std::pair{data, std::error_code{}});
++            }
++            if (!id || id > files.size())
++                throw std::runtime_error("invalid archive file reference");
++            auto included = in.location();
++            auto sort = in.number();
++            auto bufferKind = BufferKind(in.number());
++            FileInfo file(files[id - 1], nullptr, included, sort);
++            file.bufferKind = bufferKind;
++            auto lineCount = in.count();
++            for (size_t j = 0; j < lineCount; ++j) {
++                auto name = in.text();
++                auto actual = in.number();
++                auto directive = in.number();
++                auto level = in.number();
++                file.lineDirectives.emplace_back(std::move(name), actual, directive,
++                                                 uint8_t(level));
++            }
++            file.hasExternalDirectives = bool(in.number());
++            bufferEntries.emplace_back(std::move(file));
++        }
++        else if (kind == 1) {
++            auto original = in.location();
++            auto start = in.location();
++            auto end = in.location();
++            auto arg = in.number();
++            auto name = in.string();
++            ExpansionInfo expansion(original, {start, end}, bool(arg));
++            expansion.macroName = name;
++            bufferEntries.emplace_back(expansion);
++        }
++        else
++            throw std::runtime_error("invalid archive source entry");
++    }
++    unnamedBufferCount = uint32_t(in.number()) + unnamedBufferCount.load();
++}
+ } // namespace slang
 diff --git a/tests/regression/driver/suppress-macro-warnings.sv b/tests/regression/driver/suppress-macro-warnings.sv
 index 33564b4e0..5afd75590 100644
 --- a/tests/regression/driver/suppress-macro-warnings.sv
@@ -4836,6 +5657,325 @@ index 322dabb6a..45e78f42e 100644
 +    CHECK(std::count(filtered.begin(), filtered.end(), diag::UnknownMember) == 1);
 +    CHECK(run(true, true) == filtered);
 +}
+diff --git a/tests/unittests/parsing/SyntaxPrinterTests.cpp b/tests/unittests/parsing/SyntaxPrinterTests.cpp
+index d7e50037e..41fe2d3f1 100644
+--- a/tests/unittests/parsing/SyntaxPrinterTests.cpp
++++ b/tests/unittests/parsing/SyntaxPrinterTests.cpp
+@@ -3,9 +3,12 @@
+ 
+ #include "Test.h"
+ #include "catch2/catch_test_macros.hpp"
++#include <sstream>
+ 
+ #include "slang/syntax/AllSyntax.h"
+ #include "slang/syntax/SyntaxPrinter.h"
++#include "slang/syntax/SyntaxVisitor.h"
++#include "slang/text/SourceManager.h"
+ 
+ TEST_CASE("SyntaxPrinter - line comments") {
+     auto& cu = parseCompilationUnit(R"(
+@@ -246,3 +249,86 @@ endmodule)");
+ module m; // Inline comment
+ endmodule)");
+ }
++
++TEST_CASE("Preparsed library restores syntax, macros and expansion locations", "[parse-archive]") {
++    const auto root = std::filesystem::canonical(std::filesystem::temp_directory_path()) /
++                      "preparsed-library";
++    SourceManager original;
++    const auto buffer = original.assignText((root / "uvm_pkg.sv").string(), R"(
++`ifndef UVM_PKG_SV
++`define UVM_PKG_SV
++`define WIDTH 32
++package uvm_pkg;
++ class object;
++   string label="escaped\ntext";
++   logic [`WIDTH-1:0] bits=32'h12345678;
++   logic [127:0] four_state=128'hx123z;
++   string file=`__FILE__;
++   function real value(); return 1.25; endfunction
++ endclass
++endpackage
++`endif
++)");
++    auto tree = SyntaxTree::fromBuffersWithCheckpoint(std::span(&buffer, 1), original);
++    std::ostringstream output(std::ios::binary);
++    tree->writeParseArchive(output, root);
++    REQUIRE(!output.str().empty());
++    SourceManager restored;
++    restored.assignText("prior configuration buffer");
++    const auto base = restored.getSourceLocationEntryCount() - 1;
++    std::istringstream input(output.str(), std::ios::binary);
++    auto loaded = SyntaxTree::readParseArchive(input, restored, root);
++    const auto print = [](const auto& tree) {
++        return SyntaxPrinter(tree->sourceManager())
++            .setIncludeDirectives(true)
++            .setExpandIncludes(true)
++            .setExpandMacros(true)
++            .print(*tree)
++            .str();
++    };
++    CHECK(print(tree) == print(loaded));
++    struct Integers : SyntaxVisitor<Integers> {
++        std::vector<SVInt> values;
++        void visitToken(parsing::Token token) {
++            if (token.kind == parsing::TokenKind::IntegerLiteral)
++                values.push_back(token.intValue());
++        }
++    };
++    Integers before, after;
++    tree->root().visit(before);
++    loaded->root().visit(after);
++    REQUIRE(before.values.size() == after.values.size());
++    for (size_t i = 0; i < before.values.size(); ++i) {
++        CHECK(exactlyEqual(before.values[i], after.values[i]));
++        CHECK(before.values[i].getBitWidth() == after.values[i].getBitWidth());
++        CHECK(before.values[i].isSigned() == after.values[i].isSigned());
++    }
++    REQUIRE(
++        std::ranges::any_of(after.values, [](const auto& value) { return value.hasUnknown(); }));
++    REQUIRE(tree->getDefinedMacros().size() == loaded->getDefinedMacros().size());
++    REQUIRE(tree->getSourceBufferIds().size() == loaded->getSourceBufferIds().size());
++    CHECK(loaded->getSourceBufferIds()[0].getId() == tree->getSourceBufferIds()[0].getId() + base);
++    CHECK(loaded->isPrefixResumeSafe().value_or(false));
++    Bag options;
++    options.set(syntax::PrecompiledUvmSyntax{loaded, root});
++    const auto user = restored.assignText((root.parent_path() / "consumer.sv").string(),
++                                          "module user; logic [`WIDTH-1:0] data; endmodule\n");
++    auto suffix = SyntaxTree::fromBuffer(user, restored, options);
++    CHECK(suffix->diagnostics().empty());
++    CHECK(print(suffix).find("logic [32-1:0]") != std::string::npos);
++    CHECK(
++        SyntaxTree::fromBuffer(SourceBuffer{restored.getSourceText(loaded->getSourceBufferIds()[0]),
++                                            nullptr, loaded->getSourceBufferIds()[0]},
++                               restored, options) == loaded);
++    auto damaged = output.str();
++    damaged.resize(damaged.size() / 2);
++    SourceManager other;
++    std::istringstream truncated(damaged, std::ios::binary);
++    CHECK_THROWS(SyntaxTree::readParseArchive(truncated, other, root));
++    SourceManager trailingManager;
++    std::istringstream trailing(output.str() + "unexpected", std::ios::binary);
++    CHECK_THROWS(SyntaxTree::readParseArchive(trailing, trailingManager, root));
++    SourceManager overflowManager;
++    std::istringstream overflow(std::string(10, char(0xff)), std::ios::binary);
++    CHECK_THROWS(SyntaxTree::readParseArchive(overflow, overflowManager, root));
++}
+diff --git a/include/slang/syntax/ParseArchive.h b/include/slang/syntax/ParseArchive.h
+new file mode 100644
+index 000000000..9047f29b5
+--- /dev/null
++++ b/include/slang/syntax/ParseArchive.h
+@@ -0,0 +1,209 @@
++// SPDX-License-Identifier: MIT
++#pragma once
++#include <array>
++#include <bit>
++#include <cstring>
++#include <istream>
++#include <ostream>
++#include <sstream>
++#include <unordered_map>
++
++#include "slang/syntax/AllSyntax.h"
++#include "slang/util/BumpAllocator.h"
++namespace slang {
++class SourceManager;
++}
++namespace slang::syntax {
++using Token = parsing::Token;
++class SLANG_EXPORT ArchiveWriter {
++public:
++    explicit ArchiveWriter(std::ostream& out, const SourceManager* sources = nullptr) :
++        sources(sources), out(out) {}
++    const SourceManager* sources;
++    bool allowExternalPaths = false;
++    void number(uint64_t n) {
++        do {
++            auto byte = uint8_t(n & 127);
++            n >>= 7;
++            if (out.rdbuf()->sputc(char(byte | (n ? 128 : 0))) == EOF)
++                throw std::runtime_error("cannot write parse archive");
++        } while (n);
++    }
++    void text(std::string_view s) {
++        number(s.size());
++        if (out.rdbuf()->sputn(s.data(), std::streamsize(s.size())) != std::streamsize(s.size()))
++            throw std::runtime_error("cannot write parse archive text");
++    }
++    void location(SourceLocation l) {
++        number(l.buffer().getId());
++        number(l.offset());
++    }
++    void token(parsing::Token);
++    void node(const SyntaxNode*);
++    void writeParents() {
++        std::vector<const SyntaxNode*> ordered(nodes.size());
++        for (auto [node, id] : nodes)
++            ordered[id - 1] = node;
++        number(ordered.size());
++        for (auto node : ordered) {
++            if (!node->parent)
++                number(0);
++            else {
++                auto parent = nodes.find(node->parent);
++                if (parent == nodes.end())
++                    throw std::runtime_error("archive parent escapes prefix");
++                number(parent->second);
++            }
++        }
++    }
++    template<class T>
++    void field(const T& value) {
++        if constexpr (std::is_same_v<T, parsing::Token>)
++            token(value);
++        else if constexpr (std::is_pointer_v<T>)
++            node(value);
++        else if constexpr (is_syntax_list_v<T>) {
++            number(value.getChildCount());
++            for (size_t i = 0; i < value.getChildCount(); ++i) {
++                auto e = value.getChild(i);
++                number(e.isToken());
++                if (e.isToken())
++                    token(e.token());
++                else
++                    node(e.node());
++            }
++        }
++        else if constexpr (requires { value.get(); })
++            node(value.get());
++        else
++            node(&value);
++    }
++
++private:
++    std::ostream& out;
++    std::unordered_map<const SyntaxNode*, uint64_t> nodes;
++};
++class SLANG_EXPORT ArchiveReader {
++public:
++    ArchiveReader(std::istream& in, BumpAllocator& arena, uint32_t base = 0,
++                  SourceManager* sources = nullptr) : arena(arena), sources(sources), base(base) {
++        // An in-memory stream already owns a contiguous payload. Borrow it during
++        // decoding; all surviving strings are copied into the tree's arena.
++        if (auto* buffer = dynamic_cast<std::stringbuf*>(in.rdbuf())) {
++            auto position = buffer->pubseekoff(0, std::ios::cur, std::ios::in);
++            auto data = buffer->view();
++            if (position < 0 || uint64_t(position) > data.size())
++                throw std::runtime_error("invalid parse archive stream position");
++            bytes = data.substr(size_t(position));
++            if (bytes.size() > 128 * 1024 * 1024)
++                throw std::runtime_error("parse archive exceeds size limit");
++            buffer->pubseekoff(0, std::ios::end, std::ios::in);
++            return;
++        }
++        // Read in blocks once; scalar decoding never enters iostream machinery.
++        std::array<char, 65536> block;
++        while (auto n = in.rdbuf()->sgetn(block.data(), block.size())) {
++            if (storage.size() + size_t(n) > 128 * 1024 * 1024)
++                throw std::runtime_error("parse archive exceeds size limit");
++            storage.append(block.data(), size_t(n));
++        }
++        bytes = storage;
++    }
++    bool atEnd() const { return offset == bytes.size(); }
++    uint64_t number() {
++        uint64_t result = 0;
++        for (unsigned shift = 0; shift < 64; shift += 7) {
++            if (atEnd())
++                throw std::runtime_error("truncated archive integer");
++            auto c = uint8_t(bytes[offset++]);
++            if (shift == 63 && (c & 254))
++                throw std::runtime_error("invalid archive integer");
++            result |= uint64_t(c & 127) << shift;
++            if (!(c & 128))
++                return result;
++        }
++        throw std::runtime_error("invalid archive integer");
++        return result;
++    }
++    size_t count() {
++        auto n = number();
++        if (n > 16000000)
++            throw std::runtime_error("parse archive count exceeds limit");
++        return size_t(n);
++    }
++    std::string text() { return std::string(view()); }
++    std::string_view string() { return copy(view()); }
++    std::string_view copy(std::string_view s) {
++        auto b = arena.copyFrom<char>(s);
++        return {b.data(), b.size()};
++    }
++    BufferID buffer() {
++        auto id = number();
++        if (id >= 0xfffffff)
++            return BufferID(uint32_t(id), "");
++        return BufferID(id ? uint32_t(id) + base : 0, "");
++    }
++    SourceLocation location() {
++        auto id = buffer();
++        auto offset = number();
++        return SourceLocation(id, offset);
++    }
++    parsing::Token token();
++    SyntaxNode* node();
++    void restoreParents() {
++        if (count() != nodes.size())
++            throw std::runtime_error("invalid archive parent graph size");
++        for (auto node : nodes) {
++            auto parent = number();
++            if (!node || parent > nodes.size())
++                throw std::runtime_error("invalid archive parent reference");
++            node->parent = parent ? nodes[size_t(parent) - 1] : nullptr;
++        }
++    }
++    template<class T>
++    T field() {
++        if constexpr (std::is_same_v<T, parsing::Token>)
++            return token();
++        else if constexpr (is_syntax_list_v<T>) {
++            SmallVector<TokenOrSyntax> children;
++            auto n = count();
++            for (size_t i = 0; i < n; ++i) {
++                auto isToken = number();
++                if (isToken)
++                    children.emplace_back(token());
++                else
++                    children.emplace_back(node());
++            }
++            return T(arena, std::span<const TokenOrSyntax>(children));
++        }
++        else if constexpr (std::is_pointer_v<T>) {
++            auto n = node();
++            using N = std::remove_pointer_t<T>;
++            if (n && !N::isKind(n->kind))
++                throw std::runtime_error("invalid parse archive node type");
++            return static_cast<T>(n);
++        }
++        else {
++            static_assert(!sizeof(T), "unsupported archive field");
++        }
++    }
++    BumpAllocator& arena;
++    SourceManager* sources;
++    bool allowExternalPaths = false;
++
++private:
++    std::string_view view() {
++        const auto size = count();
++        if (size > bytes.size() - offset)
++            throw std::runtime_error("truncated parse archive string");
++        auto result = std::string_view(bytes).substr(offset, size);
++        offset += size;
++        return result;
++    }
++    std::string storage;
++    std::string_view bytes;
++    size_t offset = 0;
++    uint32_t base;
++    std::vector<SyntaxNode*> nodes;
++};
++} // namespace slang::syntax
 diff --git a/include/slang/util/CwdCoordinator.h b/include/slang/util/CwdCoordinator.h
 new file mode 100644
 index 000000000..2512673c7
