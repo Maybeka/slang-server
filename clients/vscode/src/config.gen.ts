@@ -22,6 +22,8 @@ export interface Config {
   experimentalMethodScopeOverlay?: boolean
   /** Experimental immutable UVM prefix reuse. Default off. External macros affecting UVM must come from command-line/configuration flags. Unsupported source changes or preprocessing state use native parsing. */
   experimentalUvmPrefixCache?: boolean
+  /** Experimental semantic reuse of an explicitly configured, user-trusted immutable UVM library. Default off. Library files and dependencies are assumed unchanged until slang.rebuildUvmLibrary or configuration reload. No automatic dependency freshness is promised. Mutable user types and generic specializations remain per-consumer. */
+  experimentalUvmSemanticCache?: boolean
   /** Frozen source selections and cache budget. Does not enable the experiment. */
   frozenSources?: Config__FrozenSourcesConfig | null
   /** Experimental package/module syntax and instance hierarchy reuse. Default off. Exact source and include lookup certification can cost filesystem I/O; changed inputs rebuild the native context while preserving editor overlays. */
@@ -116,4 +118,6 @@ export interface Config__UvmConfig {
   entryFile?: string | null
   /** Explicitly select the shipped UVM 1.2 sources. Default false. Mutually exclusive with sourceDirectory and entryFile. Conflicting project UVM inputs are rejected; no automatic injection or download. */
   useBundled?: boolean
+  /** Retention charge limit for the experimental trusted UVM semantic owner, in MiB (1..1024). Separate from frozenSources.maxMiB and process RSS. An oversized library uses native analysis. */
+  semanticMaxMiB?: number
 }

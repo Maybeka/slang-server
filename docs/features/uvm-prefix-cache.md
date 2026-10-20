@@ -54,6 +54,10 @@ included through a different root, or positioned after another source, keeps
 native parsing. The configuration does not promise semantic-analysis reuse or
 a persistent precompiled database.
 
+For explicitly immutable libraries, the separate opt-in
+[trusted semantic cache](uvm-semantic-cache.md) retains elaborated UVM semantics
+and uses manual reconstruction instead of these automatic freshness rules.
+
 ## Reuse and invalidation
 
 The ordered compilation must start with `uvm_pkg.sv` or `uvm.sv`, containing only

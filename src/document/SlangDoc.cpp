@@ -9,6 +9,7 @@
 #include "document/SlangDoc.h"
 
 #include "ServerDriver.h"
+#include "ast/TrustedUvmLibrary.h"
 #include "document/ShallowAnalysis.h"
 #include "lsp/RequestContext.h"
 #include "lsp/URI.h"
@@ -117,7 +118,8 @@ void prepareUvmPrefix(std::shared_ptr<syntax::SyntaxTree>& prefix, const SourceB
 }
 std::shared_ptr<syntax::SyntaxTree> cachedUvmTree(std::shared_ptr<syntax::SyntaxTree>& prefix,
                                                   std::span<const SourceBuffer> buffers,
-                                                  SourceManager& sm, const Bag& options) {
+                                                  SourceManager& sm, const Bag& options,
+                                                  bool trustedSemantics = false) {
     if (buffers.size() < 2)
         throw std::runtime_error("multiple ordered roots required");
     prepareUvmPrefix(prefix, buffers[0], sm, options);
@@ -126,7 +128,8 @@ std::shared_ptr<syntax::SyntaxTree> cachedUvmTree(std::shared_ptr<syntax::Syntax
     pp.predefines.clear();
     suffixOptions.set(pp);
     auto suffix = syntax::SyntaxTree::afterCachedPrefix(prefix, buffers.subspan(1), suffixOptions);
-    validateUvmMacroEnvironment(*prefix, *suffix);
+    if (!trustedSemantics)
+        validateUvmMacroEnvironment(*prefix, *suffix);
     cacheTrace("prefix-reused");
     return syntax::SyntaxTree::withCachedPrefix(prefix, suffix);
 }
@@ -380,7 +383,8 @@ std::shared_ptr<syntax::SyntaxTree> SlangDoc::getSyntaxTree(const lsp::RequestCo
                                                     unit.requiresNativeReplay);
             if (!tree && m_driver.isUvmPrefixCacheEnabled() && !m_uvmPrefixDisabled) {
                 try {
-                    tree = cachedUvmTree(m_uvmPrefixTree, buffers, m_sourceManager, unit.options);
+                    tree = cachedUvmTree(m_uvmPrefixTree, buffers, m_sourceManager, unit.options,
+                                         bool(m_driver.options.get<TrustedUvmImport>()));
                 }
                 catch (const std::exception& error) {
                     m_uvmPrefixTree.reset();
@@ -434,6 +438,10 @@ SlangDoc::AnalysisInputs SlangDoc::getAnalysisInputs(const lsp::RequestContext& 
     auto cwdPhase = m_sourceManager.beginFastCwdPhase();
     ctx.throwIfCancelled("before analysis");
     auto indexRevision = m_driver.getDependencyIndexRevision();
+    if (auto fixed = m_driver.trustedUvmSourceContext(m_uri)) {
+        cwdPhase.finish();
+        return {fixed->buffer, fixed->tree, {fixed->tree}, indexRevision};
+    }
     ctx.checkpoint("before owner resolution");
     auto previousAnalysis = m_analysis;
     auto context = m_driver.getIncludeContext(m_uri, previousAnalysis
@@ -481,11 +489,14 @@ std::shared_ptr<ShallowAnalysis> SlangDoc::refreshAnalysis(const lsp::RequestCon
     auto cwdPhase = m_sourceManager.beginFastCwdPhase();
     auto [buffer, tree, trees, indexRevision] = getAnalysisInputs(ctx);
     ctx.checkpoint("before analysis construction");
+    auto analysisOptions = m_options;
+    if (auto trusted = m_driver.options.get<TrustedUvmImport>())
+        analysisOptions.set(*trusted);
     auto analysis = m_includeCompilation && m_includeCompilation->getSyntaxTree() == tree
                         ? std::make_shared<ShallowAnalysis>(buffer, m_includeCompilation, ctx)
                         : std::make_shared<ShallowAnalysis>(m_sourceManager, buffer, tree,
-                                                            m_options, trees, m_driver.comp.get(),
-                                                            ctx,
+                                                            analysisOptions, trees,
+                                                            m_driver.comp.get(), ctx,
                                                             m_driver.isPackageOnlyContext(m_uri));
     auto topNames = analysis->getCompilation()->getRoot().topInstances |
                     std::views::transform([](const auto& top) { return top->name; });

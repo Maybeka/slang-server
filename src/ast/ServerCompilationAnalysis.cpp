@@ -8,6 +8,7 @@
 
 #include "ast/ServerCompilationAnalysis.h"
 
+#include "ast/TrustedUvmLibrary.h"
 #include "util/Logging.h"
 #include <algorithm>
 #include <unordered_set>
@@ -25,11 +26,12 @@ ServerCompilationAnalysis::ServerCompilationAnalysis(
     compilation(options),
     m_analysisOptions(options.getOrDefault<slang::analysis::AnalysisOptions>()) {
     std::vector<BufferID> bufferIds;
+    const bool trusted = importTrustedUvm(compilation, sourceManager, options);
     std::unordered_set<BufferID> seenBuffers;
 
     for (auto& [_, doc] : documents) {
         auto tree = doc->getSyntaxTree();
-        compilation.addSyntaxTree(tree);
+        compilation.addSyntaxTree(tree, trusted);
 
         for (auto bufferId : tree->getSourceBufferIds()) {
             if (seenBuffers.insert(bufferId).second)

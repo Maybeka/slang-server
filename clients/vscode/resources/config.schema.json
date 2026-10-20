@@ -57,6 +57,10 @@
           "description": "Experimental immutable UVM prefix reuse. Default off. External macros affecting UVM must come from command-line/configuration flags. Unsupported source changes or preprocessing state use native parsing.",
           "type": "boolean"
         },
+        "experimentalUvmSemanticCache": {
+          "description": "Experimental semantic reuse of an explicitly configured, user-trusted immutable UVM library. Default off. Library files and dependencies are assumed unchanged until slang.rebuildUvmLibrary or configuration reload. No automatic dependency freshness is promised. Mutable user types and generic specializations remain per-consumer.",
+          "type": "boolean"
+        },
         "frozenSources": {
           "description": "Frozen source selections and cache budget. Does not enable the experiment.",
           "anyOf": [
@@ -337,6 +341,10 @@
         "useBundled": {
           "description": "Explicitly select the shipped UVM 1.2 sources. Default false. Mutually exclusive with sourceDirectory and entryFile. Conflicting project UVM inputs are rejected; no automatic injection or download.",
           "type": "boolean"
+        },
+        "semanticMaxMiB": {
+          "type": "integer",
+          "description": "Retention charge limit for the experimental trusted UVM semantic owner, in MiB (1..1024). Separate from frozenSources.maxMiB and process RSS. An oversized library uses native analysis."
         }
       },
       "required": []

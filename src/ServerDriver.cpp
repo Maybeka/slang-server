@@ -12,6 +12,7 @@
 #include "ServerDiagClient.h"
 #include "SystemTaskDocs.h"
 #include "ast/ServerCompilation.h"
+#include "ast/TrustedUvmLibrary.h"
 #include "completions/CompletionDispatch.h"
 #include "document/SlangDoc.h"
 #include "lsp/LspTypes.h"
@@ -65,10 +66,16 @@ ServerDriver::ServerDriver(Indexer& indexer, SlangLspClient& client, const Confi
                            std::vector<std::string> buildfiles,
                            std::optional<std::string_view> workspaceFolder, bool requireValidConfig,
                            const ServerDriver* overlays) :
-    sm(driver.sourceManager), diagEngine(driver.diagEngine), client(client),
+    m_driverOwner(std::make_shared<driver::Driver>()), sm(m_driverOwner->sourceManager),
+    diagEngine(m_driverOwner->diagEngine), client(client), driver(*m_driverOwner),
     diagClient(std::make_shared<ServerDiagClient>(sm, client)),
     completions(*this, indexer, sm, options), codeActions(*this, sm, indexer), m_indexer(indexer),
     m_config(config), m_workspacePathPrefix(workspaceFolder.value_or("")) {
+    if (overlays && overlays->m_preserveTrustedUvm && overlays->m_trustedUvm &&
+        config.experimentalUvmSemanticCache.value()) {
+        m_trustedUvm = overlays->m_trustedUvm;
+        sm.inheritImmutablePrefix(m_trustedUvm->sources);
+    }
     if (isFrozenSourcesEnabled())
         completions.requireCompletionEpoch();
     diagClient->setUriResolver([this](const URI& physical) {
@@ -193,6 +200,13 @@ bool ServerDriver::parseAndLoadSources(const std::vector<std::string>& buildfile
                                   ? previousDirectory
                                   : std::filesystem::path(m_workspacePathPrefix),
                               requireValidConfig);
+    if (m_config.experimentalUvmSemanticCache.value() &&
+        (m_config.experimentalFrozenSources.value() ||
+         m_config.experimentalMethodScopeOverlay.value()))
+        ok &= uvmConfigurationError(
+            "experimentalUvmSemanticCache cannot be combined with experimentalFrozenSources "
+            "or experimentalMethodScopeOverlay",
+            requireValidConfig);
 
     if (!ok && requireValidConfig) {
         WARN("Config reload failed: {}", driver.textDiagClient->getString());
@@ -255,6 +269,8 @@ bool ServerDriver::parseAndLoadSources(const std::vector<std::string>& buildfile
     auto queryPP = options.getOrDefault<parsing::PreprocessorOptions>();
     queryPP.captureUvmPrefix = isUvmPrefixCacheEnabled();
     options.set(std::move(queryPP));
+    if (ok && m_config.experimentalUvmSemanticCache.value())
+        prepareTrustedUvmLibrary();
     installConfiguredUnits(driver.syntaxTrees);
     return ok;
 }
@@ -899,6 +915,9 @@ void ServerDriver::onWorkspaceDidChangeWatchedFiles(
         bool openOverlay = false;
         std::error_code canonicalError;
         auto changedPath = std::filesystem::weakly_canonical(change.uri.getPath(), canonicalError);
+        if (isTrustedUvmSource(canonicalError ? std::filesystem::path(change.uri.getPath())
+                                              : changedPath))
+            continue;
         for (const auto& openUri : m_openDocs) {
             auto open = docs.find(openUri);
             if (open != docs.end() && sm.getFullPath(open->second->getBuffer()) == changedPath)

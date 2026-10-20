@@ -44,7 +44,7 @@ public:
     const std::shared_ptr<slang::syntax::SyntaxTree>& getSyntaxTree() const { return m_tree; }
 
     /// Slang compilation owning the symbols referenced by per-file indexes.
-    const std::unique_ptr<slang::ast::Compilation>& getCompilation() const { return m_compilation; }
+    const std::shared_ptr<slang::ast::Compilation>& getCompilation() const { return m_compilation; }
 
     /// Whether every syntax tree still uses the latest source buffers.
     bool hasValidBuffers() const;
@@ -77,6 +77,7 @@ public:
     }
 
 private:
+    std::shared_ptr<const void> m_sourceOwnerLease;
     /// Source manager used to validate the compilation's buffers.
     slang::SourceManager& m_sourceManager;
 
@@ -87,7 +88,7 @@ private:
     std::vector<std::shared_ptr<slang::syntax::SyntaxTree>> m_allTrees;
 
     /// Owns all shallow symbols and semantic diagnostics.
-    std::unique_ptr<slang::ast::Compilation> m_compilation;
+    std::shared_ptr<slang::ast::Compilation> m_compilation;
 
     /// Selected full-design instances and overrides used by every file view.
     std::optional<ActiveDesignContext> m_activeDesign;

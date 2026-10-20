@@ -117,7 +117,7 @@ public:
     }
 
     /// Slang compilation used for symbol lookup.
-    const std::unique_ptr<slang::ast::Compilation>& getCompilation() const {
+    const std::shared_ptr<slang::ast::Compilation>& getCompilation() const {
         return m_shallowCompilation->getCompilation();
     }
     slang::BufferID getBuffer() const { return m_buffer; }

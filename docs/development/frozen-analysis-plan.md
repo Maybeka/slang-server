@@ -7,9 +7,14 @@ The implementation baseline is `53abb6b27a687ce8b26e612a9a0b22e11f4ffced`.
 
 ## Contract
 
+The released implementation uses the checked-input contract below. A subsequent
+user clarification permits a separate trusted immutable library contract,
+specified at the end of this document. That follow-up is not implemented by the
+released syntax/value caches.
+
 Users select stable UVM sources, package/module definitions or an RTL instance
-subtree. "Frozen" means eligible for reuse while its inputs remain valid, not
-permission to ignore edits or return obsolete semantics. Open unsaved text takes
+subtree. In the released mode, "frozen" means eligible for reuse while its inputs
+remain valid, not permission to ignore edits or return obsolete semantics. Open unsaved text takes
 precedence over disk. No manual unfreeze is required to make an edit visible.
 All new analysis caches remain experimental and disabled by default.
 
@@ -522,3 +527,99 @@ Completion-detail certification and full-design complete-diagnostic costs remain
 explicit measured tradeoffs, not a universal optimization claim. The original
 UBUS instrumented memory increase is retained; the matched three-repeat sequence
 does not reproduce it and proves no equivalence. No correctness guard is weakened.
+
+## Follow-up: user-trusted immutable libraries
+
+The user explicitly permits treating a supplied library and its dependency closure
+as fixed. Typical inputs are provider-packaged verification environments, UVM and
+stable RTL. Detecting source changes is optional when it would add material query
+cost. A user-triggered rebuild is sufficient after the library actually changes.
+This is a new optional contract, not a claim that the released cache already
+retains complete semantic state.
+
+### Runtime contract
+
+- Select trusted immutable reuse explicitly. Keep the released checked mode
+  available and all new experiments disabled by default.
+- Prepare the library and its promised fixed dependencies once per library
+  generation. Mutable project edits must not rebuild that fixed semantic state.
+- Do not re-read, hash or resolve the entire library dependency graph on every
+  edit/query. Runtime correctness is relative to the selected generation; changed
+  provider files may remain unapplied until the user explicitly rebuilds.
+- A provider release ID or user generation token can identify fixed inputs.
+  Compiler/build identity, ordered options and configured macros distinguish
+  incompatible generations without filesystem certification. A full manifest may
+  be checked at preparation/rebuild time. Automatic detection is not required.
+- Mutable project files still receive current queries and diagnostics. Library
+  changes do not silently claim checked-mode freshness under this contract.
+- Explicit rebuild publishes a new owner/generation and expires old handles.
+  Release obsolete state after its last consumer finishes; preserve bounded
+  ownership and process isolation.
+
+### Semantic target and implementation boundary
+
+Reuse already analyzed library semantics: package/type/member identity,
+inheritance and bound declarations. Mutable user code must refer to those types
+without repeating the fixed library's semantic analysis. Syntax trees, parser
+checkpoints, hierarchy result values and formatted completion DTOs alone do not
+satisfy this target.
+
+Promising fixed inputs removes certification work; it does not make AST/type
+pointers transferable between unrelated Compilation owners or processes. Explore
+a persistent library semantic owner and a supported consumer relationship, with
+correct type identity, lookup, source locations, lazy evaluation and diagnostics.
+Extend SDK ownership APIs as needed rather than bypassing checks in the existing
+syntax cache and calling that complete semantic reuse.
+
+Different specializations remain distinct even with fixed dependencies. Generic
+UVM classes instantiated with mutable user types need context-specific binding.
+RTL instances with different parameters, interface bindings or external
+elaboration context need distinct semantic identities. Reuse fixed definitions
+and compatible specializations; construct consumer-dependent state only where
+needed. An exact RTL subtree may retain elaborated semantics when its complete
+instance context is part of the promised fixed input.
+
+### Implementation and acceptance order
+
+1. Prove persistent package semantics with mutable consumers: canonical type
+   identity, member/inheritance lookup, cross-boundary references and current
+   unsaved user errors. Establish the required SDK ownership mechanism first.
+2. Apply it to explicit UVM and a shared environment package. Retain a dedicated
+   UVM implementation if generalization costs performance. Observe actual
+   semantic-owner reuse, not merely syntax or display-cache hits.
+3. Separate fixed definitions from consumer-dependent class/module
+   specializations, then support fixed-context RTL subtrees. Identify unsupported
+   boundaries explicitly; do not claim unrestricted whole-library reuse.
+4. Add explicit rebuild and generation status. Initial in-process semantic-owner
+   reuse is sufficient; cross-session persistence requires a separate versioned
+   serialization format and is not implied by this milestone.
+5. Compare fresh native, released dedicated UVM, released generic and trusted
+   semantic modes on real SPI/PSS/UBUS and RTL workloads. Verify public query/type
+   equality for fixed inputs, complete mutable-user diagnostics, every-item
+   completion resolution, first/continuous editing, long-session memory and
+   generation release. Require fresh library results after explicit rebuild;
+   automatic pre-rebuild freshness is not required. Measure preparation, hot-path
+   certification and rebuild separately, and prove no full library scan remains
+   hidden in the edit/query path.
+
+
+## Trusted UVM semantic reuse delivered
+
+The trusted-library follow-up now has an opt-in UVM implementation. A prepared
+UVM package and its fixed semantic objects are shared across consumer edits and
+context retirement; consumer-dependent generic specializations remain local.
+`slang.rebuildUvmLibrary` replaces the generation while preserving user overlays.
+This does not expand the released generic syntax/value caches into general
+stable-scope semantic reuse.
+
+Mac qualification passes full CTest 687, Python 16, diagnostic transport 43,
+real-project public/full-design oracles, forced retirement, relocated UVM install
+and isolated LazyVim checks. Nine three-project 1,000-edit sessions preserve the
+same UVM semantic generation and allocation size, with observed memory plateaus
+and actual context retirement. Source-lifetime leases release retired storage.
+
+The [qualification report](../../validation/macos-uvm-semantic-reuse-2026-10-20.md)
+records the 560 timing observations, startup/burst tradeoffs, neutral SPI bulk
+resolve result, matched and reconstruction memory peaks, and measurement limits.
+New caches remain disabled by default. Generic stable-scope semantics, burst
+coalescing, preparation reduction and fixed flow-analysis reuse remain follow-ups.

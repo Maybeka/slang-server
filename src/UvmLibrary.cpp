@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 #include "ServerDriver.h"
+#include "ast/TrustedUvmLibrary.h"
 #include "diagnostics/DiagnosticProcess.h"
 #include "util/Logging.h"
 #include <set>
@@ -10,6 +11,9 @@
 #    include <windows.h>
 #endif
 
+#include <rfl/to_generic.hpp>
+
+#include "slang/ast/symbols/CompilationUnitSymbols.h"
 #include "slang/driver/SourceLoader.h"
 #include "slang/parsing/ParserMetadata.h"
 #include "slang/syntax/AllSyntax.h"
@@ -208,6 +212,109 @@ bool ServerDriver::completeUvmLibraryInputs(bool requireValidConfig) {
     }
     INFO("Using configured UVM entry {}", m_uvmEntryPath.string());
     return true;
+}
+
+bool ServerDriver::prepareTrustedUvmLibrary() {
+    if (!m_config.experimentalUvmSemanticCache.value())
+        return false;
+    if (m_trustedUvm) {
+        options.set(TrustedUvmImport{m_trustedUvm, m_driverOwner});
+        m_trustedUvmReason = "retained immutable UVM semantic generation";
+        return true;
+    }
+    if (m_uvmEntryPath.empty()) {
+        m_trustedUvmReason = "trusted semantic reuse requires explicit uvm inputs";
+        return false;
+    }
+    std::shared_ptr<syntax::SyntaxTree> prefix;
+    for (auto& tree : driver.syntaxTrees) {
+        prefix = syntax::SyntaxTree::preparedUvmPrefix(tree);
+        if (!prefix && tree->root().kind == syntax::SyntaxKind::CompilationUnit) {
+            const auto& unit = tree->root().as<syntax::CompilationUnitSyntax>();
+            if (unit.members.size() == 1 &&
+                unit.members[0]->kind == syntax::SyntaxKind::PackageDeclaration &&
+                unit.members[0]->as<syntax::ModuleDeclarationSyntax>().header->name.valueText() ==
+                    "uvm_pkg")
+                prefix = tree;
+        }
+        if (prefix)
+            break;
+    }
+    if (!prefix) {
+        m_trustedUvmReason = "UVM requires a standalone package or a compatible first-root prefix";
+        return false;
+    }
+    auto compilationOptions = options.getOrDefault<ast::CompilationOptions>();
+    compilationOptions.flags |= ast::CompilationFlags::PackageAnalysis;
+    compilationOptions.topModules.clear();
+    auto compilation = std::make_shared<ast::Compilation>(compilationOptions);
+    compilation->retainSourceOwner(m_driverOwner);
+    compilation->addSyntaxTree(prefix);
+    const auto& diagnostics = compilation->getSemanticDiagnostics();
+    if (std::ranges::any_of(diagnostics, [](const auto& d) { return d.isError(); })) {
+        m_trustedUvmReason = "isolated UVM semantic preparation has errors; using native analysis";
+        return false;
+    }
+    const auto maxMiB = m_config.uvm.value()->semanticMaxMiB.value();
+    const size_t charged = compilation->getTotalBytesAllocated() +
+                           prefix->getRetainedSyntaxBytes() + prefix->getRetainedSourceBytes() +
+                           sm.getSourceLocationTableBytes() + sm.getMemoryUsage();
+    if (!maxMiB || maxMiB > 1024 || charged > size_t(maxMiB) * 1024 * 1024) {
+        m_trustedUvmReason = "UVM semantic owner exceeds semanticMaxMiB; using native analysis";
+        return false;
+    }
+    static std::atomic<uint64_t> generation = 0;
+    m_trustedUvm = std::make_shared<TrustedUvmLibrary>();
+    m_trustedUvm->sourceOwner = m_driverOwner;
+    m_trustedUvm->compilation = std::move(compilation);
+    m_trustedUvm->sources = sm.captureImmutablePrefix(prefix->getSourceBufferIds());
+    m_trustedUvm->generation = ++generation;
+    m_trustedUvm->semanticBytes = charged;
+    for (auto id : prefix->getSourceBufferIds()) {
+        const auto& path = sm.getFullPath(id);
+        if (!path.empty())
+            m_trustedUvm->files.emplace(path.lexically_normal().generic_string());
+    }
+    options.set(TrustedUvmImport{m_trustedUvm, m_driverOwner});
+    m_trustedUvmReason =
+        "prepared immutable UVM semantics; rebuild explicitly after library changes";
+    return true;
+}
+
+bool ServerDriver::isTrustedUvmSource(const fs::path& path) const {
+    return m_trustedUvm && m_trustedUvm->files.contains(path.lexically_normal().generic_string());
+}
+
+std::optional<ServerDriver::PackageIncludeContext> ServerDriver::trustedUvmSourceContext(
+    const URI& uri) const {
+    if (!isTrustedUvmSource(uri.getPath()))
+        return std::nullopt;
+    const auto& tree = m_trustedUvm->compilation->getSyntaxTrees().front();
+    for (auto id : tree->getSourceBufferIds())
+        if (sm.getFullPath(id).generic_string() == uri.getPath())
+            return PackageIncludeContext{tree, id};
+    return std::nullopt;
+}
+
+rfl::Generic ServerDriver::trustedUvmStatus() const {
+    struct Status {
+        bool enabled;
+        bool prepared;
+        uint64_t generation;
+        uint64_t consumers;
+        size_t chargedBytes;
+        size_t astBytes;
+        size_t fixedSourceFiles;
+        bool diagnosticsShareOwner;
+        std::string reason;
+    };
+    return rfl::to_generic(Status{
+        m_config.experimentalUvmSemanticCache.value(), bool(m_trustedUvm),
+        m_trustedUvm ? m_trustedUvm->generation : 0,
+        m_trustedUvm ? m_trustedUvm->consumers.load() : 0,
+        m_trustedUvm ? m_trustedUvm->semanticBytes : 0,
+        m_trustedUvm ? m_trustedUvm->compilation->getTotalBytesAllocated() : 0,
+        m_trustedUvm ? m_trustedUvm->files.size() : 0, bool(m_trustedUvm), m_trustedUvmReason});
 }
 
 } // namespace server

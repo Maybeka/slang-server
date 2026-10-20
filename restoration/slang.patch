@@ -1,3 +1,17 @@
+diff --git a/bindings/python/CompBindings.cpp b/bindings/python/CompBindings.cpp
+index 77d26408f..bc4cbb9c2 100644
+--- a/bindings/python/CompBindings.cpp
++++ b/bindings/python/CompBindings.cpp
+@@ -221,7 +221,8 @@ void registerCompilation(nb::module_& m, nb::module_& ast, nb::module_& driver)
+         .def_prop_ro("isElaborated", &Compilation::isElaborated)
+         .def_prop_ro("sourceManager", &Compilation::getSourceManager)
+         .def_prop_ro("defaultLibrary", &Compilation::getDefaultLibrary)
+-        .def("addSyntaxTree", &Compilation::addSyntaxTree, "tree"_a)
++        .def("addSyntaxTree", &Compilation::addSyntaxTree, "tree"_a,
++             "reuseImportedPackages"_a = false)
+         .def("getSyntaxTrees", &Compilation::getSyntaxTrees)
+         .def("getRoot", nb::overload_cast<>(&Compilation::getRoot), byrefint)
+         .def(
 diff --git a/docs/command-line-ref.dox b/docs/command-line-ref.dox
 index 153bb54e1..e752fcbac 100644
 --- a/docs/command-line-ref.dox
@@ -28,11 +42,33 @@ index 153bb54e1..e752fcbac 100644
  `--error-limit`
  
  Set a limit on the number of errors that will be printed. Setting this to zero will
+diff --git a/include/slang/analysis/AnalysisManager.h b/include/slang/analysis/AnalysisManager.h
+index c34ea6d4c..d0cf49714 100644
+--- a/include/slang/analysis/AnalysisManager.h
++++ b/include/slang/analysis/AnalysisManager.h
+@@ -264,6 +264,7 @@ private:
+     std::vector<std::function<void(const AnalyzedAssertion&)>> assertListeners;
+ 
+     const SourceManager* sourceManager = nullptr;
++    const ast::Compilation* analyzedCompilation = nullptr;
+ 
+     std::shared_ptr<ThreadPool> threadPool;
+ 
 diff --git a/include/slang/ast/Compilation.h b/include/slang/ast/Compilation.h
-index b7ddc64e4..b6ca1f791 100644
+index b7ddc64e4..f8078f08f 100644
 --- a/include/slang/ast/Compilation.h
 +++ b/include/slang/ast/Compilation.h
-@@ -88,7 +88,8 @@ enum class SLANG_EXPORT CompilationFlags {
+@@ -50,6 +50,9 @@ class SystemSubroutine;
+ struct AssertionInstanceDetails;
+ struct ConfigRule;
+ struct ResolvedConfig;
++namespace detail {
++struct ClassSpecializationState;
++}
+ 
+ enum class IntegralFlags : uint8_t;
+ enum class SymbolIndex : uint32_t;
+@@ -88,7 +91,8 @@ enum class SLANG_EXPORT CompilationFlags {
      /// for an unknown definition.
      IgnoreUnknownModules = 1 << 5,
  
@@ -42,7 +78,7 @@ index b7ddc64e4..b6ca1f791 100644
      RelaxStringConversions = 1 << 6,
  
      /// Allow implicit call expressions (lacking parentheses) to be recursive function calls.
-@@ -151,8 +152,17 @@ enum class SLANG_EXPORT CompilationFlags {
+@@ -151,8 +155,17 @@ enum class SLANG_EXPORT CompilationFlags {
      /// (untaken generate branches and uninstantiated module instances) so that
      /// additional lints, like port and parameter name checks, can run on it.
      CheckUninstantiated = 1 << 21,
@@ -61,6 +97,81 @@ index b7ddc64e4..b6ca1f791 100644
  
  /// Contains various options that can control compilation behavior.
  struct SLANG_EXPORT CompilationOptions {
+@@ -331,6 +344,9 @@ public:
+     Compilation(Compilation&& other) = delete;
+     ~Compilation();
+ 
++    /// Retain the source storage used by this compilation. Set before elaboration.
++    void retainSourceOwner(std::shared_ptr<const void> owner);
++
+     /// @name Top-level API
+     /// @{
+ 
+@@ -349,7 +365,20 @@ public:
+ 
+     /// Adds a syntax tree to the compilation. If the compilation has already been finalized
+     /// by calling @a getRoot this call will throw an exception.
+-    void addSyntaxTree(std::shared_ptr<syntax::SyntaxTree> tree);
++    void addSyntaxTree(std::shared_ptr<syntax::SyntaxTree> tree,
++                       bool reuseImportedPackages = false);
++
++    /// Attach already elaborated package semantics under an explicit immutable
++    /// library contract. The owner is retained; source IDs must share a captured
++    /// immutable prefix. Consumer-dependent generic state stays in this compilation.
++    void importPackage(std::shared_ptr<Compilation> owner, std::string_view name,
++                       SourceManager& sources);
++    detail::ClassSpecializationState& getImportedClassState(const GenericClassDefSymbol& symbol);
++    std::vector<const Type*> getImportedClassSpecializations() const;
++
++    std::vector<const PackageSymbol*> getImportedPackages() const {
++        return {importedPackages.begin(), importedPackages.end()};
++    }
+ 
+     /// Gets the override node for a top-level definition, creating it if necessary. This must be
+     /// called before the compilation is finalized. The syntax node can come from another
+@@ -857,6 +886,8 @@ private:
+     friend class Scope;
+     friend struct DiagnosticVisitor;
+ 
++    std::shared_ptr<const void> sourceOwnerLease;
++
+     // Collected information about a resolved bind directive.
+     struct ResolvedBind {
+         SmallVector<const Symbol*> instTargets;
+@@ -1134,6 +1165,11 @@ private:
+     // The default library.
+     std::unique_ptr<SourceLibrary> defaultLibMem;
+     const SourceLibrary* defaultLibPtr;
++
++    std::vector<std::shared_ptr<Compilation>> importedCompilations;
++    flat_hash_set<const PackageSymbol*> importedPackages;
++    flat_hash_map<const GenericClassDefSymbol*, std::unique_ptr<detail::ClassSpecializationState>>
++        importedClassStates;
+ };
+ 
+ } // namespace slang::ast
+diff --git a/include/slang/ast/symbols/ClassSymbols.h b/include/slang/ast/symbols/ClassSymbols.h
+index bb4820890..dde3e19fb 100644
+--- a/include/slang/ast/symbols/ClassSymbols.h
++++ b/include/slang/ast/symbols/ClassSymbols.h
+@@ -228,6 +228,17 @@ struct ClassSpecializationHasher {
+     size_t operator()(const ClassSpecializationKey& key) const { return key.hash(); }
+ };
+ 
++/// Consumer-owned state for specializations of an imported generic definition.
++/// Keys and types can reference mutable user declarations and must never be
++/// inserted into the retained library's caches.
++struct ClassSpecializationState {
++    using Map = flat_hash_map<ClassSpecializationKey, const Type*, ClassSpecializationHasher>;
++    Map instantiated;
++    Map uninstantiated;
++    std::optional<const Type*> defaultSpecialization;
++    uint32_t recursionDepth = 0;
++};
++
+ } // namespace detail
+ 
+ /// Represents a generic class definition, which is a parameterized class that has not
 diff --git a/include/slang/ast/types/TypePrinter.h b/include/slang/ast/types/TypePrinter.h
 index 9b2fe5cb9..26d2b1b67 100644
 --- a/include/slang/ast/types/TypePrinter.h
@@ -87,17 +198,20 @@ index 9b2fe5cb9..26d2b1b67 100644
      flat_hash_set<const Type*> seenTypes;
      flat_hash_set<const Type*> typesToDisambiguate;
 diff --git a/include/slang/diagnostics/DiagnosticEngine.h b/include/slang/diagnostics/DiagnosticEngine.h
-index bc43d0037..0354fae61 100644
+index bc43d0037..a615af8d1 100644
 --- a/include/slang/diagnostics/DiagnosticEngine.h
 +++ b/include/slang/diagnostics/DiagnosticEngine.h
-@@ -21,6 +21,7 @@
+@@ -21,8 +21,9 @@
  namespace slang {
  
  namespace ast {
 +class Compilation;
  class Symbol;
- }
+-}
++} // namespace ast
  
+ class DiagArgFormatter;
+ class DiagnosticClient;
 @@ -68,6 +69,38 @@ struct SLANG_EXPORT ReportedDiagnostic : ReportedDiagnosticInfo {
  ///
  class SLANG_EXPORT DiagnosticEngine {
@@ -485,7 +599,7 @@ index a8d51f774..d51c14841 100644
      SyntaxNode* rootNode;
      const SourceLibrary* library;
 diff --git a/include/slang/text/SourceManager.h b/include/slang/text/SourceManager.h
-index de1d1c271..819e843ac 100644
+index de1d1c271..384f17c4f 100644
 --- a/include/slang/text/SourceManager.h
 +++ b/include/slang/text/SourceManager.h
 @@ -16,12 +16,15 @@
@@ -599,7 +713,24 @@ index de1d1c271..819e843ac 100644
      /// Information about a `line directive in a source buffer.
      struct LineDirectiveInfo {
          std::string name;       // File name set by directive
-@@ -74,6 +165,9 @@ public:
+@@ -60,6 +151,16 @@ public:
+     SourceManager(const SourceManager&) = delete;
+     SourceManager& operator=(const SourceManager&) = delete;
+ 
++    /// Explicit immutable-library contract. Captures stable source IDs and storage;
++    /// it performs no filesystem freshness certification. Only the supplied graph's
++    /// physical files enter the inherited lookup cache; mutable project inputs do not.
++    struct ImmutablePrefix;
++    std::shared_ptr<const ImmutablePrefix> captureImmutablePrefix(std::span<const BufferID> graph);
++    /// A fresh manager can inherit the exact ID namespace of a retained library.
++    /// Include policy and snapshot recording are configured independently by its owner.
++    void inheritImmutablePrefix(std::shared_ptr<const ImmutablePrefix> prefix);
++    bool sharesImmutablePrefix(const SourceManager& other) const;
++
+     /// @brief Adds one or more system include directories that match
+     /// the given pattern.
+     ///
+@@ -74,6 +175,9 @@ public:
      /// and that path does not exist or is not a directory.
      std::error_code addUserDirectories(std::string_view pattern);
  
@@ -609,7 +740,7 @@ index de1d1c271..819e843ac 100644
      /// Gets the source line number for a given source location.
      size_t getLineNumber(SourceLocation location) const;
  
-@@ -259,25 +353,46 @@ public:
+@@ -259,25 +363,46 @@ public:
      /// Sets whether filenames should be made "proximate" to the current directory
      /// for diagnostic reporting purposes. This is on by default but can be
      /// disabled to always use the simple filename.
@@ -661,7 +792,7 @@ index de1d1c271..819e843ac 100644
  
      /// Stores information specified in a pragma diagnostic directive, which alters the
      /// currently active set of diagnostic mappings.
-@@ -339,6 +454,14 @@ public:
+@@ -339,6 +464,14 @@ public:
  
      /// Returns the total bytes consumed by all loaded source files:
      /// raw file content plus any cached line-offset tables.
@@ -676,7 +807,7 @@ index de1d1c271..819e843ac 100644
      size_t getMemoryUsage() const;
  
      /// Appends raw line-start offsets for @a text to @a offsets, using the same
-@@ -370,6 +493,7 @@ private:
+@@ -370,6 +503,7 @@ private:
          uint64_t sortKey = 0;
          BufferKind bufferKind = BufferKind::DesignFile;
          std::vector<LineDirectiveInfo> lineDirectives;
@@ -684,7 +815,15 @@ index de1d1c271..819e843ac 100644
  
          FileInfo() = default;
  
-@@ -448,6 +572,14 @@ private:
+@@ -441,6 +575,7 @@ private:
+ 
+     // index from BufferID to buffer metadata
+     std::vector<std::variant<FileInfo, ExpansionInfo>> bufferEntries;
++    std::shared_ptr<const ImmutablePrefix> immutablePrefix;
+ 
+     // cache for file lookups; this holds on to the actual file data
+     flat_hash_map<std::string, std::pair<std::shared_ptr<FileData>, std::error_code>> lookupCache;
+@@ -448,6 +583,14 @@ private:
      // directories for system and user includes
      std::vector<std::filesystem::path> systemDirectories;
      std::vector<std::filesystem::path> userDirectories;
@@ -699,7 +838,7 @@ index de1d1c271..819e843ac 100644
  
      // uniquified backing memory for directories
      std::set<std::filesystem::path> directories;
-@@ -455,6 +587,32 @@ private:
+@@ -455,6 +598,32 @@ private:
      // map from buffer to diagnostic directive lists
      flat_hash_map<BufferID, std::vector<DiagnosticDirectiveInfo>> diagDirectives;
  
@@ -758,8 +897,48 @@ index ce1415ffd..ab8affba5 100644
    util/Fmt.cpp
    util/IntervalMap.cpp
    util/OS.cpp
+diff --git a/source/analysis/AnalysisManager.cpp b/source/analysis/AnalysisManager.cpp
+index c3eee251f..298e11d6b 100644
+--- a/source/analysis/AnalysisManager.cpp
++++ b/source/analysis/AnalysisManager.cpp
+@@ -80,12 +80,20 @@ void AnalysisManager::analyze(const Compilation& compilation) {
+             std::runtime_error("AnalysisManager cannot be reused with different source managers"));
+     }
+     sourceManager = compilation.getSourceManager();
++    analyzedCompilation = &compilation;
+ 
+     // Analyze all compilation units first.
+     auto& root = compilation.getRootNoFinalize();
+     for (auto unit : root.compilationUnits)
+         analyzeScopeAsync(*unit);
+ 
++    // Imported packages are not reparented into this compilation's root, but
++    // their flow / usage diagnostics must still participate in design analysis.
++    for (auto package : compilation.getImportedPackages())
++        analyzeScopeAsync(*package);
++    for (auto type : compilation.getImportedClassSpecializations())
++        analyzeSymbolAsync(*type);
++
+     for (auto instance : root.topInstances)
+         analyzeSymbolAsync(*instance);
+     wait();
+diff --git a/source/analysis/AnalysisScopeVisitor.h b/source/analysis/AnalysisScopeVisitor.h
+index 347cd532c..62f0d4e78 100644
+--- a/source/analysis/AnalysisScopeVisitor.h
++++ b/source/analysis/AnalysisScopeVisitor.h
+@@ -584,7 +584,9 @@ private:
+     }
+ 
+     std::pair<bool, bool> isReferenced(const syntax::SyntaxNode& node) const {
+-        return result.scope.getCompilation().isReferenced(node);
++        auto local = result.scope.getCompilation().isReferenced(node);
++        auto consumer = manager.analyzedCompilation->isReferenced(node);
++        return {local.first || consumer.first, local.second || consumer.second};
+     }
+ };
+ 
 diff --git a/source/ast/Compilation.cpp b/source/ast/Compilation.cpp
-index ed7528f2c..200af8071 100644
+index ed7528f2c..bcdf501a6 100644
 --- a/source/ast/Compilation.cpp
 +++ b/source/ast/Compilation.cpp
 @@ -14,7 +14,6 @@
@@ -783,7 +962,104 @@ index ed7528f2c..200af8071 100644
  
      // Reset systemId counters that may have been changed due to creation of types
      // in the std package.
-@@ -310,6 +305,15 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
+@@ -163,11 +158,59 @@ Compilation::Compilation(const Bag& options, const SourceLibrary* defaultLib) :
+ 
+ Compilation::~Compilation() = default;
+ 
++void Compilation::retainSourceOwner(std::shared_ptr<const void> owner) {
++    if (!owner || sourceOwnerLease || finalized)
++        SLANG_THROW(std::logic_error("source owner must be retained before elaboration"));
++    sourceOwnerLease = std::move(owner);
++}
++
+ const Type& Compilation::getErrorType(const Type& child) {
+     return *emplace<ErrorType>(&child);
+ }
+ 
+-void Compilation::addSyntaxTree(std::shared_ptr<SyntaxTree> tree) {
++void Compilation::importPackage(std::shared_ptr<Compilation> owner, std::string_view name,
++                                SourceManager& sources) {
++    if (finalized || !owner || owner.get() == this || !owner->isElaborated() ||
++        !owner->sourceManager || !sources.sharesImmutablePrefix(*owner->sourceManager) ||
++        (sourceManager && sourceManager != &sources))
++        SLANG_THROW(std::invalid_argument("incompatible immutable package owner"));
++    auto package = owner->getPackage(name);
++    if (!package || packageMap.contains(name) ||
++        (!importedCompilations.empty() && stdPkg != owner->stdPkg))
++        SLANG_THROW(std::invalid_argument("missing or conflicting imported package"));
++    sourceManager = &sources;
++    // UVM exposes std::process and other built-in class handles through its
++    // public API. Their nominal identity must match the consumer's std package.
++    stdPkg = owner->stdPkg;
++    packageMap[stdPkg->name] = stdPkg;
++    packageMap.emplace(package->name, package);
++    importedPackages.emplace(package);
++    // Metadata is immutable and can be needed when specializing a library class
++    // in this consumer. Its storage remains owned by the retained compilation.
++    for (const auto& [node, metadata] : owner->syntaxMetadata)
++        syntaxMetadata.try_emplace(node, metadata);
++    for (const auto& [symbol, attributes] : owner->attributeMap)
++        attributeMap.try_emplace(symbol, attributes);
++    importedCompilations.push_back(std::move(owner));
++}
++
++detail::ClassSpecializationState& Compilation::getImportedClassState(
++    const GenericClassDefSymbol& symbol) {
++    auto& state = importedClassStates[&symbol];
++    if (!state)
++        state = std::make_unique<detail::ClassSpecializationState>();
++    return *state;
++}
++
++std::vector<const Type*> Compilation::getImportedClassSpecializations() const {
++    std::vector<const Type*> result;
++    for (const auto& [_, state] : importedClassStates)
++        for (const auto& [key, type] : state->instantiated)
++            result.push_back(type);
++    return result;
++}
++
++void Compilation::addSyntaxTree(std::shared_ptr<SyntaxTree> tree, bool reuseImportedPackages) {
+     SLANG_ASSERT(!isFrozen());
+ 
+     if (!tree)
+@@ -231,16 +274,33 @@ void Compilation::addSyntaxTree(std::shared_ptr<SyntaxTree> tree) {
+     for (auto& inst : tree->getMetadata().globalInstances)
+         globalInstantiations.emplace(inst->type.valueText());
+ 
++    auto addMember = [&](const SyntaxNode& member) {
++        if (reuseImportedPackages && member.kind == SyntaxKind::PackageDeclaration) {
++            auto& declaration = member.as<ModuleDeclarationSyntax>();
++            auto package = getPackage(declaration.header->name.valueText());
++            if (package && importedPackages.contains(package)) {
++                const auto* original = package->getSyntax();
++                auto path = sourceManager->getFullPath(
++                    sourceManager->getFullyExpandedLoc(declaration.header->name.location())
++                        .buffer());
++                auto ownerPath = sourceManager->getFullPath(
++                    sourceManager->getFullyExpandedLoc(package->location).buffer());
++                if (original == &member || (!path.empty() && path == ownerPath))
++                    return;
++            }
++        }
++        unit->addMembers(member);
++    };
+     if (node.kind == SyntaxKind::CompilationUnit) {
+         for (auto member : node.as<CompilationUnitSyntax>().members)
+-            unit->addMembers(*member);
++            addMember(*member);
+     }
+     else if (node.kind == SyntaxKind::LibraryMap) {
+         for (auto member : node.as<LibraryMapSyntax>().members)
+             unit->addMembers(*member);
+     }
+     else {
+-        unit->addMembers(node);
++        addMember(node);
+     }
+ 
+     syntaxTrees.emplace_back(std::move(tree));
+@@ -310,6 +370,15 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
              defaultLiblist.push_back(lib);
      }
  
@@ -799,7 +1075,26 @@ index ed7528f2c..200af8071 100644
      // If any top-level parameter overrides were provided, parse them now.
      flat_hash_map<std::string_view, HierarchyOverrideNode::ParamOverride> cliOverrides;
      parseParamOverrides(skipDefParamsAndBinds, cliOverrides);
-@@ -1560,10 +1564,12 @@ void Compilation::elaborate() {
+@@ -1475,10 +1544,14 @@ void Compilation::noteReference(const Symbol& symbol, bool isLValue) {
+ 
+ std::pair<bool, bool> Compilation::isReferenced(const SyntaxNode& node) const {
+     auto it = referenceStatusMap.find(&node);
+-    if (it == referenceStatusMap.end())
+-        return {false, false};
+-
+-    return it->second;
++    std::pair<bool, bool> result = it == referenceStatusMap.end() ? std::pair{false, false}
++                                                                  : it->second;
++    for (const auto& owner : importedCompilations) {
++        auto inherited = owner->isReferenced(node);
++        result.first |= inherited.first;
++        result.second |= inherited.second;
++    }
++    return result;
+ }
+ 
+ const NameSyntax& Compilation::parseName(std::string_view name) {
+@@ -1560,10 +1633,12 @@ void Compilation::elaborate() {
      // Double check any bind directives for correctness. These were already
      // resolved prior to full elaboration but their diagnostics were not
      // issued so we need to check again.
@@ -816,8 +1111,47 @@ index ed7528f2c..200af8071 100644
      }
  
      // Report any lingering name conflicts.
+@@ -1687,7 +1762,37 @@ const Diagnostics& Compilation::getSemanticDiagnostics() {
+     // Elaborate the design.
+     elaborate();
+ 
+-    cachedSemanticDiagnostics.emplace(diagMap.coalesce(sourceManager));
++    if (importedCompilations.empty()) {
++        cachedSemanticDiagnostics.emplace(diagMap.coalesce(sourceManager));
++    }
++    else {
++        auto combined = diagMap;
++        for (const auto& owner : importedCompilations) {
++            for (const auto& diagnostic : owner->getSemanticDiagnostics()) {
++                // A stand-alone library checks an invalid specialization for
++                // otherwise unused generics. A real consumer specialization
++                // supersedes that provisional check, just as in native elaboration.
++                bool superseded = false;
++                for (auto symbol = diagnostic.symbol; symbol;) {
++                    if (auto type = symbol->as_if<ClassType>();
++                        type && type->isUninstantiated && type->genericClass) {
++                        auto found = importedClassStates.find(type->genericClass);
++                        superseded = found != importedClassStates.end() &&
++                                     !found->second->instantiated.empty();
++                        if (superseded)
++                            break;
++                    }
++                    auto scope = symbol->getParentScope();
++                    symbol = scope ? &scope->asSymbol() : nullptr;
++                }
++                if (!superseded) {
++                    bool isNew;
++                    combined.add(diagnostic, isNew);
++                }
++            }
++        }
++        cachedSemanticDiagnostics.emplace(combined.coalesce(sourceManager));
++    }
+     return *cachedSemanticDiagnostics;
+ }
+ 
 diff --git a/source/ast/ElabVisitors.h b/source/ast/ElabVisitors.h
-index 2f346fa60..e6d61ac9b 100644
+index 2f346fa60..37837e058 100644
 --- a/source/ast/ElabVisitors.h
 +++ b/source/ast/ElabVisitors.h
 @@ -9,6 +9,7 @@
@@ -871,7 +1205,29 @@ index 2f346fa60..e6d61ac9b 100644
                  inst->visit(*this);
                  compilation.checkVirtualIfaceInstance(*inst);
              }
-@@ -501,7 +513,20 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
+@@ -495,13 +507,42 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
+         bool didSomething;
+         do {
+             didSomething = false;
++            // Imported package roots are not revisited. Bind only specializations
++            // owned by this mutable consumer, including ones created by this pass.
++            SmallVector<std::pair<std::string, const Type*>> importedSpecs;
++            for (auto spec : compilation.getImportedClassSpecializations()) {
++                if (visitedSpecs.emplace(spec).second) {
++                    TypePrinter printer;
++                    printer.append(*spec);
++                    importedSpecs.emplace_back(printer.toString(), spec);
++                }
++            }
++            std::stable_sort(importedSpecs.begin(), importedSpecs.end(),
++                             [](const auto& a, const auto& b) { return a.first < b.first; });
++            for (auto& [_, spec] : importedSpecs) {
++                spec->visit(*this);
++                didSomething = true;
++            }
+             for (auto symbol : genericClasses) {
+                 for (auto& spec : symbol->specializations()) {
+                     if (visitedSpecs.emplace(&spec).second)
                          toVisit.push_back(&spec);
                  }
  
@@ -934,6 +1290,104 @@ index e51460a5c..0f4ee0c8c 100644
  
                      expr = &ConversionExpression::makeImplicit(context, comp.getStringType(),
                                                                 ConversionKind::Explicit, *expr,
+diff --git a/source/ast/symbols/ClassSymbols.cpp b/source/ast/symbols/ClassSymbols.cpp
+index a9250508e..3287cfe64 100644
+--- a/source/ast/symbols/ClassSymbols.cpp
++++ b/source/ast/symbols/ClassSymbols.cpp
+@@ -691,7 +691,7 @@ const SubroutineSymbol* ClassType::getConstructor() const {
+     if (syntax && scope) {
+         auto extendsClause = syntax->as<ClassDeclarationSyntax>().extendsClause;
+         if (extendsClause && extendsClause->defaultedArg) {
+-            auto& comp = scope->getCompilation();
++            auto& comp = getCompilation();
+             MethodBuilder builder(comp, "new", comp.getVoidType(), SubroutineKind::Function);
+             builder.addFlags(MethodFlags::Constructor | MethodFlags::DefaultedSuperArg);
+ 
+@@ -983,6 +983,19 @@ const Symbol& GenericClassDefSymbol::fromSyntax(const Scope& scope,
+ }
+ 
+ const Type* GenericClassDefSymbol::getDefaultSpecialization(const Scope& scope) const {
++    if (&scope.getCompilation() != &getParentScope()->getCompilation()) {
++        // Never let a retained definition cache a mutable consumer's types.
++        if (defaultSpecialization)
++            return *defaultSpecialization;
++        auto& state = scope.getCompilation().getImportedClassState(*this);
++        if (state.defaultSpecialization)
++            return *state.defaultSpecialization;
++        auto result = getSpecializationImpl(ASTContext(scope, LookupLocation::max), location, false,
++                                            nullptr);
++        if (!scope.isUninstantiated())
++            state.defaultSpecialization = result;
++        return result;
++    }
+     if (defaultSpecialization)
+         return *defaultSpecialization;
+ 
+@@ -1024,8 +1037,11 @@ const Type* GenericClassDefSymbol::getSpecializationImpl(
+     auto scope = getParentScope();
+     SLANG_ASSERT(scope);
+ 
+-    auto guard = ScopeGuard([this] { recursionDepth--; });
+-    if (++recursionDepth > comp.getOptions().maxRecursiveClassSpecialization) {
++    auto* imported = &scope->getCompilation() != &comp ? &comp.getImportedClassState(*this)
++                                                       : nullptr;
++    auto& depth = imported ? imported->recursionDepth : recursionDepth;
++    auto guard = ScopeGuard([&depth] { depth--; });
++    if (++depth > comp.getOptions().maxRecursiveClassSpecialization) {
+         context.addDiag(diag::RecursiveClassSpecialization, instanceLoc) << name;
+         return &comp.getErrorType();
+     }
+@@ -1111,16 +1127,24 @@ const Type* GenericClassDefSymbol::getSpecializationImpl(
+     classType->genericParameters = paramSymbols.copy(comp);
+     if (!forceInvalidParams) {
+         detail::ClassSpecializationKey key(paramValues.copy(comp), typeParams.copy(comp));
++        if (imported) {
++            // Already prepared fixed specializations keep their canonical identity.
++            const auto& fixed = classType->isUninstantiated ? uninstantiatedSpecMap : specMap;
++            if (auto found = fixed.find(key); found != fixed.end())
++                return found->second;
++        }
+         if (classType->isUninstantiated) {
+             // If we're in an uninstantiated scope we save this specialization
+             // in a separate map so that we don't try to elaborate it further
+             // and potentially cause spurious errors to be issued.
+-            auto [it, inserted] = uninstantiatedSpecMap.emplace(key, classType);
++            auto& cache = imported ? imported->uninstantiated : uninstantiatedSpecMap;
++            auto [it, inserted] = cache.emplace(key, classType);
+             if (!inserted)
+                 return it->second;
+         }
+         else {
+-            auto [it, inserted] = specMap.emplace(key, classType);
++            auto& cache = imported ? imported->instantiated : specMap;
++            auto [it, inserted] = cache.emplace(key, classType);
+             if (!inserted)
+                 return it->second;
+         }
+diff --git a/source/ast/symbols/SubroutineSymbols.cpp b/source/ast/symbols/SubroutineSymbols.cpp
+index 0e4e7e2c6..331f862f4 100644
+--- a/source/ast/symbols/SubroutineSymbols.cpp
++++ b/source/ast/symbols/SubroutineSymbols.cpp
+@@ -1150,13 +1150,17 @@ const SubroutineSymbol* MethodPrototypeSymbol::getSubroutine() const {
+     auto& nearScope = *getParentScope();
+     auto& parentSym = nearScope.asSymbol();
+     auto& outerScope = *parentSym.getParentScope();
+-    auto& comp = outerScope.getCompilation();
++    // The extern declaration belongs to the fixed lexical package, but a
++    // specialized class (and its method body / user types) belongs to its consumer.
++    auto& declarations = outerScope.getCompilation();
++    auto& comp = nearScope.getCompilation();
+ 
+     SLANG_ASSERT(!flags.has(MethodFlags::ModportImport | MethodFlags::ModportExport |
+                             MethodFlags::InterfaceExtern));
+ 
+     // The out-of-block definition must be in our parent scope.
+-    auto [declSyntax, index, used] = comp.findOutOfBlockDecl(outerScope, parentSym.name, name);
++    auto [declSyntax, index, used] = declarations.findOutOfBlockDecl(outerScope, parentSym.name,
++                                                                     name);
+     const FunctionDeclarationSyntax* syntax = nullptr;
+     if (declSyntax && (declSyntax->kind == SyntaxKind::FunctionDeclaration ||
+                        declSyntax->kind == SyntaxKind::TaskDeclaration)) {
 diff --git a/source/diagnostics/DiagnosticEngine.cpp b/source/diagnostics/DiagnosticEngine.cpp
 index 3fa297e9c..0eb352284 100644
 --- a/source/diagnostics/DiagnosticEngine.cpp
@@ -1467,27 +1921,31 @@ index 99b853be7..088de6a81 100644
 +}
 +} // namespace slang::driver
 diff --git a/source/parsing/Lexer.cpp b/source/parsing/Lexer.cpp
-index a91519cb4..56f6b9ac1 100644
+index a91519cb4..cd32fd4f8 100644
 --- a/source/parsing/Lexer.cpp
 +++ b/source/parsing/Lexer.cpp
-@@ -1426,16 +1426,16 @@ bool Lexer::tryApplyCommentHandler() {
+@@ -1426,16 +1426,20 @@ bool Lexer::tryApplyCommentHandler() {
                                 diag::UnclosedTranslateOff);
              return true;
          case CommentHandler::LintOff:
 -            sourceManager.addDiagnosticDirective(loc(), nextWord(), DiagnosticSeverity::Ignored);
-+            sourceManager.addDiagnosticDirective(loc(), nextWord(), DiagnosticSeverity::Ignored, true);
++            sourceManager.addDiagnosticDirective(loc(), nextWord(), DiagnosticSeverity::Ignored,
++                                                 true);
              return false;
          case CommentHandler::LintOn:
 -            sourceManager.addDiagnosticDirective(loc(), nextWord(), DiagnosticSeverity::Warning);
-+            sourceManager.addDiagnosticDirective(loc(), nextWord(), DiagnosticSeverity::Warning, true);
++            sourceManager.addDiagnosticDirective(loc(), nextWord(), DiagnosticSeverity::Warning,
++                                                 true);
              return false;
          case CommentHandler::LintSave:
 -            sourceManager.addDiagnosticDirective(loc(), "__push__", DiagnosticSeverity::Ignored);
-+            sourceManager.addDiagnosticDirective(loc(), "__push__", DiagnosticSeverity::Ignored, true);
++            sourceManager.addDiagnosticDirective(loc(), "__push__", DiagnosticSeverity::Ignored,
++                                                 true);
              return false;
          case CommentHandler::LintRestore:
 -            sourceManager.addDiagnosticDirective(loc(), "__pop__", DiagnosticSeverity::Ignored);
-+            sourceManager.addDiagnosticDirective(loc(), "__pop__", DiagnosticSeverity::Ignored, true);
++            sourceManager.addDiagnosticDirective(loc(), "__pop__", DiagnosticSeverity::Ignored,
++                                                 true);
              return false;
      }
      SLANG_UNREACHABLE;
@@ -1538,7 +1996,7 @@ index 5601d7e73..747dfc7d7 100644
      }
      return Trivia(TriviaKind::Directive, result);
 diff --git a/source/parsing/Preprocessor_pragmas.cpp b/source/parsing/Preprocessor_pragmas.cpp
-index e86c15c68..b426ae04e 100644
+index e86c15c68..0a360224a 100644
 --- a/source/parsing/Preprocessor_pragmas.cpp
 +++ b/source/parsing/Preprocessor_pragmas.cpp
 @@ -257,11 +257,11 @@ void Preprocessor::applyDiagnosticPragma(const PragmaDirectiveSyntax& pragma) {
@@ -1555,12 +2013,13 @@ index e86c15c68..b426ae04e 100644
              }
              else {
                  addDiag(diag::UnknownDiagPragmaArg, simple.value.range()) << action;
-@@ -290,7 +290,7 @@ void Preprocessor::applyDiagnosticPragma(const PragmaDirectiveSyntax& pragma) {
+@@ -290,7 +290,8 @@ void Preprocessor::applyDiagnosticPragma(const PragmaDirectiveSyntax& pragma) {
                      auto& simple = expr.as<SimplePragmaExpressionSyntax>();
                      if (simple.value.kind == TokenKind::StringLiteral) {
                          sourceManager.addDiagnosticDirective(simple.value.location(),
 -                                                             simple.value.valueText(), severity);
-+                                                             simple.value.valueText(), severity, true);
++                                                             simple.value.valueText(), severity,
++                                                             true);
                      }
                      else {
                          addDiag(diag::ExpectedDiagPragmaArg, simple.value.range());
@@ -2203,7 +2662,7 @@ index ac681a4db..895fb9229 100644
      auto text = SyntaxPrinter(sourceManager())
                      .setIncludeDirectives(true)
 diff --git a/source/text/SourceManager.cpp b/source/text/SourceManager.cpp
-index 386684b5a..8a0dbdc95 100644
+index 386684b5a..1d8a42c0b 100644
 --- a/source/text/SourceManager.cpp
 +++ b/source/text/SourceManager.cpp
 @@ -7,14 +7,30 @@
@@ -3008,7 +3467,7 @@ index 386684b5a..8a0dbdc95 100644
  static size_t getTextEnd(const SmallVector<char>& mem) {
      size_t result = mem.size();
      if (result && mem[result - 1] == '\0')
-@@ -29,6 +809,20 @@ static size_t getTextEnd(const SmallVector<char>& mem) {
+@@ -29,34 +809,128 @@ static size_t getTextEnd(const SmallVector<char>& mem) {
      return result;
  }
  
@@ -3029,9 +3488,52 @@ index 386684b5a..8a0dbdc95 100644
  SourceManager::SourceManager() {
      // add a dummy entry to the start of the directory list so that our file IDs line up
      FileInfo file;
-@@ -36,27 +830,64 @@ SourceManager::SourceManager() {
+     bufferEntries.emplace_back(file);
  }
  
++struct SourceManager::ImmutablePrefix {
++    std::vector<std::variant<FileInfo, ExpansionInfo>> entries;
++    decltype(lookupCache) files;
++    uint32_t unnamedCount = 0;
++};
++
++std::shared_ptr<const SourceManager::ImmutablePrefix> SourceManager::captureImmutablePrefix(
++    std::span<const BufferID> graph) {
++    std::unique_lock lock(mutex);
++    if (immutablePrefix)
++        SLANG_THROW(std::logic_error("immutable source prefix already captured"));
++    auto prefix = std::make_shared<ImmutablePrefix>();
++    prefix->entries = bufferEntries;
++    prefix->unnamedCount = unnamedBufferCount.load();
++    flat_hash_set<const FileData*> retained;
++    for (auto id : graph) {
++        if (id.getId() >= bufferEntries.size())
++            SLANG_THROW(std::invalid_argument("invalid immutable source graph"));
++        if (auto file = std::get_if<FileInfo>(&bufferEntries[id.getId()]); file && file->data)
++            retained.emplace(file->data.get());
++    }
++    for (const auto& [path, value] : lookupCache)
++        if (value.first && retained.contains(value.first.get()))
++            prefix->files.emplace(path, value);
++    immutablePrefix = prefix;
++    return prefix;
++}
++
++void SourceManager::inheritImmutablePrefix(std::shared_ptr<const ImmutablePrefix> prefix) {
++    std::unique_lock lock(mutex);
++    if (!prefix || bufferEntries.size() != 1 || !lookupCache.empty() || snapshotRecording ||
++        snapshotReplay || immutablePrefix)
++        SLANG_THROW(std::logic_error("immutable prefix requires a fresh source manager"));
++    bufferEntries = prefix->entries;
++    lookupCache = prefix->files;
++    unnamedBufferCount.store(prefix->unnamedCount);
++    immutablePrefix = std::move(prefix);
++}
++
++bool SourceManager::sharesImmutablePrefix(const SourceManager& other) const {
++    return this == &other || (immutablePrefix && immutablePrefix == other.immutablePrefix);
++}
++
  std::error_code SourceManager::addSystemDirectories(std::string_view pattern) {
 +    if (snapshotReplay)
 +        failSnapshot("include directories cannot change during replay");
@@ -3094,7 +3596,7 @@ index 386684b5a..8a0dbdc95 100644
  size_t SourceManager::getRawLineNumber(SourceLocation location) const {
      std::shared_lock<std::shared_mutex> lock(mutex);
      return getRawLineNumber(location, lock);
-@@ -497,8 +1328,9 @@ SourceBuffer SourceManager::assignText(std::string_view text, SourceLocation inc
+@@ -497,8 +1371,9 @@ SourceBuffer SourceManager::assignText(std::string_view text, SourceLocation inc
  
  SourceBuffer SourceManager::assignText(std::string_view path, std::string_view text,
                                         SourceLocation includedFrom, const SourceLibrary* library) {
@@ -3105,7 +3607,7 @@ index 386684b5a..8a0dbdc95 100644
          using namespace std::literals;
          temp = "<unnamed_buffer"s + std::to_string(unnamedBufferCount++) + ">"s;
          path = temp;
-@@ -509,26 +1341,70 @@ SourceBuffer SourceManager::assignText(std::string_view path, std::string_view t
+@@ -509,26 +1384,70 @@ SourceBuffer SourceManager::assignText(std::string_view path, std::string_view t
      if (buffer.empty() || buffer.back() != '\0')
          buffer.push_back('\0');
  
@@ -3186,7 +3688,7 @@ index 386684b5a..8a0dbdc95 100644
  }
  
  SourceManager::BufferOrError SourceManager::readSource(const fs::path& path,
-@@ -541,6 +1417,29 @@ SourceManager::BufferOrError SourceManager::readHeader(
+@@ -541,6 +1460,29 @@ SourceManager::BufferOrError SourceManager::readHeader(
      std::string_view path, SourceLocation includedFrom, const SourceLibrary* library,
      bool isSystemPath, std::span<std::filesystem::path const> additionalIncludePaths) {
  
@@ -3216,7 +3718,7 @@ index 386684b5a..8a0dbdc95 100644
      // if the header is specified as an absolute path, just do a straight lookup
      SLANG_ASSERT(!path.empty());
      fs::path p = path;
-@@ -614,18 +1513,25 @@ SourceManager::BufferOrError SourceManager::readHeader(
+@@ -614,18 +1556,25 @@ SourceManager::BufferOrError SourceManager::readHeader(
  }
  
  void SourceManager::addLineDirective(SourceLocation location, size_t lineNum, std::string_view name,
@@ -3244,7 +3746,7 @@ index 386684b5a..8a0dbdc95 100644
      else
          full = fs::path(info->data->name).replace_filename(linePath);
  
-@@ -634,9 +1540,15 @@ void SourceManager::addLineDirective(SourceLocation location, size_t lineNum, st
+@@ -634,9 +1583,15 @@ void SourceManager::addLineDirective(SourceLocation location, size_t lineNum, st
  }
  
  void SourceManager::addDiagnosticDirective(SourceLocation location, std::string_view name,
@@ -3261,7 +3763,7 @@ index 386684b5a..8a0dbdc95 100644
  
      size_t offset = fileLocation.offset();
      auto& vec = diagDirectives[fileLocation.buffer()];
-@@ -699,6 +1611,8 @@ std::vector<std::shared_ptr<void>> SourceManager::retainBuffers(
+@@ -699,6 +1654,8 @@ std::vector<std::shared_ptr<void>> SourceManager::retainBuffers(
  
  SourceBuffer SourceManager::replaceBufferImpl(FileInfo* oldInfo, SmallVector<char>&& buffer,
                                                std::unique_lock<std::shared_mutex>& lock) {
@@ -3270,7 +3772,7 @@ index 386684b5a..8a0dbdc95 100644
      auto oldData = oldInfo->data;
  
      // Mark old data as stale, remove reference
-@@ -713,6 +1627,12 @@ SourceBuffer SourceManager::replaceBufferImpl(FileInfo* oldInfo, SmallVector<cha
+@@ -713,6 +1670,12 @@ SourceBuffer SourceManager::replaceBufferImpl(FileInfo* oldInfo, SmallVector<cha
      lookupCache.insert_or_assign(getU8Str(newData->fullPath),
                                   std::pair{newData, std::error_code{}});
  
@@ -3283,7 +3785,7 @@ index 386684b5a..8a0dbdc95 100644
      // Create a new FileInfo entry with new data (don't modify old entry!)
      // Old data should be freed if nothing more points to it.
      return createBufferEntry(newData, oldInfo->includedFrom, oldInfo->library, oldInfo->sortKey,
-@@ -727,6 +1647,8 @@ SourceBuffer SourceManager::replaceBuffer(BufferID id, SmallVector<char>&& buffe
+@@ -727,6 +1690,8 @@ SourceBuffer SourceManager::replaceBuffer(BufferID id, SmallVector<char>&& buffe
  }
  
  SourceManager::BufferOrError SourceManager::reloadBuffer(BufferID id) {
@@ -3292,7 +3794,7 @@ index 386684b5a..8a0dbdc95 100644
      std::unique_lock<std::shared_mutex> lock(mutex);
  
      auto oldInfo = getFileInfo(id, lock);
-@@ -783,6 +1705,9 @@ SourceBuffer SourceManager::createBufferEntry(std::shared_ptr<FileData> fd,
+@@ -783,6 +1748,9 @@ SourceBuffer SourceManager::createBufferEntry(std::shared_ptr<FileData> fd,
  }
  
  bool SourceManager::isCached(const fs::path& path) const {
@@ -3302,7 +3804,7 @@ index 386684b5a..8a0dbdc95 100644
      fs::path absPath;
      if (!disableProximatePaths) {
          std::error_code ec;
-@@ -803,6 +1728,51 @@ SourceManager::BufferOrError SourceManager::openCached(const fs::path& fullPath,
+@@ -803,6 +1771,51 @@ SourceManager::BufferOrError SourceManager::openCached(const fs::path& fullPath,
                                                         SourceLocation includedFrom,
                                                         const SourceLibrary* library,
                                                         uint64_t sortKey) {
@@ -3354,7 +3856,7 @@ index 386684b5a..8a0dbdc95 100644
      fs::path absPath;
      if (!disableProximatePaths) {
          std::error_code ec;
-@@ -816,6 +1786,8 @@ SourceManager::BufferOrError SourceManager::openCached(const fs::path& fullPath,
+@@ -816,6 +1829,8 @@ SourceManager::BufferOrError SourceManager::openCached(const fs::path& fullPath,
  
      // first see if we have this file cached
      std::string pathStr = getU8Str(absPath);
@@ -3363,7 +3865,7 @@ index 386684b5a..8a0dbdc95 100644
      {
          std::unique_lock<std::shared_mutex> lock(mutex);
          auto it = lookupCache.find(pathStr);
-@@ -844,31 +1816,23 @@ SourceManager::BufferOrError SourceManager::openCached(const fs::path& fullPath,
+@@ -844,31 +1859,23 @@ SourceManager::BufferOrError SourceManager::openCached(const fs::path& fullPath,
  SourceBuffer SourceManager::cacheBuffer(fs::path&& path, std::string&& pathStr,
                                          SourceLocation includedFrom, const SourceLibrary* library,
                                          uint64_t sortKey, SmallVector<char>&& buffer) {
@@ -4336,15 +4838,16 @@ index 322dabb6a..45e78f42e 100644
 +}
 diff --git a/include/slang/util/CwdCoordinator.h b/include/slang/util/CwdCoordinator.h
 new file mode 100644
-index 000000000..9e2d67cfc
+index 000000000..2512673c7
 --- /dev/null
 +++ b/include/slang/util/CwdCoordinator.h
-@@ -0,0 +1,33 @@
+@@ -0,0 +1,37 @@
 +// SPDX-License-Identifier: MIT
 +#pragma once
 +#include <atomic>
 +#include <filesystem>
 +#include <mutex>
++
 +#include "slang/util/Util.h"
 +namespace slang {
 +/// Coordinates internal command-file cwd writers with trusted analysis phases.
@@ -4354,6 +4857,7 @@ index 000000000..9e2d67cfc
 +    class SLANG_EXPORT WriteLease {
 +    public:
 +        WriteLease();
++
 +    private:
 +        std::unique_lock<std::recursive_mutex> lock;
 +    };
@@ -4363,10 +4867,12 @@ index 000000000..9e2d67cfc
 +        ~AnalysisLease();
 +        AnalysisLease(const AnalysisLease&) = delete;
 +        AnalysisLease& operator=(const AnalysisLease&) = delete;
++
 +    private:
 +        std::unique_lock<std::recursive_mutex> lock;
 +    };
 +    static void setCurrentPath(const std::filesystem::path& path, std::error_code& ec);
++
 +private:
 +    static std::recursive_mutex mutex;
 +    static std::atomic<unsigned> activeAnalyses;
@@ -4375,12 +4881,13 @@ index 000000000..9e2d67cfc
 +} // namespace slang
 diff --git a/source/util/CwdCoordinator.cpp b/source/util/CwdCoordinator.cpp
 new file mode 100644
-index 000000000..f5fd85238
+index 000000000..f9e9cae53
 --- /dev/null
 +++ b/source/util/CwdCoordinator.cpp
-@@ -0,0 +1,34 @@
+@@ -0,0 +1,36 @@
 +// SPDX-License-Identifier: MIT
 +#include "slang/util/CwdCoordinator.h"
++
 +#include <stdexcept>
 +namespace slang {
 +std::recursive_mutex CwdCoordinator::mutex;
@@ -4399,7 +4906,8 @@ index 000000000..f5fd85238
 +    // Workers borrow an existing phase, never recursively acquire it. Reject
 +    // accidental acquisition before locking so owner->pool waits cannot cycle.
 +    if (activeAnalyses.load() && !localAnalyses)
-+        SLANG_THROW(std::runtime_error("fast analysis phases must be owned by one state thread; workers borrow the phase"));
++        SLANG_THROW(std::runtime_error(
++            "fast analysis phases must be owned by one state thread; workers borrow the phase"));
 +    lock.lock();
 +    ++localAnalyses;
 +    ++activeAnalyses;
@@ -5189,15 +5697,16 @@ index 000000000..071a59793
 +}
 diff --git a/tests/unittests/ast/PackageAnalysisTests.cpp b/tests/unittests/ast/PackageAnalysisTests.cpp
 new file mode 100644
-index 000000000..0243e36ea
+index 000000000..4a39bd01f
 --- /dev/null
 +++ b/tests/unittests/ast/PackageAnalysisTests.cpp
-@@ -0,0 +1,282 @@
+@@ -0,0 +1,437 @@
 +// SPDX-FileCopyrightText: Michael Popoloski
 +// SPDX-License-Identifier: MIT
 +
 +#include "Test.h"
 +
++#include "slang/analysis/AnalysisManager.h"
 +#include "slang/ast/ASTVisitor.h"
 +#include "slang/ast/expressions/SelectExpressions.h"
 +#include "slang/ast/symbols/ClassSymbols.h"
@@ -5205,6 +5714,105 @@ index 000000000..0243e36ea
 +#include "slang/ast/symbols/InstanceSymbols.h"
 +#include "slang/ast/symbols/ParameterSymbols.h"
 +#include "slang/ast/types/AllTypes.h"
++#include "slang/diagnostics/DiagnosticEngine.h"
++
++TEST_CASE("Immutable package semantics retain identity across mutable consumers",
++          "[trusted-package]") {
++    SourceManager sources;
++    auto tree = SyntaxTree::fromText(R"(
++package uvm_pkg;
++    class uvm_object;
++        int tag;
++        process running;
++        virtual function int get_tag(); return tag; endfunction
++    endclass
++    class box #(type T);
++        T value;
++        extern function int read_field();
++    endclass
++    function int box::read_field(); return value.field; endfunction
++endpackage
++)",
++                                     sources, "uvm_pkg.sv");
++    CompilationOptions options;
++    options.flags = CompilationFlags::PackageAnalysis;
++    auto library = std::make_shared<Compilation>(options);
++    library->addSyntaxTree(tree);
++    REQUIRE(library->getAllDiagnostics().empty());
++    auto package = library->getPackage("uvm_pkg");
++    REQUIRE(package);
++    auto object = package->find("uvm_object");
++    auto& generic = package->find("box")->as<GenericClassDefSymbol>();
++    auto fixedSpecializations = generic.numSpecializations();
++    const auto fixedAstBytes = library->getTotalBytesAllocated();
++    auto prefix = sources.captureImmutablePrefix(tree->getSourceBufferIds());
++
++    for (int version = 0; version < 3; ++version) {
++        SourceManager consumerSources;
++        consumerSources.inheritImmutablePrefix(prefix);
++        Compilation consumer(options);
++        consumer.importPackage(library, "uvm_pkg", consumerSources);
++        auto text = version == 1 ? R"(
++package user_pkg;
++    import uvm_pkg::*;
++    class Packet; int other; endclass
++    class Test extends uvm_object;
++        box#(Packet) payload;
++    endclass
++endpackage
++)"
++                                 : R"(
++package user_pkg;
++    import uvm_pkg::*;
++    class Packet; int field; endclass
++    class Test extends uvm_object;
++        box#(Packet) payload;
++        function int check(); return get_tag(); endfunction
++        function process get_process(); return running; endfunction
++    endclass
++endpackage
++)";
++        consumer.addSyntaxTree(SyntaxTree::fromText(text, consumerSources, "user.sv"));
++        auto& diagnostics = consumer.getAllDiagnostics();
++        CHECK(diagnostics.empty() == (version != 1));
++        REQUIRE(consumer.getPackage("uvm_pkg") == package);
++        auto test = consumer.getPackage("user_pkg")->find("Test");
++        REQUIRE(test);
++        CHECK(test->as<ClassType>().getBaseClass() == object);
++        CHECK_FALSE(consumer.getImportedClassSpecializations().empty());
++        CHECK(generic.numSpecializations() == fixedSpecializations);
++        CHECK(library->getSemanticDiagnostics().empty());
++        CHECK(library->getTotalBytesAllocated() == fixedAstBytes);
++        CHECK(consumerSources.getSourceText(package->location.buffer()) ==
++              sources.getSourceText(package->location.buffer()));
++    }
++}
++
++TEST_CASE("Immutable package import rejects unrelated source namespaces and duplicates",
++          "[trusted-package]") {
++    SourceManager sources;
++    auto tree = SyntaxTree::fromText("package uvm_pkg; class Object; endclass endpackage", sources,
++                                     "uvm_pkg.sv");
++    CompilationOptions options;
++    options.flags = CompilationFlags::PackageAnalysis;
++    auto library = std::make_shared<Compilation>(options);
++    library->addSyntaxTree(tree);
++    REQUIRE(library->getAllDiagnostics().empty());
++    SourceManager unrelated;
++    Compilation invalid(options);
++    CHECK_THROWS(invalid.importPackage(library, "uvm_pkg", unrelated));
++    sources.captureImmutablePrefix(tree->getSourceBufferIds());
++    Compilation consumer(options);
++    consumer.importPackage(library, "uvm_pkg", sources);
++    // An actual occurrence of the fixed package is omitted without creating
++    // duplicate symbols, but a user declaration in a different file is an error.
++    consumer.addSyntaxTree(tree, true);
++    consumer.addSyntaxTree(
++        SyntaxTree::fromText("package uvm_pkg; endpackage", sources, "duplicate.sv"), true);
++    CHECK_FALSE(consumer.getAllDiagnostics().empty());
++    CHECK_THROWS(consumer.importPackage(library, "uvm_pkg", sources));
++    CHECK_THROWS(unrelated.inheritImmutablePrefix({}));
++}
 +
 +TEST_CASE("Package analysis does not create design instances") {
 +    auto tree = SyntaxTree::fromText(R"(
@@ -5473,5 +6081,60 @@ index 000000000..0243e36ea
 +            return d.code == diag::UndeclaredIdentifier ||
 +                   d.code == diag::CouldNotResolveHierarchicalPath;
 +        }));
++    }
++}
++
++TEST_CASE("Imported package flow diagnostics follow current consumer references",
++          "[trusted-package]") {
++    const std::string libraryText = R"(
++package uvm_pkg;
++    class Object;
++        function int used(); return 1; endfunction
++        function int other(); return 2; endfunction
++    endclass
++    class Box #(type T = int);
++        function int used(); return 1; endfunction
++        function int other(); return 2; endfunction
++    endclass
++    function automatic int library_call();
++        Box#(int) box = new;
++        return box.used();
++    endfunction
++endpackage
++)";
++    SourceManager librarySources;
++    auto libraryTree = SyntaxTree::fromText(libraryText, librarySources, "uvm_pkg.sv");
++    auto library = std::make_shared<Compilation>();
++    library->addSyntaxTree(libraryTree);
++    REQUIRE(library->getAllDiagnostics().empty());
++    auto prefix = librarySources.captureImmutablePrefix(libraryTree->getSourceBufferIds());
++    const auto fixedBytes = library->getTotalBytesAllocated();
++    auto report = [](Compilation& compilation) {
++        auto diagnostics = compilation.getSemanticDiagnostics();
++        analysis::AnalysisOptions options;
++        options.flags = analysis::AnalysisFlags::CheckUnused;
++        analysis::AnalysisManager manager(options);
++        compilation.freeze();
++        manager.analyze(compilation);
++        compilation.unfreeze();
++        diagnostics.append_range(manager.getDiagnostics());
++        diagnostics.sort(*compilation.getSourceManager());
++        return DiagnosticEngine::reportAll(*compilation.getSourceManager(), diagnostics);
++    };
++    for (auto method : {"used", "other", "used"}) {
++        std::string text = "package user_pkg; class Test extends uvm_pkg::Object; "
++                           "function int check(); return " +
++                           std::string(method) + "(); endfunction endclass endpackage";
++        SourceManager nativeSources;
++        Compilation native;
++        native.addSyntaxTree(SyntaxTree::fromText(libraryText, nativeSources, "uvm_pkg.sv"));
++        native.addSyntaxTree(SyntaxTree::fromText(text, nativeSources, "user.sv"));
++        SourceManager consumerSources;
++        consumerSources.inheritImmutablePrefix(prefix);
++        Compilation consumer;
++        consumer.importPackage(library, "uvm_pkg", consumerSources);
++        consumer.addSyntaxTree(SyntaxTree::fromText(text, consumerSources, "user.sv"));
++        CHECK(report(consumer) == report(native));
++        CHECK(library->getTotalBytesAllocated() == fixedBytes);
 +    }
 +}

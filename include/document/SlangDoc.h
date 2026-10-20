@@ -210,7 +210,7 @@ public:
     /// Shallow Compilation Methods
     ////////////////////////////////////////////////
 
-    const std::unique_ptr<slang::ast::Compilation>& getCompilation() {
+    const std::shared_ptr<slang::ast::Compilation>& getCompilation() {
         return getAnalysis()->getCompilation();
     }
 

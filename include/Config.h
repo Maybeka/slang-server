@@ -64,6 +64,11 @@ struct Config {
                          "project UVM inputs are rejected; no automatic injection or download.",
                          bool>
             useBundled = false;
+        rfl::Description<"Retention charge limit for the experimental trusted UVM semantic "
+                         "owner, in MiB (1..1024). Separate from frozenSources.maxMiB and "
+                         "process RSS. An oversized library uses native analysis.",
+                         uint32_t>
+            semanticMaxMiB = 256;
     };
     rfl::Description<"Explicit UVM library inputs. No library is injected unless configured. "
                      "Source loading is independent of experimentalUvmPrefixCache.",
@@ -90,6 +95,14 @@ struct Config {
                      "source changes or preprocessing state use native parsing.",
                      bool>
         experimentalUvmPrefixCache = false;
+
+    rfl::Description<"Experimental semantic reuse of an explicitly configured, user-trusted "
+                     "immutable UVM library. Default off. Library files and dependencies are "
+                     "assumed unchanged until slang.rebuildUvmLibrary or configuration reload. "
+                     "No automatic dependency freshness is promised. Mutable user types and "
+                     "generic specializations remain per-consumer.",
+                     bool>
+        experimentalUvmSemanticCache = false;
 
     struct FrozenSourcesConfig {
         rfl::Description<

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 #include "ServerDriver.h"
+#include "ast/TrustedUvmLibrary.h"
 #include "completions/CompletionContext.h"
 #include "utils/ServerHarness.h"
 #include <catch2/generators/catch_generators.hpp>
@@ -7,6 +8,7 @@
 #include <rfl/json.hpp>
 
 #include "slang/ast/Compilation.h"
+#include "slang/ast/symbols/ClassSymbols.h"
 #include "slang/ast/symbols/CompilationUnitSymbols.h"
 #include "slang/ast/symbols/ParameterSymbols.h"
 #include "slang/ast/symbols/VariableSymbols.h"
@@ -74,6 +76,125 @@ struct LibraryAccess : server::CompletionQuery {
     using CompletionQuery::getIndexedSyntaxTree;
 };
 } // namespace
+
+TEST_CASE("Trusted UVM retains semantic identities through edits and source retirement",
+          "[uvm-library][uvm-semantic]") {
+    LibraryWorkspace files;
+    auto config = files.config(false);
+    config.experimentalUvmSemanticCache = true;
+    config.compilationFilelist = "design.f";
+    files.write(files.root / "design.f",
+                "\"third party/uvm ?sources/vendor_entry.sv\"\nconsumer.sv\n");
+    auto source = [](int value) {
+        return fmt::format("package user_pkg; class Test extends uvm_pkg::object; "
+                           "localparam int V={}; endclass endpackage\n",
+                           value);
+    };
+    files.write(files.root / "consumer.sv", source(0));
+    Indexer indexer;
+    ClientHarness client;
+    auto driver = server::ServerDriver::createForExplore(indexer, client, config,
+                                                         files.root.string(), nullptr, true);
+    REQUIRE(driver);
+    auto setting = driver->options.get<server::TrustedUvmImport>();
+    INFO(rfl::json::write(driver->trustedUvmStatus()));
+    REQUIRE(setting);
+    auto library = setting->library;
+    REQUIRE(library);
+    auto package = library->compilation->getPackage("uvm_pkg");
+    auto object = package->find("object");
+    const auto uri = URI::fromFile(files.root / "consumer.sv");
+    driver->openDocument(uri, source(0), 1, true);
+    auto verify = [&](server::ServerDriver& current, int value) {
+        auto analysis = current.getDocument(uri)->getAnalysis();
+        auto& compilation = *analysis->getCompilation();
+        CHECK(compilation.getSemanticDiagnostics().empty());
+        REQUIRE(compilation.getPackage("uvm_pkg") == package);
+        auto type = compilation.getPackage("user_pkg")->find("Test");
+        REQUIRE(type);
+        CHECK(type->as<ast::ClassType>().getBaseClass() == object);
+        auto parameter = type->as<ast::ClassType>().find("V");
+        REQUIRE(parameter);
+        CHECK(*parameter->as<ast::ParameterSymbol>().getValue().integer().as<int>() == value);
+    };
+    verify(*driver, 0);
+    for (int value = 1; value <= 4; ++value) {
+        driver->onDocDidChange({.textDocument = {.version = value + 1, .uri = uri},
+                                .contentChanges = {lsp::TextDocumentContentChangeWholeDocument{
+                                    .text = source(value)}}});
+        verify(*driver, value);
+    }
+    const auto generation = library->generation;
+    CHECK(library->consumers.load() >= 5);
+    driver->preserveTrustedUvmForRetirement();
+    auto replacement = server::ServerDriver::createForExplore(indexer, client, config,
+                                                              files.root.string(), driver.get(),
+                                                              true, true);
+    REQUIRE(replacement);
+    REQUIRE(replacement->options.get<server::TrustedUvmImport>());
+    CHECK(replacement->options.get<server::TrustedUvmImport>()->library == library);
+    CHECK(&replacement->sm != &driver->sm);
+    CHECK(replacement->sm.sharesImmutablePrefix(driver->sm));
+    driver.reset();
+    verify(*replacement, 4);
+    CHECK(library->generation == generation);
+    std::weak_ptr<slang::driver::Driver> retiredSourceOwner =
+        replacement->options.get<server::TrustedUvmImport>()->sourceOwner;
+    std::weak_ptr<slang::driver::Driver> retiredLibrarySource = library->sourceOwner;
+    auto retainedAnalysis = replacement->getDocument(uri)->getAnalysis();
+    auto retainedCompilation = retainedAnalysis->getCompilation();
+    const auto retainedBuffer = retainedAnalysis->getBuffer();
+    retainedAnalysis.reset();
+    // Provider changes are intentionally unapplied until explicit reconstruction.
+    files.write(files.entry, "package uvm_pkg; localparam int X=42; "
+                             "class object; int newer; endclass endpackage\n");
+    replacement->onWorkspaceDidChangeWatchedFiles(
+        {.changes = {{.uri = URI::fromFile(files.entry), .type = lsp::FileChangeType::Changed}}});
+    verify(*replacement, 4);
+    auto rebuilt = server::ServerDriver::createForExplore(indexer, client, config,
+                                                          files.root.string(), replacement.get(),
+                                                          true, true);
+    REQUIRE(rebuilt);
+    auto refreshed = rebuilt->options.get<server::TrustedUvmImport>();
+    REQUIRE(refreshed);
+    CHECK(refreshed->library->generation != generation);
+    auto newObject = refreshed->library->compilation->getPackage("uvm_pkg")->find("object");
+    CHECK(newObject != object);
+    REQUIRE(newObject->as<ast::ClassType>().find("newer"));
+    replacement.reset();
+    auto expectedSource = source(4);
+    expectedSource.push_back('\0');
+    CHECK(retainedCompilation->getSourceManager()->getSourceText(retainedBuffer) == expectedSource);
+    CHECK_FALSE(retiredSourceOwner.expired());
+    retainedCompilation.reset();
+    CHECK(retiredSourceOwner.expired());
+    library.reset();
+    CHECK(retiredLibrarySource.expired());
+}
+
+TEST_CASE("Trusted UVM stays opt-in and reports unavailable semantic preparation",
+          "[uvm-library][uvm-semantic]") {
+    CHECK_FALSE(Config{}.experimentalUvmSemanticCache.value());
+    LibraryWorkspace files;
+    auto config = files.config(false);
+    config.experimentalUvmSemanticCache = true;
+    config.uvm.value()->semanticMaxMiB = 0;
+    Indexer indexer;
+    ClientHarness client;
+    auto driver = server::ServerDriver::createForExplore(indexer, client, config,
+                                                         files.root.string(), nullptr, true);
+    REQUIRE(driver);
+    CHECK_FALSE(driver->options.get<server::TrustedUvmImport>());
+    CHECK(rfl::json::write(driver->trustedUvmStatus()).find("semanticMaxMiB") != std::string::npos);
+    const auto uri = URI::fromFile(files.root / "consumer.sv");
+    driver->openDocument(uri,
+                         "`include \"uvm_macros.svh\"\nmodule consumer; "
+                         "uvm_pkg::object obj; localparam int Y=`PASS(1); endmodule\n",
+                         1, true);
+    auto compilation = driver->getDocument(uri)->getAnalysis()->getCompilation();
+    CHECK(compilation->getPackage("uvm_pkg"));
+    CHECK(compilation->getSemanticDiagnostics().empty());
+}
 
 TEST_CASE("Explicit UVM paths preserve native root and wrapper order", "[uvm-library]") {
     const std::string mode = GENERATE("missing", "root", "wrapper", "nonprefix");

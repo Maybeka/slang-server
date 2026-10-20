@@ -1,0 +1,853 @@
+{
+  "format": 1,
+  "platform": {
+    "os": "macOS 27.0.1 (26A434)",
+    "cpu": "Apple M4",
+    "memoryGiB": 24,
+    "compiler": "Homebrew clang 23.1.3",
+    "buildType": "Release"
+  },
+  "candidate": {
+    "binarySha256": "261c36a22edbd8447c4188518c4d97616be5029146fad82bfdc30a8b96c6acc3",
+    "sdkBase": "151a801ceaf6faf23d79a42d210ff67e50eb4660",
+    "sdkPatchSha256": "904c931b8938bd37741ece861a897f714ae361e7ed7bff6c473450eec27001f5",
+    "sdkFiles": 708,
+    "experimentDefault": false
+  },
+  "reference": {
+    "commit": "5a5389877fab70df1a705c62794e309451572377",
+    "binarySha256": "c30d503050c7f499e30c27f36fd25dc0f058a11decb08ded4540baa53db624a9",
+    "description": "Previous release of this fork; not upstream"
+  },
+  "counts": {
+    "ctest": 687,
+    "python": 16,
+    "transport": 43,
+    "trustedServerAssertions": 76,
+    "trustedServerCases": 2,
+    "trustedSdkAssertions": 41,
+    "trustedSdkCases": 3,
+    "realOracleProcesses": 60,
+    "forcedImmediateProcesses": 16,
+    "forcedSettledProcesses": 16,
+    "fullDesignProcesses": 6,
+    "libraryNavigationProcesses": 3,
+    "lazyvimProcesses": 3,
+    "relocatedInstallProcesses": 4,
+    "timingObservations": 560,
+    "shortMemoryProcesses": 27,
+    "thousandEditProcesses": 9
+  },
+  "timing": {
+    "selected": {
+      "source": "semantic-v2-timing.json",
+      "n": 20,
+      "cycles": 10,
+      "mode": "selected",
+      "cases": {
+        "W01-compare": {
+          "semanticComparedWith": {
+            "released-uvm": {
+              "pairedMedianSavingPercent": 53.57998959872292,
+              "pairedMeanSavingPercent": 53.97455957062705,
+              "pairedMeanBootstrap95": [
+                52.92724388488105,
+                55.36250756917682
+              ],
+              "n": 20
+            },
+            "current-off": {
+              "pairedMedianSavingPercent": 81.53369057446561,
+              "pairedMeanSavingPercent": 81.45266726079824,
+              "pairedMeanBootstrap95": [
+                81.25485299411498,
+                81.63420090708276
+              ],
+              "n": 20
+            },
+            "current-uvm": {
+              "pairedMedianSavingPercent": 53.35568371163318,
+              "pairedMeanSavingPercent": 53.535417676222536,
+              "pairedMeanBootstrap95": [
+                52.74611118680414,
+                54.347564886339754
+              ],
+              "n": 20
+            }
+          },
+          "armMediansMs": {
+            "released-uvm": {
+              "wholeMs": 847.6645834999999,
+              "startupFirstMs": 117.90899999999999,
+              "firstEditMs": 15.928833000000001,
+              "continuousPrimaryMs": 15.817916499999999,
+              "continuousDiagnosticMs": 63.3154375,
+              "resolveSumMs": 0.0
+            },
+            "current-off": {
+              "wholeMs": 2114.457979,
+              "startupFirstMs": 114.135958,
+              "firstEditMs": 54.05225,
+              "continuousPrimaryMs": 52.115771,
+              "continuousDiagnosticMs": 186.45556249999998,
+              "resolveSumMs": 0.0
+            },
+            "current-uvm": {
+              "wholeMs": 843.7396875,
+              "startupFirstMs": 117.40479099999999,
+              "firstEditMs": 16.1806875,
+              "continuousPrimaryMs": 15.924396000000002,
+              "continuousDiagnosticMs": 62.7812085,
+              "resolveSumMs": 0.0
+            },
+            "current-semantic": {
+              "wholeMs": 395.768813,
+              "startupFirstMs": 146.75604149999998,
+              "firstEditMs": 15.019354,
+              "continuousPrimaryMs": 15.150438000000001,
+              "continuousDiagnosticMs": 23.842124499999997,
+              "resolveSumMs": 0.0
+            }
+          }
+        },
+        "W07-pss-multidoc": {
+          "semanticComparedWith": {
+            "released-uvm": {
+              "pairedMedianSavingPercent": 67.88980023592141,
+              "pairedMeanSavingPercent": 67.59448909846711,
+              "pairedMeanBootstrap95": [
+                66.89762903449005,
+                68.11991268640918
+              ],
+              "n": 20
+            },
+            "current-off": {
+              "pairedMedianSavingPercent": 83.75061564407251,
+              "pairedMeanSavingPercent": 83.68893613239435,
+              "pairedMeanBootstrap95": [
+                83.42390693783632,
+                83.945885131399
+              ],
+              "n": 20
+            },
+            "current-uvm": {
+              "pairedMedianSavingPercent": 67.87869511810314,
+              "pairedMeanSavingPercent": 67.7082225948813,
+              "pairedMeanBootstrap95": [
+                66.92141809670728,
+                68.37331278883138
+              ],
+              "n": 20
+            }
+          },
+          "armMediansMs": {
+            "released-uvm": {
+              "wholeMs": 1318.2815205000002,
+              "startupFirstMs": 116.97368750000001,
+              "firstEditMs": 16.367708,
+              "continuousPrimaryMs": 16.133666499999997,
+              "continuousDiagnosticMs": 106.01208299999999,
+              "resolveSumMs": 16.8613115
+            },
+            "current-off": {
+              "wholeMs": 2593.74475,
+              "startupFirstMs": 114.478917,
+              "firstEditMs": 54.905833,
+              "continuousPrimaryMs": 52.7829165,
+              "continuousDiagnosticMs": 229.722667,
+              "resolveSumMs": 16.0603745
+            },
+            "current-uvm": {
+              "wholeMs": 1314.2880205000001,
+              "startupFirstMs": 120.29510450000001,
+              "firstEditMs": 16.308771,
+              "continuousPrimaryMs": 16.166167,
+              "continuousDiagnosticMs": 105.3557705,
+              "resolveSumMs": 15.995251
+            },
+            "current-semantic": {
+              "wholeMs": 422.9629375,
+              "startupFirstMs": 143.19735350000002,
+              "firstEditMs": 16.290187500000002,
+              "continuousPrimaryMs": 16.085895999999998,
+              "continuousDiagnosticMs": 25.320270999999998,
+              "resolveSumMs": 12.702
+            }
+          }
+        },
+        "W08-ubus-task": {
+          "semanticComparedWith": {
+            "released-uvm": {
+              "pairedMedianSavingPercent": 58.281918005014646,
+              "pairedMeanSavingPercent": 58.20304405603293,
+              "pairedMeanBootstrap95": [
+                57.19246855777042,
+                59.109190961678195
+              ],
+              "n": 20
+            },
+            "current-off": {
+              "pairedMedianSavingPercent": 82.0745364988773,
+              "pairedMeanSavingPercent": 82.10314220604754,
+              "pairedMeanBootstrap95": [
+                81.70067155315078,
+                82.42854650992078
+              ],
+              "n": 20
+            },
+            "current-uvm": {
+              "pairedMedianSavingPercent": 57.97269382186743,
+              "pairedMeanSavingPercent": 57.7861871827434,
+              "pairedMeanBootstrap95": [
+                57.35462557036466,
+                58.17771695488332
+              ],
+              "n": 20
+            }
+          },
+          "armMediansMs": {
+            "released-uvm": {
+              "wholeMs": 926.3772915,
+              "startupFirstMs": 110.60606250000001,
+              "firstEditMs": 17.4766255,
+              "continuousPrimaryMs": 17.073854,
+              "continuousDiagnosticMs": 70.538604,
+              "resolveSumMs": 14.839709
+            },
+            "current-off": {
+              "wholeMs": 2168.0875625,
+              "startupFirstMs": 105.6743335,
+              "firstEditMs": 55.5285625,
+              "continuousPrimaryMs": 51.724833000000004,
+              "continuousDiagnosticMs": 191.0867915,
+              "resolveSumMs": 15.165522
+            },
+            "current-uvm": {
+              "wholeMs": 918.411854,
+              "startupFirstMs": 108.992771,
+              "firstEditMs": 17.4022085,
+              "continuousPrimaryMs": 16.932979500000002,
+              "continuousDiagnosticMs": 70.34625,
+              "resolveSumMs": 14.8205615
+            },
+            "current-semantic": {
+              "wholeMs": 387.8553955,
+              "startupFirstMs": 139.715333,
+              "firstEditMs": 16.114791500000003,
+              "continuousPrimaryMs": 15.7745625,
+              "continuousDiagnosticMs": 22.944812499999998,
+              "resolveSumMs": 4.8035635
+            }
+          }
+        }
+      }
+    },
+    "bulkPssUbusAndDefinitionControls": {
+      "source": "semantic-v2-all-timing.json",
+      "n": 20,
+      "cycles": 10,
+      "mode": "all",
+      "cases": {
+        "W01-compare": {
+          "semanticComparedWith": {
+            "current-uvm": {
+              "pairedMedianSavingPercent": 53.634021491957164,
+              "pairedMeanSavingPercent": 53.22380367469637,
+              "pairedMeanBootstrap95": [
+                52.09683898988925,
+                54.21445446771243
+              ],
+              "n": 20
+            }
+          },
+          "armMediansMs": {
+            "current-uvm": {
+              "wholeMs": 842.607979,
+              "startupFirstMs": 114.586563,
+              "firstEditMs": 15.7085625,
+              "continuousPrimaryMs": 15.5573125,
+              "continuousDiagnosticMs": 62.9123745,
+              "allResolveSumMs": 0.0,
+              "resolveSumMs": 0.0
+            },
+            "current-semantic": {
+              "wholeMs": 390.47958300000005,
+              "startupFirstMs": 144.2127295,
+              "firstEditMs": 15.0116665,
+              "continuousPrimaryMs": 14.655729000000001,
+              "continuousDiagnosticMs": 23.2205005,
+              "allResolveSumMs": 0.0,
+              "resolveSumMs": 0.0
+            }
+          }
+        },
+        "W07-pss-multidoc": {
+          "semanticComparedWith": {
+            "current-uvm": {
+              "pairedMedianSavingPercent": 55.58831814169494,
+              "pairedMeanSavingPercent": 55.062558506255876,
+              "pairedMeanBootstrap95": [
+                54.25431233606362,
+                55.80503729900786
+              ],
+              "n": 20
+            }
+          },
+          "armMediansMs": {
+            "current-uvm": {
+              "wholeMs": 1555.539667,
+              "startupFirstMs": 118.704646,
+              "firstEditMs": 16.4418955,
+              "continuousPrimaryMs": 16.109979,
+              "continuousDiagnosticMs": 127.266687,
+              "allResolveSumMs": 249.78835500000002,
+              "resolveSumMs": 4.12427
+            },
+            "current-semantic": {
+              "wholeMs": 692.397833,
+              "startupFirstMs": 145.0232295,
+              "firstEditMs": 16.1678745,
+              "continuousPrimaryMs": 16.334104,
+              "continuousDiagnosticMs": 25.5800625,
+              "allResolveSumMs": 281.67381350000005,
+              "resolveSumMs": 4.234812
+            }
+          }
+        },
+        "W08-ubus-task": {
+          "semanticComparedWith": {
+            "current-uvm": {
+              "pairedMedianSavingPercent": 41.012702465886235,
+              "pairedMeanSavingPercent": 41.27677447881099,
+              "pairedMeanBootstrap95": [
+                39.60745267331352,
+                43.490363862778736
+              ],
+              "n": 20
+            }
+          },
+          "armMediansMs": {
+            "current-uvm": {
+              "wholeMs": 1514.665208,
+              "startupFirstMs": 110.9390415,
+              "firstEditMs": 17.363187500000002,
+              "continuousPrimaryMs": 16.918646000000003,
+              "continuousDiagnosticMs": 123.5074795,
+              "allResolveSumMs": 592.039666,
+              "resolveSumMs": 3.9526875
+            },
+            "current-semantic": {
+              "wholeMs": 896.3394995000001,
+              "startupFirstMs": 138.601021,
+              "firstEditMs": 16.196541500000002,
+              "continuousPrimaryMs": 15.9720415,
+              "continuousDiagnosticMs": 23.2976665,
+              "allResolveSumMs": 510.081437,
+              "resolveSumMs": 3.6143134999999997
+            }
+          }
+        }
+      }
+    },
+    "bulkSpi": {
+      "source": "semantic-v2-spi-all-timing.json",
+      "n": 20,
+      "cycles": 10,
+      "mode": "all",
+      "cases": {
+        "W01-compare": {
+          "semanticComparedWith": {
+            "current-uvm": {
+              "pairedMedianSavingPercent": -1.233326052564978,
+              "pairedMeanSavingPercent": -0.13708256724532805,
+              "pairedMeanBootstrap95": [
+                -2.1481323585638594,
+                2.146823195381489
+              ],
+              "n": 20
+            }
+          },
+          "armMediansMs": {
+            "current-uvm": {
+              "wholeMs": 3614.0528335,
+              "startupFirstMs": 123.00312550000001,
+              "firstEditMs": 19.290333,
+              "continuousPrimaryMs": 19.2606665,
+              "continuousDiagnosticMs": 78.5668125,
+              "allResolveSumMs": 3206.971001,
+              "resolveSumMs": 4.0509355
+            },
+            "current-semantic": {
+              "wholeMs": 3653.3129790000003,
+              "startupFirstMs": 147.19764600000002,
+              "firstEditMs": 18.468062500000002,
+              "continuousPrimaryMs": 18.281374999999997,
+              "continuousDiagnosticMs": 31.933896,
+              "allResolveSumMs": 3164.2137700000003,
+              "resolveSumMs": 4.755542
+            }
+          }
+        }
+      }
+    },
+    "burst": {
+      "source": "semantic-v2-burst-timing.json",
+      "n": 20,
+      "cycles": 10,
+      "mode": "selected",
+      "cases": {
+        "W01-compare": {
+          "semanticComparedWith": {
+            "current-uvm": {
+              "pairedMedianSavingPercent": 7.477930026610789,
+              "pairedMeanSavingPercent": 6.236365551133056,
+              "pairedMeanBootstrap95": [
+                1.4953689781186095,
+                9.409482704056789
+              ],
+              "n": 20
+            }
+          },
+          "armMediansMs": {
+            "current-uvm": {
+              "wholeMs": 413.627646,
+              "startupFirstMs": 114.208167,
+              "firstEditMs": 15.835104,
+              "continuousPrimaryMs": 15.248895999999998,
+              "continuousDiagnosticMs": 65.699354,
+              "resolveSumMs": 0.0
+            },
+            "current-semantic": {
+              "wholeMs": 382.575375,
+              "startupFirstMs": 142.49175,
+              "firstEditMs": 14.659979499999999,
+              "continuousPrimaryMs": 19.511708,
+              "continuousDiagnosticMs": 30.7528125,
+              "resolveSumMs": 0.0
+            }
+          }
+        },
+        "W07-pss-multidoc": {
+          "semanticComparedWith": {
+            "current-uvm": {
+              "pairedMedianSavingPercent": 22.169145604819985,
+              "pairedMeanSavingPercent": 22.448424311228848,
+              "pairedMeanBootstrap95": [
+                21.707827397408984,
+                23.245863370271348
+              ],
+              "n": 20
+            }
+          },
+          "armMediansMs": {
+            "current-uvm": {
+              "wholeMs": 550.060125,
+              "startupFirstMs": 118.6445415,
+              "firstEditMs": 16.6520205,
+              "continuousPrimaryMs": 16.771667,
+              "continuousDiagnosticMs": 109.19749999999999,
+              "resolveSumMs": 16.9922905
+            },
+            "current-semantic": {
+              "wholeMs": 426.32712449999997,
+              "startupFirstMs": 145.2811665,
+              "firstEditMs": 16.3340625,
+              "continuousPrimaryMs": 16.2678545,
+              "continuousDiagnosticMs": 25.1739165,
+              "resolveSumMs": 15.2441055
+            }
+          }
+        },
+        "W08-ubus-task": {
+          "semanticComparedWith": {
+            "current-uvm": {
+              "pairedMedianSavingPercent": 19.25134630378303,
+              "pairedMeanSavingPercent": 19.480637026268457,
+              "pairedMeanBootstrap95": [
+                19.18867841590647,
+                19.7972425494428
+              ],
+              "n": 20
+            }
+          },
+          "armMediansMs": {
+            "current-uvm": {
+              "wholeMs": 480.0315625,
+              "startupFirstMs": 108.99202149999999,
+              "firstEditMs": 17.5758545,
+              "continuousPrimaryMs": 17.436646000000003,
+              "continuousDiagnosticMs": 74.67531249999999,
+              "resolveSumMs": 14.5602705
+            },
+            "current-semantic": {
+              "wholeMs": 387.529062,
+              "startupFirstMs": 138.166875,
+              "firstEditMs": 16.178188,
+              "continuousPrimaryMs": 15.7946045,
+              "continuousDiagnosticMs": 22.853771000000002,
+              "resolveSumMs": 4.7654165
+            }
+          }
+        }
+      }
+    },
+    "defaultOffUbus": {
+      "source": "semantic-v2-default-timing.json",
+      "n": 20,
+      "cycles": 10,
+      "mode": "selected",
+      "cases": {
+        "W08-ubus-task": {
+          "currentOffComparedWith": {
+            "released-native": {
+              "pairedMedianSavingPercent": -0.4663678666914637,
+              "pairedMeanSavingPercent": -0.5626667458240652,
+              "pairedMeanBootstrap95": [
+                -1.4547493730343037,
+                0.27071283135113366
+              ],
+              "n": 20
+            }
+          },
+          "armMediansMs": {
+            "released-native": {
+              "wholeMs": 2190.6539585,
+              "startupFirstMs": 106.6670205,
+              "firstEditMs": 54.897208,
+              "continuousPrimaryMs": 52.774146,
+              "continuousDiagnosticMs": 192.0526875,
+              "resolveSumMs": 15.4962915
+            },
+            "current-off": {
+              "wholeMs": 2186.0501045,
+              "startupFirstMs": 105.183667,
+              "firstEditMs": 53.419624999999996,
+              "continuousPrimaryMs": 53.277792000000005,
+              "continuousDiagnosticMs": 192.8426045,
+              "resolveSumMs": 15.378938
+            }
+          }
+        }
+      }
+    }
+  },
+  "memory": {
+    "short": {
+      "cycles": 20,
+      "repeats": 3,
+      "summary": {
+        "W01-compare": {
+          "current-off": {
+            "coreEdits": {
+              "parentRss": 161.734375,
+              "familyRss": 243.515625,
+              "parentFootprint": 127.28182220458984,
+              "familyFootprint": 199.6573257446289
+            },
+            "commonThroughSave": {
+              "parentRss": 192.671875,
+              "familyRss": 260.953125,
+              "parentFootprint": 157.67244720458984,
+              "familyFootprint": 216.9854278564453
+            },
+            "includingCurrentOnlyRebuild": {
+              "parentRss": 209.71875,
+              "familyRss": 260.953125,
+              "parentFootprint": 174.73497009277344,
+              "familyFootprint": 216.9854278564453
+            }
+          },
+          "current-semantic": {
+            "coreEdits": {
+              "parentRss": 104.25,
+              "familyRss": 104.25,
+              "parentFootprint": 93.10990142822266,
+              "familyFootprint": 93.10990142822266
+            },
+            "commonThroughSave": {
+              "parentRss": 108.46875,
+              "familyRss": 108.46875,
+              "parentFootprint": 97.34429931640625,
+              "familyFootprint": 97.34429931640625
+            },
+            "includingCurrentOnlyRebuild": {
+              "parentRss": 167.578125,
+              "familyRss": 167.578125,
+              "parentFootprint": 139.85994720458984,
+              "familyFootprint": 139.85994720458984
+            }
+          },
+          "released-uvm": {
+            "coreEdits": {
+              "parentRss": 71.34375,
+              "familyRss": 181.28125,
+              "parentFootprint": 59.06298065185547,
+              "familyFootprint": 129.39163208007812
+            },
+            "commonThroughSave": {
+              "parentRss": 136.34375,
+              "familyRss": 246.53125,
+              "parentFootprint": 97.78179931640625,
+              "familyFootprint": 129.39163208007812
+            },
+            "includingCurrentOnlyRebuild": {
+              "parentRss": 136.34375,
+              "familyRss": 246.53125,
+              "parentFootprint": 97.78179931640625,
+              "familyFootprint": 129.39163208007812
+            }
+          }
+        },
+        "W07-pss-multidoc": {
+          "current-off": {
+            "coreEdits": {
+              "parentRss": 162.0625,
+              "familyRss": 260.96875,
+              "parentFootprint": 127.43807220458984,
+              "familyFootprint": 202.07915496826172
+            },
+            "commonThroughSave": {
+              "parentRss": 241.515625,
+              "familyRss": 265.171875,
+              "parentFootprint": 206.46936798095703,
+              "familyFootprint": 218.6885757446289
+            },
+            "includingCurrentOnlyRebuild": {
+              "parentRss": 263.515625,
+              "familyRss": 265.171875,
+              "parentFootprint": 228.46936798095703,
+              "familyFootprint": 228.46936798095703
+            }
+          },
+          "current-semantic": {
+            "coreEdits": {
+              "parentRss": 104.5625,
+              "familyRss": 104.5625,
+              "parentFootprint": 93.34427642822266,
+              "familyFootprint": 93.34427642822266
+            },
+            "commonThroughSave": {
+              "parentRss": 119.859375,
+              "familyRss": 119.859375,
+              "parentFootprint": 108.64115142822266,
+              "familyFootprint": 108.64115142822266
+            },
+            "includingCurrentOnlyRebuild": {
+              "parentRss": 180.46875,
+              "familyRss": 180.46875,
+              "parentFootprint": 162.14119720458984,
+              "familyFootprint": 162.14119720458984
+            }
+          },
+          "released-uvm": {
+            "coreEdits": {
+              "parentRss": 68.078125,
+              "familyRss": 180.671875,
+              "parentFootprint": 55.67235565185547,
+              "familyFootprint": 135.00102996826172
+            },
+            "commonThroughSave": {
+              "parentRss": 181.859375,
+              "familyRss": 290.796875,
+              "parentFootprint": 146.75057220458984,
+              "familyFootprint": 177.6417236328125
+            },
+            "includingCurrentOnlyRebuild": {
+              "parentRss": 181.859375,
+              "familyRss": 290.796875,
+              "parentFootprint": 146.75057220458984,
+              "familyFootprint": 177.6417236328125
+            }
+          }
+        },
+        "W08-ubus-task": {
+          "current-off": {
+            "coreEdits": {
+              "parentRss": 176.375,
+              "familyRss": 267.0,
+              "parentFootprint": 141.76619720458984,
+              "familyFootprint": 223.0167236328125
+            },
+            "commonThroughSave": {
+              "parentRss": 201.359375,
+              "familyRss": 274.28125,
+              "parentFootprint": 166.37557220458984,
+              "familyFootprint": 230.2823257446289
+            },
+            "includingCurrentOnlyRebuild": {
+              "parentRss": 221.296875,
+              "familyRss": 274.28125,
+              "parentFootprint": 186.32872009277344,
+              "familyFootprint": 230.2823257446289
+            }
+          },
+          "current-semantic": {
+            "coreEdits": {
+              "parentRss": 123.484375,
+              "familyRss": 123.484375,
+              "parentFootprint": 112.29740142822266,
+              "familyFootprint": 112.29740142822266
+            },
+            "commonThroughSave": {
+              "parentRss": 125.359375,
+              "familyRss": 125.359375,
+              "parentFootprint": 114.17240142822266,
+              "familyFootprint": 114.17240142822266
+            },
+            "includingCurrentOnlyRebuild": {
+              "parentRss": 181.484375,
+              "familyRss": 181.484375,
+              "parentFootprint": 161.95367431640625,
+              "familyFootprint": 161.95367431640625
+            }
+          },
+          "released-uvm": {
+            "coreEdits": {
+              "parentRss": 93.0,
+              "familyRss": 219.203125,
+              "parentFootprint": 80.57862854003906,
+              "familyFootprint": 156.1104278564453
+            },
+            "commonThroughSave": {
+              "parentRss": 141.625,
+              "familyRss": 258.6875,
+              "parentFootprint": 109.15677642822266,
+              "familyFootprint": 156.4541778564453
+            },
+            "includingCurrentOnlyRebuild": {
+              "parentRss": 141.625,
+              "familyRss": 258.6875,
+              "parentFootprint": 109.15677642822266,
+              "familyFootprint": 156.4541778564453
+            }
+          }
+        }
+      },
+      "retirements": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "long": {
+      "cycles": 1000,
+      "repeats": 3,
+      "summary": {
+        "W01-compare": {
+          "current-semantic": {
+            "coreEdits": {
+              "parentRss": 175.78125,
+              "familyRss": 175.78125,
+              "parentFootprint": 164.68809509277344,
+              "familyFootprint": 164.68809509277344
+            },
+            "commonThroughSave": {
+              "parentRss": 175.78125,
+              "familyRss": 175.78125,
+              "parentFootprint": 164.68809509277344,
+              "familyFootprint": 164.68809509277344
+            },
+            "includingCurrentOnlyRebuild": {
+              "parentRss": 208.1875,
+              "familyRss": 208.1875,
+              "parentFootprint": 171.82872009277344,
+              "familyFootprint": 171.82872009277344
+            }
+          }
+        },
+        "W07-pss-multidoc": {
+          "current-semantic": {
+            "coreEdits": {
+              "parentRss": 176.34375,
+              "familyRss": 176.34375,
+              "parentFootprint": 165.18811798095703,
+              "familyFootprint": 165.18811798095703
+            },
+            "commonThroughSave": {
+              "parentRss": 178.15625,
+              "familyRss": 178.15625,
+              "parentFootprint": 165.18811798095703,
+              "familyFootprint": 165.18811798095703
+            },
+            "includingCurrentOnlyRebuild": {
+              "parentRss": 232.703125,
+              "familyRss": 232.703125,
+              "parentFootprint": 193.81314086914062,
+              "familyFootprint": 193.81314086914062
+            }
+          }
+        },
+        "W08-ubus-task": {
+          "current-semantic": {
+            "coreEdits": {
+              "parentRss": 193.59375,
+              "familyRss": 193.59375,
+              "parentFootprint": 173.46932220458984,
+              "familyFootprint": 173.46932220458984
+            },
+            "commonThroughSave": {
+              "parentRss": 193.734375,
+              "familyRss": 193.734375,
+              "parentFootprint": 173.46932220458984,
+              "familyFootprint": 173.46932220458984
+            },
+            "includingCurrentOnlyRebuild": {
+              "parentRss": 234.34375,
+              "familyRss": 234.34375,
+              "parentFootprint": 198.82874298095703,
+              "familyFootprint": 198.82874298095703
+            }
+          }
+        }
+      },
+      "retirements": [
+        12,
+        12,
+        38,
+        12,
+        12,
+        38,
+        12,
+        12,
+        38
+      ]
+    }
+  },
+  "limits": [
+    "Trusted dependency closure, explicit reconstruction, no automatic library freshness guarantee.",
+    "Preparation costs and SPI burst-query regression are reported; SPI bulk global resolve speedup is not established.",
+    "Long memory sessions cover the semantic arm only; no new comparative long-memory saving claim.",
+    "Memory peaks from current-only reconstruction are separate from matched common edit phases.",
+    "Secondary notification timing is not required identical; before/after settlement evidence preserves all values."
+  ],
+  "memoryUnits": "MiB",
+  "memoryScopes": {
+    "coreEdits": "Spawn through final 20- or 1000-edit mark, before extra stress phases.",
+    "commonThroughSave": "Includes shared error/repair, suffix macro change/repair and save phases.",
+    "includingCurrentOnlyRebuild": "Entire sampled run; current arms additionally execute manual UVM rebuild, which is not a matched reference phase."
+  }
+}

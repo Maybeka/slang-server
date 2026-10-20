@@ -9,6 +9,7 @@
 #include "ast/ShallowCompilation.h"
 
 #include "ast/ServerCompilation.h"
+#include "ast/TrustedUvmLibrary.h"
 #include "util/SlangExtensions.h"
 
 #include "slang/ast/symbols/CompilationUnitSymbols.h"
@@ -25,9 +26,20 @@ ShallowCompilation::ShallowCompilation(
     const ServerCompilation* design, const lsp::RequestContext& ctx, bool packageOnly) :
     m_sourceManager(sourceManager), m_tree(std::move(tree)), m_allTrees{m_tree},
     m_analysisOptions(options.getOrDefault<analysis::AnalysisOptions>()) {
+    if (auto setting = options.get<TrustedUvmImport>())
+        m_sourceOwnerLease = setting->sourceOwner;
     for (const auto& dependency : dependencies)
         if (std::find(m_allTrees.begin(), m_allTrees.end(), dependency) == m_allTrees.end())
             m_allTrees.push_back(dependency);
+
+    if (auto setting = options.get<TrustedUvmImport>();
+        setting && setting->library &&
+        m_tree == setting->library->compilation->getSyntaxTrees().front()) {
+        // Navigation within a fixed library indexes the prepared semantic owner;
+        // no second UVM compilation is constructed merely to open its source.
+        m_compilation = setting->library->compilation;
+        return;
+    }
 
     auto cOptions = options.getOrDefault<ast::CompilationOptions>();
     cOptions.flags |= ast::CompilationFlags::AllowTopLevelIfacePorts;
@@ -42,11 +54,12 @@ ShallowCompilation::ShallowCompilation(
         cOptions.flags &= ~ast::CompilationFlags::CheckUninstantiated;
     }
     ctx.checkpoint("before compilation construction");
-    m_compilation = std::make_unique<ast::Compilation>(cOptions);
+    m_compilation = std::make_shared<ast::Compilation>(cOptions);
+    const bool trusted = importTrustedUvm(*m_compilation, sourceManager, options);
     ctx.checkpoint("after compilation construction");
     for (auto& depTree : m_allTrees) {
         ctx.checkpoint("before adding syntax tree");
-        m_compilation->addSyntaxTree(depTree);
+        m_compilation->addSyntaxTree(depTree, trusted);
         ctx.checkpoint("after adding syntax tree");
     }
 

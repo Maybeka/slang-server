@@ -200,6 +200,12 @@ lsp::InitializeResult SlangServer::getInitialize(const lsp::InitializeParams& pa
         m_methodScope.reset();
         return true;
     });
+    registerCommand<std::monostate, rfl::Generic>("slang.uvmLibraryStatus", [this](std::monostate) {
+        return m_driver->trustedUvmStatus();
+    });
+    registerCommand<std::monostate, bool>("slang.rebuildUvmLibrary", [this](std::monostate) {
+        return loadConfig(m_config, true, true, true, true);
+    });
     registerCommand<lsp::Location, std::monostate, &SlangServer::showLocation>(
         "slang.showLocation");
 
@@ -1754,7 +1760,8 @@ void SlangServer::onDocDidOpen(const lsp::DidOpenTextDocumentParams& params) {
 
 void SlangServer::maybeRetireParsedContext() {
     if ((!m_config.experimentalUvmPrefixCache.value() &&
-         !m_config.experimentalFrozenSources.value()) ||
+         !m_config.experimentalFrozenSources.value() &&
+         !m_config.experimentalUvmSemanticCache.value()) ||
         std::getenv("SLANG_UVM_GENERATION_DISABLE") || !m_driver)
         return;
     auto epoch = m_driver->completions.getCompletionEpoch();
@@ -1790,6 +1797,11 @@ void SlangServer::maybeRetireParsedContext() {
         m_diagnosticProcess->cancel();
     m_activeDiagnosticSnapshot.reset();
     m_driver->prepareForContextRetirement();
+    m_driver->preserveTrustedUvmForRetirement();
+    auto clearPreservation = slang::ScopeGuard([this] {
+        if (m_driver)
+            m_driver->preserveTrustedUvmForRetirement(false);
+    });
     phases.mark("retirement-release");
     try {
         if (!loadConfig(m_config, false, true, true, true)) {
@@ -1956,7 +1968,8 @@ void SlangServer::onWorkspaceDidChangeWatchedFiles(const lsp::DidChangeWatchedFi
         if (const char* home = std::getenv("HOME"); home && !std::getenv("SLANG_SERVER_TESTS"))
             needsReload |= changedPath ==
                            normalizeWatchedPath(fs::path(home) / ".slang" / "server.json");
-        if (m_driver->isUvmConfigurationInput(changedPath) && !openOverlay(change.uri, changedPath))
+        if (!m_driver->isTrustedUvmSource(changedPath) &&
+            m_driver->isUvmConfigurationInput(changedPath) && !openOverlay(change.uri, changedPath))
             needsReload = true;
         if (needsReload)
             break;
@@ -1989,7 +2002,7 @@ void SlangServer::onWorkspaceDidChangeWatchedFiles(const lsp::DidChangeWatchedFi
     lsp::DidChangeWatchedFilesParams sourceChanges;
     for (const auto& change : params.changes) {
         const auto changedPath = normalizeWatchedPath(fs::path(change.uri.getPath()));
-        if (!openOverlay(change.uri, changedPath))
+        if (!m_driver->isTrustedUvmSource(changedPath) && !openOverlay(change.uri, changedPath))
             sourceChanges.changes.push_back(change);
     }
     if (sourceChanges.changes.empty())
@@ -2133,7 +2146,8 @@ lsp::CompletionItem SlangServer::getCompletionItemResolve(const lsp::CompletionI
             m_methodScope.reset();
     }
     lsp::CompletionItem ret = item;
-    if (m_contextRetired && m_config.experimentalUvmPrefixCache.value())
+    if (m_contextRetired && (m_config.experimentalUvmPrefixCache.value() ||
+                             m_config.experimentalUvmSemanticCache.value()))
         m_driver->completions.requireCompletionEpoch();
     m_driver->completions.getCompletionItemResolve(ret, ctx);
     return ret;

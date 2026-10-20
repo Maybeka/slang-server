@@ -39,6 +39,7 @@ using namespace slang;
 /// options passed in a filelist
 class ServerDriver {
     friend class MethodScopeOverlay;
+    std::shared_ptr<driver::Driver> m_driverOwner;
 
 public:
     /// Create an explore driver; failed loads return null when requireValidConfig is set.
@@ -62,7 +63,7 @@ public:
     DiagnosticEngine& diagEngine;
     SlangLspClient& client;
 
-    driver::Driver driver;
+    driver::Driver& driver;
 
     /// Options parsed from the flags on creation
     Bag options;
@@ -79,9 +80,13 @@ public:
     void prepareForContextRetirement();
 
     bool isUvmPrefixCacheEnabled() const {
-        return m_config.experimentalUvmPrefixCache.value() &&
+        return (m_config.experimentalUvmPrefixCache.value() ||
+                m_config.experimentalUvmSemanticCache.value()) &&
                (!m_config.experimentalFrozenSources.value() || m_frozenWitnessUsable);
     }
+    rfl::Generic trustedUvmStatus() const;
+    bool isTrustedUvmSource(const std::filesystem::path& path) const;
+    void preserveTrustedUvmForRetirement(bool enabled = true) { m_preserveTrustedUvm = enabled; }
     bool isFrozenSourcesEnabled() const { return m_config.experimentalFrozenSources.value(); }
     std::optional<std::string> frozenInputWitnessFailure(
         slang::function_ref<void()> checkCancelled = {}) const;
@@ -199,6 +204,7 @@ public:
         std::shared_ptr<syntax::SyntaxTree> tree;
         BufferID buffer;
     };
+    std::optional<PackageIncludeContext> trustedUvmSourceContext(const URI& uri) const;
 
     /// Find an already-known including root without parsing the rest of the workspace.
     std::optional<PackageIncludeContext> getIncludeContext(
@@ -398,6 +404,10 @@ private:
     bool m_nativeInputsFailed = false;
     bool m_configurationInputsFailed = false;
     std::filesystem::path m_uvmEntryPath;
+    std::shared_ptr<struct TrustedUvmLibrary> m_trustedUvm;
+    std::string m_trustedUvmReason;
+    bool m_preserveTrustedUvm = false;
+    bool prepareTrustedUvmLibrary();
     std::filesystem::path m_uvmDirectory;
     bool m_uvmLibraryOnly = false;
     std::vector<std::filesystem::path> m_uvmWatchPaths;
