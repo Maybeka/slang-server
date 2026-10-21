@@ -500,6 +500,11 @@ void ServerDriver::invalidateUvmParseCache() {
 }
 
 rfl::Generic ServerDriver::trustedUvmStatus() const {
+    auto library = m_trustedScopes && std::ranges::find(m_trustedScopes->packages, "uvm_pkg") !=
+                                          m_trustedScopes->packages.end()
+                       ? m_trustedScopes
+                       : m_trustedUvm;
+    const bool sharedScope = library && library == m_trustedScopes;
     struct Status {
         bool enabled;
         bool prepared;
@@ -517,17 +522,16 @@ rfl::Generic ServerDriver::trustedUvmStatus() const {
         double syntaxParseMs, archiveWriteMs, archiveLoadMs;
         std::string reason;
     };
-    return rfl::to_generic(
-        Status{m_config.experimentalUvmSemanticCache.value(), bool(m_trustedUvm),
-               m_trustedUvm ? m_trustedUvm->generation : 0,
-               m_trustedUvm ? m_trustedUvm->consumers.load() : 0,
-               m_trustedUvm ? m_trustedUvm->namespaceDeclines.load() : 0,
-               m_trustedUvm ? m_trustedUvm->semanticBytes : 0,
-               m_trustedUvm ? m_trustedUvm->compilation->getTotalBytesAllocated() : 0,
-               m_trustedUvm ? m_trustedUvm->files.size() : 0, bool(m_trustedUvm),
-               m_shippedUvmProfile.has_value(), m_shippedUvmProfile.value_or(""),
-               m_uvmProjectCacheHit, m_uvmParseCachePath.string(), m_uvmParseMs,
-               m_uvmArchiveWriteMs, m_uvmArchiveLoadMs, m_trustedUvmReason});
+    return rfl::to_generic(Status{
+        m_config.experimentalUvmSemanticCache.value() || sharedScope, bool(library),
+        library ? library->generation : 0, library ? library->consumers.load() : 0,
+        library ? library->namespaceDeclines.load() : 0, library ? library->semanticBytes : 0,
+        library ? library->compilation->getTotalBytesAllocated() : 0,
+        library ? library->files.size() : 0, bool(library), m_shippedUvmProfile.has_value(),
+        m_shippedUvmProfile.value_or(""), m_uvmProjectCacheHit, m_uvmParseCachePath.string(),
+        m_uvmParseMs, m_uvmArchiveWriteMs, m_uvmArchiveLoadMs,
+        sharedScope ? "UVM shares the fixed scope semantic owner; charges cover its full closure"
+                    : m_trustedUvmReason});
 }
 
 } // namespace server

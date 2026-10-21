@@ -2,6 +2,8 @@
 #include "ServerDriver.h"
 #include "ast/TrustedUvmLibrary.h"
 #include <algorithm>
+#include <cstdio>
+#include <cstdlib>
 #include <map>
 #include <rfl/to_generic.hpp>
 
@@ -132,7 +134,8 @@ bool trustedLibraryNamespaceMatches(const TrustedUvmLibrary& library, const Sour
                                 member.kind == syntax::SyntaxKind::InterfaceDeclaration ||
                                 member.kind == syntax::SyntaxKind::ProgramDeclaration;
         if (!package && !definition) {
-            if (library.definitions.empty() || member.kind == syntax::SyntaxKind::EmptyMember ||
+            if ((library.definitions.empty() && !library.hasUnitDeclarations) ||
+                member.kind == syntax::SyntaxKind::EmptyMember ||
                 member.kind == syntax::SyntaxKind::BindDirective)
                 return true; // Bind effects are resolved in the current consumer, not its lexical
                              // namespace.
@@ -140,9 +143,40 @@ bool trustedLibraryNamespaceMatches(const TrustedUvmLibrary& library, const Sour
             // A later mutable $unit function / type / variable / import can be
             // visible in native single-unit binding but absent from that scope.
             // Lazy bodies prevent proving the absence of every such dependency.
+            if (member.kind == syntax::SyntaxKind::DPIImport) {
+                const auto& name = *member.as<syntax::DPIImportSyntax>().method->name;
+                if (name.kind == syntax::SyntaxKind::IdentifierName) {
+                    const auto value =
+                        name.as<syntax::IdentifierNameSyntax>().identifier.valueText();
+                    const auto cName =
+                        member.as<syntax::DPIImportSyntax>().c_identifier.valueText();
+                    if (!std::ranges::binary_search(library.unitLookupNames, value) &&
+                        (cName.empty() ||
+                         !std::ranges::binary_search(library.unitLookupNames, cName)) &&
+                        !std::ranges::binary_search(library.unitDpiCNames,
+                                                    cName.empty() ? value : cName))
+                        return true; // Cannot change any fixed SV or C import binding.
+                }
+            }
+            if (member.kind == syntax::SyntaxKind::PackageImportDeclaration) {
+                bool safe = true;
+                for (auto item : member.as<syntax::PackageImportDeclarationSyntax>().items) {
+                    auto name = item->package.valueText();
+                    if (item->item.kind == parsing::TokenKind::Star)
+                        safe &= std::ranges::find(library.safeUnitWildcardImports, name) !=
+                                library.safeUnitWildcardImports.end();
+                    else
+                        safe &= library.compilation->getPackage(name) &&
+                                !std::ranges::binary_search(library.unitLookupNames,
+                                                            item->item.valueText());
+                }
+                if (safe)
+                    return true;
+            }
             const auto location = sources.getFullyExpandedLoc(member.getFirstToken().location());
             const auto path = sources.getFullPath(location.buffer()).lexically_normal();
-            return !path.empty() && library.files.contains(path.generic_string());
+            const bool fixed = !path.empty() && library.files.contains(path.generic_string());
+            return fixed;
         }
         const auto& declaration = member.as<syntax::ModuleDeclarationSyntax>();
         const auto name = declaration.header->name.valueText();
@@ -168,11 +202,26 @@ bool trustedLibraryNamespaceMatches(const TrustedUvmLibrary& library, const Sour
         const auto& root = tree->root();
         if (root.kind == syntax::SyntaxKind::CompilationUnit) {
             for (auto member : root.as<syntax::CompilationUnitSyntax>().members)
-                if (!compatible(*member))
+                if (!compatible(*member)) {
+                    if (std::getenv("SLANG_SCOPE_NAMESPACE_TRACE")) {
+                        auto location = sources.getFullyExpandedLoc(
+                            member->getFirstToken().location());
+                        std::fprintf(stderr, "scope-unit-decline: %s %s\n",
+                                     std::string(syntax::toString(member->kind)).c_str(),
+                                     sources.getFullPath(location.buffer()).string().c_str());
+                    }
                     return false;
+                }
         }
-        else if (!compatible(root))
+        else if (!compatible(root)) {
+            if (std::getenv("SLANG_SCOPE_NAMESPACE_TRACE")) {
+                auto location = sources.getFullyExpandedLoc(root.getFirstToken().location());
+                std::fprintf(stderr, "scope-root-decline: %s %s\n",
+                             std::string(syntax::toString(root.kind)).c_str(),
+                             sources.getFullPath(location.buffer()).string().c_str());
+            }
             return false;
+        }
     }
     return true;
 }
@@ -278,6 +327,7 @@ bool ServerDriver::prepareScopeLibrary() {
     if (!prefix->isPrefixResumeSafe().value_or(false))
         return decline("fixed package prefix has unsupported preprocessing state");
     std::vector<std::string> packages, definitions;
+    bool hasUnitDeclarations = false;
     for (const auto* member : prefix->root().as<syntax::CompilationUnitSyntax>().members) {
         if (member->kind == syntax::SyntaxKind::PackageDeclaration)
             packages.emplace_back(
@@ -287,10 +337,29 @@ bool ServerDriver::prepareScopeLibrary() {
                  member->kind == syntax::SyntaxKind::ProgramDeclaration)
             definitions.emplace_back(
                 member->as<syntax::ModuleDeclarationSyntax>().header->name.valueText());
-        else if (member->kind != syntax::SyntaxKind::PackageImportDeclaration &&
-                 member->kind != syntax::SyntaxKind::EmptyMember)
-            return decline("fixed scope roots contain unsupported compilation-unit declarations");
+        else {
+            switch (member->kind) {
+                case syntax::SyntaxKind::PackageImportDeclaration:
+                case syntax::SyntaxKind::DPIImport:
+                case syntax::SyntaxKind::ClassDeclaration:
+                case syntax::SyntaxKind::TypedefDeclaration:
+                case syntax::SyntaxKind::ForwardTypedefDeclaration:
+                case syntax::SyntaxKind::FunctionDeclaration:
+                case syntax::SyntaxKind::TaskDeclaration:
+                case syntax::SyntaxKind::DataDeclaration:
+                case syntax::SyntaxKind::ParameterDeclarationStatement:
+                    hasUnitDeclarations = true;
+                    break;
+                case syntax::SyntaxKind::EmptyMember:
+                    break;
+                default:
+                    return decline(
+                        "fixed scope roots contain unsupported compilation-unit declarations");
+            }
+        }
     }
+    if (hasUnitDeclarations && driver.syntaxTrees.size() != 1)
+        return decline("fixed compilation-unit declarations require a single configured unit");
     if (std::set<std::string>(packages.begin(), packages.end()).size() != packages.size() ||
         std::set<std::string>(definitions.begin(), definitions.end()).size() != definitions.size())
         return decline("fixed scope dependency declarations are ambiguous; native analysis");
@@ -308,7 +377,10 @@ bool ServerDriver::prepareScopeLibrary() {
     if (m_config.experimentalUvmSemanticCache.value() && !m_uvmEntryPath.empty() &&
         std::ranges::find(seeds, "uvm_pkg") == seeds.end())
         seeds.emplace_back("uvm_pkg");
-    const bool packageOnly = modules.empty() && !seeds.empty() && driver.syntaxTrees.size() == 1;
+    // A package-only projection cannot discard the fixed $unit namespace that
+    // its declarations (including deferred generic bodies) can depend on.
+    const bool packageOnly = modules.empty() && !hasUnitDeclarations && !seeds.empty() &&
+                             driver.syntaxTrees.size() == 1;
     const bool exactPrefix = definitions.empty() &&
                              std::set<std::string>(packages.begin(), packages.end()) ==
                                  std::set<std::string>(seeds.begin(), seeds.end());
@@ -341,10 +413,64 @@ bool ServerDriver::prepareScopeLibrary() {
         packages = closure->packages;
         definitions.clear();
     }
+    std::vector<std::string_view> unitLookupNames, safeUnitWildcardImports, unitDpiCNames;
+    if (!definitions.empty() || hasUnitDeclarations) {
+        auto collect = [&](auto&& self, const syntax::SyntaxNode& node,
+                           const ast::PackageSymbol* package) -> void {
+            if (node.kind == syntax::SyntaxKind::PackageDeclaration)
+                package = compilation->getPackage(
+                    node.as<syntax::ModuleDeclarationSyntax>().header->name.valueText());
+            if (node.kind == syntax::SyntaxKind::ScopedName &&
+                node.as<syntax::ScopedNameSyntax>().left->kind == syntax::SyntaxKind::UnitScope)
+                package = nullptr; // Explicit $unit lookup bypasses package-local shadows.
+            if (node.kind == syntax::SyntaxKind::DPIImport) {
+                const auto& dpi = node.as<syntax::DPIImportSyntax>();
+                auto name = dpi.c_identifier.valueText();
+                if (name.empty() && dpi.method->name->kind == syntax::SyntaxKind::IdentifierName)
+                    name =
+                        dpi.method->name->as<syntax::IdentifierNameSyntax>().identifier.valueText();
+                if (!name.empty())
+                    unitDpiCNames.push_back(name);
+            }
+            for (size_t i = 0; i < node.getChildCount(); ++i) {
+                if (auto child = node.childNode(i))
+                    self(self, *child, package);
+                else if (auto token = node.childToken(i);
+                         token && token.kind == parsing::TokenKind::Identifier) {
+                    auto name = token.valueText();
+                    // Direct package declarations shadow every CU binding,
+                    // independent of declaration order. Keep all other names,
+                    // including unresolved generic and wildcard dependencies.
+                    if (!package || !package->getNameMap().contains(name))
+                        unitLookupNames.push_back(name);
+                }
+            }
+        };
+        collect(collect, semanticTree->root(), nullptr);
+        std::ranges::sort(unitDpiCNames);
+        unitDpiCNames.erase(std::unique(unitDpiCNames.begin(), unitDpiCNames.end()),
+                            unitDpiCNames.end());
+        std::ranges::sort(unitLookupNames);
+        auto last = std::unique(unitLookupNames.begin(), unitLookupNames.end());
+        std::vector<std::string_view>(unitLookupNames.begin(), last).swap(unitLookupNames);
+        auto checkPackage = [&](std::string_view name) {
+            if (auto package = compilation->getPackage(name))
+                if (std::ranges::none_of(unitLookupNames, [&](auto lookup) {
+                        return package->findForImport(lookup) != nullptr;
+                    }))
+                    safeUnitWildcardImports.push_back(package->name);
+        };
+        for (const auto& name : packages)
+            checkPackage(name);
+        checkPackage("std");
+    }
     const auto charged = compilation->getTotalBytesAllocated() +
                          semanticTree->getRetainedSyntaxBytes() +
                          semanticTree->getRetainedSourceBytes() + sm.getSourceLocationTableBytes() +
-                         sm.getMemoryUsage();
+                         sm.getMemoryUsage() +
+                         (unitLookupNames.capacity() + safeUnitWildcardImports.capacity() +
+                          unitDpiCNames.capacity()) *
+                             sizeof(std::string_view);
     if (!config.maxMiB.value() || config.maxMiB.value() > 512 ||
         charged > size_t(config.maxMiB.value()) * 1024 * 1024)
         return decline("fixed package owner exceeds frozenSources.maxMiB");
@@ -353,6 +479,10 @@ bool ServerDriver::prepareScopeLibrary() {
     library->compilation = std::move(compilation);
     library->packages = std::move(packages);
     library->definitions = std::move(definitions);
+    library->hasUnitDeclarations = hasUnitDeclarations && !closure;
+    library->unitLookupNames = std::move(unitLookupNames);
+    library->safeUnitWildcardImports = std::move(safeUnitWildcardImports);
+    library->unitDpiCNames = std::move(unitDpiCNames);
     library->uvmParseTree = driver.precompiledUvm;
     library->shippedProfile = m_shippedUvmProfile;
     library->preparseDependencies = m_uvmPreparseDependencies;
@@ -437,6 +567,7 @@ rfl::Generic ServerDriver::scopeLibraryStatus() const {
         uint64_t generation, consumers, syntaxResumes, namespaceDeclines;
         size_t chargedBytes, astBytes, fixedSourceFiles;
         std::vector<std::string> packages, definitions;
+        bool hasUnitDeclarations = false;
         std::vector<FrozenInstanceCache::Selection> instances;
         bool instanceBodiesShared;
         ScopeBodyCache::Stats bodies;
@@ -455,6 +586,7 @@ rfl::Generic ServerDriver::scopeLibraryStatus() const {
                library ? library->files.size() : 0,
                library ? library->packages : std::vector<std::string>{},
                library ? library->definitions : std::vector<std::string>{},
-               m_scopeInstanceSelections, bodies.hits != 0, bodies, m_scopeReason});
+               library && library->hasUnitDeclarations, m_scopeInstanceSelections, bodies.hits != 0,
+               bodies, m_scopeReason});
 }
 } // namespace server

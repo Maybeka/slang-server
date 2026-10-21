@@ -2,6 +2,7 @@
 #include "Indexer.h"
 #include "ServerDriver.h"
 #include "catch2/matchers/catch_matchers.hpp"
+#include "document/ShallowAnalysis.h"
 #include "document/SlangDoc.h"
 #include "utils/ClientHarness.h"
 #include <atomic>
@@ -246,5 +247,48 @@ TEST_CASE("Fast cwd preserves native filelist single-unit macro order after unsa
         replaceText(*doc, "package p; typedef `FIELD_TYPE edited_t; endpackage\n");
         CHECK(aliasWidth(doc->getSyntaxTree(), "p", "edited_t") == 16);
         CHECK(preamble->textMatches("`define FIELD_TYPE shortint\n"));
+    }
+}
+
+TEST_CASE("Configured package includes retain the filelist provider across edits",
+          "[native-unit][configured-package-provider]") {
+    UnitWorkspace workspace;
+    workspace.write("vendor/base_pkg.sv",
+                    "package base_pkg; class Base; int inherited; endclass endpackage\n");
+    workspace.write("env/base_pkg.sv", "package base_pkg; int wrong; endpackage\n");
+    workspace.write("env/env_pkg.sv", "package env_pkg; import base_pkg::*;\n"
+                                      "`include \"item.svh\"\nendpackage\n");
+    workspace.write("env/item.svh", "class Item extends Base; int own; endclass\n");
+    workspace.write("top.sv", "module top; env_pkg::Item item; endmodule\n");
+    workspace.write("design.f", "vendor/base_pkg.sv\nenv/env_pkg.sv\ntop.sv\n");
+    Config config;
+    config.flagsByFile = std::vector<Config::FlagSource>{
+        {workspace.path("server.json").string(), "--single-unit --threads 1 --top top"}};
+    Indexer indexer;
+    ClientHarness client;
+    auto driver = server::ServerDriver::createFromFileLists(indexer, client, config, {"design.f"},
+                                                            workspace.root.string(), nullptr, true);
+    REQUIRE(driver);
+    driver->getDocument(workspace.uri("env/base_pkg.sv"))->getSyntaxTree();
+    for (int version = 1; version <= 6; ++version) {
+        auto text = "class Item extends Base; int own" + std::to_string(version) + "; endclass\n";
+        if (version == 1)
+            driver->openDocument(workspace.uri("env/item.svh"), text, version, true);
+        else
+            driver->onDocDidChange(
+                {.textDocument = {.version = version, .uri = workspace.uri("env/item.svh")},
+                 .contentChanges = {lsp::TextDocumentContentChangeWholeDocument{.text = text}}});
+        auto compilation =
+            driver->getDocument(workspace.uri("env/item.svh"))->getAnalysis()->getCompilation();
+        auto package = compilation->getPackage("env_pkg");
+        REQUIRE(package);
+        auto item = package->find("Item");
+        REQUIRE(item);
+        auto base = item->as<slang::ast::ClassType>().getBaseClass();
+        REQUIRE(base);
+        REQUIRE(base->isClass());
+        CHECK(base->as<slang::ast::ClassType>().find("inherited"));
+        CHECK(item->as<slang::ast::ClassType>().find("own" + std::to_string(version)));
+        CHECK(compilation->getPackage("base_pkg")->find("wrong") == nullptr);
     }
 }

@@ -109,7 +109,7 @@ index 133958b90..6208d7475 100644
  
  template<typename TVisitor>
 diff --git a/include/slang/ast/Compilation.h b/include/slang/ast/Compilation.h
-index b7ddc64e4..5b821b3c7 100644
+index b7ddc64e4..028d51488 100644
 --- a/include/slang/ast/Compilation.h
 +++ b/include/slang/ast/Compilation.h
 @@ -7,6 +7,7 @@
@@ -174,7 +174,7 @@ index b7ddc64e4..5b821b3c7 100644
      /// @name Top-level API
      /// @{
  
-@@ -349,7 +368,61 @@ public:
+@@ -349,7 +368,65 @@ public:
  
      /// Adds a syntax tree to the compilation. If the compilation has already been finalized
      /// by calling @a getRoot this call will throw an exception.
@@ -191,6 +191,10 @@ index b7ddc64e4..5b821b3c7 100644
 +    /// connections, overrides and bind state remain local to this compilation.
 +    void importDefinition(std::shared_ptr<Compilation> owner, std::string_view name,
 +                          SourceManager& sources);
++    /// Reuse fixed $unit declarations in matching provider syntax. Current scopes
++    /// receive transparent bindings; symbols keep their immutable lexical owner.
++    void importCompilationUnitDeclarations(std::shared_ptr<Compilation> owner,
++                                           SourceManager& sources);
 +    /// Attach an immutable, independently bound body before any target members
 +    /// escape. Connections remain owned by the current instance. Unsupported
 +    /// bodies return false without changing the target. This is explicitly opt-in.
@@ -211,7 +215,7 @@ index b7ddc64e4..5b821b3c7 100644
 +    /// Unreferenced definitions are not instantiated for provisional checking.
 +    /// Call only before elaboration, after validating the original native graph;
 +    /// this owner is not a complete design diagnostic result.
-+    void setInstanceBodyCacheContext();
++    void setInstanceBodyCacheContext(bool inheritedBindTarget = false);
 +    /// Accept integral type arguments with fixed nominal identity and no mutable aliases.
 +    bool isFixedInstanceBodyTypeArgument(const Type& type, const InstanceBodySymbol& root) const;
 +    bool hasMatchingInstanceBodyParameters(const InstanceBodySymbol& retained,
@@ -237,7 +241,7 @@ index b7ddc64e4..5b821b3c7 100644
  
      /// Gets the override node for a top-level definition, creating it if necessary. This must be
      /// called before the compilation is finalized. The syntax node can come from another
-@@ -512,6 +585,11 @@ public:
+@@ -512,6 +589,11 @@ public:
  
      /// Gets the package with the give name, or nullptr if there is no such package.
      const PackageSymbol* getPackage(std::string_view name) const;
@@ -249,7 +253,7 @@ index b7ddc64e4..5b821b3c7 100644
  
      /// Gets the built-in 'std' package.
      const PackageSymbol& getStdPackage() const { return *stdPkg; }
-@@ -681,7 +759,13 @@ public:
+@@ -681,7 +763,13 @@ public:
      /// Notes that the given symbol is "referenced" somewhere in the AST.
      /// This is used to diagnose unused variables, nets, etc. The @a isLValue parameter
      /// is used to tell whether a value is only assigned or whether it's also read somewhere.
@@ -264,7 +268,7 @@ index b7ddc64e4..5b821b3c7 100644
  
      /// Checks whether the given syntax node has been referenced in the AST thus far.
      /// The result is a pair, the first item of which is true if the node has been used
-@@ -857,6 +941,42 @@ private:
+@@ -857,6 +945,43 @@ private:
      friend class Scope;
      friend struct DiagnosticVisitor;
  
@@ -275,6 +279,7 @@ index b7ddc64e4..5b821b3c7 100644
 +    bool trackBodyReferences = false;
 +    bool completeBodyReferenceTracking = false;
 +    bool instanceBodyCacheContext = false;
++    bool instanceBodyCacheBindTarget = false;
 +    mutable std::unique_ptr<flat_hash_set<std::string>> missingPackageLookups;
 +    flat_hash_map<const Symbol*, std::pair<bool, bool>> bodyReferenceStatus;
 +    // References between different instance bodies are retained only when both
@@ -307,7 +312,7 @@ index b7ddc64e4..5b821b3c7 100644
      // Collected information about a resolved bind directive.
      struct ResolvedBind {
          SmallVector<const Symbol*> instTargets;
-@@ -937,6 +1057,10 @@ private:
+@@ -937,6 +1062,10 @@ private:
      // for things like variables and nets.
      flat_hash_map<const syntax::SyntaxNode*, std::pair<bool, bool>> referenceStatusMap;
  
@@ -318,7 +323,7 @@ index b7ddc64e4..5b821b3c7 100644
      // The name map for all module, interface, program, and primitive definitions.
      // The key is a combination of definition name + the scope in which it was declared.
      // The value is a pair -- the first element is a list of definitions that share
-@@ -1134,6 +1258,15 @@ private:
+@@ -1134,6 +1263,16 @@ private:
      // The default library.
      std::unique_ptr<SourceLibrary> defaultLibMem;
      const SourceLibrary* defaultLibPtr;
@@ -329,6 +334,7 @@ index b7ddc64e4..5b821b3c7 100644
 +    flat_hash_map<const DefinitionSymbol*, size_t> importedDefinitionInstanceCounts;
 +    flat_hash_map<const DefinitionSymbol*, std::vector<BindDirectiveInfo>> importedDefinitionBinds;
 +    flat_hash_set<const PackageSymbol*> importedPackages;
++    flat_hash_map<const syntax::SyntaxNode*, std::vector<const Symbol*>> importedUnitDeclarations;
 +    flat_hash_map<const GenericClassDefSymbol*, std::unique_ptr<detail::ClassSpecializationState>>
 +        importedClassStates;
  };
@@ -1702,7 +1708,7 @@ index cb4f631f8..664d00b20 100644
              // information to point the user towards the right ones.
              Diagnostic diag = *found;
 diff --git a/source/ast/Compilation.cpp b/source/ast/Compilation.cpp
-index ed7528f2c..94f655254 100644
+index ed7528f2c..30afe0aec 100644
 --- a/source/ast/Compilation.cpp
 +++ b/source/ast/Compilation.cpp
 @@ -9,12 +9,13 @@
@@ -1741,7 +1747,7 @@ index ed7528f2c..94f655254 100644
  
      // Reset systemId counters that may have been changed due to creation of types
      // in the std package.
-@@ -163,11 +161,1211 @@ Compilation::Compilation(const Bag& options, const SourceLibrary* defaultLib) :
+@@ -163,11 +161,1262 @@ Compilation::Compilation(const Bag& options, const SourceLibrary* defaultLib) :
  
  Compilation::~Compilation() = default;
  
@@ -1820,6 +1826,56 @@ index ed7528f2c..94f655254 100644
 +    definitionFromSyntax[&definition->getSyntax()->as<ModuleDeclarationSyntax>()][root.get()] =
 +        const_cast<DefinitionSymbol*>(definition);
 +    importedDefinitions.emplace(definition);
++    retainImportedCompilation(std::move(owner));
++}
++
++void Compilation::importCompilationUnitDeclarations(std::shared_ptr<Compilation> owner,
++                                                    SourceManager& sources) {
++    if (finalized || !owner || owner.get() == this || !owner->isElaborated() ||
++        owner->compilationUnits.size() != 1 || !compilationUnits.empty() ||
++        !owner->sourceManager || !sources.sharesImmutablePrefix(*owner->sourceManager) ||
++        (sourceManager && sourceManager != &sources) ||
++        (!importedCompilations.empty() && stdPkg != owner->stdPkg))
++        SLANG_THROW(std::invalid_argument("incompatible immutable compilation-unit owner"));
++    sourceManager = &sources;
++    stdPkg = owner->stdPkg;
++    packageMap[stdPkg->name] = stdPkg;
++    flat_hash_set<const SyntaxNode*> declarations;
++    for (const auto& tree : owner->syntaxTrees) {
++        if (tree->root().kind != SyntaxKind::CompilationUnit)
++            continue;
++        for (auto member : tree->root().as<CompilationUnitSyntax>().members) {
++            switch (member->kind) {
++                case SyntaxKind::PackageImportDeclaration:
++                case SyntaxKind::DPIImport:
++                case SyntaxKind::ClassDeclaration:
++                case SyntaxKind::TypedefDeclaration:
++                case SyntaxKind::ForwardTypedefDeclaration:
++                case SyntaxKind::FunctionDeclaration:
++                case SyntaxKind::TaskDeclaration:
++                case SyntaxKind::DataDeclaration:
++                case SyntaxKind::ParameterDeclarationStatement:
++                    declarations.insert(member);
++                    importedUnitDeclarations.try_emplace(member);
++                    break;
++                default:
++                    break;
++            }
++        }
++    }
++    for (auto unit : owner->compilationUnits) {
++        for (const auto& symbol : unit->members()) {
++            const Symbol* actual = &symbol;
++            while (actual->kind == SymbolKind::TransparentMember)
++                actual = &actual->as<TransparentMemberSymbol>().wrapped;
++            for (auto syntax = actual->getSyntax(); syntax; syntax = syntax->parent) {
++                if (declarations.contains(syntax)) {
++                    importedUnitDeclarations[syntax].push_back(&symbol);
++                    break;
++                }
++            }
++        }
++    }
 +    retainImportedCompilation(std::move(owner));
 +}
 +
@@ -1968,7 +2024,7 @@ index ed7528f2c..94f655254 100644
 +        }
 +        return false;
 +    };
-+    if (!isElaborated() || hasIssuedErrors() || hasFatalErrors() || retained.borrowedMembers ||
++    if (!isElaborated() || hasFatalErrors() || retained.borrowedMembers ||
 +        &retained.getCompilation() != this || !retained.parentInstance ||
 +        !InstanceCacheKey::isEligibleForCaching(*retained.parentInstance))
 +        return decline("body-context");
@@ -2837,11 +2893,12 @@ index ed7528f2c..94f655254 100644
 +    completeBodyReferenceTracking |= complete;
 +}
 +
-+void Compilation::setInstanceBodyCacheContext() {
++void Compilation::setInstanceBodyCacheContext(bool inheritedBindTarget) {
 +    if (finalized || options.topModules.size() != 1 || !options.paramOverrides.empty())
 +        SLANG_THROW(
 +            std::logic_error("body cache context requires one explicit top without CLI overrides"));
 +    instanceBodyCacheContext = true;
++    instanceBodyCacheBindTarget = inheritedBindTarget;
 +}
 +
 +void Compilation::tryReuseInstanceBodyOnLookup(InstanceBodySymbol& body) {
@@ -2954,11 +3011,69 @@ index ed7528f2c..94f655254 100644
      SLANG_ASSERT(!isFrozen());
  
      if (!tree)
-@@ -231,16 +1429,36 @@ void Compilation::addSyntaxTree(std::shared_ptr<SyntaxTree> tree) {
+@@ -205,6 +1454,36 @@ void Compilation::addSyntaxTree(std::shared_ptr<SyntaxTree> tree) {
+     root->addMember(*unit);
+     compilationUnits.push_back(unit);
+ 
++    if (reuseImportedPackages && !importedUnitDeclarations.empty()) {
++        std::vector<const Symbol*> fixed;
++        for (const auto& [_, symbols] : importedUnitDeclarations)
++            fixed.insert(fixed.end(), symbols.begin(), symbols.end());
++        std::stable_sort(fixed.begin(), fixed.end(),
++                         [](auto a, auto b) { return a->getIndex() < b->getIndex(); });
++        for (auto symbol : fixed) {
++            Symbol* wrapper;
++            if (symbol->kind == SymbolKind::WildcardImport) {
++                auto import = emplace<WildcardImportSymbol>(
++                    symbol->as<WildcardImportSymbol>().packageName, symbol->location);
++                wrapper = import;
++                unit->addWildcardImport(*import);
++            }
++            else if (symbol->kind == SymbolKind::ExplicitImport) {
++                const auto& import = symbol->as<ExplicitImportSymbol>();
++                wrapper = emplace<ExplicitImportSymbol>(import.packageName, import.importName,
++                                                       import.location);
++            }
++            else {
++                wrapper = emplace<TransparentMemberSymbol>(*symbol);
++            }
++            if (auto syntax = symbol->getSyntax())
++                wrapper->setSyntax(*syntax);
++            if (auto attributes = attributeMap.find(symbol); attributes != attributeMap.end())
++                attributeMap.emplace(wrapper, attributes->second);
++            unit->addMember(*wrapper);
++        }
++    }
++
+     for (auto& [n, meta] : tree->getMetadata().nodeMeta) {
+         SyntaxMetadata result;
+         result.tree = tree.get();
+@@ -231,16 +1510,57 @@ void Compilation::addSyntaxTree(std::shared_ptr<SyntaxTree> tree) {
      for (auto& inst : tree->getMetadata().globalInstances)
          globalInstantiations.emplace(inst->type.valueText());
  
 +    auto addMember = [&](const SyntaxNode& member) {
++        if (reuseImportedPackages && !importedUnitDeclarations.empty()) {
++            auto original = importedUnitDeclarations.find(&member);
++            if (original == importedUnitDeclarations.end()) {
++                // Source views can reparse a provider. Match its fixed physical
++                // declaration, never a same-named declaration in another file.
++                auto location = sourceManager->getFullyExpandedLoc(
++                    member.getFirstToken().location());
++                const auto& path = sourceManager->getFullPath(location.buffer());
++                original = std::ranges::find_if(importedUnitDeclarations, [&](const auto& entry) {
++                    if (entry.first->kind != member.kind)
++                        return false;
++                    auto old = sourceManager->getFullyExpandedLoc(
++                        entry.first->getFirstToken().location());
++                    return !path.empty() && old.offset() == location.offset() &&
++                           sourceManager->getFullPath(old.buffer()) == path;
++                });
++            }
++            if (original != importedUnitDeclarations.end()) {
++                return;
++            }
++        }
 +        if (reuseImportedPackages && member.kind == SyntaxKind::PackageDeclaration) {
 +            auto& declaration = member.as<ModuleDeclarationSyntax>();
 +            auto package = getPackage(declaration.header->name.valueText());
@@ -2993,7 +3108,7 @@ index ed7528f2c..94f655254 100644
      }
  
      syntaxTrees.emplace_back(std::move(tree));
-@@ -310,6 +1528,15 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
+@@ -310,6 +1630,15 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
              defaultLiblist.push_back(lib);
      }
  
@@ -3009,7 +3124,7 @@ index ed7528f2c..94f655254 100644
      // If any top-level parameter overrides were provided, parse them now.
      flat_hash_map<std::string_view, HierarchyOverrideNode::ParamOverride> cliOverrides;
      parseParamOverrides(skipDefParamsAndBinds, cliOverrides);
-@@ -398,7 +1625,7 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
+@@ -398,7 +1727,7 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
              if (inserted) {
                  topDefs.push_back({result, sourceRange});
                  SLANG_ASSERT(def->kind == SymbolKind::Definition);
@@ -3018,7 +3133,7 @@ index ed7528f2c..94f655254 100644
              }
              else {
                  auto& diag = root->addDiag(diag::MultipleTopDupName, sourceRange.start()
-@@ -465,8 +1692,7 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
+@@ -465,8 +1794,7 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
                          else {
                              // Otherwise, issue an error because the user asked us to instantiate
                              // this.
@@ -3028,7 +3143,7 @@ index ed7528f2c..94f655254 100644
                                  << userProvidedName;
                          }
                          continue;
-@@ -510,7 +1736,7 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
+@@ -510,7 +1838,7 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
  
                  auto& def = defSym->as<DefinitionSymbol>();
                  if (globalInstantiations.find(def.name) == globalInstantiations.end() &&
@@ -3037,7 +3152,18 @@ index ed7528f2c..94f655254 100644
                      unreferencedDefs.push_back(&def);
                  }
              }
-@@ -562,7 +1788,7 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
+@@ -551,6 +1879,10 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
+ 
+         auto& instance = InstanceSymbol::createDefault(*this, def, hierarchyOverrideNode,
+                                                        result.configRoot, result.configRule);
++        // Descendants inherit this flag even when the actual bind targets an
++        // ancestor outside the independent body owner's reconstructed context.
++        if (instanceBodyCacheBindTarget)
++            const_cast<InstanceBodySymbol&>(instance.body).flags |= InstanceFlags::TargetedByBind;
+         root->addMember(instance);
+         topList.push_back(&instance);
+     }
+@@ -562,7 +1894,7 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
  
      // For unreferenced definitions, go through and instantiate them with all empty
      // parameter values so that we get at least some semantic checking of the contents.
@@ -3046,7 +3172,7 @@ index ed7528f2c..94f655254 100644
          for (auto def : unreferencedDefs) {
              const HierarchyOverrideNode* hierarchyOverrideNode = nullptr;
              if (auto* syntax = def->getSyntax()) {
-@@ -734,6 +1960,10 @@ const DefinitionSymbol* Compilation::getDefinition(const Scope& scope,
+@@ -734,6 +2066,10 @@ const DefinitionSymbol* Compilation::getDefinition(const Scope& scope,
  
              lookupScope = lookupScope->asSymbol().getParentScope();
          } while (lookupScope);
@@ -3057,7 +3183,7 @@ index ed7528f2c..94f655254 100644
      }
      return nullptr;
  }
-@@ -824,6 +2054,27 @@ void Compilation::createDefinition(const Scope& scope, LookupLocation location,
+@@ -824,6 +2160,27 @@ void Compilation::createDefinition(const Scope& scope, LookupLocation location,
                                     const ModuleDeclarationSyntax& syntax) {
      SLANG_ASSERT(!isFrozen());
  
@@ -3085,7 +3211,7 @@ index ed7528f2c..94f655254 100644
      // We can only be missing metadata if the definition is created programmatically
      // (i.e. not via the parser) so we just fill in the parent's default net type
      // so that it's not a null pointer.
-@@ -893,7 +2144,7 @@ void Compilation::insertDefinition(Symbol& symbol, const Scope& scope) {
+@@ -893,7 +2250,7 @@ void Compilation::insertDefinition(Symbol& symbol, const Scope& scope) {
              for (auto v = vecIt; v != defList.end(); v++) {
                  auto vSym = *v;
                  auto vLib = vSym->getSourceLibrary();
@@ -3094,7 +3220,7 @@ index ed7528f2c..94f655254 100644
                      // Duplicate in the same library.
                      if (hasFlag(CompilationFlags::AllowLibModuleRedefinition)) {
                          // Silently keep the first definition and discard all subsequent ones,
-@@ -972,11 +2223,28 @@ void Compilation::insertDefinition(Symbol& symbol, const Scope& scope) {
+@@ -972,11 +2329,28 @@ void Compilation::insertDefinition(Symbol& symbol, const Scope& scope) {
  
  const PackageSymbol* Compilation::getPackage(std::string_view lookupName) const {
      auto it = packageMap.find(lookupName);
@@ -3124,7 +3250,7 @@ index ed7528f2c..94f655254 100644
  const PackageSymbol& Compilation::createPackage(const Scope& scope,
                                                  const ModuleDeclarationSyntax& syntax) {
      SLANG_ASSERT(!isFrozen());
-@@ -1136,10 +2404,14 @@ std::span<const AttributeSymbol* const> Compilation::getAttributes(
+@@ -1136,10 +2510,14 @@ std::span<const AttributeSymbol* const> Compilation::getAttributes(
  
  std::span<const AttributeSymbol* const> Compilation::getAttributes(const void* ptr) const {
      auto it = attributeMap.find(ptr);
@@ -3143,7 +3269,7 @@ index ed7528f2c..94f655254 100644
  }
  
  void Compilation::noteBindDirective(const BindDirectiveSyntax& syntax, const Scope& scope) {
-@@ -1467,18 +2739,60 @@ void Compilation::noteReference(const SyntaxNode& node, bool isLValue) {
+@@ -1467,18 +2845,60 @@ void Compilation::noteReference(const SyntaxNode& node, bool isLValue) {
      }
  }
  
@@ -3211,7 +3337,7 @@ index ed7528f2c..94f655254 100644
  }
  
  const NameSyntax& Compilation::parseName(std::string_view name) {
-@@ -1560,10 +2874,12 @@ void Compilation::elaborate() {
+@@ -1560,10 +2980,12 @@ void Compilation::elaborate() {
      // Double check any bind directives for correctness. These were already
      // resolved prior to full elaboration but their diagnostics were not
      // issued so we need to check again.
@@ -3228,7 +3354,7 @@ index ed7528f2c..94f655254 100644
      }
  
      // Report any lingering name conflicts.
-@@ -1680,6 +2996,49 @@ const Diagnostics& Compilation::getParseDiagnostics() {
+@@ -1680,6 +3102,49 @@ const Diagnostics& Compilation::getParseDiagnostics() {
      return *cachedParseDiagnostics;
  }
  
@@ -3278,7 +3404,7 @@ index ed7528f2c..94f655254 100644
  const Diagnostics& Compilation::getSemanticDiagnostics() {
      if (cachedSemanticDiagnostics)
          return *cachedSemanticDiagnostics;
-@@ -1687,7 +3046,99 @@ const Diagnostics& Compilation::getSemanticDiagnostics() {
+@@ -1687,7 +3152,99 @@ const Diagnostics& Compilation::getSemanticDiagnostics() {
      // Elaborate the design.
      elaborate();
  
@@ -4780,7 +4906,7 @@ index e86c15c68..0a360224a 100644
                      else {
                          addDiag(diag::ExpectedDiagPragmaArg, simple.value.range());
 diff --git a/source/syntax/SyntaxTree.cpp b/source/syntax/SyntaxTree.cpp
-index ac681a4db..97bae5cd0 100644
+index ac681a4db..771e3e201 100644
 --- a/source/syntax/SyntaxTree.cpp
 +++ b/source/syntax/SyntaxTree.cpp
 @@ -7,16 +7,92 @@
@@ -5452,7 +5578,7 @@ index ac681a4db..97bae5cd0 100644
  SourceManager& SyntaxTree::getDefaultSourceManager() {
      static SourceManager instance;
      return instance;
-@@ -126,7 +763,43 @@ SyntaxTree::SyntaxTree(SyntaxNode* root, const SourceLibrary* library, SourceMan
+@@ -126,7 +763,48 @@ SyntaxTree::SyntaxTree(SyntaxNode* root, const SourceLibrary* library, SourceMan
  std::shared_ptr<SyntaxTree> SyntaxTree::create(SourceManager& sourceManager,
                                                 std::span<const SourceBuffer> sources,
                                                 const Bag& options, MacroList inheritedMacros,
@@ -5462,8 +5588,13 @@ index ac681a4db..97bae5cd0 100644
 +    if (!cachedPrefix) {
 +        if (auto compiled = options.get<PrecompiledUvmSyntax>(); compiled && compiled->tree) {
 +            auto prefix = compiled->tree;
-+            if (&prefix->sourceMan != &sourceManager)
-+                throw std::runtime_error("precompiled prefix view uses a different source manager");
++            if (&prefix->sourceMan != &sourceManager) {
++                if (!sourceManager.sharesImmutablePrefix(prefix->sourceMan))
++                    throw std::runtime_error("precompiled prefix view uses a different source manager");
++                // Retired semantic owners can retain parse options with the original
++                // library tree. Rebind its immutable source IDs to this live namespace.
++                prefix = sharedPrefixView(prefix, sourceManager);
++            }
 +            SmallVector<SourceBuffer> remaining;
 +            bool removed = false;
 +            for (auto buffer : sources) {
@@ -5497,7 +5628,7 @@ index ac681a4db..97bae5cd0 100644
      if (sources.empty())
          SLANG_THROW(std::invalid_argument("sources cannot be empty"));
  
-@@ -139,8 +812,55 @@ std::shared_ptr<SyntaxTree> SyntaxTree::create(SourceManager& sourceManager,
+@@ -139,8 +817,55 @@ std::shared_ptr<SyntaxTree> SyntaxTree::create(SourceManager& sourceManager,
  
      BumpAllocator alloc;
      Diagnostics diagnostics;
@@ -5554,7 +5685,7 @@ index ac681a4db..97bae5cd0 100644
      const SourceLibrary* library = nullptr;
      for (auto it = sources.rbegin(); it != sources.rend(); it++) {
          preprocessor.pushSource(*it);
-@@ -168,9 +888,55 @@ std::shared_ptr<SyntaxTree> SyntaxTree::create(SourceManager& sourceManager,
+@@ -168,9 +893,55 @@ std::shared_ptr<SyntaxTree> SyntaxTree::create(SourceManager& sourceManager,
              return create(sourceManager, sources, options, inheritedMacros, false);
      }
  
@@ -5611,7 +5742,7 @@ index ac681a4db..97bae5cd0 100644
  }
  
  std::shared_ptr<SyntaxTree> SyntaxTree::fromLibraryMapFile(std::string_view path,
-@@ -216,6 +982,218 @@ std::shared_ptr<SyntaxTree> SyntaxTree::fromLibraryMapBuffer(const SourceBuffer&
+@@ -216,6 +987,218 @@ std::shared_ptr<SyntaxTree> SyntaxTree::fromLibraryMapBuffer(const SourceBuffer&
                         parser.getMetadata(), preprocessor.getMetadata(), options));
  }
  
@@ -5830,7 +5961,7 @@ index ac681a4db..97bae5cd0 100644
  bool SyntaxTree::validate() const {
      auto text = SyntaxPrinter(sourceManager())
                      .setIncludeDirectives(true)
-@@ -244,3 +1222,173 @@ bool SyntaxTree::validate() const {
+@@ -244,3 +1227,173 @@ bool SyntaxTree::validate() const {
  }
  
  } // namespace slang::syntax
@@ -8831,10 +8962,10 @@ index 000000000..f9e9cae53
 +} // namespace slang
 diff --git a/tests/unittests/SourceSnapshotTests.cpp b/tests/unittests/SourceSnapshotTests.cpp
 new file mode 100644
-index 000000000..6889bfae1
+index 000000000..c770624b9
 --- /dev/null
 +++ b/tests/unittests/SourceSnapshotTests.cpp
-@@ -0,0 +1,853 @@
+@@ -0,0 +1,877 @@
 +// SPDX-License-Identifier: MIT
 +#include "Test.h"
 +#include <cerrno>
@@ -9687,6 +9818,30 @@ index 000000000..6889bfae1
 +    CHECK(view->root().toString().find("stable") != std::string::npos);
 +    view.reset();
 +    CHECK(root.expired());
++}
++
++TEST_CASE("Precompiled options rebind immutable prefixes after namespace retirement",
++          "[source-namespace][precompiled-retirement]") {
++    SourceManager owner;
++    auto library = owner.assignText("uvm_pkg.sv",
++        "`define LIB_VALUE 41\npackage uvm_pkg; int member; endpackage\n");
++    auto prefix = syntax::SyntaxTree::fromBuffersWithCheckpoint(std::vector{library}, owner);
++    Bag options;
++    options.set(syntax::PrecompiledUvmSyntax{prefix,
++        owner.getFullPath(library.id).parent_path(), owner.getFullPath(library.id), false});
++    SourceManager live;
++    live.inheritImmutablePrefix(owner.captureImmutablePrefix({}));
++    for (int edit = 0; edit < 8; ++edit) {
++        auto consumer = live.assignText("user" + std::to_string(edit) + ".sv",
++            "module user; localparam int N=`LIB_VALUE; endmodule\n");
++        auto tree = syntax::SyntaxTree::fromBuffers(std::vector{library, consumer}, live, options);
++        CHECK(&tree->sourceManager() == &live);
++        CHECK(tree->diagnostics().empty());
++        CHECK(tree->root().toString().find("41") != std::string::npos);
++    }
++    SourceManager unrelated;
++    auto other = unrelated.assignText("other.sv", "module other; endmodule\n");
++    CHECK_THROWS(syntax::SyntaxTree::fromBuffers(std::vector{other}, unrelated, options));
 +}
 diff --git a/tests/unittests/ast/PackageAnalysisTests.cpp b/tests/unittests/ast/PackageAnalysisTests.cpp
 new file mode 100644

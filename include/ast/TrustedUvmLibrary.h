@@ -22,6 +22,10 @@ struct TrustedUvmLibrary {
     std::shared_ptr<const slang::SourceManager::ImmutablePrefix> sources;
     std::vector<std::string> packages = {"uvm_pkg"};
     std::vector<std::string> definitions;
+    bool hasUnitDeclarations = false;
+    std::vector<std::string_view> unitLookupNames;
+    std::vector<std::string_view> safeUnitWildcardImports;
+    std::vector<std::string_view> unitDpiCNames;
     std::shared_ptr<slang::syntax::SyntaxTree> uvmParseTree;
     uint64_t generation = 0;
     size_t semanticBytes = 0;
@@ -63,6 +67,8 @@ inline bool importTrustedUvm(
         compilation.importPackage(setting->library->compilation, name, sources);
     for (const auto& name : setting->library->definitions)
         compilation.importDefinition(setting->library->compilation, name, sources);
+    if (setting->library->hasUnitDeclarations)
+        compilation.importCompilationUnitDeclarations(setting->library->compilation, sources);
     if (auto bodies = options.get<ScopeBodyImport>())
         if (auto cache = bodies->cache.lock())
             cache->install(compilation);

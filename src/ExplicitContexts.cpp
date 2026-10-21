@@ -298,6 +298,25 @@ std::optional<ServerDriver::PackageIncludeContext> ServerDriver::getExplicitIncl
     handled = false;
     if (comp) {
         refreshConfiguredUnits();
+        // A configured package inclusion is authoritative. Cached standalone documents can
+        // otherwise select a different, nearer package with the same name after an edit.
+        if (m_designUsesConfiguredUnits) {
+            auto document = docs.find(uri);
+            if (document == docs.end())
+                return {};
+            auto target = sm.getFullPath(document->second->getBuffer());
+            std::vector<PackageIncludeContext> matches;
+            for (const auto& tree : m_currentConfiguredTrees)
+                for (auto buffer : packageIncludes(sm, *tree, target))
+                    matches.push_back({tree, buffer});
+            if (!matches.empty()) {
+                handled = true;
+                // Preserve full-design source views' first-include ordering for
+                // multiply included library headers.
+                m_packageOnlyContexts.insert(uri);
+                return matches.front();
+            }
+        }
         return {};
     }
     auto document = docs.find(uri);

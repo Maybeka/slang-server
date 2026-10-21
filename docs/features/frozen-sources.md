@@ -77,6 +77,32 @@ inputs without a resolved configured source group keep native parsing.
 
 ## Exact instance subtrees
 
+The semantic experiment also retains fixed compilation-unit declarations in a
+single configured unit: classes, forward types, typedefs, functions, tasks,
+variables, parameters and DPI imports. Consumer units receive transparent names
+while the declarations retain their original lexical owner. This covers tracer
+classes declared outside a package. Generic specializations depending on consumer
+types remain in the consumer. Unsupported compilation-unit constructs still use
+native analysis.
+
+Fixed global package imports are restored with consumer-local lookup records.
+When fixed compilation-unit state exists, package selections keep the ordered
+provider prefix instead of projecting away that namespace. Duplicate-import
+diagnostics and explicit `$unit::` references retain native behavior.
+
+New consumer compilation-unit declarations conservatively suspend this import.
+Imports from fixed packages and unrelated DPI declarations are allowed only when
+they cannot change the fixed namespace or an existing DPI C binding. Dependencies
+remain fixed until manual rebuild; this check does not watch provider contents.
+
+Errors outside an independent RTL candidate do not by themselves disable body
+reuse. Its certificate still rejects local errors, unscoped diagnostics and
+unproven dependencies; a retained body owner must have no semantic errors.
+Independent contexts preserve inherited bind-target flags. Actual bound children
+and types supplied by mutable ancestors can still require native analysis.
+Inspect body hits separately from library preparation: this does not promise
+reuse of the entire selected DUT in every testbench.
+
 An explicit full design can also select canonical elaborated instance paths:
 
 ```json

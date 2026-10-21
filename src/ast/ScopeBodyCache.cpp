@@ -359,25 +359,28 @@ bool ScopeBodyCache::capacityAdvice(const Compilation& current, const InstanceBo
 }
 
 void ScopeBodyCache::publish(std::shared_ptr<Compilation> current) {
-    if (current->hasIssuedErrors())
+    if (current->hasFatalErrors())
         return;
     auto& sources = *const_cast<SourceManager*>(current->getSourceManager());
-    auto bind = [&](const std::optional<std::string>& compact) {
+    auto bind = [&](const std::optional<std::string>& compact, bool inheritedBindTarget = false) {
         ++counters.ownerBuilds;
         auto result = std::make_shared<Compilation>(current->getOptions());
         result->enableInstanceBodyReferenceTracking(/* complete */ true);
         if (compact)
-            result->setInstanceBodyCacheContext();
+            result->setInstanceBodyCacheContext(inheritedBindTarget);
         if (auto lease = current->getSourceOwnerLease())
             result->retainSourceOwner(lease);
         for (const auto& name : library->packages)
             result->importPackage(library->compilation, name, sources);
         for (const auto& name : library->definitions)
             result->importDefinition(library->compilation, name, sources);
+        if (library->hasUnitDeclarations)
+            result->importCompilationUnitDeclarations(library->compilation, sources);
         if (compact) {
             auto parseOptions = current->getSyntaxTrees().back()->options();
             result->addSyntaxTree(syntax::SyntaxTree::fromText(
-                *compact, sources, "<scope-cache-context>", "", parseOptions));
+                                      *compact, sources, "<scope-cache-context>", "", parseOptions),
+                                  true);
         }
         else {
             for (const auto& tree : current->getSyntaxTrees())
@@ -465,7 +468,7 @@ void ScopeBodyCache::publish(std::shared_ptr<Compilation> current) {
             }
             return true;
         }
-        auto owner = bind(context);
+        auto owner = bind(context, body->flags.has(InstanceFlags::TargetedByBind));
         Bodies compactBodies;
         owner->getRoot().visit(compactBodies);
         const bool valid = !owner->hasIssuedErrors() &&
@@ -478,9 +481,10 @@ void ScopeBodyCache::publish(std::shared_ptr<Compilation> current) {
                                       owner->prepareInstanceBodyReuse(*candidate);
                            });
         if (!valid) {
-            if (auto trace = std::getenv("SLANG_SCOPE_BODY_TRACE"); trace && *trace)
+            if (auto trace = std::getenv("SLANG_SCOPE_BODY_TRACE"); trace && *trace) {
                 fmt::print(stderr, "scope-body compact-context invalid\t{}\terrors={}\n", path,
                            owner->hasIssuedErrors());
+            }
             owner.reset();
             if (promotion) {
                 // Failed fresh certification is admission advice only. Bound the
