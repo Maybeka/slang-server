@@ -85,6 +85,11 @@ public:
                (!m_config.experimentalFrozenSources.value() || m_frozenWitnessUsable);
     }
     rfl::Generic trustedUvmStatus() const;
+    rfl::Generic scopeLibraryStatus() const;
+    std::shared_ptr<syntax::SyntaxTree> resumeScopeLibrary(
+        std::span<const std::filesystem::path> paths, std::span<const SourceBuffer> buffers,
+        const Bag& options, bool nativeReplay);
+    bool isTrustedScopeSource(const std::filesystem::path& path) const;
     void invalidateUvmParseCache();
     bool isTrustedUvmSource(const std::filesystem::path& path) const;
     void preserveTrustedUvmForRetirement(bool enabled = true) { m_preserveTrustedUvm = enabled; }
@@ -205,7 +210,9 @@ public:
         std::shared_ptr<syntax::SyntaxTree> tree;
         BufferID buffer;
     };
-    std::optional<PackageIncludeContext> trustedUvmSourceContext(const URI& uri) const;
+    std::optional<PackageIncludeContext> trustedLibrarySourceContext(const URI& uri) const;
+    /// Current configured declarations must not replace a fixed global namespace.
+    bool hasCompatibleTrustedNamespace() const;
 
     /// Find an already-known including root without parsing the rest of the workspace.
     std::optional<PackageIncludeContext> getIncludeContext(
@@ -415,6 +422,15 @@ private:
     double m_uvmParseMs = 0, m_uvmArchiveWriteMs = 0, m_uvmArchiveLoadMs = 0;
     bool m_preserveTrustedUvm = false;
     bool prepareTrustedUvmLibrary();
+    std::shared_ptr<struct TrustedUvmLibrary> m_trustedScopes;
+    std::shared_ptr<class ScopeBodyCache> m_scopeBodies;
+    std::shared_ptr<syntax::SyntaxTree> m_scopePrefix;
+    std::vector<std::filesystem::path> m_scopeRoots;
+    size_t m_scopeRootCount = 0;
+    std::string m_scopeReason;
+    std::vector<FrozenInstanceCache::Selection> m_scopeInstanceSelections;
+    uint64_t m_scopeResumes = 0;
+    bool prepareScopeLibrary();
     std::filesystem::path m_uvmDirectory;
     bool m_uvmLibraryOnly = false;
     std::vector<std::filesystem::path> m_uvmWatchPaths;

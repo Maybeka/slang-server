@@ -12,13 +12,13 @@ compiler database or retain semantic symbols across compilations.
   "frozenSources": {
     "packages": ["common_types_pkg"],
     "modules": ["spi_master"],
-    "maxMiB": 64
+    "maxMiB": 256
   }
 }
 ```
 
 Set `experimentalFrozenSources` to `true` to evaluate reuse. A selection alone
-never enables caching. `maxMiB` ranges from 0 to 512; zero disables retention,
+never enables caching. `maxMiB` defaults to 256 MiB and ranges from 0 to 512; zero disables retention,
 and an out-of-range budget declines retention. This budget is shared between
 compilation-input groups and independent completion-detail parses of their source
 dependencies. It charges retained syntax/source bytes and cache keys, not total
@@ -85,7 +85,7 @@ An explicit full design can also select canonical elaborated instance paths:
   "experimentalFrozenSources": false,
   "frozenSources": {
     "instances": ["hdl_top_pss.DUT"],
-    "maxMiB": 64
+    "maxMiB": 256
   }
 }
 ```
@@ -129,7 +129,7 @@ symbol pointers are transplanted into another compilation.
 
 With instance selectors, one quarter of `maxMiB` is reserved for hierarchy values
 and certificates; the remaining three quarters bound parent syntax retention.
-For 64 MiB these limits are 16 and 48 MiB. Worker retention remains independently
+For the default 256 MiB these limits are 64 and 192 MiB. Worker retention remains independently
 bounded. Inspect both `sources.statistics.retainedBytes` and
 `sources.instances.statistics.retainedBytes`; their sum remains within the parent
 budget. These counters are not process RSS. Refresh and driver replacement release
@@ -281,3 +281,252 @@ a cross-request freshness cache.
 On Mac, the ordinary-leaf shortcut also checks actual leaf spelling with a
 no-follow type/name query; a case-only filename rename cannot retain an obsolete
 canonical identity. This supplements exact content reads and negative lookups.
+
+## Fixed-dependency semantic experiment (under development)
+
+`experimentalScopeSemanticCache` is a separate, default-off experiment using the
+same `frozenSources.packages` and `maxMiB` selectors. The default retained-cache
+budget is 256 MiB; set `frozenSources.maxMiB` to change it. An entry that cannot fit
+uses ordinary analysis, without waiting for older consumers to release caches. For supported package-only
+inputs, it binds a declaration view and discovers dependency packages through
+actual compiler package lookups, including lookups with suppressed diagnostics.
+It imports the selected packages and their discovered dependencies from one
+semantic owner. Separate, unrelated source roots can remain editable, even when
+they precede a selected package. The original ordered-prefix route remains for
+inputs that cannot yet be isolated, including interface-dependent libraries. Unlike certified syntax retention, its dependencies are explicitly assumed
+fixed until `slang.rebuildScopeLibrary` or configuration reload; no per-edit file
+witness is performed. Ordinary consumer edits and context retirement retain the
+owner. Consumer-dependent generic specializations remain in the consumer.
+A declaration-only closure reparses mutable roots rather than resuming a prefix
+that includes them; `syntaxResumes` can therefore stay zero despite semantic reuse.
+
+Do not enable `experimentalFrozenSources` or method overlays with this route.
+The current prototype supports one configured fixed declaration prefix containing
+packages and module/interface definitions. Module selectors and concrete RTL
+instance selectors prepare that definition closure. Parameters, attributes,
+bind state and instance counts belong to each consumer; virtual interface types
+keep the shared definition identity. `instanceBodiesShared` reports actual
+whole-body hits in the independent subtree registry; a false value means that
+this consumer has not yet reused an eligible body.
+Inherited multi-unit preprocessing, unsupported unit declarations, ambiguous
+selectors, errors and budget overflow decline retention. A module/interface owner
+also uses native binding for an analysis containing compilation-unit functions,
+tasks, types, variables, classes or imports outside its fixed provider files: those
+names can be visible to native code but absent from the retained definition's
+lexical scope. Declarations inside an editable module are unaffected. Current
+`bind` directives keep their existing native binding path. Package-only UVM reuse
+has its separate package namespace boundary. `namespaceDeclines` counts these
+rejected imports; a prepared library need not be used by every analysis.
+
+**Put fixed providers
+and editable consumers in separate physical files.** Selecting a scope also freezes
+other declarations in its provider file; this experiment does not independently
+update a sibling scope in that file. Any editor change to the fixed file, including
+comments or whitespace, requires `slang.rebuildScopeLibrary`. A rebuild preserves
+unsaved editor text. External provider changes are intentionally picked up on
+explicit rebuild rather than authenticated on every edit.
+
+Place stable libraries / RTL before editable consumers in the filelist. A
+conservative prefix can also freeze preceding inputs and dependency definitions;
+inspect the actual packages, definitions and preparation reason in
+`slang.scopeLibraryStatus`. Keep code that needs routine editing outside that fixed
+input group. Independent mixed-file sibling editing is outside this feature's
+supported usage.
+
+Dedicated UVM semantics can join a compatible ordered package closure; otherwise the existing UVM route
+remains available. Its shipped/default versus project-specific artifact policy
+is unchanged.
+
+`slang.scopeLibraryStatus` exposes actual preparation, imported packages, semantic
+generation, consumers, syntax resumes, retained charge, AST charge and decline
+reason. `namespaceDeclines` counts semantic imports / views declined because a
+mutable root introduces a same-named fixed package or module/interface/program.
+Those analyses follow native declaration order; removing the conflict allows the
+existing library generation and body owners to be reused again. `prepared` means
+the library is available, not that every current analysis imported it. `slang.rebuildScopeLibrary` rebuilds the owner while preserving editor
+text. An unsaved fixed-source edit rejects source/consumer analysis with an
+explicit rebuild instruction until that rebuild completes. Charges do not measure
+RSS. The CVA6 and UVM acceptance results, including preparation and memory costs,
+are recorded in the [implementation and acceptance plan](../development/scope-semantic-plan.md).
+Passing those workloads does not extend the supported language boundary.
+
+The fixed-scope experiment also automatically reuses eligible closed instance
+subtrees at the same concrete path, including value-parameter variants, nested
+children, loop generates and instance arrays. Both explicit module names and
+instance paths select candidates. The registry prepares independent semantic owners
+from already parsed trees; current outside port connections remain separate, while
+closed internal connections remain shared. The parent is retained as one boundary
+when its complete subtree is eligible. Unsupported parents can still admit eligible
+children independently. Admitted values include fixed-size integral / packed
+nominal arrays and scalar runtime strings with fixed-origin aliases. Input-only
+local / fixed-package functions, local-destination `$sformat`, and audited
+`$fopen` / `$fwrite` / `$fclose` bindings can be retained. These operations are
+bound, never executed by the server. String parameter signatures and general
+output/ref calls remain outside this boundary; every admitted call's operands
+must still satisfy the dependency checks.
+
+With one explicit top and no command-line parameter overrides, newly needed
+closed subtrees can each use a minimal independent ancestor context. This includes
+ordinary instance ancestors, active conditional generate branches and concrete
+loop-generate iterations, with their original names and indices. Resolved root
+value arguments are copied; fixed package enum typedefs preserve nominal assignment
+types. Integral type arguments are reconstructed from resolved builtin types or
+addressable fixed package typedefs. Each owner retains fixed provider definitions
+and sources rather than the mutable consumer syntax. Multiple disjoint subtrees
+can use separate compact owners.
+The hierarchy path, definition identity, flags, complete parameter signature and
+independence certificate are checked again against the native body before publication.
+Unrelated unreferenced definitions are not provisionally instantiated in this
+cache-only context; the current native design still receives complete diagnostics.
+`bodies.compactPublications` counts actual owner publications through this route.
+Instance-array ancestors, CLI overrides, unrepresentable arguments and failed
+validation or combined compact-budget checks retain the full-context owner route
+when its own syntax and memory budget permits it.
+
+The registry uses the same `frozenSources.maxMiB` limit as the library. An
+oversized parent does not prevent eligible descendants from being considered.
+Repeated oversized compact variants can use bounded admission advice (at most
+32 exact context keys and 64 KiB of charged storage, with a 16 KiB per-key cap).
+This advice can only leave an analysis on the native path; it never authorizes
+semantic sharing. New parameter contexts are considered independently, and
+rebuilding the library replaces the advice with the registry.
+
+Working owners pinned by the current analysis stay charged. When their remaining
+budget cannot cover another owner's unavoidable source namespace charge, further
+construction stops. Measured costs of matching retained variants can also
+conservatively decline a new candidate. Every actual publication still requires
+the full identity, parameter and independence checks. `ownerBuilds`,
+`admissionHits`, `capacitySkips`, `admissionRecords` and `admissionBytes` expose
+these decisions. Admission storage yields to semantic owners when needed.
+
+The registry uses the same `frozenSources.maxMiB` limit as the library.
+`chargedBytes` includes library, retained body-owner and evicted-but-still-pinned
+charges. The nested `bodies` status reports the budget, base / owner / pinned
+charges, owners, hits, publications, evictions and declines; `instanceBodiesShared`
+reflects actual hits. Charges include reserved reference-profile hash storage and
+subtree certificates. They can count shared prefix storage in more than one owner
+and are not process RSS or a temporary preparation limit. Replacing the library
+explicitly replaces the body registry; context retirement can retain it.
+
+A variant matches resolved integral parameter values, widths, signedness, type
+identity and override state. Current root argument expressions remain attached to
+the current instance; retained root overrides store fixed values. Internal child
+argument expressions remain intact. Defaults and local parameters can use
+parameter-only constant expressions such as `$clog2(W)` and `$bits(W)`. Independent
+owners bind every occurrence and retain per-occurrence reference profiles, avoiding
+usage inherited from another parameter variant. Current consumer maps reproduce
+native canonical-instance analysis without changing the shared instance objects.
+Native instantiation-site counts, including grouped array elements, are replayed
+for each current consumer.
+
+Fixed package wildcard / explicit imports, immutable package constants,
+multidimensional packed vectors and package-owned enums / packed structs / packed
+unions are supported, including integral value parameters with those nominal types.
+A foreign enum with the same numeric value cannot silently replace the declared
+type. Type uses, constant reads and name-checked parameter defaults are replayed in
+the current reference profile; unrelated package uses from old consumers are not.
+Named assignment-pattern keys remain field metadata and do not count as parameter
+reads.
+
+Integral type parameters can use builtin scalars / packed vectors and fixed
+package enums / packed structs / packed unions. Chained type-parameter defaults and
+value parameters typed by those parameters are supported. Signatures distinguish
+ranges, signedness, two-state / four-state representation, override state and fixed
+nominal identity; two different fixed structs with the same fields do not share a
+variant. Scalar spelling and fixed typedef names also distinguish variants so
+editor queries cannot retain an old `reg` / `logic` or alias presentation.
+Native name-checking of overridden defaults still contributes declaration
+uses. Mutable aliases and member-dependent defaults use native analysis.
+Anonymous packed struct / union and enum defaults inside the selected subtree
+can also be reused. Their immutable declaration syntax, owning definition and
+instance path must match, together with resolved field types / ranges and enum
+values. Equal layouts from different declarations or instances do not establish
+nominal identity. Enum parameter previews are prepared without elaborating ports,
+variables or child instances, and are reused by later native elaboration after a
+cache miss. Forwarded module-local types outside the selected subtree still use
+native analysis.
+
+Body-local aliases, enums and packed structs / unions are also certified. Their
+field types, enum values and declaration names / dimensions are audited so a
+folded width cannot hide a dependency on a mutable package. Fixed-size unpacked
+arrays can contain admitted integral or nominal elements, including nested arrays
+and local typedefs forwarded to child instances inside the selected subtree.
+Fixed-size `localparam` tables are supported when every leaf has an admitted
+integral type and the full initializer / dimensions have fixed dependencies.
+This includes nested tables of packed structs or enums and nonzero array bounds.
+The native parameter vector includes body localparams: signatures compare their
+resolved type / ranges and deep values, as well as ordinary scalar arguments.
+Array vectors and large integer payloads in certified tables contribute to retained
+memory charges. Overridable array-valued parameters still use native analysis.
+Transparent enum members preserve their original nominal owner.
+Pure built-in integral conversion, bit-count and fixed type / dimension queries
+can be shared; arguments and `inside` range endpoints pass the same dependency
+audit. Local functions with input-only arguments and admitted result / local types
+are audited with their bodies; input-only void functions are included. Functions
+owned by the immutable package library
+reuse that package's bound graph and replay the actual call use. Class methods,
+DPI and output / reference arguments remain outside this admission path.
+`$fatal`, `$error`, `$warning`, `$info`, `$stop` and `$finish` can be retained with
+audited arguments; literal format strings are immutable data. Time, random and
+other unproven calls keep native analysis, including when nested inside an admitted
+system task or local function, except for the runtime call described below.
+An unseeded parameterless `$urandom()` can share its bound runtime call graph.
+No random result is evaluated or cached: native constant evaluation still reports
+an error and prevents retaining invalid constant contexts. Seeded random calls
+and other unproven runtime functions continue to use native analysis.
+Fixed-size streaming concatenations retain their bound slice-size expression for
+the same dependency audit, rather than trusting only its folded numeric width.
+Operands and `with` selections are also audited. A slice width from an editable
+package cannot silently reuse a previously bound stream.
+Loop-generate initialization, condition and step expressions are audited even
+when no iteration is instantiated. Conditional-generate controls and case labels
+are retained separately so directly nested constructs that flatten away a scope
+cannot hide a mutable dependency.
+
+Scope completion handles carry their context epoch from the first response,
+including native fallback. Fresh and logical stale handles remain resolvable after
+context retirement and explicit rebuild; expired unframed physical IDs are fenced.
+
+Reading a frozen module with a selected current instance indexes that instance and
+shares its full-design analysis. This preserves current parameter widths and driver
+code in hover without adding default instances to the immutable library. Unbound
+module declarations get a private default elaboration. Pure package views retain
+the direct immutable-owner path.
+Invalid selected-instance parameter arguments also keep the native private
+shallow view until repaired; the current full design still diagnoses those errors.
+Chained type parameters display their resolved target in completion details, and
+overridden type parameters retain declaration documentation.
+
+Reference profiles distinguish binding origin from declaration ownership. Only
+uses within the certified subtree enter retained internal profiles, including
+references between its child instance bodies; native syntax usage still includes
+every reference. Downward hierarchical references are admitted only when every
+resolved path component and the target remain inside that subtree. New consumers
+bind outside hierarchical reads / writes again, so removed old callers cannot
+hide unused or unassigned diagnostics. Incoming uses no longer require a scan of
+the whole old consumer. Upward references and dependencies outside the retained
+subtree still require native analysis.
+Certified body uses are folded into the current reference map once on import;
+each later declaration-use query does not scan every cached subtree.
+Package declaration usage is captured once at the first export by moving the
+existing profile. Later owner-side hover / completion lookups use a separate
+overlay and cannot suppress unused-package warnings in subsequent consumers.
+
+Internal semantic warnings retain raw per-occurrence records, including disabled
+warnings, and are coalesced using the current consumer's instance counts. Current
+diagnostic policy remains responsible for severity and suppression. Warnings with
+locations, ranges or notes outside the fixed subtree conservatively prevent that
+body from being retained. Outside root connections are diagnosed afresh.
+
+For investigation, `SLANG_SCOPE_BODY_TRACE=1` emits admission reasons and actual
+retained / reused hierarchy paths to stderr. It is disabled unless requested and
+is not a timing mode. The ordinary `declines` counter does not count every failed
+admission check.
+
+Parameter defaults that require member elaboration (such as `$bits(signal)`),
+mutable consumer aliases, nonintegral local types, unsupported type parameters, interface / ref
+ports, tasks and functions outside the admitted closed / fixed package cases
+still use native analysis. Constructor-time exposure or creation of native
+children can also prevent replacing a body. Broader coverage and formal
+large-project performance / memory acceptance remain under
+development. All new experiments remain disabled by default.

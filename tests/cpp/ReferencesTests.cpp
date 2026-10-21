@@ -504,7 +504,9 @@ TEST_CASE("FindReferences - Included Package Member Uses Included Buffer URI") {
     });
 
     REQUIRE(refs.has_value());
-    REQUIRE(refs->size() == 5);
+    // Both macro invocations point to the same physical token in refs.svh.
+    REQUIRE(refs->size() == 2);
+    verifyReferenceTokens(server, *refs, "num");
 
     bool foundDeclaration = false;
     bool foundIncludedUse = false;
@@ -544,7 +546,8 @@ TEST_CASE("FindReferences - Package Member Does Not Match Other Package") {
     });
 
     REQUIRE(refs.has_value());
-    REQUIRE(refs->size() == 5);
+    REQUIRE(refs->size() == 2);
+    verifyReferenceTokens(server, *refs, "num");
 
     for (const auto& ref : *refs) {
         CHECK(ref.uri.str().find("other_pkg.sv") == std::string::npos);

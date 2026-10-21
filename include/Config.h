@@ -104,6 +104,13 @@ struct Config {
                      bool>
         experimentalUvmSemanticCache = false;
 
+    rfl::Description<
+        "Experimental complete semantic reuse of explicitly fixed scopes. Default off. "
+        "Dependencies are fixed until slang.rebuildScopeLibrary or configuration reload. "
+        "Uses frozenSources selectors; unsupported boundaries use native analysis.",
+        bool>
+        experimentalScopeSemanticCache = false;
+
     struct FrozenSourcesConfig {
         rfl::Description<
             "Exact package names in configured compilation inputs. The complete "
@@ -116,18 +123,19 @@ struct Config {
                          "are elaborated independently. Does not enable the experiment.",
                          std::vector<std::string>>
             modules;
-        rfl::Description<"Exact canonical RTL instance paths. Selects the instance and its "
-                         "descendants. Certified hierarchy values can survive supported class "
-                         "task body edits; other semantic changes rebuild natively. Requires "
-                         "a full design and does not enable the experiment.",
+        rfl::Description<"Exact canonical RTL instance paths selecting that instance and its "
+                         "descendants. Behavior follows the enabled frozen-source or fixed-scope "
+                         "experiment. Requires configured hierarchy and does not itself enable "
+                         "caching.",
                          std::vector<std::string>>
             instances;
-        rfl::Description<"Maximum charged retained cache size in MiB (0 to 512). With instance "
-                         "selectors, one quarter is reserved for certified hierarchy values. "
-                         "Current compilations can still own syntax after eviction; this is not "
-                         "a process RSS limit.",
+        rfl::Description<"Maximum charged retained cache size in MiB (0 to 512, default 256). "
+                         "Oversized entries use ordinary analysis. The syntax experiment "
+                         "reserves one quarter for certified hierarchy values with instance "
+                         "selectors; the semantic experiment shares the budget between library "
+                         "and body owners. This is not a process RSS limit.",
                          uint32_t>
-            maxMiB = 64;
+            maxMiB = 256;
     };
     rfl::Description<"Frozen source selections and cache budget. Does not enable the experiment.",
                      std::optional<FrozenSourcesConfig>>

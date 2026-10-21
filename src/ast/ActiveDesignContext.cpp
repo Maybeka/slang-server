@@ -279,6 +279,15 @@ void ActiveDesignContext::bindInstance(const ast::InstanceSymbol& instance) {
     m_definitions.insert_or_assign(std::string(instance.getDefinition().name), std::move(binding));
 }
 
+std::shared_ptr<ast::Compilation> ActiveDesignContext::retainCompilation() const {
+    return std::shared_ptr<ast::Compilation>(m_analysis, &m_analysis->compilation);
+}
+
+const ast::InstanceSymbol* ActiveDesignContext::getBoundInstance(std::string_view name) const {
+    auto found = m_definitions.find(std::string(name));
+    return found == m_definitions.end() ? nullptr : found->second.instance;
+}
+
 void ActiveDesignContext::applyOverrides(ast::Compilation& shallowCompilation) const {
     std::unordered_map<std::string_view, const ast::DefinitionSymbol*> shallowDefinitions;
     for (auto* symbol : shallowCompilation.getDefinitions()) {

@@ -168,7 +168,8 @@ bool ServerDriver::configureUvmLibrary(const fs::path& base, bool requireValidCo
     }
     m_uvmEntryPath = entry;
     driver.options.uvmPrefixRoot = entry.string();
-    if (config.useBundled.value() || m_config.experimentalUvmSemanticCache.value()) {
+    if (config.useBundled.value() || m_config.experimentalUvmSemanticCache.value() ||
+        m_config.experimentalScopeSemanticCache.value()) {
         try {
             using Clock = std::chrono::steady_clock;
             auto elapsed = [](auto start) {
@@ -205,7 +206,8 @@ bool ServerDriver::configureUvmLibrary(const fs::path& base, bool requireValidCo
             m_uvmPreparseKey = rfl::json::write(
                 Configuration{SLANG_UVM_ARCHIVE_IDENTITY, directory.string(), entry.string(),
                               fs::current_path().string(), syntaxConfiguration, includeConfig});
-            if (m_trustedUvm && m_trustedUvm->preparseKey != m_uvmPreparseKey)
+            const auto retained = m_trustedUvm ? m_trustedUvm : m_trustedScopes;
+            if (retained && retained->preparseKey != m_uvmPreparseKey)
                 throw std::runtime_error("retained UVM configuration changed; reload the project");
             if (shipped)
                 m_shippedUvmProfile = "default";
@@ -214,11 +216,11 @@ bool ServerDriver::configureUvmLibrary(const fs::path& base, bool requireValidCo
                                       (std::to_string(uvm_artifact::checksum(m_uvmPreparseKey)) +
                                        ".cst");
             }
-            if (m_trustedUvm && m_trustedUvm->preparseKey == m_uvmPreparseKey) {
-                m_uvmPreparseDependencies = m_trustedUvm->preparseDependencies;
+            if (retained && retained->uvmParseTree && retained->preparseKey == m_uvmPreparseKey) {
+                m_uvmPreparseDependencies = retained->preparseDependencies;
                 m_uvmProjectCacheHit = !shipped;
-                driver.precompiledUvm = syntax::SyntaxTree::sharedPrefixView(
-                    m_trustedUvm->compilation->getSyntaxTrees().front(), sm);
+                driver.precompiledUvm = syntax::SyntaxTree::sharedPrefixView(retained->uvmParseTree,
+                                                                             sm);
             }
             else {
                 auto load = [&](const fs::path& path, std::string_view expected) {
@@ -281,7 +283,7 @@ bool ServerDriver::configureUvmLibrary(const fs::path& base, bool requireValidCo
                     m_uvmArchiveLoadMs = elapsed(artifact ? projectLoadStart : restoreStart);
                 }
             }
-            if (!m_trustedUvm)
+            if (!retained)
                 m_indexer.installPreparsedLibrary(directory, driver.precompiledUvm.get());
             driver.precompiledUvmRoot = directory;
             driver.precompiledUvmEntry = entry;
@@ -356,7 +358,7 @@ bool ServerDriver::prepareTrustedUvmLibrary() {
     if (!m_config.experimentalUvmSemanticCache.value())
         return false;
     if (m_trustedUvm) {
-        options.set(TrustedUvmImport{m_trustedUvm, m_driverOwner});
+        options.set(TrustedUvmImport{m_trustedUvm, m_driverOwner->getSourceOwner()});
         m_trustedUvmReason = "retained immutable UVM semantic generation";
         return true;
     }
@@ -403,7 +405,7 @@ bool ServerDriver::prepareTrustedUvmLibrary() {
     compilationOptions.flags |= ast::CompilationFlags::PackageAnalysis;
     compilationOptions.topModules.clear();
     auto compilation = std::make_shared<ast::Compilation>(compilationOptions);
-    compilation->retainSourceOwner(m_driverOwner);
+    compilation->retainSourceOwner(m_driverOwner->getSourceOwner());
     compilation->addSyntaxTree(prefix);
     const auto& diagnostics = compilation->getSemanticDiagnostics();
     if (std::ranges::any_of(diagnostics, [](const auto& d) { return d.isError(); })) {
@@ -420,8 +422,9 @@ bool ServerDriver::prepareTrustedUvmLibrary() {
     }
     static std::atomic<uint64_t> generation = 0;
     m_trustedUvm = std::make_shared<TrustedUvmLibrary>();
-    m_trustedUvm->sourceOwner = m_driverOwner;
+    m_trustedUvm->sourceOwner = m_driverOwner->getSourceOwner();
     m_trustedUvm->compilation = std::move(compilation);
+    m_trustedUvm->uvmParseTree = driver.precompiledUvm ? driver.precompiledUvm : prefix;
     m_trustedUvm->sources = sm.captureImmutablePrefix(prefix->getSourceBufferIds());
     m_trustedUvm->generation = ++generation;
     m_trustedUvm->semanticBytes = charged;
@@ -434,7 +437,7 @@ bool ServerDriver::prepareTrustedUvmLibrary() {
         if (!path.empty())
             m_trustedUvm->files.emplace(path.lexically_normal().generic_string());
     }
-    options.set(TrustedUvmImport{m_trustedUvm, m_driverOwner});
+    options.set(TrustedUvmImport{m_trustedUvm, m_driverOwner->getSourceOwner()});
     m_trustedUvmReason =
         "prepared immutable UVM semantics; rebuild explicitly after library changes";
     return true;
@@ -450,12 +453,41 @@ bool ServerDriver::isTrustedUvmSource(const fs::path& path) const {
     return false;
 }
 
-std::optional<ServerDriver::PackageIncludeContext> ServerDriver::trustedUvmSourceContext(
+std::optional<ServerDriver::PackageIncludeContext> ServerDriver::trustedLibrarySourceContext(
     const URI& uri) const {
-    if (!isTrustedUvmSource(uri.getPath()))
+    // The fixed-dependency contract avoids filesystem authentication. An explicit
+    // editor modification is nevertheless visible and must not receive stale
+    // matching-version consumer diagnostics. Rebuilding preserves these overlays.
+    if (m_trustedScopes) {
+        const auto& fixedTree = m_trustedScopes->compilation->getSyntaxTrees().front();
+        for (const auto& openUri : m_openDocs) {
+            auto document = docs.find(openUri);
+            if (document == docs.end())
+                continue;
+            auto current = document->second->getBuffer();
+            const auto& path = sm.getFullPath(current);
+            if (!isTrustedScopeSource(path))
+                continue;
+            for (auto fixed : fixedTree->getSourceBufferIds())
+                if (sm.getFullPath(fixed) == path &&
+                    sm.getSourceText(current) != sm.getSourceText(fixed))
+                    throw lsp::RequestFailed("Fixed scope source was edited; run "
+                                             "slang.rebuildScopeLibrary to rebuild its "
+                                             "semantic generation: " +
+                                             path.string());
+        }
+    }
+    if (!isTrustedUvmSource(uri.getPath()) && !isTrustedScopeSource(uri.getPath()))
         return std::nullopt;
-    const auto& tree = m_trustedUvm ? m_trustedUvm->compilation->getSyntaxTrees().front()
-                                    : driver.precompiledUvm;
+    // Even an unchanged provider query must observe namespace conflicts in the
+    // current configured unit. Returning its private owner would otherwise bypass
+    // native ambiguity checks and expose a stale package binding in exploration.
+    if (!hasCompatibleTrustedNamespace())
+        return std::nullopt;
+    const auto& tree = isTrustedScopeSource(uri.getPath())
+                           ? m_trustedScopes->compilation->getSyntaxTrees().front()
+                       : m_trustedUvm ? m_trustedUvm->compilation->getSyntaxTrees().front()
+                                      : driver.precompiledUvm;
     for (auto id : tree->getSourceBufferIds())
         if (sm.getFullPath(id).generic_string() == uri.getPath())
             return PackageIncludeContext{tree, id};
@@ -473,6 +505,7 @@ rfl::Generic ServerDriver::trustedUvmStatus() const {
         bool prepared;
         uint64_t generation;
         uint64_t consumers;
+        uint64_t namespaceDeclines;
         size_t chargedBytes;
         size_t astBytes;
         size_t fixedSourceFiles;
@@ -488,6 +521,7 @@ rfl::Generic ServerDriver::trustedUvmStatus() const {
         Status{m_config.experimentalUvmSemanticCache.value(), bool(m_trustedUvm),
                m_trustedUvm ? m_trustedUvm->generation : 0,
                m_trustedUvm ? m_trustedUvm->consumers.load() : 0,
+               m_trustedUvm ? m_trustedUvm->namespaceDeclines.load() : 0,
                m_trustedUvm ? m_trustedUvm->semanticBytes : 0,
                m_trustedUvm ? m_trustedUvm->compilation->getTotalBytesAllocated() : 0,
                m_trustedUvm ? m_trustedUvm->files.size() : 0, bool(m_trustedUvm),

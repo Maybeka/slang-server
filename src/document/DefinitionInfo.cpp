@@ -1116,7 +1116,20 @@ lsp::MarkupContent DefinitionInfo::getHover(BufferID docBuffer,
             },
             target);
         auto duplicate = std::ranges::any_of(renderedTargets, [&](const auto& existing) {
-            return existing.first == rendered.first && existing.second == rendered.second;
+            if (existing.second != rendered.second)
+                return false;
+            if (existing.first == rendered.first)
+                return true;
+            // Separate parses can refer to the same unchanged file declaration.
+            // Preserve distinct macro expansion sites and distinct source versions.
+            if (!existing.first || !rendered.first || sm.isMacroLoc(existing.first) ||
+                sm.isMacroLoc(rendered.first))
+                return false;
+            return existing.first.offset() == rendered.first.offset() &&
+                   sm.getFullPath(existing.first.buffer()) ==
+                       sm.getFullPath(rendered.first.buffer()) &&
+                   sm.getSourceText(existing.first.buffer()) ==
+                       sm.getSourceText(rendered.first.buffer());
         });
         if (!duplicate)
             renderedTargets.push_back(std::move(rendered));

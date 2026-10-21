@@ -30,6 +30,7 @@
 #include <queue>
 #include <set>
 #include <string_view>
+#include <tuple>
 
 #include "slang/ast/Compilation.h"
 #include "slang/ast/Symbol.h"
@@ -71,12 +72,23 @@ ServerDriver::ServerDriver(Indexer& indexer, SlangLspClient& client, const Confi
     diagClient(std::make_shared<ServerDiagClient>(sm, client)),
     completions(*this, indexer, sm, options), codeActions(*this, sm, indexer), m_indexer(indexer),
     m_config(config), m_workspacePathPrefix(workspaceFolder.value_or("")) {
-    if (overlays && overlays->m_preserveTrustedUvm && overlays->m_trustedUvm &&
+    if (overlays && overlays->m_preserveTrustedUvm && overlays->m_trustedScopes &&
+        config.experimentalScopeSemanticCache.value()) {
+        m_trustedScopes = overlays->m_trustedScopes;
+        m_scopeBodies = overlays->m_scopeBodies;
+        m_scopeRoots = overlays->m_scopeRoots;
+        m_scopeRootCount = overlays->m_scopeRootCount;
+        m_scopeInstanceSelections = overlays->m_scopeInstanceSelections;
+        sm.inheritImmutablePrefix(m_trustedScopes->sources);
+        if (overlays->m_scopePrefix)
+            m_scopePrefix = syntax::SyntaxTree::sharedPrefixView(overlays->m_scopePrefix, sm);
+    }
+    if (!m_trustedScopes && overlays && overlays->m_preserveTrustedUvm && overlays->m_trustedUvm &&
         config.experimentalUvmSemanticCache.value()) {
         m_trustedUvm = overlays->m_trustedUvm;
         sm.inheritImmutablePrefix(m_trustedUvm->sources);
     }
-    if (isFrozenSourcesEnabled())
+    if (isFrozenSourcesEnabled() || config.experimentalScopeSemanticCache.value())
         completions.requireCompletionEpoch();
     diagClient->setUriResolver([this](const URI& physical) {
         // Exact open URIs win; otherwise bind the known physical source to its
@@ -278,7 +290,9 @@ bool ServerDriver::parseAndLoadSources(const std::vector<std::string>& buildfile
     auto queryPP = options.getOrDefault<parsing::PreprocessorOptions>();
     queryPP.captureUvmPrefix = isUvmPrefixCacheEnabled();
     options.set(std::move(queryPP));
-    if (ok && m_config.experimentalUvmSemanticCache.value())
+    if (ok && m_config.experimentalScopeSemanticCache.value())
+        prepareScopeLibrary();
+    if (ok && !m_trustedScopes && m_config.experimentalUvmSemanticCache.value())
         prepareTrustedUvmLibrary();
     installConfiguredUnits(driver.syntaxTrees);
     return ok;
@@ -924,7 +938,9 @@ void ServerDriver::onWorkspaceDidChangeWatchedFiles(
         bool openOverlay = false;
         std::error_code canonicalError;
         auto changedPath = std::filesystem::weakly_canonical(change.uri.getPath(), canonicalError);
-        if (isTrustedUvmSource(canonicalError ? std::filesystem::path(change.uri.getPath())
+        if (isTrustedScopeSource(canonicalError ? std::filesystem::path(change.uri.getPath())
+                                                : changedPath) ||
+            isTrustedUvmSource(canonicalError ? std::filesystem::path(change.uri.getPath())
                                               : changedPath))
             continue;
         for (const auto& openUri : m_openDocs) {
@@ -2126,6 +2142,31 @@ std::optional<lsp::Hover> ServerDriver::getDocHover(
     return lsp::Hover{.contents = info.getHover(analysis->getBuffer(), hovers)};
 }
 
+namespace {
+std::optional<lsp::Location> physicalMemberDeclaration(const ast::Symbol& symbol,
+                                                       const SourceManager& sources) {
+    if (symbol.kind != ast::SymbolKind::Field && symbol.kind != ast::SymbolKind::Subroutine &&
+        symbol.kind != ast::SymbolKind::MethodPrototype)
+        return std::nullopt;
+    auto start = sources.getFullyOriginalLoc(symbol.location);
+    auto end = start + symbol.name.size();
+    if (auto syntax = symbol.getSyntax();
+        syntax && syntax->kind == syntax::SyntaxKind::Declarator) {
+        const auto& name = syntax->as<syntax::DeclaratorSyntax>().name;
+        start = sources.getFullyOriginalLoc(name.range().start());
+        end = sources.getFullyOriginalLoc(name.range().end());
+    }
+    // Projected fields and imported functions can lack declarations in the
+    // current local token index, especially in an invalid-parameter fallback.
+    // Only actual physical spellings can participate in reference / rename edits.
+    if (start && end && start.buffer() == end.buffer() && start.offset() <= end.offset() &&
+        end.offset() <= sources.getSourceText(start.buffer()).size() &&
+        sources.getSourceText(SourceRange(start, end)) == symbol.name)
+        return toOriginalLocation(SourceRange(start, end), sources);
+    return std::nullopt;
+}
+} // namespace
+
 std::optional<std::vector<lsp::DocumentHighlight>> ServerDriver::getDocDocumentHighlight(
     const URI& uri, const lsp::Position& position) {
     auto doc = getDocument(uri);
@@ -2151,6 +2192,12 @@ std::optional<std::vector<lsp::DocumentHighlight>> ServerDriver::getDocDocumentH
     // Find all references to the symbol in the current document
     std::vector<lsp::Location> references;
     analysis->addLocalReferences(references, symbol->location, symbol->name);
+    if (auto declaration = physicalMemberDeclaration(*symbol, sm);
+        declaration && declaration->uri == uri &&
+        std::ranges::none_of(references, [&](const auto& reference) {
+            return reference.uri == declaration->uri && reference.range == declaration->range;
+        }))
+        references.push_back(*declaration);
     if (references.empty()) {
         return std::nullopt;
     }
@@ -2317,6 +2364,7 @@ std::optional<std::vector<lsp::Location>> ServerDriver::getDocReferences(
         return std::nullopt;
 
     std::vector<lsp::Location> references;
+    std::vector<lsp::Location> declarations;
 
     auto targetName = declTok->rawText();
 
@@ -2402,12 +2450,20 @@ std::optional<std::vector<lsp::Location>> ServerDriver::getDocReferences(
         if (targetDoc) {
             auto targetAnalysis = targetDoc->getAnalysis(ctx);
             targetAnalysis->addLocalReferences(references, targetSymbol->location, targetName);
+            if (auto declaration = physicalMemberDeclaration(*targetSymbol, sm)) {
+                declarations.push_back(*declaration);
+                if (includeDeclaration && std::ranges::none_of(references, [&](const auto& r) {
+                        return r.uri == declaration->uri && r.range == declaration->range;
+                    }))
+                    references.insert(references.begin() + existingReferenceCount, *declaration);
+            }
             if (!includeDeclaration) {
                 auto targetLspLoc = lsp::Location{
                     .uri = URI::fromFile(sm.getFullPath(targetLoc.buffer())),
                     .range = toRange(SourceRange(targetLoc, targetLoc + targetSymbol->name.size()),
                                      sm),
                 };
+                declarations.push_back(targetLspLoc);
                 references.erase(std::remove_if(references.begin(), references.end(),
                                                 [&](const lsp::Location& loc) {
                                                     return loc.uri == targetLspLoc.uri &&
@@ -2527,7 +2583,26 @@ std::optional<std::vector<lsp::Location>> ServerDriver::getDocReferences(
         references.erase(output, references.end());
     }
 
-    return references.empty() ? std::nullopt : std::make_optional(std::move(references));
+    // Cross-document discovery can append declarations after the local pass.
+    // Apply declaration filtering and deduplication to the completed graph.
+    auto key = [](const auto& location) {
+        return std::tuple(location.uri.str(), location.range.start.line,
+                          location.range.start.character, location.range.end.line,
+                          location.range.end.character);
+    };
+    using LocationKey = decltype(key(references.front()));
+    std::set<LocationKey> declarationKeys, referenceKeys;
+    if (!includeDeclaration)
+        for (const auto& declaration : declarations)
+            declarationKeys.insert(key(declaration));
+    std::vector<lsp::Location> uniqueReferences;
+    for (auto& reference : references) {
+        auto location = key(reference);
+        if (!declarationKeys.contains(location) && referenceKeys.insert(std::move(location)).second)
+            uniqueReferences.push_back(std::move(reference));
+    }
+    return uniqueReferences.empty() ? std::nullopt
+                                    : std::make_optional(std::move(uniqueReferences));
 }
 
 std::optional<lsp::WorkspaceEdit> ServerDriver::getDocRename(const URI& uri,

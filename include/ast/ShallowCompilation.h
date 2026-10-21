@@ -35,7 +35,7 @@ public:
                        std::shared_ptr<slang::syntax::SyntaxTree> tree, const slang::Bag& options,
                        const std::vector<std::shared_ptr<slang::syntax::SyntaxTree>>& dependencies,
                        const ServerCompilation* design, const lsp::RequestContext& ctx = {},
-                       bool packageOnly = false);
+                       bool packageOnly = false, slang::BufferID sourceBuffer = {});
 
     /// Source manager supplying the buffers used by this compilation.
     slang::SourceManager& getSourceManager() const { return m_sourceManager; }
@@ -65,6 +65,11 @@ public:
     /// Whether this compilation has bindings to a selected full-design instance.
     bool hasActiveDesign() const { return m_activeDesign.has_value(); }
 
+    /// Selected fixed-module bodies indexed without creating library default instances.
+    const std::vector<const slang::ast::InstanceSymbol*>& getSourceInstances() const {
+        return m_sourceInstances;
+    }
+
     /// Return the full-design symbol corresponding to a shallow symbol, if available.
     const slang::ast::Symbol* getDesignSymbol(const slang::ast::Symbol& shallowSymbol) const {
         return m_activeDesign ? m_activeDesign->getDesignSymbol(shallowSymbol) : nullptr;
@@ -92,6 +97,7 @@ private:
 
     /// Selected full-design instances and overrides used by every file view.
     std::optional<ActiveDesignContext> m_activeDesign;
+    std::vector<const slang::ast::InstanceSymbol*> m_sourceInstances;
 
     /// Options used when lazily running driver analysis.
     slang::analysis::AnalysisOptions m_analysisOptions;

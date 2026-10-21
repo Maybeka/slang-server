@@ -603,6 +603,7 @@ TEST_CASE("Frozen certification reloads changed filelists and effective JSON con
 TEST_CASE("Frozen source configuration is opt in and zero budget preserves native analysis",
           "[frozen-source-integration]") {
     CHECK_FALSE(Config{}.experimentalFrozenSources.value());
+    CHECK(Config::FrozenSourcesConfig{}.maxMiB.value() == 256);
     Config config;
     Config::FrozenSourcesConfig selection;
     selection.packages = std::vector<std::string>{"a", "b"};
@@ -2056,4 +2057,300 @@ TEST_CASE("An edited selected final root reuses its explicit UVM dependency pref
                                     .text = originalRoot}}});
     cached.command("slang.refreshFrozenSources");
     compare();
+}
+
+#if defined(__linux__) || defined(__APPLE__)
+TEST_CASE("Scope semantic completions retain epochs through retirement and explicit rebuild",
+          "[scope-semantic][scope-completion-epoch]") {
+    const bool enabled = GENERATE(false, true);
+    std::optional<std::string> previous;
+    if (auto* value = std::getenv("SLANG_UVM_GENERATION_EDIT_LIMIT"))
+        previous = value;
+    setenv("SLANG_UVM_GENERATION_EDIT_LIMIT", "1", 1);
+    auto restore = ScopeGuard([&] {
+        if (previous)
+            setenv("SLANG_UVM_GENERATION_EDIT_LIMIT", previous->c_str(), 1);
+        else
+            unsetenv("SLANG_UVM_GENERATION_EDIT_LIMIT");
+    });
+    FrozenWorkspace files(false);
+    files.write("fixed.sv", "module stable(input logic a, output wire y); assign y=a; endmodule\n");
+    auto source = [](int width) {
+        return fmt::format("module top; logic[{}:0] first; wire copy=first[0]; stable "
+                           "u(.a(first[0]), .y()); endmodule\n",
+                           width - 1);
+    };
+    auto text = source(2);
+    files.write("top.sv", text);
+    files.write("design.f", "fixed.sv\ntop.sv\n");
+    Config config;
+    config.flags = "--single-unit --threads 1 --top top";
+    config.build = "design.f";
+    config.experimentalScopeSemanticCache = enabled;
+    config.frozenSources =
+        Config::FrozenSourcesConfig{.instances = std::vector<std::string>{"top.u"}, .maxMiB = 64};
+    files.write(".slang/server.json", rfl::json::write(config));
+    FrozenHarness server(files.initialize());
+    const auto uri = URI::fromFile(files.root / "top.sv");
+    server.m_driver->openDocument(uri, text, 1, true);
+    auto item = [&] {
+        const auto offset = text.find("first[0]") + 3;
+        auto response = server.getDocCompletion(
+            {.textDocument = {.uri = uri}, .position = {0, uint32_t(offset)}});
+        REQUIRE(rfl::holds_alternative<std::vector<lsp::CompletionItem>>(response));
+        auto items = rfl::get<std::vector<lsp::CompletionItem>>(response);
+        auto found = std::ranges::find_if(items, [](const auto& i) { return i.label == "first"; });
+        REQUIRE(found != items.end());
+        REQUIRE(found->data);
+        if (enabled) {
+            const auto data = found->data->to_object().value();
+            CHECK(std::ranges::any_of(data, [](const auto& entry) {
+                return entry.first == "contextEpoch";
+            }));
+            CHECK(std::ranges::any_of(data,
+                                      [](const auto& entry) { return entry.first == "payload"; }));
+        }
+        return *found;
+    };
+    const auto old = item();
+    const auto firstEpoch = server.m_driver->completions.getCompletionEpoch();
+    for (int version = 2; version <= 4; ++version) {
+        text = source(version + 1);
+        server.onDocDidChange(
+            {.textDocument = {.version = version, .uri = uri},
+             .contentChanges = {lsp::TextDocumentContentChangeWholeDocument{.text = text}}});
+        auto resolved = server.getCompletionItemResolve(item());
+        REQUIRE(resolved.documentation);
+        CHECK(rfl::json::write(resolved.documentation).find(fmt::format("[{}:0]", version)) !=
+              std::string::npos);
+    }
+    CHECK((server.m_driver->completions.getCompletionEpoch() != firstEpoch) == enabled);
+    auto stale = server.getCompletionItemResolve(old);
+    REQUIRE(stale.documentation);
+    CHECK(rfl::json::write(stale.documentation).find("[4:0]") != std::string::npos);
+    if (enabled) {
+        auto raw = old;
+        raw.data = old.data->to_object().value().at("payload");
+        auto fenced = server.getCompletionItemResolve(raw);
+        CHECK_FALSE(fenced.documentation);
+        CHECK_FALSE(fenced.data);
+        const auto beforeRebuild = item();
+        const auto epoch = server.m_driver->completions.getCompletionEpoch();
+        REQUIRE(rfl::from_generic<bool>(server.command("slang.rebuildScopeLibrary")).value());
+        CHECK(server.m_driver->completions.getCompletionEpoch() != epoch);
+        REQUIRE(server.m_driver->getDocument(uri)->textMatches(text));
+        auto fresh = server.getCompletionItemResolve(item());
+        REQUIRE(fresh.documentation);
+        CHECK(rfl::json::write(fresh.documentation).find("[4:0]") != std::string::npos);
+        auto oldResolved = server.getCompletionItemResolve(beforeRebuild);
+        REQUIRE(oldResolved.documentation);
+        CHECK(rfl::json::write(oldResolved.documentation).find("[4:0]") != std::string::npos);
+    }
+}
+#endif
+
+TEST_CASE("Frozen type-parameter completion preserves native broken-argument fallback and repair",
+          "[scope-type-completion-fallback]") {
+    const bool enabled = GENERATE(false, true);
+    FrozenWorkspace files;
+    files.write("fixed.sv", R"(
+package fixed_types;
+  typedef struct packed { logic [3:0] payload; } packet_t;
+endpackage
+module stable #(parameter type T=fixed_types::packet_t, parameter type U=T);
+  U q;
+endmodule
+)");
+    auto source = [](std::string_view type) {
+        return fmt::format("module top; stable #(.T({})) u(); "
+                           "initial $display(u.q); endmodule\n",
+                           type);
+    };
+    files.write("consumer.sv", source("fixed_types::packet_t"));
+    files.write("design.f", "fixed.sv\nconsumer.sv\n");
+    Config config;
+    config.flags = "--single-unit --threads 1 --top top";
+    config.compilationFilelist = "design.f";
+    config.experimentalScopeSemanticCache = enabled;
+    config.frozenSources =
+        Config::FrozenSourcesConfig{.instances = std::vector<std::string>{"top.u"}, .maxMiB = 64};
+    files.write(".slang/server.json", rfl::json::write(config));
+    FrozenHarness server(files.initialize());
+    server.setBuildFile("design.f");
+    REQUIRE(server.setActiveInstance("top.u"));
+    auto user = server.openFile("consumer.sv");
+    auto provider = server.openFile("fixed.sv");
+    for (const auto type :
+         {"fixed_types::packet_t", "MissingType", "logic [7:0]", "fixed_types::packet_t"}) {
+        INFO(type);
+        user.replaceAll(source(type));
+        user.save();
+        if (std::string_view(type) == "fixed_types::packet_t") {
+            auto hover = user.getHoverAt(user.before("fixed_types::packet_t").m_offset);
+            REQUIRE(hover);
+            const auto& text = rfl::get<lsp::MarkupContent>(hover->contents).value;
+            const std::string header = "**Package** `fixed_types`";
+            REQUIRE(text.find(header) != std::string::npos);
+            CHECK(text.find(header) == text.rfind(header));
+        }
+        auto items = provider.before("q;").getCompletions();
+        auto q = std::ranges::find(items, "q", [](const auto& item) { return item.m_item.label; });
+        REQUIRE(q != items.end());
+        REQUIRE(q->m_item.labelDetails);
+        CHECK(q->m_item.labelDetails->detail ==
+              (std::string_view(type) == "logic [7:0]" ? " logic[7:0]" : " packet_t"));
+        auto u = std::ranges::find(items, "U", [](const auto& item) { return item.m_item.label; });
+        REQUIRE(u != items.end());
+        u->resolve();
+        REQUIRE(u->m_item.documentation);
+        CHECK(rfl::get<lsp::MarkupContent>(*u->m_item.documentation)
+                  .value.find("parameter type U=T") != std::string::npos);
+    }
+}
+
+TEST_CASE("Projected nominal field references include the physical declaration when requested",
+          "[scope-local-nominal-references]") {
+    const bool enabled = GENERATE(false, true);
+    const bool macro = GENERATE(false, true);
+    FrozenWorkspace files;
+    const std::string packet = "struct packed { logic [3:0] payload; }";
+    files.write("fixed.sv",
+                (macro ? "`define PACKET_T " + packet + "\n" : "") +
+                    "module stable #(parameter type T=" + (macro ? "`PACKET_T" : packet) +
+                    ")(input logic [3:0] a, output wire [3:0] y); T q; "
+                    "assign q=a; assign y=q.payload; endmodule\n");
+    files.write("consumer.sv", "module top; logic [3:0] a; wire [3:0] y; "
+                               "stable u(.*); initial $display(u.q.payload); endmodule\n");
+    files.write("design.f", "fixed.sv\nconsumer.sv\n");
+    Config config;
+    config.flags = "--single-unit --threads 1 --top top";
+    config.compilationFilelist = "design.f";
+    config.experimentalScopeSemanticCache = enabled;
+    config.frozenSources =
+        Config::FrozenSourcesConfig{.instances = std::vector<std::string>{"top.u"}, .maxMiB = 64};
+    files.write(".slang/server.json", rfl::json::write(config));
+    FrozenHarness server(files.initialize());
+    server.setBuildFile("design.f");
+    REQUIRE(server.setActiveInstance("top.u"));
+    auto user = server.openFile("consumer.sv");
+    auto provider = server.openFile("fixed.sv");
+    const auto declaration =
+        lsp::Location{.uri = provider.m_uri,
+                      .range = lsp::Range{.start = provider.before("payload;").getPosition(),
+                                          .end = provider.after("payload").getPosition()}};
+    for (bool include : {true, false}) {
+        auto references = server.m_driver->getDocReferences(user.m_uri,
+                                                            user.before("payload").getPosition(),
+                                                            include);
+        REQUIRE(references);
+        CHECK(references->size() == (include ? 3 : 2));
+        CHECK(std::ranges::count_if(*references, [&](const auto& loc) {
+                  return loc.uri == declaration.uri && loc.range == declaration.range;
+              }) == (include ? 1 : 0));
+    }
+}
+
+TEST_CASE("Forwarded array fields resolve documents and references after component discovery",
+          "[scope-forwarded-field-queries]") {
+    const bool enabled = GENERATE(false, true);
+    FrozenWorkspace files;
+    files.write("fixed.sv", R"(
+package provider;
+ function automatic void check_width(input int width);
+   if(width<1) $error("invalid width");
+ endfunction
+ typedef enum logic [1:0] {Idle, Busy} state_t;
+endpackage
+module leaf #(parameter type T=logic)(input T value, output wire y);
+ assign y=value.payload;
+endmodule
+module stable #(parameter type T=struct packed { logic [3:0] payload; })
+ (input logic [3:0] a, output wire y);
+ import provider::*;
+ initial provider::check_width(4);
+ state_t state=Idle;
+ T words[2];
+ function automatic T make_word(input logic [3:0] a);
+   make_word.payload=a;
+ endfunction
+ assign words[0]=make_word(a);
+ leaf #(.T(T)) child(.value(words[0]),.y(y));
+endmodule
+)");
+    files.write("consumer.sv", "module top; logic [3:0] a; wire y; stable u(.*); endmodule\n");
+    files.write("design.f", "fixed.sv\nconsumer.sv\n");
+    Config config;
+    config.flags = "--single-unit --threads 1 --top top";
+    config.compilationFilelist = "design.f";
+    config.experimentalScopeSemanticCache = enabled;
+    config.frozenSources =
+        Config::FrozenSourcesConfig{.instances = std::vector<std::string>{"top.u"}, .maxMiB = 64};
+    files.write(".slang/server.json", rfl::json::write(config));
+    FrozenHarness server(files.initialize());
+    server.setBuildFile("design.f");
+    REQUIRE(server.setActiveInstance("top.u"));
+    auto user = server.openFile("consumer.sv");
+    auto provider = server.openFile("fixed.sv");
+    auto lexical = provider.before("words[2]").getCompletions();
+    auto idle = std::ranges::find(lexical, "Idle", [](const auto& i) { return i.m_item.label; });
+    REQUIRE(idle != lexical.end());
+    idle->resolve();
+    REQUIRE(idle->m_item.documentation);
+    CHECK(rfl::get<lsp::MarkupContent>(*idle->m_item.documentation).value.find("Idle, Busy") !=
+          std::string::npos);
+    auto at = provider.before("payload;");
+    auto items = at.getCompletions();
+    auto field = std::ranges::find(items, "payload", [](const auto& i) { return i.m_item.label; });
+    REQUIRE(field != items.end());
+    field->resolve();
+    REQUIRE(field->m_item.documentation);
+    CHECK(rfl::get<lsp::MarkupContent>(*field->m_item.documentation)
+              .value.find("logic [3:0] payload;") != std::string::npos);
+    const auto declaration = lsp::Range{.start = provider.before("payload; }").getPosition(),
+                                        .end = provider.before("; }").getPosition()};
+    auto highlights = server.m_driver->getDocDocumentHighlight(provider.m_uri, at.getPosition());
+    REQUIRE(highlights);
+    CHECK(std::ranges::count_if(*highlights,
+                                [&](const auto& h) { return h.range == declaration; }) == 1);
+    for (bool include : {false, true}) {
+        auto references = server.m_driver->getDocReferences(provider.m_uri, at.getPosition(),
+                                                            include);
+        REQUIRE(references);
+        CHECK(std::ranges::count_if(*references, [&](const auto& loc) {
+                  return loc.uri == provider.m_uri && loc.range == declaration;
+              }) == (include ? 1 : 0));
+        for (const auto& location : *references)
+            CHECK(std::ranges::count_if(*references, [&](const auto& candidate) {
+                      return candidate.uri == location.uri && candidate.range == location.range;
+                  }) == 1);
+    }
+    auto functionReferences = server.m_driver->getDocReferences(
+        provider.m_uri, provider.before("make_word(a)").getPosition(), false);
+    REQUIRE(functionReferences);
+    CHECK(functionReferences->size() == 2);
+    CHECK(std::ranges::none_of(*functionReferences, [&](const auto& location) {
+        return location.range.start == provider.before("make_word(input").getPosition();
+    }));
+    for (bool invalid : {true, false}) {
+        user.replaceAll(
+            invalid
+                ? "module top; logic [3:0] a; wire y; stable #(.T(MissingType)) u(.*); endmodule\n"
+                : "module top; logic [3:0] a; wire y; stable u(.*); endmodule\n");
+        user.save();
+        const auto position = provider.before("check_width(4)").getPosition();
+        const auto declarationStart = provider.before("check_width(input").getPosition();
+        for (bool include : {true, false}) {
+            auto refs = server.m_driver->getDocReferences(provider.m_uri, position, include);
+            REQUIRE(refs);
+            CHECK(refs->size() == (include ? 2 : 1));
+            CHECK(std::ranges::count_if(*refs, [&](const auto& r) {
+                      return r.uri == provider.m_uri && r.range.start == declarationStart;
+                  }) == (include ? 1 : 0));
+        }
+        auto marks = server.m_driver->getDocDocumentHighlight(provider.m_uri, position);
+        REQUIRE(marks);
+        CHECK(std::ranges::count_if(*marks, [&](const auto& m) {
+                  return m.range.start == declarationStart;
+              }) == 1);
+    }
 }

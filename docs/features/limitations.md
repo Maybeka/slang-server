@@ -27,6 +27,21 @@ The lightweight workspace index skips include expansion. Automatic discovery the
 
 Header syntax indexing skips unrelated class bodies while retaining enclosing include ancestry and leading directives. Required-interface name discovery is reused for unchanged syntax trees; semantic diagnostics are still collected in full. This is not incremental package compilation. Large UVM packages can still be expensive to reparse and analyze, even though stable requests reuse the discovered owner. Full-design build mode retains its configured contexts. Broader ownership discovery and performance work are tracked in [#135](https://github.com/hudson-trading/slang-server/issues/135).
 
+**Frozen Scope Semantic Cache (Experimental)**
+
+With `experimentalScopeSemanticCache`, put stable packages / RTL and editable
+consumer code in separate physical files. Selecting a package, module or RTL
+instance also freezes other declarations in its provider file. Independent edits
+to a sibling scope in that file are unsupported; any fixed-file edit, including
+comments or whitespace, requires `slang.rebuildScopeLibrary`. Rebuild preserves
+unsaved editor text. Dependency files are assumed fixed until explicit rebuild.
+
+Place stable inputs before editable consumers in the filelist: conservative
+prefix reuse can freeze preceding inputs too. Inspect `slang.scopeLibraryStatus`
+for the actual reused packages and definitions. The experiment defaults off;
+unsupported contexts and over-budget caches use ordinary native analysis. See
+[fixed-dependency semantic reuse](frozen-sources.md#fixed-dependency-semantic-experiment-under-development).
+
 **Rapid Editing**
 
 Document changes and requests are applied in arrival order. The `didChange` handler applies text, editor versions and invalidation, then records pending diagnostic work. Full diagnostic collection runs on the same worker only when its foreground queue is empty. New input cancels the idle pass at cooperative checkpoints; pending generations remain available for a later quiet period. Cancelled diagnostic updates are rolled back. Completed document diagnostics carry the editor version, when known. Incidental include diagnostics and buffers reloaded independently from disk can remain unversioned.

@@ -2237,3 +2237,35 @@ endmodule
         CHECK(getCompletionTextEdit(method->m_item).newText.find(type) != std::string::npos);
     }
 }
+
+TEST_CASE("Chained type parameters complete with concrete types and declaration documentation",
+          "[scope-type-completion]") {
+    ServerHarness server;
+    auto doc = server.openFile("chained_type_completion.sv", R"(
+package fixed_types;
+  typedef struct packed { logic [3:0] payload; } packet_t;
+endpackage
+module leaf #(parameter type T=logic, parameter type U=T, parameter type V=U);
+  V q;
+endmodule
+module top;
+  leaf #(.T(fixed_types::packet_t)) u();
+  initial $display(u.q);
+endmodule
+)");
+    auto items = doc.after("u.").getCompletions(".");
+    auto q = std::ranges::find(items, "q", [](const auto& item) { return item.m_item.label; });
+    REQUIRE(q != items.end());
+    REQUIRE(q->m_item.labelDetails);
+    CHECK(q->m_item.labelDetails->detail == " packet_t");
+    for (const auto name : {"T", "U", "V"}) {
+        auto parameter = std::ranges::find(items, name,
+            [](const auto& item) { return item.m_item.label; });
+        REQUIRE(parameter != items.end());
+        parameter->resolve();
+        REQUIRE(parameter->m_item.documentation);
+        const auto& documentation = rfl::get<lsp::MarkupContent>(*parameter->m_item.documentation);
+        CHECK(documentation.value.find(std::string("parameter type ") + name + "=") !=
+              std::string::npos);
+    }
+}

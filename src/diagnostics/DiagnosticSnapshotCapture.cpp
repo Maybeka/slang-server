@@ -16,7 +16,7 @@ std::optional<ServerDriver::DiagnosticSnapshot> ServerDriver::captureDiagnosticS
     // Trusted semantics are owned by the parent process. Keep diagnostics on
     // that same owner instead of re-elaborating UVM in a one-shot child or
     // transferring live compiler pointers through the value-only protocol.
-    if (m_trustedUvm || driver.precompiledUvm)
+    if (m_trustedScopes || m_trustedUvm || driver.precompiledUvm)
         return std::nullopt;
     if (comp || m_pendingIncludedDiagnostics.empty())
         return std::nullopt;

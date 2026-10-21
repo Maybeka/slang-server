@@ -501,7 +501,8 @@ void CompletionDispatch::getCompletions(std::vector<lsp::CompletionItem>& result
         if (item.kind == lsp::CompletionItemKind::Module)
             item.data = std::string(doc->getURI().str());
         context.query->setCompletionEdit(item);
-        if ((m_driver.isUvmPrefixCacheEnabled() || m_driver.isFrozenSourcesEnabled()) &&
+        if ((m_driver.isUvmPrefixCacheEnabled() || m_driver.isFrozenSourcesEnabled() ||
+             (m_parsedLibraryCache && m_parsedLibraryCache->requireEpoch)) &&
             item.data && item.data->to_object())
             item.data = rfl::to_generic(
                 CompletionEpochPayload{getCompletionEpoch(), std::move(*item.data)});

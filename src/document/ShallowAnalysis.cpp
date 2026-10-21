@@ -59,6 +59,36 @@ static bool symbolsMatch(const ast::Symbol* a, const ast::Symbol* b) {
     }
     return false;
 }
+// Independent parses can assign different buffer IDs to the same declaration.
+// File text identity alone is insufficient: the same header or macro can declare
+// different members at different include / expansion sites.
+static bool sameDeclarationLocation(SourceLocation a, SourceLocation b,
+                                    const SourceManager& sources, unsigned depth = 0) {
+    if (a == b)
+        return true;
+    if (!a || !b || depth >= 128)
+        return false;
+    const bool aMacro = sources.isMacroLoc(a), bMacro = sources.isMacroLoc(b);
+    if (aMacro || bMacro) {
+        if (!aMacro || !bMacro || sources.isMacroArgLoc(a) != sources.isMacroArgLoc(b) ||
+            sources.getMacroName(a) != sources.getMacroName(b))
+            return false;
+        const auto ar = sources.getExpansionRange(a), br = sources.getExpansionRange(b);
+        return sameDeclarationLocation(sources.getOriginalLoc(a), sources.getOriginalLoc(b),
+                                       sources, depth + 1) &&
+               sameDeclarationLocation(ar.start(), br.start(), sources, depth + 1) &&
+               sameDeclarationLocation(ar.end(), br.end(), sources, depth + 1);
+    }
+    if (a.offset() != b.offset() ||
+        sources.getFullPath(a.buffer()) != sources.getFullPath(b.buffer()))
+        return false;
+    auto at = sources.getSourceText(a.buffer()), bt = sources.getSourceText(b.buffer());
+    if (at.data() != bt.data() || at.size() != bt.size())
+        return false;
+    return sameDeclarationLocation(sources.getIncludedFrom(a.buffer()),
+                                   sources.getIncludedFrom(b.buffer()), sources, depth + 1);
+}
+
 ShallowAnalysis::ShallowAnalysis(BufferID buffer, std::shared_ptr<ShallowCompilation> compilation,
                                  const lsp::RequestContext& ctx) :
     syntaxes(*compilation->getSyntaxTree(), buffer),
@@ -83,7 +113,17 @@ ShallowAnalysis::ShallowAnalysis(BufferID buffer, std::shared_ptr<ShallowCompila
     auto& root = getCompilation()->getRoot();
     ctx.checkpoint("after root binding");
     ctx.checkpoint("before symbol indexing");
-    root.visit(m_symbolIndexer);
+    if (!m_shallowCompilation->getSourceInstances().empty()) {
+        for (auto package : getCompilation()->getImportedPackages())
+            package->visit(m_symbolIndexer);
+        for (auto instance : m_shallowCompilation->getSourceInstances()) {
+            instance->getDefinition().visit(m_symbolIndexer);
+            instance->body.visit(m_symbolIndexer);
+        }
+    }
+    else {
+        root.visit(m_symbolIndexer);
+    }
     SmallVector<const ast::DefinitionSymbol*> unindexedDefinitions;
     for (auto* symbol : getCompilation()->getDefinitions()) {
         auto* definition = symbol->as_if<ast::DefinitionSymbol>();
@@ -128,7 +168,7 @@ ShallowAnalysis::ShallowAnalysis(
     const ServerCompilation* design, const lsp::RequestContext& ctx, bool packageOnly) :
     ShallowAnalysis(buffer,
                     std::make_shared<ShallowCompilation>(sm, std::move(tree), options, dependencies,
-                                                         design, ctx, packageOnly),
+                                                         design, ctx, packageOnly, buffer),
                     ctx) {
     ctx.checkpoint("after per-file indexing");
 }
@@ -1043,7 +1083,7 @@ void ShallowAnalysis::addLocalReferences(std::vector<lsp::Location>& references,
         // Check if this is the token at the target location
         auto tokenSymbols = getSymbolsAtToken(token);
         auto targetIt = std::ranges::find_if(tokenSymbols, [&](const ast::Symbol* symbol) {
-            return symbol->location == targetLocation;
+            return sameDeclarationLocation(symbol->location, targetLocation, m_sourceManager);
         });
         if (targetIt != tokenSymbols.end()) {
             targetSymbol = *targetIt;

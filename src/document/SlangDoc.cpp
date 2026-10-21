@@ -378,7 +378,9 @@ std::shared_ptr<syntax::SyntaxTree> SlangDoc::getSyntaxTree(const lsp::RequestCo
                     m_buffer = *buffer;
             }
             std::shared_ptr<syntax::SyntaxTree> tree;
-            if (m_driver.isFrozenSourcesEnabled())
+            tree = m_driver.resumeScopeLibrary(unit.rootPaths, buffers, unit.options,
+                                               unit.requiresNativeReplay);
+            if (!tree && m_driver.isFrozenSourcesEnabled())
                 tree = m_driver.resumeFrozenSources(unit.rootPaths, buffers, unit.options,
                                                     unit.requiresNativeReplay);
             if (!tree && m_driver.isUvmPrefixCacheEnabled() && !m_uvmPrefixDisabled) {
@@ -438,7 +440,13 @@ SlangDoc::AnalysisInputs SlangDoc::getAnalysisInputs(const lsp::RequestContext& 
     auto cwdPhase = m_sourceManager.beginFastCwdPhase();
     ctx.throwIfCancelled("before analysis");
     auto indexRevision = m_driver.getDependencyIndexRevision();
-    if (auto fixed = m_driver.trustedUvmSourceContext(m_uri)) {
+    if (auto fixed = m_driver.trustedLibrarySourceContext(m_uri)) {
+        // A prior rejected namespace can have left an explicit context error.
+        // Re-resolve it against this edit before taking the owner shortcut.
+        if (m_driver.hasExplicitContextError(m_uri)) {
+            (void)m_driver.getIncludeContext(m_uri);
+            m_driver.requireExplicitContext(m_uri);
+        }
         cwdPhase.finish();
         return {fixed->buffer, fixed->tree, {fixed->tree}, indexRevision};
     }
@@ -490,8 +498,13 @@ std::shared_ptr<ShallowAnalysis> SlangDoc::refreshAnalysis(const lsp::RequestCon
     auto [buffer, tree, trees, indexRevision] = getAnalysisInputs(ctx);
     ctx.checkpoint("before analysis construction");
     auto analysisOptions = m_options;
-    if (auto trusted = m_driver.options.get<TrustedUvmImport>())
-        analysisOptions.set(*trusted);
+    if (auto trusted = m_driver.options.get<TrustedUvmImport>()) {
+        auto import = *trusted;
+        import.enabled = m_driver.hasCompatibleTrustedNamespace();
+        if (!import.enabled)
+            ++import.library->namespaceDeclines;
+        analysisOptions.set(std::move(import));
+    }
     auto analysis = m_includeCompilation && m_includeCompilation->getSyntaxTree() == tree
                         ? std::make_shared<ShallowAnalysis>(buffer, m_includeCompilation, ctx)
                         : std::make_shared<ShallowAnalysis>(m_sourceManager, buffer, tree,

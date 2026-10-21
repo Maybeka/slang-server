@@ -65,18 +65,18 @@ const ast::Type& unwrapErrorType(const ast::Type& type) {
 }
 
 const ast::Type* getTypeParameterTargetType(const ast::Type& type) {
-    auto* alias = type.as_if<ast::TypeAliasType>();
-    if (!alias)
-        return nullptr;
-
-    auto* aliasSyntax = alias->getSyntax();
-    if (!aliasSyntax || !aliasSyntax->parent ||
-        aliasSyntax->parent->kind != syntax::SyntaxKind::TypeParameterDeclaration) {
-        return nullptr;
+    const ast::Type* result = nullptr;
+    for (auto current = &type; auto alias = current->as_if<ast::TypeAliasType>();) {
+        auto syntax = alias->getSyntax();
+        if (!syntax || !syntax->parent ||
+            syntax->parent->kind != syntax::SyntaxKind::TypeParameterDeclaration)
+            break;
+        const auto& target = alias->targetType.getType();
+        if (target.isError())
+            return nullptr;
+        result = current = &target;
     }
-
-    const auto& targetType = alias->targetType.getType();
-    return targetType.isError() ? nullptr : &targetType;
+    return result;
 }
 
 } // namespace server

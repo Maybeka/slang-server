@@ -28,7 +28,7 @@ using namespace slang;
 /// @brief Contains the analysis state surrounding a compilation, recreated on every refresh (file
 /// save when compilation is set). This includes the compilation itself, references to used buffers,
 /// instance indexer, etc.
-class ServerCompilationAnalysis {
+class ServerCompilationAnalysis : public std::enable_shared_from_this<ServerCompilationAnalysis> {
 public:
     ServerCompilationAnalysis(
         const std::unordered_map<std::string, std::shared_ptr<SlangDoc>>& documents, Bag& options,
@@ -53,12 +53,12 @@ public:
     /// Get load cone leaves for a given RTL path.
     std::set<ConeLeaf> getLoadCone(const std::string& path);
 
+    /// Share completed current driver analysis with readonly fixed-source views.
+    slang::analysis::AnalysisManager& getAnalysisManager();
+
 private:
     /// Resolve an RTL path for cone tracing, throwing if it is not in the compiled design.
     const slang::ast::Symbol& lookupConeSymbol(const std::string& path);
-
-    /// Lazily creates and runs the full-design analysis manager.
-    slang::analysis::AnalysisManager& getAnalysisManager();
 
     /// Retained buffer data to prevent deallocation while this compilation exists
     std::vector<std::shared_ptr<void>> m_retainedBuffers;

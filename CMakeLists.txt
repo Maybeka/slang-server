@@ -353,6 +353,7 @@ add_library(
   src/ast/ServerCompilation.cpp
   src/ast/FrozenInstanceCache.cpp
   src/ast/ServerCompilationAnalysis.cpp
+  src/ast/ScopeBodyCache.cpp
   src/ast/ShallowCompilation.cpp
   src/ast/WcpClient.cpp
   src/document/DefinitionInfo.cpp
@@ -386,6 +387,7 @@ add_library(
   src/Config.cpp
   src/Indexer.cpp
   src/ServerDriver.cpp
+  src/ScopeLibrary.cpp
   src/UvmLibrary.cpp
   src/FrozenSources.cpp
   src/document/FrozenSourceRegistry.cpp

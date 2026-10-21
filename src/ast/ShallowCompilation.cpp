@@ -14,6 +14,7 @@
 
 #include "slang/ast/symbols/CompilationUnitSymbols.h"
 #include "slang/ast/symbols/InstanceSymbols.h"
+#include "slang/ast/symbols/ParameterSymbols.h"
 #include "slang/ast/symbols/ValueSymbol.h"
 #include "slang/diagnostics/AnalysisDiags.h"
 
@@ -23,7 +24,8 @@ using namespace slang;
 ShallowCompilation::ShallowCompilation(
     SourceManager& sourceManager, std::shared_ptr<syntax::SyntaxTree> tree, const Bag& options,
     const std::vector<std::shared_ptr<syntax::SyntaxTree>>& dependencies,
-    const ServerCompilation* design, const lsp::RequestContext& ctx, bool packageOnly) :
+    const ServerCompilation* design, const lsp::RequestContext& ctx, bool packageOnly,
+    BufferID sourceBuffer) :
     m_sourceManager(sourceManager), m_tree(std::move(tree)), m_allTrees{m_tree},
     m_analysisOptions(options.getOrDefault<analysis::AnalysisOptions>()) {
     if (auto setting = options.get<TrustedUvmImport>())
@@ -44,12 +46,64 @@ ShallowCompilation::ShallowCompilation(
     }
 
     if (auto setting = options.get<TrustedUvmImport>();
-        setting && setting->library &&
+        setting && setting->library && setting->enabled &&
         m_tree == setting->library->compilation->getSyntaxTrees().front()) {
-        // Navigation within a fixed library indexes the prepared semantic owner;
-        // no second UVM compilation is constructed merely to open its source.
-        m_compilation = setting->library->compilation;
-        return;
+        // A package can use its immutable semantic owner directly. A module
+        // needs its selected current instance, including current driver context.
+        std::vector<BufferID> enclosing;
+        if (sourceBuffer.valid()) {
+            enclosing.push_back(sourceBuffer);
+            for (auto location = sourceManager.getIncludedFrom(sourceBuffer); location;
+                 location = sourceManager.getIncludedFrom(location.buffer()))
+                enclosing.push_back(location.buffer());
+        }
+        std::vector<std::string_view> names;
+        for (const auto& name : setting->library->definitions) {
+            auto definition = setting->library->compilation
+                                  ->tryGetDefinition(name, setting->library->compilation->getRoot())
+                                  .definition;
+            if (definition &&
+                (!sourceBuffer.valid() ||
+                 std::ranges::find(
+                     enclosing, sourceManager.getFullyExpandedLoc(definition->location).buffer()) !=
+                     enclosing.end()))
+                names.push_back(name);
+        }
+        if (names.empty()) {
+            m_compilation = setting->library->compilation;
+            return;
+        }
+        if (design) {
+            auto active = design->createActiveDesignContext(names);
+            for (auto name : names) {
+                if (auto instance = active.getBoundInstance(name)) {
+                    // Native shallow overrides omit invalid arguments. Keep
+                    // that private default view while the consumer is broken,
+                    // rather than expose its invalid instantiated parameter map.
+                    const bool invalid =
+                        std::ranges::any_of(instance->body.getParameters(), [](auto parameter) {
+                            const auto& symbol = parameter->symbol;
+                            if (auto value = symbol.template as_if<ast::ParameterSymbol>())
+                                return value->getValue().bad();
+                            if (auto type = symbol.template as_if<ast::TypeParameterSymbol>())
+                                return type->targetType.getType().isError();
+                            return false;
+                        });
+                    if (invalid)
+                        break;
+                    m_sourceInstances.push_back(instance);
+                }
+            }
+            if (m_sourceInstances.size() == names.size()) {
+                m_activeDesign = std::move(active);
+                m_compilation = m_activeDesign->retainCompilation();
+                m_editedDefinitionsElaborated = true;
+                return;
+            }
+            m_sourceInstances.clear();
+        }
+        // Uninstantiated definitions still get a private default elaboration;
+        // never add default bodies or overrides to the shared library owner.
     }
 
     auto cOptions = options.getOrDefault<ast::CompilationOptions>();
@@ -66,7 +120,7 @@ ShallowCompilation::ShallowCompilation(
     }
     ctx.checkpoint("before compilation construction");
     m_compilation = std::make_shared<ast::Compilation>(cOptions);
-    const bool trusted = importTrustedUvm(*m_compilation, sourceManager, options);
+    const bool trusted = importTrustedUvm(*m_compilation, sourceManager, options, m_allTrees);
     ctx.checkpoint("after compilation construction");
     for (auto& depTree : m_allTrees) {
         ctx.checkpoint("before adding syntax tree");
@@ -109,7 +163,9 @@ const Diagnostics& ShallowCompilation::getSemanticDiagnostics() {
         m_editedDefinitionsElaborated = true;
     }
 
-    return m_compilation->getSemanticDiagnostics();
+    const auto& diagnostics = m_compilation->getSemanticDiagnostics();
+    m_compilation->offerInstanceBodies(m_compilation);
+    return diagnostics;
 }
 
 Diagnostics ShallowCompilation::getAnalysisDiags() {
@@ -120,6 +176,15 @@ Diagnostics ShallowCompilation::getAnalysisDiags() {
 }
 
 const analysis::AnalysisManager* ShallowCompilation::getAnalysisManager() {
+    if (!m_sourceInstances.empty()) {
+        auto& manager = m_activeDesign->getAnalysis().getAnalysisManager();
+        if (!m_cachedAnalysisDiags)
+            m_cachedAnalysisDiags = manager.getDiagnostics().filter(
+                {diag::UnusedDefinition, diag::UnusedPackageParameter,
+                 diag::UnusedPackageSubroutine, diag::UnusedPackageTypedef,
+                 diag::UnusedPackageVar});
+        return &manager;
+    }
     if (m_driverAnalysis)
         return m_driverAnalysis.get();
 
@@ -144,6 +209,8 @@ const analysis::AnalysisManager* ShallowCompilation::getAnalysisManager() {
 
 std::vector<const analysis::ValueDriver*> ShallowCompilation::getDrivers(
     const ast::ValueSymbol& symbol) {
+    if (!m_sourceInstances.empty())
+        return m_activeDesign->getAnalysis().getDrivers(symbol);
     if (m_activeDesign) {
         auto* designSymbol = getDesignSymbol(symbol);
         if (auto* designValue = designSymbol ? designSymbol->as_if<ast::ValueSymbol>() : nullptr)

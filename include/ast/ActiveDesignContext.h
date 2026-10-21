@@ -52,6 +52,10 @@ public:
 
     ServerCompilationAnalysis& getAnalysis() const { return *m_analysis; }
 
+    /// Retain the current full compilation for readonly fixed-module source views.
+    std::shared_ptr<slang::ast::Compilation> retainCompilation() const;
+    const slang::ast::InstanceSymbol* getBoundInstance(std::string_view name) const;
+
 private:
     /// Records one definition's selected instance and resolved interface connections.
     struct DefinitionBinding {

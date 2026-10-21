@@ -53,6 +53,33 @@ using namespace slang;
 
 namespace {
 
+// Native source views are parsed in their physical include-root context. A
+// retained active instance can instead belong to a larger single compilation
+// unit; imports from other root files must not leak into that source's UI.
+auto completionSourceRoot(const ast::Symbol& symbol) {
+    std::filesystem::path result;
+    const auto scope = symbol.getParentScope();
+    const auto sources = scope ? scope->getCompilation().getSourceManager() : nullptr;
+    if (!sources || !symbol.location)
+        return result;
+    auto location = sources->getFullyExpandedLoc(symbol.location);
+    while (auto parent = sources->getIncludedFrom(location.buffer()))
+        location = sources->getFullyExpandedLoc(parent);
+    return sources->getFullPath(location.buffer());
+}
+
+bool sourceImportVisible(const ast::Symbol& import, const ast::Symbol& boundary) {
+    if (import.isDeclaredBefore(boundary) == false)
+        return false;
+    const auto body = boundary.as_if<ast::InstanceBodySymbol>();
+    const auto definitionScope = body ? body->getDefinition().getParentScope() : nullptr;
+    if (!definitionScope || &body->getCompilation() == &definitionScope->getCompilation())
+        return true; // Preserve the ordinary native compilation-unit view.
+    const auto source = completionSourceRoot(import);
+    const auto target = completionSourceRoot(boundary);
+    return source.empty() || target.empty() || source == target;
+}
+
 const ast::Symbol& unwrapCompletionMember(const ast::Symbol& symbol) {
     auto* result = &symbol;
     while (auto* member = result->as_if<ast::TransparentMemberSymbol>())
@@ -688,8 +715,15 @@ void MemberCompletionQuery::resolve(const slang::ast::Symbol& rawSymbol, lsp::Co
             setSubroutineCompletionEdit(*prototype, item);
         symSyntax = symbol.getSyntax();
     }
-    else if (symbol.kind == slang::ast::SymbolKind::TypeAlias) {
-        symSyntax = symbol.getSyntax();
+    else if (symbol.kind == slang::ast::SymbolKind::TypeAlias ||
+             symbol.kind == slang::ast::SymbolKind::TypeParameter) {
+        symSyntax = symbol.kind == slang::ast::SymbolKind::TypeParameter
+                        ? symbol.as<ast::TypeParameterSymbol>().getTypeAlias().getSyntax()
+                        : symbol.getSyntax();
+        if (symSyntax && symSyntax->kind == syntax::SyntaxKind::TypeAssignment &&
+            symSyntax->parent &&
+            symSyntax->parent->kind == syntax::SyntaxKind::TypeParameterDeclaration)
+            symSyntax = symSyntax->parent;
     }
     else if (slang::ast::ValueSymbol::isKind(symbol.kind) ||
              slang::ast::PortSymbol::isKind(symbol.kind) ||
@@ -755,6 +789,10 @@ void MemberCompletionQuery::addCompletions(std::vector<lsp::CompletionItem>& res
             if (member.name.empty() || member.kind == slang::ast::SymbolKind::Package) {
                 continue;
             }
+            if (prevSym && currentScope->asSymbol().kind == ast::SymbolKind::CompilationUnit &&
+                member.kind == ast::SymbolKind::ExplicitImport &&
+                !sourceImportVisible(member, *prevSym))
+                continue;
             if (contextKind == CompletionContextKind::Expression &&
                 (member.kind == slang::ast::SymbolKind::ClassType ||
                  member.kind == slang::ast::SymbolKind::GenericClassDef)) {
@@ -796,6 +834,13 @@ void MemberCompletionQuery::addCompletions(std::vector<lsp::CompletionItem>& res
         if (isOriginalCall) {
             if (auto importData = currentScope->getWildcardImportData()) {
                 for (auto import : importData->wildcardImports) {
+                    // A retained definition can share a full compilation unit.
+                    // Use native declaration lookup positions rather than expose
+                    // wildcard imports outside that definition's visible prefix.
+                    if (prevSym &&
+                        currentScope->asSymbol().kind == ast::SymbolKind::CompilationUnit &&
+                        !sourceImportVisible(*import, *prevSym))
+                        continue;
                     auto package = import->getPackage();
                     if (package != nullptr) {
                         INFO("Adding wildcard imports from package {}", package->name);
@@ -875,11 +920,23 @@ void MemberCompletionQuery::resolve(CompletionDispatch& dispatch, lsp::Completio
                           symbol->kind == ast::SymbolKind::Subroutine)))
             return;
     }
-    if (!symbol && data->bufferId && data->bufferId == analysis->getBuffer().getId()) {
+    if (!symbol && data->bufferId) {
+        // Forwarded nominal fields can belong to an immutable provider buffer,
+        // not the querying document's current buffer. Search only the current
+        // graph, still requiring exact location, kind, name and instance path.
+
         CompletionSymbolFinder finder(
             SourceLocation(BufferID(data->bufferId, "completion item resolve"), data->offset),
             data->symbolKind, data->symbolName, data->symbolPath, ctx);
         root.visit(finder);
+        // Imported packages are registered in the compilation's package map,
+        // but are not children of its current compilation units. Enum members
+        // reached through retained typedefs still need the same exact search.
+        if (!finder.result)
+            if (auto separator = data->symbolPath.find("::"); separator != std::string::npos)
+                if (auto package = analysis->getCompilation()->getPackage(
+                        std::string_view(data->symbolPath).substr(0, separator)))
+                    package->visit(finder);
         symbol = finder.result;
     }
     if (!symbol) {

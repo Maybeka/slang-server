@@ -26,11 +26,14 @@ ServerCompilationAnalysis::ServerCompilationAnalysis(
     compilation(options),
     m_analysisOptions(options.getOrDefault<slang::analysis::AnalysisOptions>()) {
     std::vector<BufferID> bufferIds;
-    const bool trusted = importTrustedUvm(compilation, sourceManager, options);
+    std::vector<std::shared_ptr<syntax::SyntaxTree>> trees;
+    trees.reserve(documents.size());
+    for (auto& [_, doc] : documents)
+        trees.push_back(doc->getSyntaxTree());
+    const bool trusted = importTrustedUvm(compilation, sourceManager, options, trees);
     std::unordered_set<BufferID> seenBuffers;
 
-    for (auto& [_, doc] : documents) {
-        auto tree = doc->getSyntaxTree();
+    for (auto& tree : trees) {
         compilation.addSyntaxTree(tree, trusted);
 
         for (auto bufferId : tree->getSourceBufferIds()) {
@@ -55,6 +58,8 @@ slang::analysis::AnalysisManager& ServerCompilationAnalysis::getAnalysisManager(
         // A query can refresh the design before the save-triggered diagnostic
         // pass. Complete elaboration before freezing it for driver analysis.
         (void)compilation.getSemanticDiagnostics();
+        if (auto self = weak_from_this().lock())
+            compilation.offerInstanceBodies(std::shared_ptr<ast::Compilation>(self, &compilation));
         m_driverAnalysis = std::make_unique<slang::analysis::AnalysisManager>(m_analysisOptions);
         compilation.freeze();
         m_driverAnalysis->analyze(compilation);
@@ -160,12 +165,17 @@ std::set<ConeLeaf> ServerCompilationAnalysis::getLoadCone(const std::string& pat
         throw std::runtime_error(fmt::format("Could not find reference to: {}", path));
     }
 
-    LoadsTracer coneTracer(&symbol);
+    std::set<ConeLeaf> leaves;
     for (const auto* use : it->second) {
+        // Event / control state belongs to this use only. Symbol allocation
+        // order must not turn an unrelated port connection into a self-load.
+        LoadsTracer coneTracer(&symbol);
         use->visit(coneTracer);
+        const auto current = coneTracer.getLeaves();
+        leaves.insert(current.begin(), current.end());
     }
 
-    return coneTracer.getLeaves();
+    return leaves;
 }
 
 } // namespace server

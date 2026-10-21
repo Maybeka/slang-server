@@ -200,6 +200,14 @@ lsp::InitializeResult SlangServer::getInitialize(const lsp::InitializeParams& pa
         m_methodScope.reset();
         return true;
     });
+    registerCommand<std::monostate, rfl::Generic>("slang.scopeLibraryStatus",
+                                                  [this](std::monostate) {
+                                                      return m_driver->scopeLibraryStatus();
+                                                  });
+    registerCommand<std::monostate, bool>("slang.rebuildScopeLibrary", [this](std::monostate) {
+        m_driver->invalidateUvmParseCache();
+        return loadConfig(m_config, true, true, true, true);
+    });
     registerCommand<std::monostate, rfl::Generic>("slang.uvmLibraryStatus", [this](std::monostate) {
         return m_driver->trustedUvmStatus();
     });
@@ -1762,7 +1770,8 @@ void SlangServer::onDocDidOpen(const lsp::DidOpenTextDocumentParams& params) {
 void SlangServer::maybeRetireParsedContext() {
     if ((!m_config.experimentalUvmPrefixCache.value() &&
          !m_config.experimentalFrozenSources.value() &&
-         !m_config.experimentalUvmSemanticCache.value()) ||
+         !m_config.experimentalUvmSemanticCache.value() &&
+         !m_config.experimentalScopeSemanticCache.value()) ||
         std::getenv("SLANG_UVM_GENERATION_DISABLE") || !m_driver)
         return;
     auto epoch = m_driver->completions.getCompletionEpoch();
@@ -2148,7 +2157,8 @@ lsp::CompletionItem SlangServer::getCompletionItemResolve(const lsp::CompletionI
     }
     lsp::CompletionItem ret = item;
     if (m_contextRetired && (m_config.experimentalUvmPrefixCache.value() ||
-                             m_config.experimentalUvmSemanticCache.value()))
+                             m_config.experimentalUvmSemanticCache.value() ||
+                             m_config.experimentalScopeSemanticCache.value()))
         m_driver->completions.requireCompletionEpoch();
     m_driver->completions.getCompletionItemResolve(ret, ctx);
     return ret;
