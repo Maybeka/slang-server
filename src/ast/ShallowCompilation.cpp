@@ -164,7 +164,11 @@ const Diagnostics& ShallowCompilation::getSemanticDiagnostics() {
     }
 
     const auto& diagnostics = m_compilation->getSemanticDiagnostics();
-    m_compilation->offerInstanceBodies(m_compilation);
+    // The full design owns cache admission. Private query views clear tops
+    // and cap instance depth; publishing them can evict the active DUT graph
+    // with a different parameter / option variant during read-only queries.
+    if (!m_activeDesign)
+        m_compilation->offerInstanceBodies(m_compilation);
     return diagnostics;
 }
 

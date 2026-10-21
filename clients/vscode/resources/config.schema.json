@@ -65,6 +65,10 @@
           "description": "Experimental complete semantic reuse of explicitly fixed scopes. Default off. Dependencies are fixed until slang.rebuildScopeLibrary or configuration reload. Uses frozenSources selectors; unsupported boundaries use native analysis.",
           "type": "boolean"
         },
+        "experimentalDiagnosticDeltaPublishing": {
+          "description": "Experimental diagnostic delta publication. Default off. Repeated results are compared before serialization; changed document versions, errors, repairs and URI retirements are still published.",
+          "type": "boolean"
+        },
         "frozenSources": {
           "description": "Frozen source selections and cache budget. Does not enable the experiment.",
           "anyOf": [

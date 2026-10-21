@@ -109,7 +109,7 @@ index 133958b90..6208d7475 100644
  
  template<typename TVisitor>
 diff --git a/include/slang/ast/Compilation.h b/include/slang/ast/Compilation.h
-index b7ddc64e4..028d51488 100644
+index b7ddc64e4..cf121d8bf 100644
 --- a/include/slang/ast/Compilation.h
 +++ b/include/slang/ast/Compilation.h
 @@ -7,6 +7,7 @@
@@ -174,7 +174,7 @@ index b7ddc64e4..028d51488 100644
      /// @name Top-level API
      /// @{
  
-@@ -349,7 +368,65 @@ public:
+@@ -349,7 +368,78 @@ public:
  
      /// Adds a syntax tree to the compilation. If the compilation has already been finalized
      /// by calling @a getRoot this call will throw an exception.
@@ -218,6 +218,19 @@ index b7ddc64e4..028d51488 100644
 +    void setInstanceBodyCacheContext(bool inheritedBindTarget = false);
 +    /// Accept integral type arguments with fixed nominal identity and no mutable aliases.
 +    bool isFixedInstanceBodyTypeArgument(const Type& type, const InstanceBodySymbol& root) const;
++    /// Record an independently bound, closed integral type dependency. The
++    /// source is inspected for provenance and layout, never retained by pointer.
++    bool recordInstanceBodyTypeDependency(const Type& replacement, const Type& source);
++    /// Identity unification is installed only after a whole body import succeeds.
++    const Type* getInstanceBodyTypeIdentity(const Type& type) const;
++    struct InstanceBodyTypePresentation {
++        bool transparent = false;
++        std::string name;
++        std::string scope;
++    };
++    const InstanceBodyTypePresentation* getInstanceBodyTypePresentation(const Type& type) const;
++    /// Consumer bind directives cannot add members to an independently retained body.
++    bool isInstanceBodyBindContextCompatible() const;
 +    bool hasMatchingInstanceBodyParameters(const InstanceBodySymbol& retained,
 +                                           const InstanceBodySymbol& target) const;
 +    void detachRetainedParameterInitializers(InstanceBodySymbol& body);
@@ -241,7 +254,7 @@ index b7ddc64e4..028d51488 100644
  
      /// Gets the override node for a top-level definition, creating it if necessary. This must be
      /// called before the compilation is finalized. The syntax node can come from another
-@@ -512,6 +589,11 @@ public:
+@@ -512,6 +602,11 @@ public:
  
      /// Gets the package with the give name, or nullptr if there is no such package.
      const PackageSymbol* getPackage(std::string_view name) const;
@@ -253,7 +266,7 @@ index b7ddc64e4..028d51488 100644
  
      /// Gets the built-in 'std' package.
      const PackageSymbol& getStdPackage() const { return *stdPkg; }
-@@ -681,7 +763,13 @@ public:
+@@ -681,7 +776,13 @@ public:
      /// Notes that the given symbol is "referenced" somewhere in the AST.
      /// This is used to diagnose unused variables, nets, etc. The @a isLValue parameter
      /// is used to tell whether a value is only assigned or whether it's also read somewhere.
@@ -268,7 +281,7 @@ index b7ddc64e4..028d51488 100644
  
      /// Checks whether the given syntax node has been referenced in the AST thus far.
      /// The result is a pair, the first item of which is true if the node has been used
-@@ -857,6 +945,43 @@ private:
+@@ -857,6 +958,50 @@ private:
      friend class Scope;
      friend struct DiagnosticVisitor;
  
@@ -279,6 +292,11 @@ index b7ddc64e4..028d51488 100644
 +    bool trackBodyReferences = false;
 +    bool completeBodyReferenceTracking = false;
 +    bool instanceBodyCacheContext = false;
++    flat_hash_map<const Type*, std::string> fixedBodyTypeOrigins;
++    flat_hash_map<const Type*, const Type*> importedBodyTypeIdentities;
++    flat_hash_map<const Type*, InstanceBodyTypePresentation> fixedBodyTypePresentations;
++    mutable std::optional<bool> bodyBindContextCompatible;
++    std::string instanceBodyTypeOrigin(const Type& type) const;
 +    bool instanceBodyCacheBindTarget = false;
 +    mutable std::unique_ptr<flat_hash_set<std::string>> missingPackageLookups;
 +    flat_hash_map<const Symbol*, std::pair<bool, bool>> bodyReferenceStatus;
@@ -299,6 +317,7 @@ index b7ddc64e4..028d51488 100644
 +        size_t constantStorageBytes = 0;
 +        BodyReferenceMap references;
 +        std::vector<const InstanceBodySymbol*> descendants;
++        std::vector<const Type*> classes;
 +        std::vector<const DefinitionSymbol*> instantiationSites;
 +        std::vector<const Diagnostic*> diagnostics;
 +    };
@@ -308,11 +327,12 @@ index b7ddc64e4..028d51488 100644
 +    flat_hash_set<const InstanceBodySymbol*> replayedBodyDiagnostics;
 +    void replayInstanceBodyDiagnostics(const InstanceBodySymbol& body);
 +    std::vector<std::shared_ptr<Compilation>> importedBodyOwners;
++    std::vector<const Type*> importedBodyClasses;
 +
      // Collected information about a resolved bind directive.
      struct ResolvedBind {
          SmallVector<const Symbol*> instTargets;
-@@ -937,6 +1062,10 @@ private:
+@@ -937,6 +1082,10 @@ private:
      // for things like variables and nets.
      flat_hash_map<const syntax::SyntaxNode*, std::pair<bool, bool>> referenceStatusMap;
  
@@ -323,7 +343,7 @@ index b7ddc64e4..028d51488 100644
      // The name map for all module, interface, program, and primitive definitions.
      // The key is a combination of definition name + the scope in which it was declared.
      // The value is a pair -- the first element is a list of definitions that share
-@@ -1134,6 +1263,16 @@ private:
+@@ -1134,6 +1283,16 @@ private:
      // The default library.
      std::unique_ptr<SourceLibrary> defaultLibMem;
      const SourceLibrary* defaultLibPtr;
@@ -512,10 +532,18 @@ index 562415765..b916eb73f 100644
      /// when resolution is requested.
      /// @param syntax The initializer expression syntax.
 diff --git a/include/slang/ast/types/TypePrinter.h b/include/slang/ast/types/TypePrinter.h
-index 9b2fe5cb9..26d2b1b67 100644
+index 9b2fe5cb9..3a54057a2 100644
 --- a/include/slang/ast/types/TypePrinter.h
 +++ b/include/slang/ast/types/TypePrinter.h
-@@ -133,12 +133,19 @@ public:
+@@ -122,6 +122,7 @@ private:
+     void printUnpackedArrayDim(const Type& type);
+     void printScope(const Scope* scope);
+     void printAKA(const Type& type);
++    void printTypeScope(const Type& type);
+ 
+     std::unique_ptr<FormatBuffer> buffer;
+ };
+@@ -133,12 +134,19 @@ public:
      TypeArgFormatter();
  
      /// Set the options to use when formatting types.
@@ -1050,7 +1078,7 @@ index a8d51f774..1b486f2ac 100644
 +};
  } // namespace slang::syntax
 diff --git a/include/slang/text/SourceManager.h b/include/slang/text/SourceManager.h
-index de1d1c271..9822803a9 100644
+index de1d1c271..2ba59ba63 100644
 --- a/include/slang/text/SourceManager.h
 +++ b/include/slang/text/SourceManager.h
 @@ -16,15 +16,22 @@
@@ -1174,7 +1202,7 @@ index de1d1c271..9822803a9 100644
      /// Information about a `line directive in a source buffer.
      struct LineDirectiveInfo {
          std::string name;       // File name set by directive
-@@ -60,6 +158,20 @@ public:
+@@ -60,6 +158,24 @@ public:
      SourceManager(const SourceManager&) = delete;
      SourceManager& operator=(const SourceManager&) = delete;
  
@@ -1188,6 +1216,10 @@ index de1d1c271..9822803a9 100644
 +    void inheritImmutablePrefix(std::shared_ptr<const ImmutablePrefix> prefix);
 +    bool sharesImmutablePrefix(const SourceManager& other) const;
 +
++    /// Project a declaration location onto an identical physical file held by
++    /// the immutable prefix. No source from a retiring consumer is retained.
++    std::optional<SourceLocation> projectImmutableOriginalLocation(SourceLocation location) const;
++
 +    /// Own expansion names before releasing parser / driver storage. Future
 +    /// expansions also retain names. Ordinary parsing does not enable this mode.
 +    void retainSourceNames();
@@ -1195,7 +1227,7 @@ index de1d1c271..9822803a9 100644
      /// @brief Adds one or more system include directories that match
      /// the given pattern.
      ///
-@@ -74,6 +186,9 @@ public:
+@@ -74,6 +190,9 @@ public:
      /// and that path does not exist or is not a directory.
      std::error_code addUserDirectories(std::string_view pattern);
  
@@ -1205,7 +1237,7 @@ index de1d1c271..9822803a9 100644
      /// Gets the source line number for a given source location.
      size_t getLineNumber(SourceLocation location) const;
  
-@@ -256,28 +371,57 @@ public:
+@@ -256,28 +375,57 @@ public:
      /// Returns true if the given file path is already loaded and cached in the source manager.
      bool isCached(const std::filesystem::path& path) const;
  
@@ -1268,7 +1300,7 @@ index de1d1c271..9822803a9 100644
  
      /// Stores information specified in a pragma diagnostic directive, which alters the
      /// currently active set of diagnostic mappings.
-@@ -339,6 +483,14 @@ public:
+@@ -339,6 +487,14 @@ public:
  
      /// Returns the total bytes consumed by all loaded source files:
      /// raw file content plus any cached line-offset tables.
@@ -1283,7 +1315,7 @@ index de1d1c271..9822803a9 100644
      size_t getMemoryUsage() const;
  
      /// Appends raw line-start offsets for @a text to @a offsets, using the same
-@@ -370,6 +522,7 @@ private:
+@@ -370,6 +526,7 @@ private:
          uint64_t sortKey = 0;
          BufferKind bufferKind = BufferKind::DesignFile;
          std::vector<LineDirectiveInfo> lineDirectives;
@@ -1291,7 +1323,7 @@ index de1d1c271..9822803a9 100644
  
          FileInfo() = default;
  
-@@ -441,6 +594,9 @@ private:
+@@ -441,6 +598,9 @@ private:
  
      // index from BufferID to buffer metadata
      std::vector<std::variant<FileInfo, ExpansionInfo>> bufferEntries;
@@ -1301,7 +1333,7 @@ index de1d1c271..9822803a9 100644
  
      // cache for file lookups; this holds on to the actual file data
      flat_hash_map<std::string, std::pair<std::shared_ptr<FileData>, std::error_code>> lookupCache;
-@@ -448,6 +604,14 @@ private:
+@@ -448,6 +608,14 @@ private:
      // directories for system and user includes
      std::vector<std::filesystem::path> systemDirectories;
      std::vector<std::filesystem::path> userDirectories;
@@ -1316,7 +1348,7 @@ index de1d1c271..9822803a9 100644
  
      // uniquified backing memory for directories
      std::set<std::filesystem::path> directories;
-@@ -455,6 +619,32 @@ private:
+@@ -455,6 +623,32 @@ private:
      // map from buffer to diagnostic directive lists
      flat_hash_map<BufferID, std::vector<DiagnosticDirectiveInfo>> diagDirectives;
  
@@ -1708,7 +1740,7 @@ index cb4f631f8..664d00b20 100644
              // information to point the user towards the right ones.
              Diagnostic diag = *found;
 diff --git a/source/ast/Compilation.cpp b/source/ast/Compilation.cpp
-index ed7528f2c..30afe0aec 100644
+index ed7528f2c..c7f52bd57 100644
 --- a/source/ast/Compilation.cpp
 +++ b/source/ast/Compilation.cpp
 @@ -9,12 +9,13 @@
@@ -1734,7 +1766,24 @@ index ed7528f2c..30afe0aec 100644
  #include "slang/text/CharInfo.h"
  #include "slang/text/SourceManager.h"
  #include "slang/util/TimeTrace.h"
-@@ -148,11 +150,7 @@ Compilation::Compilation(const Bag& options, const SourceLibrary* defaultLib) :
+@@ -43,6 +45,16 @@ Compilation::Compilation(const Bag& options, const SourceLibrary* defaultLib) :
+     options(options.getOrDefault<CompilationOptions>()), tempDiag({}, {}), netAliasAllocator(*this),
+     defaultLibPtr(defaultLib) {
+ 
++    // Driver option bags expose top names as views into command-line storage.
++    // Cached compilations retain source storage independently of the Driver,
++    // so their option signature must also own these bytes across retirement.
++    decltype(this->options.topModules) ownedTops;
++    for (auto name : this->options.topModules) {
++        auto text = copyFrom<char>(std::span(name.data(), name.size()));
++        ownedTops.emplace(std::string_view(text.data(), text.size()));
++    }
++    this->options.topModules = std::move(ownedTops);
++
+     // Construct all built-in types.
+     auto& bi = builtins::Builtins::Instance;
+     bitType = &bi.bitType;
+@@ -148,11 +160,7 @@ Compilation::Compilation(const Bag& options, const SourceLibrary* defaultLib) :
  
      // Set a default handler for printing types and symbol paths, for convenience.
      static std::once_flag onceFlag;
@@ -1747,7 +1796,7 @@ index ed7528f2c..30afe0aec 100644
  
      // Reset systemId counters that may have been changed due to creation of types
      // in the std package.
-@@ -163,11 +161,1262 @@ Compilation::Compilation(const Bag& options, const SourceLibrary* defaultLib) :
+@@ -163,11 +171,1809 @@ Compilation::Compilation(const Bag& options, const SourceLibrary* defaultLib) :
  
  Compilation::~Compilation() = default;
  
@@ -1832,8 +1881,8 @@ index ed7528f2c..30afe0aec 100644
 +void Compilation::importCompilationUnitDeclarations(std::shared_ptr<Compilation> owner,
 +                                                    SourceManager& sources) {
 +    if (finalized || !owner || owner.get() == this || !owner->isElaborated() ||
-+        owner->compilationUnits.size() != 1 || !compilationUnits.empty() ||
-+        !owner->sourceManager || !sources.sharesImmutablePrefix(*owner->sourceManager) ||
++        owner->compilationUnits.size() != 1 || !compilationUnits.empty() || !owner->sourceManager ||
++        !sources.sharesImmutablePrefix(*owner->sourceManager) ||
 +        (sourceManager && sourceManager != &sources) ||
 +        (!importedCompilations.empty() && stdPkg != owner->stdPkg))
 +        SLANG_THROW(std::invalid_argument("incompatible immutable compilation-unit owner"));
@@ -1882,6 +1931,8 @@ index ed7528f2c..30afe0aec 100644
 +bool Compilation::isFixedInstanceBodyTypeArgument(const Type& type,
 +                                                  const InstanceBodySymbol& rootBody) const {
 +    auto fixed = [&](const Type& candidate) {
++        if (fixedBodyTypeOrigins.contains(&candidate))
++            return true;
 +        auto scope = candidate.getParentScope();
 +        return scope && std::ranges::any_of(importedCompilations, [&](const auto& owner) {
 +                   return owner.get() == &scope->getCompilation();
@@ -1933,12 +1984,273 @@ index ed7528f2c..30afe0aec 100644
 +    return check(check, type);
 +}
 +
++std::string Compilation::instanceBodyTypeOrigin(const Type& type) const {
++    if (auto found = fixedBodyTypeOrigins.find(&type); found != fixedBodyTypeOrigins.end())
++        return found->second;
++    if (!sourceManager || !type.getParentScope())
++        return {};
++    const auto location = type.getSyntax() ? type.getSyntax()->getFirstToken().location()
++                                           : type.location;
++    const auto original = sourceManager->getFullyOriginalLoc(location);
++    const auto expanded = sourceManager->getFullyExpandedLoc(location);
++    if (!original || !expanded)
++        return {};
++    return fmt::format("{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}", int(type.kind),
++                       sourceManager->getFullPath(original.buffer()).generic_string(),
++                       original.offset(), sourceManager->getLineNumber(original),
++                       sourceManager->getColumnNumber(original),
++                       sourceManager->getFullPath(expanded.buffer()).generic_string(),
++                       expanded.offset(), sourceManager->getLineNumber(expanded),
++                       sourceManager->getColumnNumber(expanded),
++                       type.getParentScope()->asSymbol().getHierarchicalPath(), type.name,
++                       type.getSyntax() ? type.getSyntax()->toString() : std::string());
++}
++
++const Compilation::InstanceBodyTypePresentation* Compilation::getInstanceBodyTypePresentation(
++    const Type& type) const {
++    auto found = fixedBodyTypePresentations.find(&type);
++    return found == fixedBodyTypePresentations.end() ? nullptr : &found->second;
++}
++
++bool Compilation::isInstanceBodyBindContextCompatible() const {
++    if (bodyBindContextCompatible)
++        return *bodyBindContextCompatible;
++    flat_hash_set<const SyntaxNode*> fixed;
++    flat_hash_set<std::string_view> definitions;
++    for (auto definition : importedDefinitions) {
++        fixed.emplace(definition->getSyntax());
++        definitions.emplace(definition->name);
++    }
++    for (auto package : getImportedPackages())
++        fixed.emplace(package->getSyntax());
++    for (const auto& [syntax, _] : importedUnitDeclarations)
++        fixed.emplace(syntax);
++    bool compatible = true;
++    auto visitor = makeSyntaxVisitor([&](auto& self, const auto& node) {
++        if (!compatible || fixed.contains(&node))
++            return;
++        using T = std::remove_cvref_t<decltype(node)>;
++        if constexpr (std::same_as<T, BindDirectiveSyntax>) {
++            // Module-target binds can affect every occurrence. Hierarchical
++            // targets require current elaboration and stay native conservatively.
++            compatible =
++                node.target->kind == SyntaxKind::IdentifierName &&
++                !definitions.contains(
++                    node.target->template as<IdentifierNameSyntax>().identifier.valueText());
++        }
++        else
++            self.visitDefault(node);
++    });
++    for (const auto& tree : syntaxTrees)
++        if (tree->getMetadata().hasBindDirectives)
++            tree->root().visit(visitor);
++    bodyBindContextCompatible = compatible;
++    return compatible;
++}
++
++bool Compilation::recordInstanceBodyTypeDependency(const Type& replacement, const Type& source) {
++    if (!instanceBodyCacheContext || !isElaborated() || hasFatalErrors())
++        return false;
++    std::vector<std::pair<const Type*, std::string>> staged;
++    std::vector<std::pair<const Type*, InstanceBodyTypePresentation>> presentations;
++    std::vector<std::pair<const Type*, const Type*>> nominalNames;
++    auto presentation = [](const Type& type) {
++        InstanceBodyTypePresentation result;
++        if (auto scope = type.getParentScope()) {
++            if (auto stored = scope->getCompilation().getInstanceBodyTypePresentation(type))
++                return *stored;
++            const auto& symbol = scope->asSymbol();
++            if (symbol.kind != SymbolKind::CompilationUnit) {
++                result.scope = symbol.getLexicalPath();
++                result.scope += symbol.kind == SymbolKind::Package ||
++                                        symbol.kind == SymbolKind::ClassType ||
++                                        symbol.kind == SymbolKind::CovergroupType
++                                    ? "::"
++                                    : ".";
++            }
++        }
++        result.name = type.name;
++        return result;
++    };
++    std::vector<std::pair<const Symbol*, const Symbol*>> sourceSymbols;
++    size_t visited = 0;
++    auto record = [&](auto&& self, const Type& left, const Type& right, unsigned depth) -> bool {
++        if (depth > 64 || ++visited > 4096)
++            return false;
++        if (&left == &right)
++            return true;
++        if (left.kind == SymbolKind::TypeAlias) {
++            auto scope = left.getParentScope();
++            if (!scope || &scope->getCompilation() != this)
++                return false;
++            std::string aliasOrigin;
++            if (right.kind == SymbolKind::TypeAlias && right.getParentScope())
++                aliasOrigin = right.getParentScope()->getCompilation().instanceBodyTypeOrigin(
++                    right);
++            staged.emplace_back(&left, std::move(aliasOrigin));
++            if (right.kind == SymbolKind::TypeAlias)
++                sourceSymbols.emplace_back(&left, &right);
++            auto display = presentation(right);
++            display.transparent |= right.kind != SymbolKind::TypeAlias;
++            presentations.emplace_back(&left, std::move(display));
++            return self(self, left.as<TypeAliasType>().targetType.getType(),
++                        right.kind == SymbolKind::TypeAlias
++                            ? right.as<TypeAliasType>().targetType.getType()
++                            : right,
++                        depth + 1);
++        }
++        if (right.kind == SymbolKind::TypeAlias)
++            return self(self, left, right.as<TypeAliasType>().targetType.getType(), depth + 1);
++        const auto& x = left.getCanonicalType();
++        const auto& y = right.getCanonicalType();
++        if (&x == &y)
++            return true;
++        if (x.kind != y.kind)
++            return false;
++        if (x.kind == SymbolKind::FixedSizeUnpackedArrayType) {
++            const auto& a = x.as<FixedSizeUnpackedArrayType>();
++            const auto& b = y.as<FixedSizeUnpackedArrayType>();
++            return a.range == b.range && self(self, a.elementType, b.elementType, depth + 1);
++        }
++        if (!x.isIntegral() || x.getBitWidth() != y.getBitWidth() || x.isSigned() != y.isSigned() ||
++            x.isFourState() != y.isFourState())
++            return false;
++        if (x.kind == SymbolKind::PackedArrayType) {
++            const auto& a = x.as<PackedArrayType>();
++            const auto& b = y.as<PackedArrayType>();
++            return a.range == b.range && self(self, a.elementType, b.elementType, depth + 1);
++        }
++        const bool nominal = x.kind == SymbolKind::EnumType ||
++                             x.kind == SymbolKind::PackedStructType ||
++                             x.kind == SymbolKind::PackedUnionType;
++        if (nominal) {
++            auto scope = y.getParentScope();
++            if (!scope || !x.getParentScope() || &x.getParentScope()->getCompilation() != this)
++                return false;
++            auto origin = scope->getCompilation().instanceBodyTypeOrigin(y);
++            if (origin.empty())
++                return false;
++            staged.emplace_back(&x, std::move(origin));
++            presentations.emplace_back(&x, presentation(y));
++            nominalNames.emplace_back(&x, &y);
++            sourceSymbols.emplace_back(&x, &y);
++        }
++        if (x.kind == SymbolKind::EnumType) {
++            const auto& a = x.as<EnumType>();
++            const auto& b = y.as<EnumType>();
++            if (!self(self, a.baseType, b.baseType, depth + 1))
++                return false;
++            auto av = a.values(), bv = b.values();
++            auto ai = av.begin(), bi = bv.begin();
++            for (; ai != av.end() && bi != bv.end(); ++ai, ++bi)
++                if (ai->name != bi->name || ai->getValue() != bi->getValue())
++                    return false;
++                else
++                    sourceSymbols.emplace_back(&*ai, &*bi);
++            return ai == av.end() && bi == bv.end();
++        }
++        if (x.kind == SymbolKind::PackedStructType || x.kind == SymbolKind::PackedUnionType) {
++            if (x.kind == SymbolKind::PackedUnionType &&
++                (x.as<PackedUnionType>().isTagged != y.as<PackedUnionType>().isTagged ||
++                 x.as<PackedUnionType>().isSoft != y.as<PackedUnionType>().isSoft))
++                return false;
++            auto fields = [](const Type& value) -> const Scope& {
++                return value.kind == SymbolKind::PackedStructType
++                           ? static_cast<const Scope&>(value.as<PackedStructType>())
++                           : static_cast<const Scope&>(value.as<PackedUnionType>());
++            };
++            auto av = fields(x).template membersOfType<FieldSymbol>();
++            auto bv = fields(y).template membersOfType<FieldSymbol>();
++            auto ai = av.begin(), bi = bv.begin();
++            for (; ai != av.end() && bi != bv.end(); ++ai, ++bi)
++                if (ai->name != bi->name || !self(self, ai->getType(), bi->getType(), depth + 1))
++                    return false;
++                else
++                    sourceSymbols.emplace_back(&*ai, &*bi);
++            return ai == av.end() && bi == bv.end();
++        }
++        return x.isSimpleBitVector() && x.isMatching(y);
++    };
++    if (!record(record, replacement, source, 0))
++        return false;
++    // Detached syntax and physical locations belong to the immutable source
++    // prefix, never the old consumer's arena or recyclable expansion buffers.
++    flat_hash_map<const SyntaxNode*, SyntaxNode*> syntaxCopies;
++    std::vector<std::tuple<Symbol*, SourceLocation, const SyntaxNode*>> sourceCopies;
++    for (auto [target, original] : sourceSymbols) {
++        auto scope = original->getParentScope();
++        auto manager = scope ? scope->getCompilation().getSourceManager() : nullptr;
++        if (!manager || !sourceManager || !manager->sharesImmutablePrefix(*sourceManager))
++            return false;
++        auto location = manager->projectImmutableOriginalLocation(original->location);
++        if (!location)
++            return false;
++        const SyntaxNode* syntax = original->getSyntax();
++        if (syntax && !syntaxCopies.contains(syntax)) {
++            auto root = syntax;
++            if (root->parent && (root->kind == SyntaxKind::Declarator ||
++                                 root->parent->kind == SyntaxKind::TypedefDeclaration ||
++                                 root->parent->kind == SyntaxKind::TypeParameterDeclaration))
++                root = root->parent;
++            auto copy = syntax::deepClone(*root, *this);
++            auto project = [&](auto&& self, const SyntaxNode& from, SyntaxNode& to) -> bool {
++                syntaxCopies.emplace(&from, &to);
++                for (size_t i = 0; i < from.getChildCount(); ++i) {
++                    if (auto child = from.childNode(i)) {
++                        if (!self(self, *child, *to.childNode(i)))
++                            return false;
++                    }
++                    else if (auto token = to.childTokenPtr(i); token && *token) {
++                        auto projected = manager->projectImmutableOriginalLocation(
++                            token->location());
++                        if (!projected)
++                            return false;
++                        *token = token->withLocation(*this, *projected);
++                    }
++                }
++                return true;
++            };
++            if (!project(project, *root, *copy))
++                return false;
++        }
++        sourceCopies.emplace_back(const_cast<Symbol*>(target), *location,
++                                  syntax ? syntaxCopies.at(syntax) : nullptr);
++    }
++    for (auto [target, location, syntax] : sourceCopies) {
++        target->location = location;
++        if (syntax)
++            target->setSyntax(*syntax);
++    }
++    for (auto& [type, origin] : staged)
++        fixedBodyTypeOrigins.insert_or_assign(type, std::move(origin));
++    for (auto& [type, display] : presentations)
++        fixedBodyTypePresentations.insert_or_assign(type, std::move(display));
++    for (auto [type, original] : nominalNames) {
++        auto text = copyFrom<char>(std::span(original->name.data(), original->name.size()));
++        auto& target = const_cast<Type&>(*type);
++        target.name = std::string_view(text.data(), text.size());
++        if (type->kind == SymbolKind::EnumType)
++            target.as<EnumType>().systemId = original->as<EnumType>().systemId;
++        else if (type->kind == SymbolKind::PackedStructType)
++            target.as<PackedStructType>().systemId = original->as<PackedStructType>().systemId;
++        else if (type->kind == SymbolKind::PackedUnionType)
++            target.as<PackedUnionType>().systemId = original->as<PackedUnionType>().systemId;
++    }
++    return true;
++}
++
++const Type* Compilation::getInstanceBodyTypeIdentity(const Type& type) const {
++    auto found = importedBodyTypeIdentities.find(&type);
++    return found == importedBodyTypeIdentities.end() ? &type : found->second;
++}
++
 +bool Compilation::tryImportInstanceBody(std::shared_ptr<Compilation> owner,
 +                                        const InstanceBodySymbol& retained,
 +                                        InstanceBodySymbol& target) {
 +    if (!owner || owner.get() == this || isElaborated() || isFrozen() || !owner->isElaborated() ||
-+        !owner->importedBodyFrames.empty() || &retained.getCompilation() != owner.get() ||
-+        &target.getCompilation() != this || !sourceManager || !owner->sourceManager ||
++        !isInstanceBodyBindContextCompatible() || !owner->importedBodyFrames.empty() ||
++        &retained.getCompilation() != owner.get() || &target.getCompilation() != this ||
++        !sourceManager || !owner->sourceManager ||
 +        !sourceManager->sharesImmutablePrefix(*owner->sourceManager) || stdPkg != owner->stdPkg ||
 +        options != owner->options || target.membersExposed || target.borrowedMembers ||
 +        !retained.parentInstance || !target.parentInstance ||
@@ -1946,13 +2258,31 @@ index ed7528f2c..30afe0aec 100644
 +        retained.getHierarchicalPath() != target.getHierarchicalPath() ||
 +        retained.flags != target.flags || importedBodyFrames.contains(&retained) ||
 +        !InstanceCacheKey::isEligibleForCaching(*retained.parentInstance) ||
-+        !InstanceCacheKey::isEligibleForCaching(*target.parentInstance))
++        !InstanceCacheKey::isEligibleForCaching(*target.parentInstance)) {
++        if (owner && std::getenv("SLANG_SCOPE_BODY_TRACE"))
++            fmt::print(stderr,
++                       "scope-body import-context-mismatch\t{}\tprefix={} options={} members={} "
++                       "borrowed={} flags={} definitions={} frames={}\n",
++                       target.parentInstance ? target.getHierarchicalPath() : "",
++                       sourceManager && owner->sourceManager &&
++                           sourceManager->sharesImmutablePrefix(*owner->sourceManager),
++                       options == owner->options, target.membersExposed, target.borrowedMembers,
++                       retained.flags == target.flags,
++                       &retained.getDefinition() == &target.getDefinition(),
++                       owner->importedBodyFrames.size());
 +        return false;
++    }
 +
++    if (getDefaultDisable(target) && !defaultDisableMap.contains(&target))
++        return false;
 +    if (!owner->prepareInstanceBodyReuse(retained))
 +        return false;
-+    if (!hasMatchingInstanceBodyParameters(retained, target))
++    if (!hasMatchingInstanceBodyParameters(retained, target)) {
++        if (std::getenv("SLANG_SCOPE_BODY_TRACE"))
++            fmt::print(stderr, "scope-body import parameter-mismatch\t{}\n",
++                       target.getHierarchicalPath());
 +        return false;
++    }
 +    auto& certificate = *owner->bodyReuseCertificates.at(&retained);
 +    if (!certificate.descendants.empty() && !owner->completeBodyReferenceTracking)
 +        return false;
@@ -1962,6 +2292,65 @@ index ed7528f2c..30afe0aec 100644
 +        if (member->kind == SymbolKind::Instance || member->kind == SymbolKind::InstanceArray ||
 +            member->kind == SymbolKind::GenerateBlock ||
 +            member->kind == SymbolKind::GenerateBlockArray)
++            return false;
++    }
++    std::vector<std::pair<const Type*, const Type*>> typeIdentities;
++    auto mapTypes = [&](auto&& self, const Type& oldType, const Type& newType) -> bool {
++        const auto& a = oldType.getCanonicalType();
++        const auto& b = newType.getCanonicalType();
++        if (&a == &b)
++            return true;
++        if (owner->fixedBodyTypeOrigins.contains(&a)) {
++            auto scope = b.getParentScope();
++            // An immutable imported package must not acquire consumer-local
++            // identity annotations. Such fields must use that package directly.
++            if (!scope || &scope->getCompilation() != this)
++                return false;
++            // Separate independent owners can capture the same current nominal
++            // declaration. Never overwrite a prior validated identity: the next
++            // body stays native and shares the first body's identity annotation.
++            if (auto found = importedBodyTypeIdentities.find(&b);
++                found != importedBodyTypeIdentities.end() && found->second != &a) {
++                if (std::getenv("SLANG_SCOPE_BODY_TRACE"))
++                    fmt::print(stderr, "scope-body prior-identity-conflict\t{}\n",
++                               target.getHierarchicalPath());
++                return false;
++            }
++            for (auto [current, identity] : typeIdentities)
++                if (current == &b && identity != &a) {
++                    if (std::getenv("SLANG_SCOPE_BODY_TRACE"))
++                        fmt::print(stderr, "scope-body staged-identity-conflict\t{}\n",
++                                   target.getHierarchicalPath());
++                    return false;
++                }
++            typeIdentities.emplace_back(&b, &a);
++        }
++        if (a.kind == SymbolKind::PackedArrayType ||
++            a.kind == SymbolKind::FixedSizeUnpackedArrayType)
++            return self(self, *a.getArrayElementType(), *b.getArrayElementType());
++        if (a.kind == SymbolKind::EnumType)
++            return self(self, a.as<EnumType>().baseType, b.as<EnumType>().baseType);
++        if (a.kind == SymbolKind::PackedStructType || a.kind == SymbolKind::PackedUnionType) {
++            auto fields = [](const Type& value) -> const Scope& {
++                return value.kind == SymbolKind::PackedStructType
++                           ? static_cast<const Scope&>(value.as<PackedStructType>())
++                           : static_cast<const Scope&>(value.as<PackedUnionType>());
++            };
++            auto av = fields(a).template membersOfType<FieldSymbol>();
++            auto bv = fields(b).template membersOfType<FieldSymbol>();
++            auto bi = bv.begin();
++            for (auto ai = av.begin(); ai != av.end(); ++ai, ++bi)
++                if (!self(self, ai->getType(), bi->getType()))
++                    return false;
++        }
++        return true;
++    };
++    for (size_t i = 0; i < target.parameters.size(); ++i) {
++        const auto& a = retained.parameters[i]->symbol;
++        const auto& b = target.parameters[i]->symbol;
++        if (a.kind == SymbolKind::TypeParameter &&
++            !mapTypes(mapTypes, a.as<TypeParameterSymbol>().targetType.getType(),
++                      b.as<TypeParameterSymbol>().targetType.getType()))
 +            return false;
 +    }
 +    SmallVector<const Expression*> boundaryInitializers;
@@ -1974,6 +2363,8 @@ index ed7528f2c..30afe0aec 100644
 +                boundaryInitializers.push_back(initializer);
 +    }
 +    target.boundaryParameterInitializers = boundaryInitializers.copy(*this);
++    for (auto [type, identity] : typeIdentities)
++        importedBodyTypeIdentities.insert_or_assign(type, identity);
 +
 +    // No symbol is reparented and no borrowed map / member link may be mutated.
 +    // The wrapper keeps the current instance and compilation as its boundary.
@@ -1982,6 +2373,9 @@ index ed7528f2c..30afe0aec 100644
 +    if (std::ranges::find(importedBodyOwners, owner) == importedBodyOwners.end())
 +        importedBodyOwners.push_back(std::move(owner));
 +    importedBodyCertificates.push_back(&certificate);
++    for (auto type : certificate.classes)
++        if (std::ranges::find(importedBodyClasses, type) == importedBodyClasses.end())
++            importedBodyClasses.push_back(type);
 +    // Fold the immutable profile once at import. Unused / shadow analysis asks
 +    // about many declarations; scanning every retained subtree for each query
 +    // makes analysis cost grow with the number of disjoint cached bodies.
@@ -2028,6 +2422,8 @@ index ed7528f2c..30afe0aec 100644
 +        &retained.getCompilation() != this || !retained.parentInstance ||
 +        !InstanceCacheKey::isEligibleForCaching(*retained.parentInstance))
 +        return decline("body-context");
++    if (getDefaultDisable(retained) && !defaultDisableMap.contains(&retained))
++        return decline("outside-default-disable");
 +    if (auto found = bodyReuseCertificates.find(&retained); found != bodyReuseCertificates.end())
 +        return found->second->independent;
 +    if (auto it = owner->instanceSideEffectMap.find(&retained);
@@ -2049,12 +2445,14 @@ index ed7528f2c..30afe0aec 100644
 +                decline(reason, detail);
 +            independent = false;
 +        };
++        flat_hash_set<const Scope*> closedClasses;
 +        auto isLocal = [&](const Symbol& symbol) {
 +            const Scope* scope = symbol.kind == SymbolKind::InstanceBody
 +                                     ? &symbol.as<InstanceBodySymbol>()
-+                                     : symbol.getParentScope();
++                                 : symbol.kind == SymbolKind::ClassType ? &symbol.as<ClassType>()
++                                                                        : symbol.getParentScope();
 +            while (scope) {
-+                if (scope == &retained)
++                if (scope == &retained || closedClasses.contains(scope))
 +                    return true;
 +                const auto& container = scope->asSymbol();
 +                if (container.kind == SymbolKind::InstanceBody) {
@@ -2077,7 +2475,8 @@ index ed7528f2c..30afe0aec 100644
 +        auto fixedBitVector = [&](auto&& self, const Type& type, bool recordUse = true) -> bool {
 +            if (type.kind == SymbolKind::TypeAlias) {
 +                auto scope = type.getParentScope();
-+                if (!scope || (!isLocal(type) && !isFixedCompilation(scope->getCompilation())))
++                if (!scope || (!isLocal(type) && !isFixedCompilation(scope->getCompilation()) &&
++                               !fixedBodyTypeOrigins.contains(&type)))
 +                    return false;
 +                if (recordUse)
 +                    if (auto syntax = type.getSyntax())
@@ -2089,6 +2488,8 @@ index ed7528f2c..30afe0aec 100644
 +                canonical.kind == SymbolKind::FixedSizeUnpackedArrayType)
 +                return self(self, *canonical.getArrayElementType());
 +            auto localNominal = [&](const auto& nominal) {
++                if (fixedBodyTypeOrigins.contains(&nominal))
++                    return true;
 +                if (isFixedCompilation(nominal.getCompilation()))
 +                    return true;
 +                if (!isLocal(nominal))
@@ -2132,9 +2533,63 @@ index ed7528f2c..30afe0aec 100644
 +            }
 +            return type.getCanonicalType().kind == SymbolKind::StringType;
 +        };
-+        auto isFixedBodyValueType = [&](const Type& type, bool recordUse = true) {
-+            return fixedBitVector(fixedBitVector, type, recordUse) ||
-+                   fixedStringType(fixedStringType, type, recordUse);
++        std::function<bool(const Type&, bool)> isFixedBodyValueType;
++        isFixedBodyValueType = [&](const Type& type, bool recordUse) {
++            if (fixedBitVector(fixedBitVector, type, recordUse) ||
++                fixedStringType(fixedStringType, type, recordUse))
++                return true;
++            if (type.kind == SymbolKind::TypeAlias) {
++                auto scope = type.getParentScope();
++                if (!scope || (!isLocal(type) && !isFixedCompilation(scope->getCompilation())))
++                    return false;
++                if (recordUse)
++                    if (auto syntax = type.getSyntax())
++                        certificate.references[syntax].first = true;
++                return isFixedBodyValueType(type.as<TypeAliasType>().targetType.getType(), true);
++            }
++            const auto& canonical = type.getCanonicalType();
++            if (canonical.kind == SymbolKind::QueueType ||
++                canonical.kind == SymbolKind::DynamicArrayType ||
++                canonical.kind == SymbolKind::FixedSizeUnpackedArrayType)
++                return isFixedBodyValueType(*canonical.getArrayElementType(), true);
++            if (canonical.kind == SymbolKind::AssociativeArrayType) {
++                const auto& array = canonical.as<AssociativeArrayType>();
++                return isFixedBodyValueType(array.elementType, true) &&
++                       (!array.indexType || isFixedBodyValueType(*array.indexType, true));
++            }
++            if (canonical.kind == SymbolKind::FloatingType)
++                return true;
++            if (canonical.kind != SymbolKind::ClassType)
++                return false;
++            const auto& cls = canonical.as<ClassType>();
++            if (isFixedCompilation(cls.getCompilation()))
++                return true;
++            if (closedClasses.contains(&cls))
++                return true;
++            const auto* provider = cls.genericClass ? cls.genericClass->getParentScope()
++                                                    : cls.getParentScope();
++            if (&cls.getCompilation() != this || cls.isUninstantiated || !provider ||
++                (!isLocal(provider->asSymbol()) && !isFixedCompilation(provider->getCompilation())))
++                return false;
++            // Specializations stay inside this independent owner. Their provider
++            // is fixed, but parameters must also close over this retained graph.
++            closedClasses.emplace(&cls);
++            for (auto parameter : cls.genericParameters) {
++                if (parameter->kind == SymbolKind::TypeParameter) {
++                    if (!isFixedInstanceBodyTypeArgument(
++                            parameter->as<TypeParameterSymbol>().targetType.getType(), retained))
++                        return false;
++                }
++                else if (parameter->kind != SymbolKind::Parameter ||
++                         !parameter->as<ParameterSymbol>().getValue().isInteger() ||
++                         !isFixedIntegralType(parameter->as<ParameterSymbol>().getType()))
++                    return false;
++            }
++            certificate.classes.push_back(&cls);
++            pendingTypes.push_back(&cls);
++            if (auto base = cls.getBaseClass())
++                return isFixedBodyValueType(*base, true);
++            return true;
 +        };
 +        auto declarationNames = [&](const SyntaxNode& syntax, const Symbol& declaration) {
 +            auto names = makeSyntaxVisitor([&](auto& syntaxVisitor, const auto& node) {
@@ -2191,6 +2646,18 @@ index ed7528f2c..30afe0aec 100644
 +                    // prevents publishing that compilation. Seeded calls remain
 +                    // outside this certificate until their effects are audited.
 +                    return call.arguments().empty();
++                case KnownSystemName::Time:
++                case KnownSystemName::STime:
++                case KnownSystemName::RealTime:
++                    return call.arguments().empty();
++                case KnownSystemName::Past:
++                    return call.arguments().size() <= 3;
++                case KnownSystemName::Sampled:
++                case KnownSystemName::Rose:
++                case KnownSystemName::Fell:
++                case KnownSystemName::Stable:
++                case KnownSystemName::Changed:
++                    return call.arguments().size() == 1;
 +                case KnownSystemName::Signed:
 +                case KnownSystemName::Unsigned:
 +                case KnownSystemName::Clog2:
@@ -2251,7 +2718,39 @@ index ed7528f2c..30afe0aec 100644
 +                    return target && isLocal(*target);
 +                }
 +                case KnownSystemName::FOpen:
++                case KnownSystemName::SFormatF:
++                case KnownSystemName::Display:
++                case KnownSystemName::DisplayB:
++                case KnownSystemName::DisplayO:
++                case KnownSystemName::DisplayH:
++                case KnownSystemName::Write:
++                case KnownSystemName::WriteB:
++                case KnownSystemName::WriteO:
++                case KnownSystemName::WriteH:
++                case KnownSystemName::Strobe:
++                case KnownSystemName::StrobeB:
++                case KnownSystemName::StrobeO:
++                case KnownSystemName::StrobeH:
++                case KnownSystemName::Monitor:
++                case KnownSystemName::MonitorB:
++                case KnownSystemName::MonitorO:
++                case KnownSystemName::MonitorH:
++                case KnownSystemName::FDisplay:
++                case KnownSystemName::FDisplayB:
++                case KnownSystemName::FDisplayO:
++                case KnownSystemName::FDisplayH:
 +                case KnownSystemName::FWrite:
++                case KnownSystemName::FWriteB:
++                case KnownSystemName::FWriteO:
++                case KnownSystemName::FWriteH:
++                case KnownSystemName::FStrobe:
++                case KnownSystemName::FStrobeB:
++                case KnownSystemName::FStrobeO:
++                case KnownSystemName::FStrobeH:
++                case KnownSystemName::FMonitor:
++                case KnownSystemName::FMonitorB:
++                case KnownSystemName::FMonitorO:
++                case KnownSystemName::FMonitorH:
 +                case KnownSystemName::FClose:
 +                    // The compiler binds these operations but never executes IO.
 +                    // Invalid constant calls still fail native evaluation.
@@ -2260,19 +2759,46 @@ index ed7528f2c..30afe0aec 100644
 +                    return false;
 +            }
 +        };
++        auto localContainerCall = [&](const CallExpression& call) {
++            if (!call.isSystemCall() || call.thisClass() || call.arguments().empty())
++                return false;
++            const auto& info = std::get<1>(call.subroutine);
++            if (info.extraInfo.index() != 0 || !isLocal(info.scope->asSymbol()))
++                return false;
++            using parsing::KnownSystemName;
++            switch (call.getKnownSystemName()) {
++                case KnownSystemName::ArraySize:
++                case KnownSystemName::Num:
++                case KnownSystemName::Exists:
++                case KnownSystemName::Delete:
++                case KnownSystemName::Insert:
++                case KnownSystemName::PopFront:
++                case KnownSystemName::PopBack:
++                case KnownSystemName::PushFront:
++                case KnownSystemName::PushBack: {
++                    auto receiver = call.arguments().front()->getSymbolReference(false);
++                    return receiver && isLocal(*receiver);
++                }
++                default:
++                    return false;
++            }
++        };
 +        auto closedFunction = [&](const SubroutineSymbol& subroutine) {
 +            auto scope = subroutine.getParentScope();
 +            const bool fixed = scope && isFixedCompilation(scope->getCompilation());
++            const bool classMethod = scope && scope->asSymbol().kind == SymbolKind::ClassType &&
++                                     (closedClasses.contains(scope) || fixed);
 +            return (isLocal(subroutine) || fixed) &&
-+                   subroutine.subroutineKind == SubroutineKind::Function && !subroutine.thisVar &&
-+                   !subroutine.hasOutputArgs() &&
++                   (subroutine.subroutineKind == SubroutineKind::Function || isLocal(subroutine)) &&
++                   (!subroutine.thisVar || classMethod) && !subroutine.hasOutputArgs() &&
++                   (!subroutine.flags.has(MethodFlags::Constructor) || classMethod) &&
 +                   !subroutine.flags.has(MethodFlags::Virtual | MethodFlags::Pure |
-+                                         MethodFlags::Constructor | MethodFlags::InterfaceExtern |
-+                                         MethodFlags::ModportImport | MethodFlags::ModportExport |
-+                                         MethodFlags::DPIImport | MethodFlags::DPIContext |
-+                                         MethodFlags::BuiltIn | MethodFlags::Randomize) &&
++                                         MethodFlags::InterfaceExtern | MethodFlags::ModportImport |
++                                         MethodFlags::ModportExport | MethodFlags::DPIImport |
++                                         MethodFlags::DPIContext | MethodFlags::BuiltIn |
++                                         MethodFlags::Randomize) &&
 +                   (subroutine.getReturnType().isVoid() ||
-+                    isFixedBodyValueType(subroutine.getReturnType()));
++                    isFixedBodyValueType(subroutine.getReturnType(), true));
 +        };
 +        auto fixedArrayConstant = [&](auto&& self, const Type& type, const ConstantValue& value,
 +                                      size_t& storageBytes) -> bool {
@@ -2344,8 +2870,9 @@ index ed7528f2c..30afe0aec 100644
 +                switch (node.kind) {
 +                    case SymbolKind::TypeParameter: {
 +                        const auto& parameter = node.template as<TypeParameterSymbol>();
-+                        if (!isFixedInstanceBodyTypeArgument(parameter.targetType.getType(),
-+                                                             retained) ||
++                        if ((!closedClasses.contains(node.getParentScope()) &&
++                             !isFixedInstanceBodyTypeArgument(parameter.targetType.getType(),
++                                                              retained)) ||
 +                            !isFixedIntegralType(parameter.targetType.getType())) {
 +                            reject("type-parameter-dependency", node.name);
 +                            return;
@@ -2353,6 +2880,9 @@ index ed7528f2c..30afe0aec 100644
 +                        break;
 +                    }
 +                    case SymbolKind::Subroutine:
++                        if (closedClasses.contains(node.getParentScope()) &&
++                            node.template as<SubroutineSymbol>().flags.has(MethodFlags::BuiltIn))
++                            return; // Uncalled compiler-provided class APIs are not user bodies.
 +                        if (!closedFunction(node.template as<SubroutineSymbol>())) {
 +                            reject("unproven-function", node.name);
 +                            return;
@@ -2409,12 +2939,17 @@ index ed7528f2c..30afe0aec 100644
 +                    case SymbolKind::GenerateBlockArray:
 +                    case SymbolKind::Genvar:
 +                    case SymbolKind::Variable:
++                    case SymbolKind::ClassProperty:
 +                    case SymbolKind::Iterator:
 +                    case SymbolKind::Net:
 +                    case SymbolKind::ContinuousAssign:
 +                    case SymbolKind::ProceduralBlock:
 +                    case SymbolKind::StatementBlock:
 +                    case SymbolKind::EmptyMember:
++                        break;
++                    case SymbolKind::ClassType:
++                        if (!closedClasses.contains(&node.template as<ClassType>()))
++                            reject("unclosed-class");
 +                        break;
 +                    case SymbolKind::Port:
 +                        if (node.template as<PortSymbol>().direction != ArgumentDirection::In &&
@@ -2428,7 +2963,7 @@ index ed7528f2c..30afe0aec 100644
 +                if (auto value = node.template as_if<ValueSymbol>()) {
 +                    if (!(node.kind == SymbolKind::Parameter
 +                              ? isFixedIntegralType(value->getType())
-+                              : isFixedBodyValueType(value->getType())))
++                              : isFixedBodyValueType(value->getType(), true)))
 +                        reject("value-type", toString(value->getType().getCanonicalType().kind));
 +                }
 +                if constexpr (std::same_as<T, TypeParameterSymbol>) {
@@ -2464,7 +2999,8 @@ index ed7528f2c..30afe0aec 100644
 +            else if constexpr (std::derived_from<T, Expression>) {
 +                if (node.kind == ExpressionKind::Call) {
 +                    const auto& call = node.template as<CallExpression>();
-+                    if (diagnosticCall(call) || runtimeFormatCall(call)) {
++                    if (diagnosticCall(call) || runtimeFormatCall(call) ||
++                        localContainerCall(call)) {
 +                        visitor.visitDefault(node);
 +                        return;
 +                    }
@@ -2501,6 +3037,9 @@ index ed7528f2c..30afe0aec 100644
 +                }
 +                if (node.kind == ExpressionKind::StringLiteral)
 +                    return; // immutable literal data
++                if (node.kind == ExpressionKind::NullLiteral ||
++                    node.kind == ExpressionKind::EmptyArgument)
++                    return;
 +                if (node.kind == ExpressionKind::ValueRange ||
 +                    (node.kind == ExpressionKind::Replication && node.type->isVoid())) {
 +                    // The range wrapper deliberately has void type. Its two
@@ -2527,7 +3066,7 @@ index ed7528f2c..30afe0aec 100644
 +                    }
 +                }
 +                if (node.kind == ExpressionKind::ArbitrarySymbol ||
-+                    !isFixedBodyValueType(*node.type)) {
++                    !isFixedBodyValueType(*node.type, true)) {
 +                    reject("expression-kind-or-type",
 +                           fmt::format("{} / {}", toString(node.kind),
 +                                       toString(node.type->getCanonicalType().kind)));
@@ -2579,11 +3118,13 @@ index ed7528f2c..30afe0aec 100644
 +                        Lookup::name(syntax, context, LookupFlags::ForceHierarchical, result);
 +                        if (auto symbol = result.found) {
 +                            auto scope = symbol->getParentScope();
-+                            if ((isLocal(*symbol) && (symbol->kind == SymbolKind::Parameter ||
-+                                                      symbol->kind == SymbolKind::TypeParameter ||
-+                                                      (symbol->kind == SymbolKind::TypeAlias &&
-+                                                       isFixedInstanceBodyTypeArgument(
-+                                                           symbol->as<Type>(), retained)))) ||
++                            if ((isLocal(*symbol) &&
++                                 (symbol->kind == SymbolKind::Parameter ||
++                                  symbol->kind == SymbolKind::TypeParameter ||
++                                  (symbol->kind == SymbolKind::TypeAlias &&
++                                   (isFixedInstanceBodyTypeArgument(symbol->as<Type>(), retained) ||
++                                    (closedClasses.contains(scope) &&
++                                     isFixedIntegralType(symbol->as<Type>())))))) ||
 +                                (scope && isFixedCompilation(scope->getCompilation()))) {
 +                                if (auto declaration = symbol->getSyntax())
 +                                    certificate.references[declaration].first = true;
@@ -2695,6 +3236,14 @@ index ed7528f2c..30afe0aec 100644
 +                    location.offset() <= range.end().offset())
 +                    return true;
 +            }
++            for (auto type : certificate.classes)
++                if (auto syntax = type->getSyntax()) {
++                    const auto range = syntax->sourceRange();
++                    if (location.buffer() == range.start().buffer() &&
++                        location.offset() >= range.start().offset() &&
++                        location.offset() <= range.end().offset())
++                        return true;
++                }
 +            return false;
 +        };
 +        auto fixedDiagnostic = [&](auto&& self, const Diagnostic& diagnostic) -> bool {
@@ -2749,6 +3298,20 @@ index ed7528f2c..30afe0aec 100644
 +    target.parameterLookupMode = true;
 +    auto restore = ScopeGuard([&] { target.parameterLookupMode = previousMode; });
 +    auto origin = [](const Symbol& x, const Symbol& y) {
++        if (x.isType() && y.isType()) {
++            const auto& xt = x.as<Type>();
++            const auto& yt = y.as<Type>();
++            auto xs = xt.getParentScope(), ys = yt.getParentScope();
++            if (xs && ys) {
++                const auto& xc = xs->getCompilation();
++                const auto& yc = ys->getCompilation();
++                if (xc.fixedBodyTypeOrigins.contains(&xt)) {
++                    auto key = xc.instanceBodyTypeOrigin(xt);
++                    if (!key.empty() && key == yc.instanceBodyTypeOrigin(yt))
++                        return true;
++                }
++            }
++        }
 +        if (!x.getSyntax() || x.getSyntax() != y.getSyntax() || x.name != y.name)
 +            return false;
 +        auto xs = x.getParentScope();
@@ -2761,6 +3324,16 @@ index ed7528f2c..30afe0aec 100644
 +    auto sameType = [&](auto&& self, const Type& x, const Type& y) -> bool {
 +        if (&x == &y)
 +            return true;
++        auto transparent = [](const Type& type) {
++            auto scope = type.getParentScope();
++            auto view = scope ? scope->getCompilation().getInstanceBodyTypePresentation(type)
++                              : nullptr;
++            return view && view->transparent;
++        };
++        if (x.kind == SymbolKind::TypeAlias && transparent(x))
++            return self(self, x.as<TypeAliasType>().targetType.getType(), y);
++        if (y.kind == SymbolKind::TypeAlias && transparent(y))
++            return self(self, x, y.as<TypeAliasType>().targetType.getType());
 +        if (x.kind != y.kind)
 +            return false;
 +        if (x.kind == SymbolKind::TypeAlias) {
@@ -2830,8 +3403,21 @@ index ed7528f2c..30afe0aec 100644
 +            const auto& at = a.targetType.getType();
 +            const auto& bt = b.targetType.getType();
 +            if (a.isOverridden() != b.isOverridden() || a.typeRestriction != b.typeRestriction ||
-+                !isFixedInstanceBodyTypeArgument(bt, target) || !sameType(sameType, at, bt))
++                (!isFixedInstanceBodyTypeArgument(bt, target) &&
++                 !retained.getCompilation().fixedBodyTypeOrigins.contains(
++                     &at.getCanonicalType())) ||
++                !sameType(sameType, at, bt)) {
++                if (std::getenv("SLANG_SCOPE_BODY_TRACE")) {
++                    const auto& ac = at.getCanonicalType();
++                    const auto& bc = bt.getCanonicalType();
++                    auto as = ac.getParentScope(), bs = bc.getParentScope();
++                    fmt::print(stderr, "scope-body type-signature\t{}\t{} | {}\t{} | {}\n",
++                               left.name, at.toString(), bt.toString(),
++                               as ? as->getCompilation().instanceBodyTypeOrigin(ac) : "",
++                               bs ? bs->getCompilation().instanceBodyTypeOrigin(bc) : "");
++                }
 +                return false;
++            }
 +            continue;
 +        }
 +        if (left.kind != SymbolKind::Parameter)
@@ -2920,7 +3506,13 @@ index ed7528f2c..30afe0aec 100644
 +        return map.bucket_count() * (sizeof(typename Map::value_type) + 16);
 +    };
 +    size_t result = mapBytes(bodyReferenceStatus) + mapBytes(bodyCrossReferences) +
-+                    mapBytes(bodyReuseCertificates) + mapBytes(importedBodyCanonicalInstances);
++                    mapBytes(bodyReuseCertificates) + mapBytes(importedBodyCanonicalInstances) +
++                    mapBytes(fixedBodyTypeOrigins) + mapBytes(importedBodyTypeIdentities) +
++                    mapBytes(fixedBodyTypePresentations);
++    for (const auto& [_, display] : fixedBodyTypePresentations)
++        result += display.name.capacity() + display.scope.capacity() + 2;
++    for (const auto& [_, origin] : fixedBodyTypeOrigins)
++        result += origin.capacity() + 1;
 +    result += bodyDefinitionSites.capacity() * sizeof(decltype(bodyDefinitionSites)::value_type);
 +    result += bodyElaborationControls.capacity() *
 +              sizeof(decltype(bodyElaborationControls)::value_type);
@@ -2929,9 +3521,11 @@ index ed7528f2c..30afe0aec 100644
 +        result += mapBytes(certificate->references);
 +        result += certificate->constantStorageBytes;
 +        result += certificate->descendants.capacity() * sizeof(const InstanceBodySymbol*);
++        result += certificate->classes.capacity() * sizeof(const Type*);
 +        result += certificate->instantiationSites.capacity() * sizeof(const DefinitionSymbol*);
 +        result += certificate->diagnostics.capacity() * sizeof(const Diagnostic*);
 +    }
++    result += importedBodyClasses.capacity() * sizeof(const Type*);
 +    return result;
 +}
 +
@@ -3000,18 +3594,20 @@ index ed7528f2c..30afe0aec 100644
 +}
 +
 +std::vector<const Type*> Compilation::getImportedClassSpecializations() const {
-+    std::vector<const Type*> result;
++    std::vector<const Type*> result = importedBodyClasses;
 +    for (const auto& [_, state] : importedClassStates)
 +        for (const auto& [key, type] : state->instantiated)
-+            result.push_back(type);
++            if (std::ranges::find(importedBodyClasses, type) == importedBodyClasses.end())
++                result.push_back(type);
 +    return result;
 +}
 +
 +void Compilation::addSyntaxTree(std::shared_ptr<SyntaxTree> tree, bool reuseImportedPackages) {
++    bodyBindContextCompatible.reset();
      SLANG_ASSERT(!isFrozen());
  
      if (!tree)
-@@ -205,6 +1454,36 @@ void Compilation::addSyntaxTree(std::shared_ptr<SyntaxTree> tree) {
+@@ -205,6 +2011,36 @@ void Compilation::addSyntaxTree(std::shared_ptr<SyntaxTree> tree) {
      root->addMember(*unit);
      compilationUnits.push_back(unit);
  
@@ -3032,7 +3628,7 @@ index ed7528f2c..30afe0aec 100644
 +            else if (symbol->kind == SymbolKind::ExplicitImport) {
 +                const auto& import = symbol->as<ExplicitImportSymbol>();
 +                wrapper = emplace<ExplicitImportSymbol>(import.packageName, import.importName,
-+                                                       import.location);
++                                                        import.location);
 +            }
 +            else {
 +                wrapper = emplace<TransparentMemberSymbol>(*symbol);
@@ -3048,7 +3644,7 @@ index ed7528f2c..30afe0aec 100644
      for (auto& [n, meta] : tree->getMetadata().nodeMeta) {
          SyntaxMetadata result;
          result.tree = tree.get();
-@@ -231,16 +1510,57 @@ void Compilation::addSyntaxTree(std::shared_ptr<SyntaxTree> tree) {
+@@ -231,16 +2067,57 @@ void Compilation::addSyntaxTree(std::shared_ptr<SyntaxTree> tree) {
      for (auto& inst : tree->getMetadata().globalInstances)
          globalInstantiations.emplace(inst->type.valueText());
  
@@ -3108,7 +3704,7 @@ index ed7528f2c..30afe0aec 100644
      }
  
      syntaxTrees.emplace_back(std::move(tree));
-@@ -310,6 +1630,15 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
+@@ -310,6 +2187,15 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
              defaultLiblist.push_back(lib);
      }
  
@@ -3124,7 +3720,7 @@ index ed7528f2c..30afe0aec 100644
      // If any top-level parameter overrides were provided, parse them now.
      flat_hash_map<std::string_view, HierarchyOverrideNode::ParamOverride> cliOverrides;
      parseParamOverrides(skipDefParamsAndBinds, cliOverrides);
-@@ -398,7 +1727,7 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
+@@ -398,7 +2284,7 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
              if (inserted) {
                  topDefs.push_back({result, sourceRange});
                  SLANG_ASSERT(def->kind == SymbolKind::Definition);
@@ -3133,7 +3729,7 @@ index ed7528f2c..30afe0aec 100644
              }
              else {
                  auto& diag = root->addDiag(diag::MultipleTopDupName, sourceRange.start()
-@@ -465,8 +1794,7 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
+@@ -465,8 +2351,7 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
                          else {
                              // Otherwise, issue an error because the user asked us to instantiate
                              // this.
@@ -3143,7 +3739,7 @@ index ed7528f2c..30afe0aec 100644
                                  << userProvidedName;
                          }
                          continue;
-@@ -510,7 +1838,7 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
+@@ -510,7 +2395,7 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
  
                  auto& def = defSym->as<DefinitionSymbol>();
                  if (globalInstantiations.find(def.name) == globalInstantiations.end() &&
@@ -3152,7 +3748,7 @@ index ed7528f2c..30afe0aec 100644
                      unreferencedDefs.push_back(&def);
                  }
              }
-@@ -551,6 +1879,10 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
+@@ -551,6 +2436,10 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
  
          auto& instance = InstanceSymbol::createDefault(*this, def, hierarchyOverrideNode,
                                                         result.configRoot, result.configRule);
@@ -3163,7 +3759,7 @@ index ed7528f2c..30afe0aec 100644
          root->addMember(instance);
          topList.push_back(&instance);
      }
-@@ -562,7 +1894,7 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
+@@ -562,7 +2451,7 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
  
      // For unreferenced definitions, go through and instantiate them with all empty
      // parameter values so that we get at least some semantic checking of the contents.
@@ -3172,7 +3768,7 @@ index ed7528f2c..30afe0aec 100644
          for (auto def : unreferencedDefs) {
              const HierarchyOverrideNode* hierarchyOverrideNode = nullptr;
              if (auto* syntax = def->getSyntax()) {
-@@ -734,6 +2066,10 @@ const DefinitionSymbol* Compilation::getDefinition(const Scope& scope,
+@@ -734,6 +2623,10 @@ const DefinitionSymbol* Compilation::getDefinition(const Scope& scope,
  
              lookupScope = lookupScope->asSymbol().getParentScope();
          } while (lookupScope);
@@ -3183,7 +3779,7 @@ index ed7528f2c..30afe0aec 100644
      }
      return nullptr;
  }
-@@ -824,6 +2160,27 @@ void Compilation::createDefinition(const Scope& scope, LookupLocation location,
+@@ -824,6 +2717,27 @@ void Compilation::createDefinition(const Scope& scope, LookupLocation location,
                                     const ModuleDeclarationSyntax& syntax) {
      SLANG_ASSERT(!isFrozen());
  
@@ -3211,7 +3807,7 @@ index ed7528f2c..30afe0aec 100644
      // We can only be missing metadata if the definition is created programmatically
      // (i.e. not via the parser) so we just fill in the parent's default net type
      // so that it's not a null pointer.
-@@ -893,7 +2250,7 @@ void Compilation::insertDefinition(Symbol& symbol, const Scope& scope) {
+@@ -893,7 +2807,7 @@ void Compilation::insertDefinition(Symbol& symbol, const Scope& scope) {
              for (auto v = vecIt; v != defList.end(); v++) {
                  auto vSym = *v;
                  auto vLib = vSym->getSourceLibrary();
@@ -3220,7 +3816,7 @@ index ed7528f2c..30afe0aec 100644
                      // Duplicate in the same library.
                      if (hasFlag(CompilationFlags::AllowLibModuleRedefinition)) {
                          // Silently keep the first definition and discard all subsequent ones,
-@@ -972,11 +2329,28 @@ void Compilation::insertDefinition(Symbol& symbol, const Scope& scope) {
+@@ -972,11 +2886,28 @@ void Compilation::insertDefinition(Symbol& symbol, const Scope& scope) {
  
  const PackageSymbol* Compilation::getPackage(std::string_view lookupName) const {
      auto it = packageMap.find(lookupName);
@@ -3250,7 +3846,7 @@ index ed7528f2c..30afe0aec 100644
  const PackageSymbol& Compilation::createPackage(const Scope& scope,
                                                  const ModuleDeclarationSyntax& syntax) {
      SLANG_ASSERT(!isFrozen());
-@@ -1136,10 +2510,14 @@ std::span<const AttributeSymbol* const> Compilation::getAttributes(
+@@ -1136,10 +3067,14 @@ std::span<const AttributeSymbol* const> Compilation::getAttributes(
  
  std::span<const AttributeSymbol* const> Compilation::getAttributes(const void* ptr) const {
      auto it = attributeMap.find(ptr);
@@ -3269,7 +3865,7 @@ index ed7528f2c..30afe0aec 100644
  }
  
  void Compilation::noteBindDirective(const BindDirectiveSyntax& syntax, const Scope& scope) {
-@@ -1467,18 +2845,60 @@ void Compilation::noteReference(const SyntaxNode& node, bool isLValue) {
+@@ -1467,18 +3402,60 @@ void Compilation::noteReference(const SyntaxNode& node, bool isLValue) {
      }
  }
  
@@ -3337,7 +3933,7 @@ index ed7528f2c..30afe0aec 100644
  }
  
  const NameSyntax& Compilation::parseName(std::string_view name) {
-@@ -1560,10 +2980,12 @@ void Compilation::elaborate() {
+@@ -1560,10 +3537,12 @@ void Compilation::elaborate() {
      // Double check any bind directives for correctness. These were already
      // resolved prior to full elaboration but their diagnostics were not
      // issued so we need to check again.
@@ -3354,7 +3950,7 @@ index ed7528f2c..30afe0aec 100644
      }
  
      // Report any lingering name conflicts.
-@@ -1680,6 +3102,49 @@ const Diagnostics& Compilation::getParseDiagnostics() {
+@@ -1680,6 +3659,49 @@ const Diagnostics& Compilation::getParseDiagnostics() {
      return *cachedParseDiagnostics;
  }
  
@@ -3404,7 +4000,7 @@ index ed7528f2c..30afe0aec 100644
  const Diagnostics& Compilation::getSemanticDiagnostics() {
      if (cachedSemanticDiagnostics)
          return *cachedSemanticDiagnostics;
-@@ -1687,7 +3152,99 @@ const Diagnostics& Compilation::getSemanticDiagnostics() {
+@@ -1687,7 +3709,99 @@ const Diagnostics& Compilation::getSemanticDiagnostics() {
      // Elaborate the design.
      elaborate();
  
@@ -4209,6 +4805,196 @@ index 0e4e7e2c6..331f862f4 100644
      const FunctionDeclarationSyntax* syntax = nullptr;
      if (declSyntax && (declSyntax->kind == SyntaxKind::FunctionDeclaration ||
                         declSyntax->kind == SyntaxKind::TaskDeclaration)) {
+diff --git a/source/ast/types/Type.cpp b/source/ast/types/Type.cpp
+index 82108e97b..65f4cf20b 100644
+--- a/source/ast/types/Type.cpp
++++ b/source/ast/types/Type.cpp
+@@ -437,6 +437,14 @@ bool Type::isMatching(const Type& rhs) const {
+     if (l == r)
+         return true;
+ 
++    if (l->kind == r->kind &&
++        (l->kind == SymbolKind::EnumType || l->kind == SymbolKind::PackedStructType ||
++         l->kind == SymbolKind::PackedUnionType) &&
++        l->getParentScope() && r->getParentScope() &&
++        l->getParentScope()->getCompilation().getInstanceBodyTypeIdentity(*l) ==
++            r->getParentScope()->getCompilation().getInstanceBodyTypeIdentity(*r))
++        return true;
++
+     if (l->isError() && r->isError()) {
+         auto lChild = l->as<ErrorType>().child;
+         auto rChild = r->as<ErrorType>().child;
+diff --git a/source/ast/types/TypePrinter.cpp b/source/ast/types/TypePrinter.cpp
+index 8944debab..e69e1c442 100644
+--- a/source/ast/types/TypePrinter.cpp
++++ b/source/ast/types/TypePrinter.cpp
+@@ -10,9 +10,31 @@
+ #include "../../text/FormatBuffer.h"
+ 
+ #include "slang/ast/ASTVisitor.h"
++#include "slang/ast/Compilation.h"
+ 
+ namespace slang::ast {
+ 
++static const Compilation::InstanceBodyTypePresentation* presentation(const Type& type) {
++    auto scope = type.getParentScope();
++    return scope ? scope->getCompilation().getInstanceBodyTypePresentation(type) : nullptr;
++}
++
++static const Type& visibleType(const Type& type) {
++    auto current = &type;
++    while (current->kind == SymbolKind::TypeAlias) {
++        auto view = presentation(*current);
++        if (!view || !view->transparent)
++            break;
++        current = &current->as<TypeAliasType>().targetType.getType();
++    }
++    return *current;
++}
++
++static std::string_view visibleName(const Type& type) {
++    auto view = presentation(type);
++    return view ? std::string_view(view->name) : type.name;
++}
++
+ static std::string getLexicalPath(const Scope* scope) {
+     if (!scope || scope->asSymbol().kind == SymbolKind::CompilationUnit)
+         return "";
+@@ -42,12 +64,16 @@ void TypePrinter::maybeAddQuote() {
+ }
+ 
+ void TypePrinter::append(const Type& type) {
++    if (auto& visible = visibleType(type); &visible != &type) {
++        append(visible);
++        return;
++    }
+     maybeAddQuote();
+ 
+     if (options.printAKA && type.kind == SymbolKind::TypeAlias) {
+         if (!options.elideScopeNames)
+-            buffer->append(getLexicalPath(type.getParentScope()));
+-        buffer->append(type.name);
++            printTypeScope(type);
++        buffer->append(visibleName(type));
+     }
+     else {
+         type.visit(*this, ""sv);
+@@ -105,7 +131,7 @@ void TypePrinter::visit(const FloatingType& type, std::string_view) {
+ 
+ void TypePrinter::visit(const EnumType& type, std::string_view overrideName) {
+     if (options.anonymousTypeStyle == TypePrintingOptions::FriendlyName) {
+-        printScope(type.getParentScope());
++        printTypeScope(type);
+ 
+         if (!type.name.empty())
+             buffer->append(type.name);
+@@ -166,7 +192,7 @@ void TypePrinter::visit(const EnumType& type, std::string_view overrideName) {
+             buffer->append(overrideName);
+         }
+         else {
+-            printScope(type.getParentScope());
++            printTypeScope(type);
+             if (type.name.empty())
+                 buffer->format("e${}", type.systemId);
+             else
+@@ -193,7 +219,7 @@ void TypePrinter::visit(const PackedArrayType& type, std::string_view) {
+ 
+ void TypePrinter::visit(const PackedStructType& type, std::string_view overrideName) {
+     if (options.anonymousTypeStyle == TypePrintingOptions::FriendlyName) {
+-        printScope(type.getParentScope());
++        printTypeScope(type);
+ 
+         if (overrideName.empty()) {
+             buffer->append("struct packed");
+@@ -216,7 +242,7 @@ void TypePrinter::visit(const PackedStructType& type, std::string_view overrideN
+         else if (!overrideName.empty())
+             buffer->append(overrideName);
+         else {
+-            printScope(type.getParentScope());
++            printTypeScope(type);
+             buffer->format("s${}", type.systemId);
+         }
+     }
+@@ -224,7 +250,7 @@ void TypePrinter::visit(const PackedStructType& type, std::string_view overrideN
+ 
+ void TypePrinter::visit(const PackedUnionType& type, std::string_view overrideName) {
+     if (options.anonymousTypeStyle == TypePrintingOptions::FriendlyName) {
+-        printScope(type.getParentScope());
++        printTypeScope(type);
+ 
+         if (overrideName.empty()) {
+             buffer->append("union packed");
+@@ -250,7 +276,7 @@ void TypePrinter::visit(const PackedUnionType& type, std::string_view overrideNa
+         else if (!overrideName.empty())
+             buffer->append(overrideName);
+         else {
+-            printScope(type.getParentScope());
++            printTypeScope(type);
+             buffer->format("u${}", type.systemId);
+         }
+     }
+@@ -411,17 +437,23 @@ void TypePrinter::visit(const VirtualInterfaceType& type, std::string_view) {
+ }
+ 
+ void TypePrinter::visit(const TypeAliasType& type, std::string_view overrideName) {
++    if (auto& visible = visibleType(type); &visible != &type) {
++        visible.visit(*this, overrideName);
++        return;
++    }
++    auto view = presentation(type);
++    const auto name = visibleName(type);
+     std::string downstreamOverrideName;
+     if (!overrideName.empty()) {
+         downstreamOverrideName = overrideName;
+     }
+     else if (options.elideScopeNames ||
+              options.anonymousTypeStyle == TypePrintingOptions::FriendlyName) {
+-        downstreamOverrideName = type.name;
++        downstreamOverrideName = name;
+     }
+     else {
+-        std::string path = getLexicalPath(type.getParentScope());
+-        path.append(type.name);
++        std::string path = view ? view->scope : getLexicalPath(type.getParentScope());
++        path.append(name);
+         downstreamOverrideName = path;
+     }
+ 
+@@ -569,14 +601,15 @@ void TypePrinter::printAKA(const Type& type) {
+     // and take the last named type we see.
+     const Type* target = &type;
+     while (target->isAlias()) {
+-        const Type& newTarget = target->as<TypeAliasType>().targetType.getType();
+-        if (newTarget.name.empty() && !newTarget.isArray() && !newTarget.isVirtualInterface())
++        const Type& newTarget = visibleType(target->as<TypeAliasType>().targetType.getType());
++        if (visibleName(newTarget).empty() && !newTarget.isArray() &&
++            !newTarget.isVirtualInterface())
+             break;
+ 
+         target = &newTarget;
+     }
+ 
+-    if (target != &type && target->name != type.name) {
++    if (target != &type && visibleName(*target) != visibleName(type)) {
+         buffer->append(" (aka ");
+         maybeAddQuote();
+         target->visit(*this, ""sv);
+@@ -585,6 +618,15 @@ void TypePrinter::printAKA(const Type& type) {
+     }
+ }
+ 
++void TypePrinter::printTypeScope(const Type& type) {
++    if (auto view = presentation(type)) {
++        if (!options.elideScopeNames)
++            buffer->append(view->scope);
++    }
++    else
++        printScope(type.getParentScope());
++}
++
+ TypeArgFormatter::TypeArgFormatter() {
+     printer.options.quoteChar = '\'';
+     printer.options.elideScopeNames = true;
 diff --git a/source/diagnostics/DiagnosticEngine.cpp b/source/diagnostics/DiagnosticEngine.cpp
 index 3fa297e9c..0eb352284 100644
 --- a/source/diagnostics/DiagnosticEngine.cpp
@@ -6136,7 +6922,7 @@ index ac681a4db..771e3e201 100644
 +}
 +} // namespace slang::syntax
 diff --git a/source/text/SourceManager.cpp b/source/text/SourceManager.cpp
-index 386684b5a..4e2f8204c 100644
+index 386684b5a..6fefa93c9 100644
 --- a/source/text/SourceManager.cpp
 +++ b/source/text/SourceManager.cpp
 @@ -7,14 +7,32 @@
@@ -6943,7 +7729,7 @@ index 386684b5a..4e2f8204c 100644
  static size_t getTextEnd(const SmallVector<char>& mem) {
      size_t result = mem.size();
      if (result && mem[result - 1] == '\0')
-@@ -29,34 +811,176 @@ static size_t getTextEnd(const SmallVector<char>& mem) {
+@@ -29,34 +811,198 @@ static size_t getTextEnd(const SmallVector<char>& mem) {
      return result;
  }
  
@@ -7003,6 +7789,28 @@ index 386684b5a..4e2f8204c 100644
 +            prefix->files.emplace(path, value);
 +    immutablePrefix = prefix;
 +    return prefix;
++}
++
++std::optional<SourceLocation> SourceManager::projectImmutableOriginalLocation(
++    SourceLocation location) const {
++    std::shared_lock lock(mutex);
++    if (!immutablePrefix || !location || location.buffer().getId() >= bufferEntries.size())
++        return std::nullopt;
++    // Existing prefix expansion entries retain the original macro ancestry.
++    // A recyclable tail expansion cannot be projected without its full graph.
++    if (location.buffer().getId() < immutablePrefix->entries.size())
++        return location;
++    auto file = std::get_if<FileInfo>(&bufferEntries[location.buffer().getId()]);
++    if (!file || !file->data)
++        return std::nullopt;
++    for (size_t i = 1; i < immutablePrefix->entries.size(); ++i) {
++        auto previous = std::get_if<FileInfo>(&immutablePrefix->entries[i]);
++        if (previous && previous->data && previous->data->fullPath == file->data->fullPath &&
++            previous->data->mem.size() == file->data->mem.size() &&
++            std::ranges::equal(previous->data->mem, file->data->mem))
++            return SourceLocation(BufferID(uint32_t(i), previous->data->name), location.offset());
++    }
++    return std::nullopt;
 +}
 +
 +void SourceManager::inheritImmutablePrefix(std::shared_ptr<const ImmutablePrefix> prefix) {
@@ -7120,7 +7928,7 @@ index 386684b5a..4e2f8204c 100644
  size_t SourceManager::getRawLineNumber(SourceLocation location) const {
      std::shared_lock<std::shared_mutex> lock(mutex);
      return getRawLineNumber(location, lock);
-@@ -486,6 +1410,8 @@ SourceLocation SourceManager::createExpansionLoc(SourceLocation originalLoc,
+@@ -486,6 +1432,8 @@ SourceLocation SourceManager::createExpansionLoc(SourceLocation originalLoc,
                                                   std::string_view macroName) {
      std::unique_lock<std::shared_mutex> lock(mutex);
  
@@ -7129,7 +7937,7 @@ index 386684b5a..4e2f8204c 100644
      bufferEntries.emplace_back(ExpansionInfo(originalLoc, expansionRange, macroName));
      return SourceLocation(BufferID((uint32_t)(bufferEntries.size() - 1), macroName), 0);
  }
-@@ -497,8 +1423,9 @@ SourceBuffer SourceManager::assignText(std::string_view text, SourceLocation inc
+@@ -497,8 +1445,9 @@ SourceBuffer SourceManager::assignText(std::string_view text, SourceLocation inc
  
  SourceBuffer SourceManager::assignText(std::string_view path, std::string_view text,
                                         SourceLocation includedFrom, const SourceLibrary* library) {
@@ -7140,7 +7948,7 @@ index 386684b5a..4e2f8204c 100644
          using namespace std::literals;
          temp = "<unnamed_buffer"s + std::to_string(unnamedBufferCount++) + ">"s;
          path = temp;
-@@ -509,26 +1436,70 @@ SourceBuffer SourceManager::assignText(std::string_view path, std::string_view t
+@@ -509,26 +1458,70 @@ SourceBuffer SourceManager::assignText(std::string_view path, std::string_view t
      if (buffer.empty() || buffer.back() != '\0')
          buffer.push_back('\0');
  
@@ -7221,7 +8029,7 @@ index 386684b5a..4e2f8204c 100644
  }
  
  SourceManager::BufferOrError SourceManager::readSource(const fs::path& path,
-@@ -541,6 +1512,29 @@ SourceManager::BufferOrError SourceManager::readHeader(
+@@ -541,6 +1534,29 @@ SourceManager::BufferOrError SourceManager::readHeader(
      std::string_view path, SourceLocation includedFrom, const SourceLibrary* library,
      bool isSystemPath, std::span<std::filesystem::path const> additionalIncludePaths) {
  
@@ -7251,7 +8059,7 @@ index 386684b5a..4e2f8204c 100644
      // if the header is specified as an absolute path, just do a straight lookup
      SLANG_ASSERT(!path.empty());
      fs::path p = path;
-@@ -614,18 +1608,25 @@ SourceManager::BufferOrError SourceManager::readHeader(
+@@ -614,18 +1630,25 @@ SourceManager::BufferOrError SourceManager::readHeader(
  }
  
  void SourceManager::addLineDirective(SourceLocation location, size_t lineNum, std::string_view name,
@@ -7279,7 +8087,7 @@ index 386684b5a..4e2f8204c 100644
      else
          full = fs::path(info->data->name).replace_filename(linePath);
  
-@@ -634,9 +1635,15 @@ void SourceManager::addLineDirective(SourceLocation location, size_t lineNum, st
+@@ -634,9 +1657,15 @@ void SourceManager::addLineDirective(SourceLocation location, size_t lineNum, st
  }
  
  void SourceManager::addDiagnosticDirective(SourceLocation location, std::string_view name,
@@ -7296,7 +8104,7 @@ index 386684b5a..4e2f8204c 100644
  
      size_t offset = fileLocation.offset();
      auto& vec = diagDirectives[fileLocation.buffer()];
-@@ -675,6 +1682,13 @@ std::vector<BufferID> SourceManager::getAllBuffers() const {
+@@ -675,6 +1704,13 @@ std::vector<BufferID> SourceManager::getAllBuffers() const {
  size_t SourceManager::getMemoryUsage() const {
      std::shared_lock<std::shared_mutex> lock(mutex);
      size_t total = 0;
@@ -7310,7 +8118,7 @@ index 386684b5a..4e2f8204c 100644
      for (auto& [path, entry] : lookupCache) {
          if (entry.first) {
              total += entry.first->mem.capacity();
-@@ -699,6 +1713,8 @@ std::vector<std::shared_ptr<void>> SourceManager::retainBuffers(
+@@ -699,6 +1735,8 @@ std::vector<std::shared_ptr<void>> SourceManager::retainBuffers(
  
  SourceBuffer SourceManager::replaceBufferImpl(FileInfo* oldInfo, SmallVector<char>&& buffer,
                                                std::unique_lock<std::shared_mutex>& lock) {
@@ -7319,7 +8127,7 @@ index 386684b5a..4e2f8204c 100644
      auto oldData = oldInfo->data;
  
      // Mark old data as stale, remove reference
-@@ -713,6 +1729,12 @@ SourceBuffer SourceManager::replaceBufferImpl(FileInfo* oldInfo, SmallVector<cha
+@@ -713,6 +1751,12 @@ SourceBuffer SourceManager::replaceBufferImpl(FileInfo* oldInfo, SmallVector<cha
      lookupCache.insert_or_assign(getU8Str(newData->fullPath),
                                   std::pair{newData, std::error_code{}});
  
@@ -7332,7 +8140,7 @@ index 386684b5a..4e2f8204c 100644
      // Create a new FileInfo entry with new data (don't modify old entry!)
      // Old data should be freed if nothing more points to it.
      return createBufferEntry(newData, oldInfo->includedFrom, oldInfo->library, oldInfo->sortKey,
-@@ -727,6 +1749,8 @@ SourceBuffer SourceManager::replaceBuffer(BufferID id, SmallVector<char>&& buffe
+@@ -727,6 +1771,8 @@ SourceBuffer SourceManager::replaceBuffer(BufferID id, SmallVector<char>&& buffe
  }
  
  SourceManager::BufferOrError SourceManager::reloadBuffer(BufferID id) {
@@ -7341,7 +8149,7 @@ index 386684b5a..4e2f8204c 100644
      std::unique_lock<std::shared_mutex> lock(mutex);
  
      auto oldInfo = getFileInfo(id, lock);
-@@ -783,6 +1807,9 @@ SourceBuffer SourceManager::createBufferEntry(std::shared_ptr<FileData> fd,
+@@ -783,6 +1829,9 @@ SourceBuffer SourceManager::createBufferEntry(std::shared_ptr<FileData> fd,
  }
  
  bool SourceManager::isCached(const fs::path& path) const {
@@ -7351,7 +8159,7 @@ index 386684b5a..4e2f8204c 100644
      fs::path absPath;
      if (!disableProximatePaths) {
          std::error_code ec;
-@@ -803,6 +1830,51 @@ SourceManager::BufferOrError SourceManager::openCached(const fs::path& fullPath,
+@@ -803,6 +1852,51 @@ SourceManager::BufferOrError SourceManager::openCached(const fs::path& fullPath,
                                                         SourceLocation includedFrom,
                                                         const SourceLibrary* library,
                                                         uint64_t sortKey) {
@@ -7403,7 +8211,7 @@ index 386684b5a..4e2f8204c 100644
      fs::path absPath;
      if (!disableProximatePaths) {
          std::error_code ec;
-@@ -816,6 +1888,8 @@ SourceManager::BufferOrError SourceManager::openCached(const fs::path& fullPath,
+@@ -816,6 +1910,8 @@ SourceManager::BufferOrError SourceManager::openCached(const fs::path& fullPath,
  
      // first see if we have this file cached
      std::string pathStr = getU8Str(absPath);
@@ -7412,7 +8220,7 @@ index 386684b5a..4e2f8204c 100644
      {
          std::unique_lock<std::shared_mutex> lock(mutex);
          auto it = lookupCache.find(pathStr);
-@@ -844,31 +1918,23 @@ SourceManager::BufferOrError SourceManager::openCached(const fs::path& fullPath,
+@@ -844,31 +1940,23 @@ SourceManager::BufferOrError SourceManager::openCached(const fs::path& fullPath,
  SourceBuffer SourceManager::cacheBuffer(fs::path&& path, std::string&& pathStr,
                                          SourceLocation includedFrom, const SourceLibrary* library,
                                          uint64_t sortKey, SmallVector<char>&& buffer) {
@@ -7454,7 +8262,7 @@ index 386684b5a..4e2f8204c 100644
  }
  
  template<IsLock TLock>
-@@ -1039,4 +2105,127 @@ const SourceManager::LineDirectiveInfo* SourceManager::FileInfo::getPreviousLine
+@@ -1039,4 +2127,127 @@ const SourceManager::LineDirectiveInfo* SourceManager::FileInfo::getPreviousLine
      }
  }
  
@@ -7618,7 +8426,7 @@ index f1b0a80f7..d51707507 100644
    Test.cpp)
  
 diff --git a/tests/unittests/DriverTests.cpp b/tests/unittests/DriverTests.cpp
-index b4f6b728e..564d6ebba 100644
+index b4f6b728e..43327ebd3 100644
 --- a/tests/unittests/DriverTests.cpp
 +++ b/tests/unittests/DriverTests.cpp
 @@ -41,6 +41,33 @@ TEST_CASE("Driver processOptions can skip input file check") {
@@ -7986,7 +8794,7 @@ index b4f6b728e..564d6ebba 100644
  }
  #endif
  
-@@ -568,3 +898,44 @@ TEST_CASE("SourceLoader owns strings in uniqueExtensions") {
+@@ -568,3 +898,59 @@ TEST_CASE("SourceLoader owns strings in uniqueExtensions") {
      const char* argv[] = {"testfoo", "-f", path.c_str(), "-f", path.c_str()};
      CHECK(driver.parseCommandLine(5, argv));
  }
@@ -8030,6 +8838,21 @@ index b4f6b728e..564d6ebba 100644
 +    REQUIRE(compilation->getRoot().topInstances.front()->body.find("value"));
 +    compilation.reset();
 +    CHECK(lifetime.expired());
++}
++
++TEST_CASE("Compilation owns top selection independently of command-line storage",
++          "[driver][scope-options-lifetime]") {
++    std::string sourceTopName = "wanted_top";
++    CompilationOptions options;
++    options.topModules.emplace(sourceTopName);
++    Compilation compilation{Bag{options}};
++    sourceTopName[0] = 'x';
++    REQUIRE(compilation.getOptions().topModules.size() == 1);
++    REQUIRE(*compilation.getOptions().topModules.begin() == "wanted_top");
++    compilation.addSyntaxTree(
++        SyntaxTree::fromText("module wanted_top; endmodule module other_top; endmodule"));
++    REQUIRE(compilation.getRoot().topInstances.size() == 1);
++    CHECK(compilation.getRoot().topInstances.front()->name == "wanted_top");
 +}
 diff --git a/tests/unittests/FileTests.cpp b/tests/unittests/FileTests.cpp
 index d3e9fbb31..1668b07cd 100644

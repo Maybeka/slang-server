@@ -469,8 +469,17 @@ instance path must match, together with resolved field types / ranges and enum
 values. Equal layouts from different declarations or instances do not establish
 nominal identity. Enum parameter previews are prepared without elaborating ports,
 variables or child instances, and are reused by later native elaboration after a
-cache miss. Forwarded module-local types outside the selected subtree still use
-native analysis.
+cache miss. Closed ancestor type arguments can be captured into an independent owner: integral
+aliases, packed arrays, fixed unpacked arrays, enums, and packed structs / unions.
+The captured graph preserves nominal declaration identity, alias presentation and
+physical declaration locations without retaining a previous editing generation.
+Current type layouts and declaration origins must match before import. Class-scoped
+type dependencies stay native until specialization provenance is supported. Two
+independent owners cannot overwrite one current nominal type identity; a conflicting
+body stays native. Types with
+unsupported dependencies or source locations outside the immutable source snapshot
+continue through native analysis. Mutable module-target or hierarchical `bind`
+directives also prevent importing affected bodies.
 
 Body-local aliases, enums and packed structs / unions are also certified. Their
 field types, enum values and declaration names / dimensions are audited so a
@@ -490,12 +499,18 @@ can be shared; arguments and `inside` range endpoints pass the same dependency
 audit. Local functions with input-only arguments and admitted result / local types
 are audited with their bodies; input-only void functions are included. Functions
 owned by the immutable package library
-reuse that package's bound graph and replay the actual call use. Class methods,
-DPI and output / reference arguments remain outside this admission path.
+reuse that package's bound graph and replay the actual call use. Closed class
+specializations from fixed providers can also be owned independently, including
+constructors and audited input-only methods. Runtime queues, dynamic arrays and
+associative arrays can retain local container operations with audited arguments.
+Virtual / randomization methods, DPI, output / reference arguments and accesses
+to mutable outside state remain outside this admission path.
 `$fatal`, `$error`, `$warning`, `$info`, `$stop` and `$finish` can be retained with
-audited arguments; literal format strings are immutable data. Time, random and
-other unproven calls keep native analysis, including when nested inside an admitted
-system task or local function, except for the runtime call described below.
+audited arguments; literal format strings are immutable data. Runtime display,
+file-output and formatting calls, argument-free time queries, and supported
+sampling calls can retain their bound graph without executing or caching a result.
+Inherited outside clocking / disable contexts and unsupported sampling arguments
+keep native analysis. Other unproven calls also keep native analysis.
 An unseeded parameterless `$urandom()` can share its bound runtime call graph.
 No random result is evaluated or cached: native constant evaluation still reports
 an error and prevents retaining invalid constant contexts. Seeded random calls
@@ -550,9 +565,30 @@ is not a timing mode. The ordinary `declines` counter does not count every faile
 admission check.
 
 Parameter defaults that require member elaboration (such as `$bits(signal)`),
-mutable consumer aliases, nonintegral local types, unsupported type parameters, interface / ref
-ports, tasks and functions outside the admitted closed / fixed package cases
+consumer aliases outside the closed type capture, unsupported nonintegral types,
+unsupported type parameters, interface / ref ports, and tasks / functions outside
+the admitted closed / fixed provider cases
 still use native analysis. Constructor-time exposure or creation of native
 children can also prevent replacing a body. Broader coverage and formal
 large-project performance / memory acceptance remain under
 development. All new experiments remain disabled by default.
+
+`slang.scopeLibraryStatus` includes `bodies.retainedRoots`, the deduplicated paths
+currently held by independent owners. A root hit can cover its entire subtree;
+the hit count is not the number of descendant instances skipped. Root retention
+by itself does not guarantee every subsequent parameterization can import it.
+
+### Experimental diagnostic delta publishing
+
+`experimentalDiagnosticDeltaPublishing` defaults to `false` independently of the
+semantic cache flags. When enabled, the server compares each completed diagnostic
+list with the last list published for that URI before serializing an LSP message.
+Ordering alone does not trigger a replacement; duplicate counts and every public
+diagnostic field still participate. A changed document version is always published.
+Errors removed by an edit are cleared normally. Compiler-context retirement hands
+this publication history to its replacement, avoiding an empty-list / full-list
+burst for unchanged sources. This reduces notification traffic and serialization;
+it does not skip current semantic analysis or suppress warnings.
+
+See the [Mac CVA6 whole-DUT evaluation](../development/cva6-dut-reuse-evaluation.md)
+for measured latency, memory costs and complete acceptance boundaries.

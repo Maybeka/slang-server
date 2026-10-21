@@ -1003,6 +1003,8 @@ bool SlangServer::loadConfig(const Config& config, bool forceIndexing, bool requ
         return false;
 
     const bool replacingDriver = bool(m_driver);
+    const bool publicationHandoff =
+        replacingDriver && newDriver->diagClient->sharesPublicationsWith(*m_driver->diagClient);
     auto old_config = m_config;
     m_config = config;
     m_driver = std::move(newDriver);
@@ -1010,9 +1012,9 @@ bool SlangServer::loadConfig(const Config& config, bool forceIndexing, bool requ
     if (!preserveDesign)
         m_topFile.reset();
     m_configReloadPending = false;
-    if (replacingDriver)
+    if (replacingDriver && !(deferOpenDiagnostics && publicationHandoff))
         republishDriverDiagnostics(*m_driver);
-    else
+    else if (!replacingDriver)
         m_driver->diagClient->pushDiags();
 
     if (!m_config.indexGlobs.get().empty() || !m_config.excludeDirs.get().empty()) {

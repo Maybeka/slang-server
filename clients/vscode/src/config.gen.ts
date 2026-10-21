@@ -26,6 +26,8 @@ export interface Config {
   experimentalUvmSemanticCache?: boolean
   /** Experimental complete semantic reuse of explicitly fixed scopes. Default off. Dependencies are fixed until slang.rebuildScopeLibrary or configuration reload. Uses frozenSources selectors; unsupported boundaries use native analysis. */
   experimentalScopeSemanticCache?: boolean
+  /** Experimental diagnostic delta publication. Default off. Repeated results are compared before serialization; changed document versions, errors, repairs and URI retirements are still published. */
+  experimentalDiagnosticDeltaPublishing?: boolean
   /** Frozen source selections and cache budget. Does not enable the experiment. */
   frozenSources?: Config__FrozenSourcesConfig | null
   /** Experimental package/module syntax and instance hierarchy reuse. Default off. Exact source and include lookup certification can cost filesystem I/O; changed inputs rebuild the native context while preserving editor overlays. */

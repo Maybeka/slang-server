@@ -26,6 +26,78 @@
 #include "slang/text/SourceLocation.h"
 #include "slang/text/SourceManager.h"
 namespace server {
+namespace {
+template<typename T, typename Equal>
+bool sameOptional(const std::optional<T>& a, const std::optional<T>& b, Equal equal) {
+    return a.has_value() == b.has_value() && (!a || equal(*a, *b));
+}
+
+// Compare the complete LSP payload before reflection and JSON encoding. Keep
+// related notes and optional metadata: matching just message/range loses edits.
+bool sameDiagnostic(const lsp::Diagnostic& a, const lsp::Diagnostic& b) {
+    return a.range == b.range && a.severity == b.severity && a.source == b.source &&
+           a.message == b.message && a.tags == b.tags &&
+           sameOptional(a.code, b.code,
+                        [](const auto& x, const auto& y) {
+                            return x.visit([&](const auto& value) {
+                                auto other = rfl::get_if<std::decay_t<decltype(value)>>(&y);
+                                return other && value == *other;
+                            });
+                        }) &&
+           sameOptional(a.codeDescription, b.codeDescription,
+                        [](const auto& x, const auto& y) { return x.href == y.href; }) &&
+           sameOptional(a.relatedInformation, b.relatedInformation,
+                        [](const auto& x, const auto& y) {
+                            return std::ranges::equal(x, y, [](const auto& l, const auto& r) {
+                                return l.location.uri == r.location.uri &&
+                                       l.location.range == r.location.range &&
+                                       l.message == r.message;
+                            });
+                        }) &&
+           sameOptional(a.data, b.data, [](const auto& x, const auto& y) {
+               return rfl::json::write(x) == rfl::json::write(y);
+           });
+}
+
+size_t diagnosticHash(const lsp::Diagnostic& diagnostic) {
+    size_t result = 0;
+    auto add = [&]<typename T>(const T& value) {
+        result ^= std::hash<T>{}(value) + size_t(0x9e3779b9) + (result << 6) + (result >> 2);
+    };
+    auto range = [&](const lsp::Range& value) {
+        add(value.start.line);
+        add(value.start.character);
+        add(value.end.line);
+        add(value.end.character);
+    };
+    range(diagnostic.range);
+    add(diagnostic.message);
+    add(diagnostic.severity);
+    add(diagnostic.source);
+    add(bool(diagnostic.code));
+    if (diagnostic.code) {
+        add(diagnostic.code->index());
+        diagnostic.code->visit([&](const auto& value) { add(value); });
+    }
+    add(bool(diagnostic.codeDescription));
+    if (diagnostic.codeDescription)
+        add(diagnostic.codeDescription->href);
+    add(bool(diagnostic.tags));
+    if (diagnostic.tags)
+        for (auto tag : *diagnostic.tags)
+            add(tag);
+    add(bool(diagnostic.relatedInformation));
+    if (diagnostic.relatedInformation)
+        for (const auto& note : *diagnostic.relatedInformation) {
+            add(note.location.uri);
+            range(note.location.range);
+            add(note.message);
+        }
+    // A hash only selects candidates; every match is checked with the complete
+    // payload comparator, including arbitrary data. Collisions cannot hide edits.
+    return result;
+}
+} // namespace
 
 ServerDiagClient::Update::Update(ServerDiagClient& client) : client(client) {
     SLANG_ASSERT(!client.m_update);
@@ -303,20 +375,57 @@ void ServerDiagClient::adoptDocumentUri(const URI& physical, const URI& opened) 
     m_dirtyUris.erase(physical);
     // Keep this retirement key literal: resolving it would clear only the new
     // alias and leave the client's previously published physical error behind.
-    if (m_publishedNonemptyUris.contains(physical))
+    if (m_publications->nonempty.contains(physical))
         m_dirtyUris.emplace(physical);
 }
 
 void ServerDiagClient::publish(const URI& uri, const std::vector<lsp::Diagnostic>& diagnostics) {
-    m_client.onDocPublishDiagnostics(lsp::PublishDiagnosticsParams{
-        .uri = uri, .version = getVersion(uri), .diagnostics = diagnostics});
+    auto version = getVersion(uri);
+    if (m_deltaPublishing) {
+        auto previous = m_publications->published.find(uri);
+        if (previous != m_publications->published.end() && previous->second.version == version &&
+            previous->second.diagnostics.size() == diagnostics.size()) {
+            const auto& published = previous->second;
+            std::vector<bool> matched(diagnostics.size(), false);
+            const bool same = std::ranges::all_of(diagnostics, [&](const auto& diagnostic) {
+                auto [begin, end] = published.index.equal_range(diagnosticHash(diagnostic));
+                for (auto it = begin; it != end; ++it) {
+                    if (!matched[it->second] &&
+                        sameDiagnostic(published.diagnostics[it->second], diagnostic)) {
+                        matched[it->second] = true;
+                        return true;
+                    }
+                }
+                return false;
+            });
+            if (same)
+                return;
+        }
+    }
+    m_client.onDocPublishDiagnostics(
+        lsp::PublishDiagnosticsParams{.uri = uri, .version = version, .diagnostics = diagnostics});
+    if (m_deltaPublishing) {
+        Published published{version, diagnostics, {}};
+        published.index.reserve(diagnostics.size());
+        for (size_t i = 0; i < diagnostics.size(); ++i)
+            published.index.emplace(diagnosticHash(diagnostics[i]), i);
+        m_publications->published.insert_or_assign(uri, std::move(published));
+    }
     if (diagnostics.empty())
-        m_publishedNonemptyUris.erase(uri);
+        m_publications->nonempty.erase(uri);
     else
-        m_publishedNonemptyUris.emplace(uri);
+        m_publications->nonempty.emplace(uri);
 }
 
 void ServerDiagClient::clearAndPush() {
+    if (m_deltaPublishing) {
+        // A replacement may not have recomputed every closed source yet. Final
+        // retirement must still clear all nonempty results known by the editor.
+        const std::vector<URI> published(m_publications->nonempty.begin(),
+                                         m_publications->nonempty.end());
+        for (const auto& uri : published)
+            publish(uri, {});
+    }
     for (const auto& [uri, diags] : m_diagnostics) {
         publish(uri, {});
     }

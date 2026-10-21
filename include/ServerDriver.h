@@ -114,7 +114,8 @@ public:
     /// @brief Destructor
     ~ServerDriver() {
         // Clear diags from this driver
-        diagClient->clearAndPush();
+        if (diagClient->publishesOnDestruction())
+            diagClient->clearAndPush();
         docs.clear(); // Release document owners before the SDK Driver / SourceManager.
     };
 

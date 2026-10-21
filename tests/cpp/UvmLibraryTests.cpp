@@ -18,6 +18,8 @@
 #include "slang/ast/symbols/InstanceSymbols.h"
 #include "slang/ast/symbols/ParameterSymbols.h"
 #include "slang/ast/symbols/VariableSymbols.h"
+#include "slang/ast/types/AllTypes.h"
+#include "slang/ast/types/TypePrinter.h"
 #include "slang/diagnostics/TextDiagnosticClient.h"
 #include "slang/parsing/Preprocessor.h"
 #include "slang/syntax/AllSyntax.h"
@@ -2344,7 +2346,7 @@ module stable #(parameter int W=2)(input logic [W-1:0] a, output wire [W-1:0] y)
   assign y=(state==ACTIVE) ? q.packet.data + bits_t'(count) : bits_t'(shape);
 )");
     if (impure)
-        fixed += "wire [63:0] clock_value=$time; wire [31:0] random_value=$urandom();\n";
+        fixed += "int seed=1; wire [31:0] random_value=$urandom(seed);\n";
     fixed += "endmodule\n";
     files.write(files.root / "fixed.sv", fixed);
     auto source = [](int width, bool invalid) {
@@ -3542,7 +3544,7 @@ TEST_CASE("Closed body extensions reject mutable function and array dependencies
                     "default: begin:h wire q=a[1]; end endcase always_comb y=a;"),
         std::string("for(genvar i=0;i<consumer_pkg::N;i++) begin:g wire q=a[0]; end "
                     "always_comb y=a;"),
-        std::string("initial $info(\"time %0t\",$time); always_comb y=a;"),
+        std::string("int seed=1; initial $info(\"random %0d\",$urandom(seed)); always_comb y=a;"),
         std::string("logic words[consumer_pkg::N]; always_comb begin words[0]=a[0]; "
                     "y=32'(words[0]); end"));
     INFO(implementation);
@@ -4179,7 +4181,9 @@ module stable #(parameter bit EXTERNAL=1)(input int a, output int y);
 endmodule
 )";
     if (boundary == 1)
-        fixed.insert(fixed.rfind("endmodule"), "if(!EXTERNAL) initial $display(\"%0t\",$time);\n");
+        fixed.insert(
+            fixed.rfind("endmodule"),
+            "if(!EXTERNAL) begin:g int seed=1; initial $display(\"%0d\",$urandom(seed)); end\n");
     if (boundary == 2)
         fixed.replace(fixed.find("else assign y=local_y;"),
                       std::string("else assign y=local_y;").size(),
@@ -4681,4 +4685,347 @@ module stable(output wire [31:0] y); assign y=fixed_pkg::N; endmodule
     REQUIRE(fixedValue);
     CHECK(fixedValue->as<ast::ParameterSymbol>().getValue().integer().as<int>() == 4);
     CHECK_FALSE(driver->hasCompatibleTrustedNamespace());
+}
+
+TEST_CASE("Closed ancestor type arguments retain nominal identity without old consumers",
+          "[scope-semantic][scope-type-closure]") {
+    const bool enumeration = GENERATE(false, true);
+    INFO(enumeration);
+    const bool trace = GENERATE(false, true);
+    INFO(trace);
+    LibraryWorkspace files;
+    Config config;
+    config.experimentalScopeSemanticCache = true;
+    config.frozenSources =
+        Config::FrozenSourcesConfig{.instances = std::vector<std::string>{"top.u"}, .maxMiB = 64};
+    config.flagsByFile = std::vector<Config::FlagSource>{
+        {(files.root / "server.json").string(), "--single-unit --threads 1 --top top"}};
+    auto provider = std::string(R"(
+module stable #(parameter type T=logic)(input T a, output T y);
+ localparam int SIZE=$bits(T);
+ assign y=a;
+)");
+    if (trace) {
+        provider = R"(
+class frozen_packet #(parameter type P=logic, parameter P MASK=P'('0));
+ P data;
+ function new(P value); data=value; endfunction
+ function P read(); return data; endfunction
+endclass
+)" + provider;
+        provider += R"(
+ T pending[$];
+ task automatic record();
+   frozen_packet #(.P(T)) item;
+   pending.push_back(a);
+   item=new(pending.pop_front());
+   if(pending.size()) pending.delete();
+   $display("%0t %h", $time, item.read());
+ endtask
+ initial record();
+)";
+    }
+    files.write(files.root / "fixed.sv", provider + "endmodule\n");
+    auto source = [&](int edit, int width = 8, bool alternate = false) {
+        auto first =
+            enumeration
+                ? "typedef enum logic[7:0] {FIRST=1, SECOND=2} first_t;"
+                : fmt::format(
+                      "typedef struct packed {{logic [{}:0] payload; logic valid;}} first_t;",
+                      width - 1);
+        auto second =
+            enumeration
+                ? "typedef enum logic[7:0] {OTHER_FIRST=1, OTHER_SECOND=2} second_t;"
+                : fmt::format(
+                      "typedef struct packed {{logic [{}:0] payload; logic valid;}} second_t;",
+                      width - 1);
+        return fmt::format("module top; {} {} localparam int EDIT={}; {} a,y; "
+                           "stable #(.T({})) u(.*); endmodule\n",
+                           first, second, edit, alternate ? "second_t" : "first_t",
+                           alternate ? "second_t" : "first_t");
+    };
+    files.write(files.root / "consumer.sv", source(0));
+    files.write(files.root / "design.f", "fixed.sv\nconsumer.sv\n");
+    Indexer indexer;
+    ClientHarness client;
+    auto driver = server::ServerDriver::createFromFileLists(indexer, client, config, {"design.f"},
+                                                            files.root.string(), nullptr, true);
+    REQUIRE(driver);
+    auto library = driver->options.get<server::TrustedUvmImport>()->library;
+    auto cache = std::make_shared<server::ScopeBodyCache>(library, 64 * 1024 * 1024,
+                                                          std::vector<std::string>{},
+                                                          std::vector<std::string>{"top.u"});
+    std::string extraSource;
+    bool shiftLine = false;
+    bool shiftMember = false;
+    auto make = [&](int edit, int width = 8, bool alternate = false, bool native = false) {
+        auto options = driver->options;
+        options.set(server::ScopeBodyImport{cache});
+        auto result = std::make_shared<ast::Compilation>(options);
+        REQUIRE(server::importTrustedUvm(*result, driver->sm, options));
+        if (native)
+            result->setInstanceBodyReuseHooks({}, {});
+        auto oldBuffer = driver->sm.readSource(files.root / "consumer.sv").value();
+        auto text = source(edit, width, alternate) + extraSource;
+        if (shiftLine)
+            text.replace(text.find("module top;"), 11, "module\ntop;");
+        if (shiftMember)
+            text.replace(text.find(" payload;"), 9, "\npayload;");
+        SmallVector<char> bytes;
+        bytes.insert(bytes.end(), text.begin(), text.end());
+        bytes.push_back('\0');
+        auto buffer = driver->sm.replaceBuffer(oldBuffer.id, std::move(bytes));
+        result->addSyntaxTree(syntax::SyntaxTree::fromBuffer(buffer, driver->sm, options));
+        (void)result->getSemanticDiagnostics();
+        return result;
+    };
+    auto first = make(0);
+    first->offerInstanceBodies(first);
+    INFO(rfl::json::write(cache->status()));
+    REQUIRE(cache->status().owners == 1);
+    std::weak_ptr<ast::Compilation> oldCompilation = first;
+    std::weak_ptr<syntax::SyntaxTree> oldSyntax = first->getSyntaxTrees().front();
+    first.reset();
+    CHECK(oldCompilation.expired());
+    CHECK(oldSyntax.expired());
+    auto repeated = make(1), native = make(1, 8, false, true);
+    CHECK(repeated->hasImportedInstanceBodies());
+    auto argument = [](ast::Compilation& compilation) -> const ast::Type& {
+        const auto& top = compilation.getRoot().topInstances.front()->body;
+        const auto& instance = top.find("u")->as<ast::InstanceSymbol>();
+        return instance.body.find("T")->as<ast::TypeParameterSymbol>().targetType.getType();
+    };
+    for (unsigned flags = 0; flags < 16; ++flags) {
+        ast::TypePrinter actual, expected;
+        actual.options.printAKA = expected.options.printAKA = flags & 1;
+        actual.options.skipTypeDefs = expected.options.skipTypeDefs = flags & 2;
+        actual.options.skipScopedTypeNames = expected.options.skipScopedTypeNames = flags & 4;
+        actual.options.anonymousTypeStyle = expected.options.anonymousTypeStyle =
+            flags & 8 ? ast::TypePrintingOptions::FriendlyName
+                      : ast::TypePrintingOptions::SystemName;
+        actual.append(argument(*repeated));
+        expected.append(argument(*native));
+        CAPTURE(flags);
+        CHECK(actual.toString() == expected.toString());
+    }
+    CHECK(DiagnosticEngine::reportAll(driver->sm, repeated->getSemanticDiagnostics()) ==
+          DiagnosticEngine::reportAll(driver->sm, native->getSemanticDiagnostics()));
+    auto sourcePosition = [&](const ast::Symbol& symbol) {
+        auto location = driver->sm.getFullyOriginalLoc(symbol.location);
+        return fmt::format("{}:{}:{}", driver->sm.getFullPath(location.buffer()).string(),
+                           driver->sm.getLineNumber(location),
+                           driver->sm.getColumnNumber(location));
+    };
+    const auto& actualType = argument(*repeated).getCanonicalType();
+    const auto& expectedType = argument(*native).getCanonicalType();
+    CHECK(sourcePosition(actualType) == sourcePosition(expectedType));
+    if (!enumeration) {
+        const auto& actual = actualType.as<ast::PackedStructType>();
+        const auto& expected = expectedType.as<ast::PackedStructType>();
+        REQUIRE(actual.find("payload"));
+        REQUIRE(expected.find("payload"));
+        CHECK(sourcePosition(*actual.find("payload")) == sourcePosition(*expected.find("payload")));
+        REQUIRE(actual.find("payload")->getSyntax());
+        CHECK(actual.find("payload")->getSyntax()->toString() ==
+              expected.find("payload")->getSyntax()->toString());
+    }
+    analysis::AnalysisOptions analysisOptions{.flags = analysis::AnalysisFlags::CheckUnused |
+                                                       analysis::AnalysisFlags::CheckShadow};
+    analysis::AnalysisManager actualAnalysis(analysisOptions), expectedAnalysis(analysisOptions);
+    repeated->freeze();
+    actualAnalysis.analyze(*repeated);
+    repeated->unfreeze();
+    native->freeze();
+    expectedAnalysis.analyze(*native);
+    native->unfreeze();
+    CHECK(DiagnosticEngine::reportAll(driver->sm, actualAnalysis.getDiagnostics()) ==
+          DiagnosticEngine::reportAll(driver->sm, expectedAnalysis.getDiagnostics()));
+    shiftLine = true;
+    auto relocated = make(2), nativeRelocated = make(2, 8, false, true);
+    CHECK_FALSE(relocated->hasImportedInstanceBodies());
+    CHECK(DiagnosticEngine::reportAll(driver->sm, relocated->getSemanticDiagnostics()) ==
+          DiagnosticEngine::reportAll(driver->sm, nativeRelocated->getSemanticDiagnostics()));
+    shiftLine = false;
+    CHECK(make(2)->hasImportedInstanceBodies());
+    if (!enumeration) {
+        shiftMember = true;
+        CHECK_FALSE(make(2)->hasImportedInstanceBodies());
+        shiftMember = false;
+        CHECK(make(2)->hasImportedInstanceBodies());
+    }
+    for (const auto& bind : {"bind stable audit probe();", "bind top.u audit probe();"}) {
+        extraSource = std::string("module audit; initial missing_audit=1; endmodule ") + bind;
+        auto bound = make(2), expected = make(2, 8, false, true);
+        CHECK_FALSE(bound->hasImportedInstanceBodies());
+        CHECK(DiagnosticEngine::reportAll(driver->sm, bound->getSemanticDiagnostics()) ==
+              DiagnosticEngine::reportAll(driver->sm, expected->getSemanticDiagnostics()));
+        extraSource.clear();
+        CHECK(make(2)->hasImportedInstanceBodies());
+    }
+    if (!enumeration) {
+        auto resized = make(2, 9);
+        CHECK_FALSE(resized->hasImportedInstanceBodies());
+        auto expected = make(2, 9, false, true);
+        CHECK(DiagnosticEngine::reportAll(driver->sm, resized->getSemanticDiagnostics()) ==
+              DiagnosticEngine::reportAll(driver->sm, expected->getSemanticDiagnostics()));
+    }
+    auto changedOrigin = make(3, 8, true);
+    CHECK_FALSE(changedOrigin->hasImportedInstanceBodies());
+    auto expected = make(3, 8, true, true);
+    CHECK(DiagnosticEngine::reportAll(driver->sm, changedOrigin->getSemanticDiagnostics()) ==
+          DiagnosticEngine::reportAll(driver->sm, expected->getSemanticDiagnostics()));
+}
+
+TEST_CASE("Captured fields keep native hover and declaration targets across edits",
+          "[scope-semantic][scope-type-closure-hover]") {
+    const bool macro = GENERATE(false, true);
+    const bool forwarded = GENERATE(false, true);
+    const auto macroView = GENERATE(Config::HoverConfig::MacroView::source,
+                                    Config::HoverConfig::MacroView::expanded,
+                                    Config::HoverConfig::MacroView::both);
+    CAPTURE(macro, forwarded, int(macroView));
+    LibraryWorkspace files;
+    files.write(files.root / "fixed.sv",
+                "module stable #(parameter type T=logic)(input T a,output T y); "
+                "T local_copy; assign local_copy=a; assign y=local_copy; endmodule\n");
+    const std::string shape = "struct packed {logic [7:0] payload; logic valid;}";
+    const std::string declaration = "typedef " + shape + " packet_t; ";
+    const std::string prefix =
+        forwarded ? (macro ? "`define SHAPE_DATA " + shape +
+                                 "\nmodule top #(parameter type packet_t=`SHAPE_DATA); "
+                           : "module top #(parameter type packet_t=" + shape + "); ")
+                  : (macro ? "`define DECL_DATA " + declaration + "\nmodule top; `DECL_DATA\n"
+                           : "module top; " + declaration);
+    const std::string original =
+        prefix +
+        "packet_t a,y; stable #(.T(packet_t)) u(.*); wire [7:0] result=u.local_copy.payload; "
+        "localparam int EDIT=0; endmodule\n";
+    files.write(files.root / "consumer.sv", original);
+    files.write(files.root / "design.f", "fixed.sv\nconsumer.sv\n");
+    struct Harness : ServerHarness {
+        using server::SlangServer::m_driver;
+        using ServerHarness::ServerHarness;
+    };
+    std::vector<std::string> native;
+    for (bool enabled : {false, true}) {
+        Config config;
+        config.build = "design.f";
+        config.flags = "--single-unit --threads 1 --top top";
+        config.experimentalScopeSemanticCache = enabled;
+        config.hovers.value().macroView = macroView;
+        config.frozenSources = Config::FrozenSourcesConfig{
+            .instances = std::vector<std::string>{"top.u"}, .maxMiB = 64};
+        files.write(files.root / ".slang/server.json", rfl::json::write(config));
+        Harness server(lsp::InitializeParams{
+            .capabilities = {},
+            .workspaceFolders = {{lsp::WorkspaceFolder{.uri = URI::fromFile(files.root),
+                                                       .name = "closed-fields"}}}});
+        REQUIRE(server.m_driver->comp);
+        REQUIRE(server.m_driver->comp->setActiveInstance("top.u"));
+        auto document = server.openFile("consumer.sv");
+        auto fixedDocument = server.openFile("fixed.sv");
+        for (int edit = 1; edit <= 3; ++edit) {
+            auto text = original;
+            text.replace(text.find("EDIT=0"), 6, fmt::format("EDIT={}", edit));
+            document.replaceAll(text);
+            document.publishChanges();
+            auto cursor = document.before("payload; localparam");
+            auto hover = document.getHoverAt(cursor.m_offset);
+            REQUIRE(hover);
+            auto completions = cursor.getResolvedCompletions();
+            CHECK(completions.size() == 2);
+            auto info = document.getDefinitionInfoAt(cursor.m_offset);
+            REQUIRE(info);
+            auto actual = rfl::json::write(*hover) +
+                          rfl::json::write(info->getDefinitionLspLinks());
+            CHECK(actual.find("__slang_scope_cache") == std::string::npos);
+            if (enabled)
+                CHECK(actual == native.at(edit - 1));
+            else
+                native.push_back(actual);
+        }
+        if (enabled) {
+            auto cache = server.m_driver->options.get<server::ScopeBodyImport>()->cache.lock();
+            REQUIRE(cache);
+            CHECK(cache->status().hits >= 3);
+            CHECK(cache->status().owners == 1);
+            CHECK(cache->status().publications == 1);
+            CHECK(cache->status().retainedRoots == std::vector<std::string>{"top.u"});
+        }
+    }
+}
+
+TEST_CASE("Independent nominal captures cannot overwrite a current declaration identity",
+          "[scope-semantic][scope-type-closure-owners]") {
+    const bool classScoped = GENERATE(false, true);
+    CAPTURE(classScoped);
+    LibraryWorkspace files;
+    files.write(files.root / "fixed.sv",
+                "module stable #(parameter type T=logic)(input T a,output T y); "
+                "assign y=a; endmodule\n");
+    auto source = [&](int edit) {
+        auto declarations = classScoped
+                                ? "class C #(parameter W=8); typedef struct packed {logic[W-1:0] "
+                                  "data;} value_t; endclass typedef C#(8)::value_t packet_t;"
+                                : "typedef struct packed {logic[7:0] data;} packet_t;";
+        return fmt::format("module top; {} packet_t a,b,c; "
+                           "stable #(.T(packet_t)) u(.a(a),.y(b)),v(.a(b),.y(c)); "
+                           "localparam int EDIT={}; endmodule\n",
+                           declarations, edit);
+    };
+    files.write(files.root / "consumer.sv", source(0));
+    files.write(files.root / "design.f", "fixed.sv\nconsumer.sv\n");
+    Config config;
+    config.experimentalScopeSemanticCache = true;
+    config.frozenSources = Config::FrozenSourcesConfig{
+        .instances = std::vector<std::string>{"top.u", "top.v"}, .maxMiB = 64};
+    config.flagsByFile = std::vector<Config::FlagSource>{
+        {(files.root / "server.json").string(), "--single-unit --threads 1 --top top"}};
+    Indexer indexer;
+    ClientHarness client;
+    auto driver = server::ServerDriver::createFromFileLists(indexer, client, config, {"design.f"},
+                                                            files.root.string(), nullptr, true);
+    REQUIRE(driver);
+    auto setting = driver->options.get<server::TrustedUvmImport>();
+    REQUIRE(setting);
+    auto library = setting->library;
+    auto cache = std::make_shared<server::ScopeBodyCache>(
+        library, 64 * 1024 * 1024, std::vector<std::string>{},
+        std::vector<std::string>{"top.u", "top.v"});
+    auto make = [&](int edit, bool native = false) {
+        auto options = driver->options;
+        options.set(server::ScopeBodyImport{cache});
+        auto compilation = std::make_shared<ast::Compilation>(options);
+        REQUIRE(server::importTrustedUvm(*compilation, driver->sm, options));
+        if (native)
+            compilation->setInstanceBodyReuseHooks({}, {});
+        auto old = driver->sm.readSource(files.root / "consumer.sv").value();
+        auto text = source(edit);
+        SmallVector<char> bytes(text.begin(), text.end());
+        bytes.push_back('\0');
+        auto buffer = driver->sm.replaceBuffer(old.id, std::move(bytes));
+        compilation->addSyntaxTree(syntax::SyntaxTree::fromBuffer(buffer, driver->sm, options));
+        (void)compilation->getSemanticDiagnostics();
+        return compilation;
+    };
+    auto first = make(0);
+    REQUIRE_FALSE(first->hasIssuedErrors());
+    first->offerInstanceBodies(first);
+    CHECK(cache->status().owners == (classScoped ? 0 : 2));
+    auto current = make(1), expected = make(1, true);
+    CHECK_FALSE(current->hasIssuedErrors());
+    CHECK(DiagnosticEngine::reportAll(driver->sm, current->getSemanticDiagnostics()) ==
+          DiagnosticEngine::reportAll(driver->sm, expected->getSemanticDiagnostics()));
+    CHECK(cache->status().hits == (classScoped ? 0 : 1));
+    analysis::AnalysisOptions options{.flags = analysis::AnalysisFlags::CheckUnused |
+                                               analysis::AnalysisFlags::CheckShadow};
+    analysis::AnalysisManager actualAnalysis(options), expectedAnalysis(options);
+    current->freeze();
+    actualAnalysis.analyze(*current);
+    current->unfreeze();
+    expected->freeze();
+    expectedAnalysis.analyze(*expected);
+    expected->unfreeze();
+    CHECK(DiagnosticEngine::reportAll(driver->sm, actualAnalysis.getDiagnostics()) ==
+          DiagnosticEngine::reportAll(driver->sm, expectedAnalysis.getDiagnostics()));
 }

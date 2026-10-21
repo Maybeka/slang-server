@@ -111,6 +111,12 @@ struct Config {
         bool>
         experimentalScopeSemanticCache = false;
 
+    rfl::Description<"Experimental diagnostic delta publication. Default off. Repeated results "
+                     "are compared before serialization; changed document versions, errors, "
+                     "repairs and URI retirements are still published.",
+                     bool>
+        experimentalDiagnosticDeltaPublishing = false;
+
     struct FrozenSourcesConfig {
         rfl::Description<
             "Exact package names in configured compilation inputs. The complete "

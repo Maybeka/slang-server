@@ -20,6 +20,7 @@ public:
         uint64_t hits = 0, misses = 0, publications = 0, compactPublications = 0, evictions = 0,
                  declines = 0, ownerBuilds = 0, admissionHits = 0, capacitySkips = 0;
         size_t admissionBytes = 0, admissionRecords = 0;
+        std::vector<std::string> retainedRoots;
     };
     ScopeBodyCache(std::shared_ptr<TrustedUvmLibrary> library, size_t budget,
                    std::vector<std::string> modules, std::vector<std::string> instances);

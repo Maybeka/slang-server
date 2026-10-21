@@ -604,6 +604,20 @@ void renderSymbolHeader(markup::Paragraph& infoPg, const ast::Symbol& symbol,
 
     auto& parentSym = symbol.getParentScope()->asSymbol();
     auto lexicalPath = parentSym.getLexicalPath();
+    if (parentSym.isType()) {
+        const auto& type = parentSym.as<ast::Type>();
+        auto scope = type.getParentScope();
+        if (auto view = scope ? scope->getCompilation().getInstanceBodyTypePresentation(type)
+                              : nullptr) {
+            lexicalPath = view->scope;
+            if (!view->name.empty())
+                lexicalPath += view->name;
+            else if (lexicalPath.ends_with("::"))
+                lexicalPath.resize(lexicalPath.size() - 2);
+            else if (lexicalPath.ends_with('.'))
+                lexicalPath.pop_back();
+        }
+    }
 
     // The typedef name needs to be appended; it's not attached to the type
     auto parentSyntax = parentSym.getSyntax();

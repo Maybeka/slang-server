@@ -69,7 +69,8 @@ ServerDriver::ServerDriver(Indexer& indexer, SlangLspClient& client, const Confi
                            const ServerDriver* overlays) :
     m_driverOwner(std::make_shared<driver::Driver>()), sm(m_driverOwner->sourceManager),
     diagEngine(m_driverOwner->diagEngine), client(client), driver(*m_driverOwner),
-    diagClient(std::make_shared<ServerDiagClient>(sm, client)),
+    diagClient(std::make_shared<ServerDiagClient>(
+        sm, client, config.experimentalDiagnosticDeltaPublishing.value())),
     completions(*this, indexer, sm, options), codeActions(*this, sm, indexer), m_indexer(indexer),
     m_config(config), m_workspacePathPrefix(workspaceFolder.value_or("")) {
     if (overlays && overlays->m_preserveTrustedUvm && overlays->m_trustedScopes &&
@@ -547,7 +548,10 @@ void ServerDriver::copyOpenDocumentsFrom(const ServerDriver* oldDriver,
 
     m_includeSelections = oldDriver->m_includeSelections;
     completions.resolveEdits = oldDriver->completions.resolveEdits;
-    oldDriver->diagClient->clearAndPush();
+    const bool handoff = oldDriver->m_preserveTrustedUvm &&
+                         diagClient->inheritPublications(*oldDriver->diagClient);
+    if (!handoff)
+        oldDriver->diagClient->clearAndPush();
     for (const auto& uri : oldDriver->m_openDocs) {
         auto docIt = oldDriver->docs.find(uri);
         if (docIt == oldDriver->docs.end()) {
@@ -560,6 +564,8 @@ void ServerDriver::copyOpenDocumentsFrom(const ServerDriver* oldDriver,
         text.remove_suffix(1);
         openDocument(uri, text, docIt->second->getVersion(), deferConfiguredDiagnostics);
     }
+    if (handoff)
+        diagClient->completePublicationHandoff(*oldDriver->diagClient);
 }
 
 std::unique_ptr<ServerDriver> ServerDriver::createForExplore(

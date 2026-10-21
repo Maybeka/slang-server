@@ -11,6 +11,7 @@
 #include <stdexcept>
 #include <unordered_map>
 
+#include "slang/ast/Compilation.h"
 #include "slang/ast/types/AllTypes.h"
 #include "slang/syntax/AllSyntax.h"
 #include "slang/syntax/SyntaxKind.h"
@@ -68,13 +69,20 @@ const ast::Type* getTypeParameterTargetType(const ast::Type& type) {
     const ast::Type* result = nullptr;
     for (auto current = &type; auto alias = current->as_if<ast::TypeAliasType>();) {
         auto syntax = alias->getSyntax();
-        if (!syntax || !syntax->parent ||
-            syntax->parent->kind != syntax::SyntaxKind::TypeParameterDeclaration)
+        const bool parameter = syntax && syntax->parent &&
+                               syntax->parent->kind == syntax::SyntaxKind::TypeParameterDeclaration;
+        auto scope = alias->getParentScope();
+        auto view = scope ? scope->getCompilation().getInstanceBodyTypePresentation(*alias)
+                          : nullptr;
+        const bool transparent = view && view->transparent;
+        if (!parameter && !transparent)
             break;
         const auto& target = alias->targetType.getType();
         if (target.isError())
             return nullptr;
-        result = current = &target;
+        current = &target;
+        if (parameter || result)
+            result = current;
     }
     return result;
 }

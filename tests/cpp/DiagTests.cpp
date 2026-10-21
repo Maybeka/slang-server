@@ -800,3 +800,184 @@ module top;
         CHECK(std::get<std::string>(diagnostics[i].args.back()) == (i % 2 ? "fail" : "succeed"));
     }
 }
+
+TEST_CASE("Diagnostic deltas retain every visible field and document version",
+          "[diagnostic-delta]") {
+    slang::SourceManager sources;
+    ClientHarness client;
+    server::ServerDiagClient diagnostics(sources, client, true);
+    diagnostics.disableDestructorPublication();
+    const auto uri = URI::fromFile("/tmp/slang-delta.sv");
+    lsp::Diagnostic value{.range = {{1, 2}, {1, 5}},
+                          .severity = lsp::DiagnosticSeverity::Error,
+                          .code = rfl::Variant<int, std::string>{1},
+                          .codeDescription = lsp::CodeDescription{uri},
+                          .source = "slang",
+                          .message = "unknown name",
+                          .tags = std::vector{lsp::DiagnosticTag::Unnecessary},
+                          .relatedInformation = std::vector{lsp::DiagnosticRelatedInformation{
+                              .location = {uri, {{0, 0}, {0, 1}}}, .message = "declared here"}},
+                          .data = rfl::Generic{std::string("original")}};
+    diagnostics.setVersion(uri, 1);
+    diagnostics.replaceRendered(uri, {value});
+    diagnostics.pushDiags();
+    REQUIRE(client.diagnosticPublications.size() == 1);
+    diagnostics.clear(uri);
+    diagnostics.replaceRendered(uri, {value});
+    diagnostics.pushDiags(uri);
+    CHECK(client.diagnosticPublications.size() == 1);
+
+    SECTION("range") {
+        ++value.range.start.character;
+    }
+    SECTION("severity") {
+        value.severity = lsp::DiagnosticSeverity::Warning;
+    }
+    SECTION("code value") {
+        value.code = rfl::Variant<int, std::string>{2};
+    }
+    SECTION("code type") {
+        value.code = rfl::Variant<int, std::string>{std::string("1")};
+    }
+    SECTION("code description") {
+        value.codeDescription->href = URI::fromFile("/tmp/help");
+    }
+    SECTION("source") {
+        value.source = "new source";
+    }
+    SECTION("message") {
+        value.message = "different name";
+    }
+    SECTION("tags") {
+        value.tags.reset();
+    }
+    SECTION("related URI") {
+        value.relatedInformation->front().location.uri = URI::fromFile("/tmp/other");
+    }
+    SECTION("related range") {
+        ++value.relatedInformation->front().location.range.end.character;
+    }
+    SECTION("related message") {
+        value.relatedInformation->front().message = "another declaration";
+    }
+    SECTION("related presence") {
+        value.relatedInformation.reset();
+    }
+    SECTION("data") {
+        value.data = rfl::Generic{std::string("changed")};
+    }
+    SECTION("version only") {
+        diagnostics.setVersion(uri, 2);
+    }
+    diagnostics.replaceRendered(uri, {value});
+    diagnostics.pushDiags();
+    CHECK(client.diagnosticPublications.size() == 2);
+    diagnostics.pushDiags(uri);
+    CHECK(client.diagnosticPublications.size() == 2);
+}
+
+TEST_CASE("Diagnostic deltas preserve repair cancellation and alias retirement",
+          "[diagnostic-delta]") {
+    slang::SourceManager sources;
+    ClientHarness client;
+    server::ServerDiagClient diagnostics(sources, client, true);
+    diagnostics.disableDestructorPublication();
+    const auto physical = URI::fromFile("/tmp/slang-delta-physical.sv");
+    const auto opened = URI::fromFile("/tmp/slang-delta-alias.sv");
+    lsp::Diagnostic error{.range = {{0, 0}, {0, 1}}, .message = "error"};
+    diagnostics.replaceRendered(physical, {error});
+    diagnostics.pushDiags();
+    {
+        auto cancelled = diagnostics.beginUpdate();
+        diagnostics.clear(physical);
+        diagnostics.replaceRendered(physical, {});
+    }
+    diagnostics.pushDiags();
+    CHECK(client.diagnosticPublications.size() == 1);
+    REQUIRE(client.getDiagnostics(physical).size() == 1);
+
+    diagnostics.adoptDocumentUri(physical, opened);
+    diagnostics.setVersion(opened, 1);
+    diagnostics.replaceRendered(opened, {error});
+    diagnostics.pushDiags(opened);
+    REQUIRE(client.diagnosticPublications.size() == 3);
+    CHECK(client.diagnosticPublications[1] == physical);
+    CHECK(client.diagnosticPublications[2] == opened);
+    CHECK(client.getDiagnostics(physical).empty());
+    diagnostics.clear(opened);
+    diagnostics.pushDiags();
+    CHECK(client.getDiagnostics(opened).empty());
+    CHECK(client.diagnosticPublications.size() == 4);
+    diagnostics.clear(opened);
+    diagnostics.pushDiags();
+    CHECK(client.diagnosticPublications.size() == 4);
+    diagnostics.replaceRendered(opened, {error});
+    diagnostics.pushDiags();
+    CHECK(client.diagnosticPublications.size() == 5);
+}
+
+TEST_CASE("Diagnostic delta publication stays off by default", "[diagnostic-delta]") {
+    slang::SourceManager sources;
+    ClientHarness client;
+    server::ServerDiagClient diagnostics(sources, client);
+    diagnostics.disableDestructorPublication();
+    const auto uri = URI::fromFile("/tmp/slang-delta-default.sv");
+    for (int i = 0; i < 2; ++i) {
+        diagnostics.replaceRendered(uri, {});
+        diagnostics.pushDiags();
+    }
+    CHECK(client.diagnosticPublications.size() == 2);
+    CHECK_FALSE(Config{}.experimentalDiagnosticDeltaPublishing.value());
+}
+
+TEST_CASE("Diagnostic deltas ignore ordering but preserve duplicate counts", "[diagnostic-delta]") {
+    slang::SourceManager sources;
+    ClientHarness client;
+    server::ServerDiagClient diagnostics(sources, client, true);
+    diagnostics.disableDestructorPublication();
+    const auto uri = URI::fromFile("/tmp/slang-delta-order.sv");
+    lsp::Diagnostic a{.range = {{0, 0}, {0, 1}}, .message = "a"};
+    auto b = a;
+    b.data = rfl::Generic{std::string("distinct payload, same hash")};
+    diagnostics.replaceRendered(uri, {a, b, a});
+    diagnostics.pushDiags();
+    diagnostics.replaceRendered(uri, {b, a, a});
+    diagnostics.pushDiags();
+    CHECK(client.diagnosticPublications.size() == 1);
+    diagnostics.replaceRendered(uri, {b, a, b});
+    diagnostics.pushDiags();
+    CHECK(client.diagnosticPublications.size() == 2);
+}
+
+TEST_CASE("Diagnostic delta history survives compiler retirement without clearing",
+          "[diagnostic-delta]") {
+    slang::SourceManager sources;
+    ClientHarness client;
+    auto previous = std::make_unique<server::ServerDiagClient>(sources, client, true);
+    const auto uri = URI::fromFile("/tmp/slang-delta-retirement.sv");
+    lsp::Diagnostic error{.range = {{0, 0}, {0, 1}}, .message = "error"};
+    previous->setVersion(uri, 1);
+    previous->replaceRendered(uri, {error});
+    previous->pushDiags();
+    {
+        server::ServerDiagClient failedReplacement(sources, client, true);
+        REQUIRE(failedReplacement.inheritPublications(*previous));
+        CHECK_FALSE(failedReplacement.publishesOnDestruction());
+    }
+    CHECK(client.diagnosticPublications.size() == 1);
+    server::ServerDiagClient replacement(sources, client, true);
+    REQUIRE(replacement.inheritPublications(*previous));
+    replacement.completePublicationHandoff(*previous);
+    previous.reset();
+    CHECK(client.diagnosticPublications.size() == 1);
+    replacement.setVersion(uri, 1);
+    replacement.replaceRendered(uri, {error});
+    replacement.pushDiags();
+    CHECK(client.diagnosticPublications.size() == 1);
+    replacement.setVersion(uri, 2);
+    replacement.pushDiags(uri);
+    CHECK(client.diagnosticPublications.size() == 2);
+    replacement.clearAndPush();
+    CHECK(client.getDiagnostics(uri).empty());
+    CHECK(client.diagnosticPublications.size() == 3);
+}

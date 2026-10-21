@@ -1,14 +1,17 @@
 // SPDX-License-Identifier: MIT
 #include "ast/ScopeBodyCache.h"
 
+#include "ast/ClosedTypeContext.h"
 #include "ast/TrustedUvmLibrary.h"
 #include <algorithm>
 #include <cstdlib>
 #include <fmt/format.h>
+#include <fstream>
 
 #include "slang/ast/ASTVisitor.h"
 #include "slang/ast/symbols/BlockSymbols.h"
 #include "slang/ast/symbols/ParameterSymbols.h"
+#include "slang/diagnostics/DiagnosticEngine.h"
 #include "slang/syntax/SyntaxTree.h"
 
 namespace server {
@@ -36,11 +39,32 @@ struct Bodies : ASTVisitor<Bodies, VisitFlags::Symbols> {
 // declarations. Reconstruct only active generate branches and one concrete loop
 // iteration. Instance arrays and CLI overrides keep the full-context route.
 // Native path, flags, parameter signature and independence are checked again.
-std::optional<std::string> compactContext(const Compilation& current,
+struct BodyContext {
+    std::string source;
+    ClosedTypeContext types;
+    std::string instancePath;
+};
+std::optional<BodyContext> compactContext(const Compilation& current,
                                           const InstanceBodySymbol& body,
                                           const TrustedUvmLibrary& library) {
     if (!current.getOptions().paramOverrides.empty())
         return std::nullopt;
+    if (!current.isInstanceBodyBindContextCompatible())
+        return std::nullopt;
+    if (auto disable = current.getDefaultDisable(body)) {
+        const auto& entries = current.getDefaultDisableMap();
+        auto own = entries.find(&body);
+        if (own == entries.end() || own->second != disable)
+            return std::nullopt;
+    }
+    if (auto clock = current.getDefaultClocking(body)) {
+        auto scope = clock->getParentScope();
+        auto instance = scope ? scope->getContainingInstance() : nullptr;
+        const auto root = body.getHierarchicalPath();
+        if (!instance || (instance->getHierarchicalPath() != root &&
+                          !instance->getHierarchicalPath().starts_with(root + ".")))
+            return std::nullopt;
+    }
     std::vector<const Symbol*> chain;
     const Scope* cursor = &body;
     while (cursor && cursor->asSymbol().kind != SymbolKind::Root) {
@@ -91,6 +115,8 @@ std::optional<std::string> compactContext(const Compilation& current,
                 return name;
         }
     };
+    ClosedTypeContext types;
+    types.fixedOwner = library.compilation.get();
     std::string arguments;
     for (auto parameter : body.getParameters()) {
         if (parameter->symbol.kind == SymbolKind::TypeParameter) {
@@ -98,7 +124,7 @@ std::optional<std::string> compactContext(const Compilation& current,
             if (!value.isOverridden())
                 continue;
             const auto& type = value.targetType.getType();
-            if (parameter->isLocalParam() || !current.isFixedInstanceBodyTypeArgument(type, body))
+            if (parameter->isLocalParam())
                 return std::nullopt;
             auto name = identifier(value.name);
             if (!name)
@@ -106,13 +132,22 @@ std::optional<std::string> compactContext(const Compilation& current,
             // Preserve addressable package typedefs, otherwise spell out the
             // resolved builtin type (including ranges, signedness and state).
             auto scope = type.getParentScope();
-            auto spelling = type.kind == SymbolKind::TypeAlias && scope &&
-                                    scope->asSymbol().kind == SymbolKind::Package
-                                ? type.toString()
-                                : type.getCanonicalType().toString();
+            std::optional<std::string> spelling;
+            if (current.isFixedInstanceBodyTypeArgument(type, body) &&
+                ((type.kind == SymbolKind::TypeAlias && scope &&
+                  scope->asSymbol().kind == SymbolKind::Package) ||
+                 type.getCanonicalType().isSimpleBitVector()))
+                spelling = type.kind == SymbolKind::TypeAlias && scope &&
+                                   scope->asSymbol().kind == SymbolKind::Package
+                               ? type.toString()
+                               : type.getCanonicalType().toString();
+            else
+                spelling = types.add(type);
+            if (!spelling)
+                return std::nullopt;
             if (!arguments.empty())
                 arguments += ",";
-            arguments += fmt::format(".{}({})", *name, spelling);
+            arguments += fmt::format(".{}({})", *name, *spelling);
             continue;
         }
         if (parameter->symbol.kind != SymbolKind::Parameter)
@@ -175,6 +210,8 @@ std::optional<std::string> compactContext(const Compilation& current,
             return std::nullopt;
         const bool last = i + 1 == chain.size();
         auto next = last ? *definition : nextWrapper();
+        if (last)
+            text += types.declarations;
         text += fmt::format("{} {}{} (); ", next,
                             last && !arguments.empty() ? "#(" + arguments + ") " : "", *name);
         while (openBlocks) {
@@ -185,7 +222,7 @@ std::optional<std::string> compactContext(const Compilation& current,
         if (!last)
             text += fmt::format("module {}; ", next);
     }
-    return text;
+    return BodyContext{std::move(text), std::move(types), body.getHierarchicalPath()};
 }
 size_t charge(const Compilation& compilation) {
     size_t bytes = compilation.getTotalBytesAllocated() +
@@ -272,8 +309,15 @@ void ScopeBodyCache::lookup(Compilation& current, InstanceBodySymbol& body) {
 ScopeBodyCache::Stats ScopeBodyCache::status() const {
     auto result = counters;
     result.owners = groups.size();
-    for (const auto& group : groups)
+    for (const auto& group : groups) {
         result.ownerBytes += group.bytes;
+        for (const auto& [path, _] : group.bodies)
+            result.retainedRoots.push_back(path);
+    }
+    std::ranges::sort(result.retainedRoots);
+    result.retainedRoots.erase(std::unique(result.retainedRoots.begin(),
+                                           result.retainedRoots.end()),
+                               result.retainedRoots.end());
     for (const auto& pin : pins)
         if (!pin.owner.expired())
             result.pinnedBytes += pin.bytes;
@@ -362,7 +406,7 @@ void ScopeBodyCache::publish(std::shared_ptr<Compilation> current) {
     if (current->hasFatalErrors())
         return;
     auto& sources = *const_cast<SourceManager*>(current->getSourceManager());
-    auto bind = [&](const std::optional<std::string>& compact, bool inheritedBindTarget = false) {
+    auto bind = [&](const std::optional<BodyContext>& compact, bool inheritedBindTarget = false) {
         ++counters.ownerBuilds;
         auto result = std::make_shared<Compilation>(current->getOptions());
         result->enableInstanceBodyReferenceTracking(/* complete */ true);
@@ -378,15 +422,45 @@ void ScopeBodyCache::publish(std::shared_ptr<Compilation> current) {
             result->importCompilationUnitDeclarations(library->compilation, sources);
         if (compact) {
             auto parseOptions = current->getSyntaxTrees().back()->options();
-            result->addSyntaxTree(syntax::SyntaxTree::fromText(
-                                      *compact, sources, "<scope-cache-context>", "", parseOptions),
+            result->addSyntaxTree(syntax::SyntaxTree::fromText(compact->source, sources,
+                                                               "<scope-cache-context>", "",
+                                                               parseOptions),
                                   true);
         }
         else {
             for (const auto& tree : current->getSyntaxTrees())
                 result->addSyntaxTree(tree, true);
         }
-        (void)result->getSemanticDiagnostics();
+        const auto& ownerDiagnostics = result->getSemanticDiagnostics();
+        if (compact) {
+            if (auto path = std::getenv("SLANG_SCOPE_CONTEXT_TRACE")) {
+                const auto stem = std::filesystem::path(path) /
+                                  fmt::format("context-{}", counters.ownerBuilds);
+                std::ofstream(stem.string() + ".sv") << compact->source;
+                std::ofstream(stem.string() + ".diagnostics")
+                    << DiagnosticEngine::reportAll(sources, ownerDiagnostics);
+            }
+        }
+        if (compact && !compact->types.dependencies.empty()) {
+            Bodies bodies;
+            result->getRoot().visit(bodies);
+            const Scope* scope = nullptr;
+            for (auto body : bodies.values)
+                if (body->getHierarchicalPath() == compact->instancePath && body->parentInstance)
+                    scope = body->parentInstance->getParentScope();
+            if (!scope)
+                return result;
+            for (const auto& dependency : compact->types.dependencies) {
+                auto symbol = scope->find(dependency.name);
+                if (!symbol || !symbol->isType() ||
+                    !result->recordInstanceBodyTypeDependency(symbol->as<Type>(),
+                                                              *dependency.original)) {
+                    if (std::getenv("SLANG_SCOPE_BODY_TRACE"))
+                        fmt::print(stderr, "scope-body closed-type invalid\t{}\n", dependency.name);
+                    return result;
+                }
+            }
+        }
         return result;
     };
     std::vector<Group> staged;
@@ -427,7 +501,7 @@ void ScopeBodyCache::publish(std::shared_ptr<Compilation> current) {
         if (covered)
             return false;
         auto context = compactContext(*current, *body, *library);
-        if (context && rejected(*context))
+        if (context && rejected(context->source))
             return true; // Still consider descendants of a rejected parent.
         // Every independent owner is charged this same source namespace. If
         // pinned owners and this batch leave less than that unavoidable charge,
@@ -458,7 +532,8 @@ void ScopeBodyCache::publish(std::shared_ptr<Compilation> current) {
         }
         const bool certified = current->prepareInstanceBodyReuse(*body);
         const bool promotion = !certified && context &&
-                               current->instanceBodyReuseRequiresFreshOwner(*body);
+                               (current->instanceBodyReuseRequiresFreshOwner(*body) ||
+                                !context->types.dependencies.empty());
         if (!certified && !promotion)
             return true;
         if (!context) {
@@ -489,7 +564,7 @@ void ScopeBodyCache::publish(std::shared_ptr<Compilation> current) {
             if (promotion) {
                 // Failed fresh certification is admission advice only. Bound the
                 // cost across edits without retaining the mixed consumer graph.
-                rememberRejection(*context, stagedBytes);
+                rememberRejection(context->source, stagedBytes);
                 return true;
             }
             if (tryFull()) {
@@ -513,7 +588,7 @@ void ScopeBodyCache::publish(std::shared_ptr<Compilation> current) {
                 return false;
             }
             if (oversized)
-                rememberRejection(*context, stagedBytes);
+                rememberRejection(context->source, stagedBytes);
             return true;
         }
         stagedBytes += group->bytes;

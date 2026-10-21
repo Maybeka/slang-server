@@ -56,8 +56,9 @@ public:
             m_versions.erase(uri);
     }
 
-    ServerDiagClient(const slang::SourceManager& sourceManager, SlangLspClient& client) :
-        m_sourceManager(sourceManager), m_client(client) {
+    ServerDiagClient(const slang::SourceManager& sourceManager, SlangLspClient& client,
+                     bool deltaPublishing = false) :
+        m_deltaPublishing(deltaPublishing), m_sourceManager(sourceManager), m_client(client) {
         m_diagnostics = std::unordered_map<URI, std::vector<lsp::Diagnostic>>();
     }
 
@@ -66,6 +67,22 @@ public:
             clearAndPush();
     }
     void disableDestructorPublication() { m_publishOnDestruction = false; }
+    bool publishesOnDestruction() const { return m_publishOnDestruction; }
+    // Retiring compiler state does not retire the editor's diagnostic snapshot.
+    bool inheritPublications(const ServerDiagClient& previous) {
+        if (!m_deltaPublishing || !previous.m_deltaPublishing)
+            return false;
+        m_publications = previous.m_publications;
+        m_publishOnDestruction = false;
+        return true;
+    }
+    void completePublicationHandoff(ServerDiagClient& previous) {
+        previous.disableDestructorPublication();
+        m_publishOnDestruction = true;
+    }
+    bool sharesPublicationsWith(const ServerDiagClient& previous) const {
+        return m_deltaPublishing && m_publications == previous.m_publications;
+    }
     const auto& renderedDiagnostics() const { return m_diagnostics; }
     // Import only after the owner has validated the complete snapshot generation.
     void replaceRendered(URI uri, std::vector<lsp::Diagnostic> diagnostics) {
@@ -97,6 +114,17 @@ public:
     void clear();
 
 private:
+    struct Published {
+        std::optional<int> version;
+        std::vector<lsp::Diagnostic> diagnostics;
+        std::unordered_multimap<size_t, size_t> index;
+    };
+    bool m_deltaPublishing;
+    struct Publications {
+        std::unordered_map<URI, Published> published;
+        slang::flat_hash_set<URI> nonempty;
+    };
+    std::shared_ptr<Publications> m_publications = std::make_shared<Publications>();
     void publish(const URI& uri, const std::vector<lsp::Diagnostic>& diagnostics);
     void pushClearedDiags();
     URI resolveUri(const URI& uri) const { return m_uriResolver ? m_uriResolver(uri) : uri; }
@@ -111,7 +139,6 @@ private:
     std::unordered_map<URI, std::vector<lsp::Diagnostic>> m_diagnostics;
     // Uris that have modified diags yet to be pushed to the client
     slang::flat_hash_set<URI> m_dirtyUris;
-    slang::flat_hash_set<URI> m_publishedNonemptyUris;
 
     const slang::SourceManager& m_sourceManager;
     SlangLspClient& m_client;
