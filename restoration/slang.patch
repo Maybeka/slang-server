@@ -812,7 +812,7 @@ index bc43d0037063e9e47d7c4fbd85473077d953a4a4..a615af8d1ec98d669140ca8e15bc36cc
  
  } // namespace slang
 diff --git a/include/slang/driver/Driver.h b/include/slang/driver/Driver.h
-index 0f9cff2a3c5865d20a9f6c570e07ab640a1b0f69..c7b61d17ac025fdca531a25694ab4a4bbe03097c 100644
+index 0f9cff2a3c5865d20a9f6c570e07ab640a1b0f69..c013e37384df7bd669134f6ca94abd9813f4d850 100644
 --- a/include/slang/driver/Driver.h
 +++ b/include/slang/driver/Driver.h
 @@ -18,6 +18,7 @@
@@ -841,13 +841,14 @@ index 0f9cff2a3c5865d20a9f6c570e07ab640a1b0f69..c7b61d17ac025fdca531a25694ab4a4b
  
      /// The diagnostics engine that will be used to report diagnostics.
      DiagnosticEngine diagEngine;
-@@ -372,12 +375,20 @@ public:
+@@ -372,12 +375,21 @@ public:
  
          /// Returns true if the lintMode option is provided.
          bool lintMode() const;
 +
 +        /// Embedder-only prefix capture policy; never enabled by command-line defaults.
 +        bool captureUvmPrefix = false;
++        bool trackMacroHistory = false;
 +        std::string uvmPrefixRoot;
      } options;
  
@@ -862,7 +863,7 @@ index 0f9cff2a3c5865d20a9f6c570e07ab640a1b0f69..c7b61d17ac025fdca531a25694ab4a4b
      /// @brief Adds standard command line arguments to the @a cmdLine object.
      ///
      /// If not called, no arguments will be added by default, though the user
-@@ -391,6 +402,7 @@ public:
+@@ -391,6 +403,7 @@ public:
      template<typename TArgs>
      [[nodiscard]] bool parseCommandLine(int argc, TArgs argv,
                                          const CommandLine::ParseOptions& parseOptions = {}) {
@@ -870,7 +871,7 @@ index 0f9cff2a3c5865d20a9f6c570e07ab640a1b0f69..c7b61d17ac025fdca531a25694ab4a4b
          if (!cmdLine.parse(argc, argv, parseOptions)) {
              issueCommandLineErrors(cmdLine);
              return false;
-@@ -454,6 +466,10 @@ public:
+@@ -454,6 +467,10 @@ public:
      [[nodiscard]] Bag createOptionBag() const;
  
      /// Creates an options bag from all of the currently set parse options
@@ -982,7 +983,7 @@ index 0913e369e9dfcbcc41ca5dc07b1892631b767833..e583d9e63c0216e51b815797460ea8c7
  
      static constexpr int MinFilesForThreading = 4;
 diff --git a/include/slang/parsing/Preprocessor.h b/include/slang/parsing/Preprocessor.h
-index 88d571c1a80cd25fdc86c49f3663bbfc57fd3d69..f81977f25ad720ad3cd49df6d83cfb1978c0a7e8 100644
+index 88d571c1a80cd25fdc86c49f3663bbfc57fd3d69..664ac1dd925be8fb9228f3a36fe8f5f04db6981a 100644
 --- a/include/slang/parsing/Preprocessor.h
 +++ b/include/slang/parsing/Preprocessor.h
 @@ -22,6 +22,7 @@
@@ -993,15 +994,19 @@ index 88d571c1a80cd25fdc86c49f3663bbfc57fd3d69..f81977f25ad720ad3cd49df6d83cfb19
  
  struct ConditionalDirectiveExpressionSyntax;
  struct DefineDirectiveSyntax;
-@@ -43,6 +44,7 @@ struct SLANG_EXPORT PreprocessorOptions {
-     /// The maximum depth of the include stack; further attempts to include
+@@ -44,6 +45,11 @@ struct SLANG_EXPORT PreprocessorOptions {
      /// a file will result in an error.
      uint32_t maxIncludeDepth = 1024;
-+    std::filesystem::path precompiledSourceRoot;
  
++    /// Record compact macro deltas and function/task token entry states. Transient;
++    /// callers without this metadata must replay preprocessing as usual.
++    bool trackMacroHistory = false;
++    std::filesystem::path precompiledSourceRoot;
++
      /// The version of the SystemVerilog language to use.
      LanguageVersion languageVersion = LanguageVersion::Default;
-@@ -77,6 +79,18 @@ struct SLANG_EXPORT PreprocessorOptions {
+ 
+@@ -77,6 +83,18 @@ struct SLANG_EXPORT PreprocessorOptions {
      /// module/program/package/class inside an include file with protected code has the
      /// end of scope token inside the protected code.
      bool allowMissingProtectedScopeEnd = false;
@@ -1020,7 +1025,7 @@ index 88d571c1a80cd25fdc86c49f3663bbfc57fd3d69..f81977f25ad720ad3cd49df6d83cfb19
  };
  
  /// Preprocessor - Interface between lexer and parser
-@@ -85,6 +99,8 @@ struct SLANG_EXPORT PreprocessorOptions {
+@@ -85,6 +103,8 @@ struct SLANG_EXPORT PreprocessorOptions {
  /// and macro expansion, and the actual SystemVerilog parser that wants a nice coherent stream
  /// of tokens to consume.
  class SLANG_EXPORT Preprocessor {
@@ -1029,7 +1034,19 @@ index 88d571c1a80cd25fdc86c49f3663bbfc57fd3d69..f81977f25ad720ad3cd49df6d83cfb19
  public:
      Preprocessor(SourceManager& sourceManager, BumpAllocator& alloc, Diagnostics& diagnostics,
                   const Bag& options = {},
-@@ -476,6 +492,8 @@ private:
+@@ -336,6 +356,11 @@ private:
+         bool isTopLevel = false;
+     };
+ 
++    void recordMacroChange(std::string_view name, const syntax::DefineDirectiveSyntax* value) {
++        if (options.trackMacroHistory)
++            metadata.macroChanges.push_back({name, value});
++    }
++
+     // Macro handling methods
+     MacroDef findMacro(Token directive);
+     std::pair<syntax::MacroActualArgumentListSyntax*, Trivia> handleTopLevelMacro(
+@@ -476,6 +501,8 @@ private:
  
      // Directives don't get handled when lexing within a macro body
      // (either define or usage).
@@ -1039,10 +1056,31 @@ index 88d571c1a80cd25fdc86c49f3663bbfc57fd3d69..f81977f25ad720ad3cd49df6d83cfb19
  
      // Special handling for pulling directives when in an ifdef condition expr.
 diff --git a/include/slang/parsing/PreprocessorMetadata.h b/include/slang/parsing/PreprocessorMetadata.h
-index fc3236bf12bc3f64d131decc19c66be949bda1a4..ce4f769274e44cc1acb2229f52c1435eb76fddf3 100644
+index fc3236bf12bc3f64d131decc19c66be949bda1a4..67ef3d91373018654228d19a79829c382f777433 100644
 --- a/include/slang/parsing/PreprocessorMetadata.h
 +++ b/include/slang/parsing/PreprocessorMetadata.h
-@@ -45,6 +45,9 @@ struct SLANG_EXPORT PreprocessorMetadata {
+@@ -33,6 +33,20 @@ struct SLANG_EXPORT MacroRefMetadata {
+ 
+ /// Various bits of metadata collected during preprocessing.
+ struct SLANG_EXPORT PreprocessorMetadata {
++    /// Transient journal; an empty name resets the ordinary macro environment.
++    /// Definitions and names borrow the same retained arenas as definedMacros.
++    struct MacroChange {
++        std::string_view name;
++        const syntax::DefineDirectiveSyntax* definition;
++    };
++    struct SubroutineEntry {
++        SourceLocation location;
++        size_t changes;
++        int keywordVersion;
++    };
++    std::vector<MacroChange> macroChanges;
++    std::vector<SubroutineEntry> subroutineEntries;
++
+     /// The macros that were defined at the end of preprocessing.
+     std::vector<const syntax::DefineDirectiveSyntax*> definedMacros;
+ 
+@@ -45,6 +59,9 @@ struct SLANG_EXPORT PreprocessorMetadata {
      /// The source buffer IDs that were pushed into the preprocessor, in order.
      /// This includes top-level and included source files, but not macro expansion buffers.
      std::vector<BufferID> sourceBufferIds;
@@ -5624,7 +5662,7 @@ index 3fa297e9c399e3143a30eeebacbcd569f3f30159..0eb352284b87411bfd3576392b14b094
      for (auto& [key, formatter] : formatters)
          formatter->startMessage(diag);
 diff --git a/source/driver/Driver.cpp b/source/driver/Driver.cpp
-index d049078b09193791a4dfbc2e7dd89db458bf61f6..4e9fd85d810fb148f7409ecf5003e1100528f4fe 100644
+index d049078b09193791a4dfbc2e7dd89db458bf61f6..45fd119f717c7dcda0495c4a8e41ae101201e55e 100644
 --- a/source/driver/Driver.cpp
 +++ b/source/driver/Driver.cpp
 @@ -26,6 +26,7 @@
@@ -5767,11 +5805,12 @@ index d049078b09193791a4dfbc2e7dd89db458bf61f6..4e9fd85d810fb148f7409ecf5003e110
      SourceOptions soptions;
      soptions.numThreads = options.numThreads;
      soptions.singleUnit = options.singleUnit == true;
-@@ -1177,6 +1206,8 @@ void Driver::addParseOptions(Bag& bag) const {
+@@ -1177,6 +1206,9 @@ void Driver::addParseOptions(Bag& bag) const {
      soptions.librariesInheritMacros = options.librariesInheritMacros == true;
  
      PreprocessorOptions ppoptions;
 +    ppoptions.captureUvmPrefix = options.captureUvmPrefix;
++    ppoptions.trackMacroHistory = options.trackMacroHistory;
 +    ppoptions.uvmPrefixRoot = options.uvmPrefixRoot;
      ppoptions.predefines = options.defines;
      ppoptions.undefines = options.undefines;
@@ -6035,9 +6074,20 @@ index a91519cb4e865e7b578b6f3f458e13cd7a67963e..cd32fd4f81f9fce7e0dd895d91934f91
      }
      SLANG_UNREACHABLE;
 diff --git a/source/parsing/Preprocessor.cpp b/source/parsing/Preprocessor.cpp
-index 5601d7e738142d8a7906fef416c07b9f927543d0..4d36b272104a641c2694b0cb0f65b7d76129ecd1 100644
+index 5601d7e738142d8a7906fef416c07b9f927543d0..63c0d371a2dba93b241a4b4f121f33c13e344e77 100644
 --- a/source/parsing/Preprocessor.cpp
 +++ b/source/parsing/Preprocessor.cpp
+@@ -39,8 +39,8 @@ Preprocessor::Preprocessor(SourceManager& sourceManager, BumpAllocator& alloc,
+     // Add in any inherited macros that aren't already set in our map.
+     for (auto define : inheritedMacros) {
+         auto name = define->name.valueText();
+-        if (!name.empty())
+-            macros.emplace(name, define);
++        if (!name.empty() && macros.emplace(name, define).second)
++            recordMacroChange(name, define);
+     }
+ 
+     // clang-format off
 @@ -99,11 +99,18 @@ void Preprocessor::pushSource(std::string_view source, std::string_view name) {
      pushSource(buffer);
  
@@ -6058,7 +6108,7 @@ index 5601d7e738142d8a7906fef416c07b9f927543d0..4d36b272104a641c2694b0cb0f65b7d7
      metadata.sourceBufferIds.push_back(buffer.id);
  
      if (!options.keywordMapping.empty()) {
-@@ -222,6 +229,13 @@ void Preprocessor::predefine(const std::string& definition, std::string_view nam
+@@ -222,13 +229,21 @@ void Preprocessor::predefine(const std::string& definition, std::string_view nam
          // Nothing to do but keep going.
      }
  
@@ -6072,7 +6122,48 @@ index 5601d7e738142d8a7906fef416c07b9f927543d0..4d36b272104a641c2694b0cb0f65b7d7
      // Look for the macro in the temporary preprocessor's macro map.
      // Any macros found that are not the built-in intrinsic macros should
      // be copied over to our own map.
-@@ -541,6 +555,9 @@ Token Preprocessor::handleDirectives(Token token) {
+     for (auto& pair : pp.macros) {
+         if (!pair.second.isIntrinsic()) {
+             pair.second.commandLine = true;
+-            macros.insert(pair);
++            if (macros.insert(pair).second)
++                recordMacroChange(pair.first, pair.second.syntax);
+         }
+     }
+ }
+@@ -236,6 +251,7 @@ void Preprocessor::predefine(const std::string& definition, std::string_view nam
+ bool Preprocessor::undefine(std::string_view name) {
+     auto it = macros.find(name);
+     if (it != macros.end() && !it->second.isIntrinsic()) {
++        recordMacroChange(it->first, nullptr);
+         macros.erase(it);
+         return true;
+     }
+@@ -243,6 +259,7 @@ bool Preprocessor::undefine(std::string_view name) {
+ }
+ 
+ void Preprocessor::undefineAll() {
++    recordMacroChange({}, nullptr);
+     macros.clear();
+     macros["__FILE__"] = MacroIntrinsic::File;
+     macros["__LINE__"] = MacroIntrinsic::Line;
+@@ -323,7 +340,14 @@ PreprocessorMetadata&& Preprocessor::getMetadata() {
+ }
+ 
+ Token Preprocessor::next() {
+-    return consume();
++    auto token = consume();
++    if (options.trackMacroHistory &&
++        (token.kind == TokenKind::FunctionKeyword || token.kind == TokenKind::TaskKeyword) &&
++        sourceManager.isFileLoc(token.location())) {
++        metadata.subroutineEntries.push_back(
++            {token.location(), metadata.macroChanges.size(), int(getCurrentKeywordVersion())});
++    }
++    return token;
+ }
+ 
+ Token Preprocessor::nextProcessed() {
+@@ -541,6 +565,9 @@ Token Preprocessor::handleDirectives(Token token) {
                  return token.withTrivia(alloc, trivia);
          }
  
@@ -6082,7 +6173,19 @@ index 5601d7e738142d8a7906fef416c07b9f927543d0..4d36b272104a641c2694b0cb0f65b7d7
          token = nextRaw();
      }
  }
-@@ -1130,7 +1147,7 @@ Trivia Preprocessor::handleLineDirective(Token directive) {
+@@ -855,8 +882,10 @@ Trivia Preprocessor::handleDefineDirective(Token directive) {
+         }
+     }
+ 
+-    if (!bad)
++    if (!bad) {
+         macros[name.valueText()] = result;
++        recordMacroChange(name.valueText(), result);
++    }
+     return Trivia(TriviaKind::Directive, result);
+ }
+ 
+@@ -1130,7 +1159,7 @@ Trivia Preprocessor::handleLineDirective(Token directive) {
              // We should only notify the source manager about the line directive if it
              // is well formed, to avoid very strange line number issues.
              sourceManager.addLineDirective(directive.location(), *lineNum, fileName.valueText(),
@@ -6091,6 +6194,26 @@ index 5601d7e738142d8a7906fef416c07b9f927543d0..4d36b272104a641c2694b0cb0f65b7d7
          }
      }
      return Trivia(TriviaKind::Directive, result);
+@@ -1188,6 +1217,7 @@ Trivia Preprocessor::handleUndefDirective(Token directive) {
+                     .syntax = result,
+                     .definition = it->second.syntax,
+                 });
++                recordMacroChange(it->first, nullptr);
+                 macros.erase(it);
+             }
+             else {
+diff --git a/source/parsing/Preprocessor_macros.cpp b/source/parsing/Preprocessor_macros.cpp
+index be9987d808d92b362e7b175eb514861684b71592..b6630daa5c1d569672b3954d93feb5e61ea6da28 100644
+--- a/source/parsing/Preprocessor_macros.cpp
++++ b/source/parsing/Preprocessor_macros.cpp
+@@ -52,6 +52,7 @@ void Preprocessor::createBuiltInMacro(std::string_view name, int value, std::str
+                                                       syntax::TokenList(alloc, body));
+     def.builtIn = true;
+     macros[name] = def;
++    recordMacroChange(name, def.syntax);
+ 
+ #undef NL
+ }
 diff --git a/source/parsing/Preprocessor_pragmas.cpp b/source/parsing/Preprocessor_pragmas.cpp
 index e86c15c68a361c3168d7948e294e33fdbd0b9b92..0a360224ad6ee4611b79e5a8e1191dceb6667bc2 100644
 --- a/source/parsing/Preprocessor_pragmas.cpp
@@ -9822,6 +9945,91 @@ index 322dabb6a2b6442a0a22db9e3e46fce53ab16dfd..45e78f42e2b747c1cf6b56cb5fe70c8b
 +    CHECK(std::count(filtered.begin(), filtered.end(), diag::IntBoolConv) == 2);
 +    CHECK(std::count(filtered.begin(), filtered.end(), diag::UnknownMember) == 1);
 +    CHECK(run(true, true) == filtered);
++}
+diff --git a/tests/unittests/parsing/PreprocessorTests.cpp b/tests/unittests/parsing/PreprocessorTests.cpp
+index 4e4ca233f4636d6d9c48e3b42c51ee0185f0d46c..8e2b1a3d66a1291fd1285a9e7a7a51c2353e826e 100644
+--- a/tests/unittests/parsing/PreprocessorTests.cpp
++++ b/tests/unittests/parsing/PreprocessorTests.cpp
+@@ -2,6 +2,7 @@
+ // SPDX-License-Identifier: MIT
+ 
+ #include "Test.h"
++#include <map>
+ 
+ #include "slang/diagnostics/PreprocessorDiags.h"
+ #include "slang/driver/Driver.h"
+@@ -3735,3 +3736,72 @@ endmodule
+     std::string result = preprocess(text);
+     CHECK(result == expected);
+ }
++
++TEST_CASE("Subroutine entry journal matches the live macro environment", "[preprocessor]") {
++    auto check = [&](bool enabled) {
++        PreprocessorOptions options;
++        options.trackMacroHistory = enabled;
++        options.predefines = {"COMMAND=42", "REMOVED=2"};
++        options.undefines = {"REMOVED"};
++        Preprocessor pp(getSourceManager(), alloc, diagnostics, Bag{options});
++        pp.pushSource(R"(
++`define BEFORE 1
++function int first(); return `BEFORE; endfunction
++`undef BEFORE
++`define BEFORE 2
++`ifdef COMMAND
++  `define SELECTED 3
++`else
++  `define SELECTED 4
++`endif
++`begin_keywords "1800-2012"
++task second(); endtask
++`end_keywords
++`undefineall
++function int third(); return `COMMAND; endfunction
++`define BEFORE 99
++)");
++        std::vector<std::vector<const DefineDirectiveSyntax*>> expected;
++        std::vector<SourceLocation> locations;
++        std::vector<int> versions;
++        for (;;) {
++            auto token = pp.next();
++            if (token.kind == TokenKind::EndOfFile)
++                break;
++            if (token.kind == TokenKind::FunctionKeyword || token.kind == TokenKind::TaskKeyword) {
++                expected.push_back(pp.getDefinedMacros());
++                locations.push_back(token.location());
++                versions.push_back(int(pp.getCurrentKeywordVersion()));
++            }
++        }
++        auto metadata = pp.getMetadata();
++        if (!enabled) {
++            CHECK(metadata.macroChanges.empty());
++            CHECK(metadata.subroutineEntries.empty());
++            return;
++        }
++        REQUIRE(expected.size() == 3);
++        REQUIRE(metadata.subroutineEntries.size() == expected.size());
++        for (size_t i = 0; i < expected.size(); ++i) {
++            const auto& entry = metadata.subroutineEntries[i];
++            CHECK(entry.location == locations[i]);
++            CHECK(entry.keywordVersion == versions[i]);
++            std::map<std::string_view, const DefineDirectiveSyntax*> macros;
++            for (size_t j = 0; j < entry.changes; ++j) {
++                const auto& change = metadata.macroChanges[j];
++                if (change.name.empty())
++                    macros.clear();
++                else if (change.definition)
++                    macros[change.name] = change.definition;
++                else
++                    macros.erase(change.name);
++            }
++            std::vector<const DefineDirectiveSyntax*> actual;
++            for (const auto& [_, definition] : macros)
++                actual.push_back(definition);
++            CHECK(actual == expected[i]);
++        }
++    };
++    check(false);
++    check(true);
 +}
 diff --git a/tests/unittests/parsing/SyntaxPrinterTests.cpp b/tests/unittests/parsing/SyntaxPrinterTests.cpp
 index d7e50037e018017f55b6ee55b273d9c8d20e8baf..41fe2d3f129147155e2885a310638bb0edfcf825 100644

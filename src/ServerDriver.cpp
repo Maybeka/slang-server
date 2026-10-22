@@ -258,10 +258,12 @@ bool ServerDriver::parseAndLoadSources(const std::vector<std::string>& buildfile
                                  !frozen.instances.value().empty()) &&
                                 !std::getenv("SLANG_FROZEN_NATIVE_SEED_DISABLE");
     driver.options.captureUvmPrefix = isUvmPrefixCacheEnabled() || m_captureFrozenNativeSeed;
+    driver.options.trackMacroHistory = m_config.experimentalMethodBodyQueries.value();
     options = driver.createOptionBag();
-    if (m_config.experimentalMethodBodyQueries.value())
+    if (m_config.experimentalMethodBodyQueries.value()) {
         options.insertOrGet<ast::CompilationOptions>().flags |=
             ast::CompilationFlags::TrackSubroutineBodyDependencies;
+    }
     options.set(driver.getAnalysisOptions());
     // Native command files can change cwd and install include paths. Only the
     // subsequent source parse belongs to the immutable diagnostic replay graph.
@@ -2137,17 +2139,19 @@ std::optional<std::string> ServerDriver::getDesignInstancePathAt(const URI& uri,
 
 std::optional<lsp::Hover> ServerDriver::getDocHover(
     const URI& uri, const lsp::Position& position, const lsp::RequestContext& ctx,
-    std::optional<Config::HoverConfig::MacroView> macroView) {
+    std::optional<Config::HoverConfig::MacroView> macroView,
+    std::shared_ptr<ShallowAnalysis> analysis) {
     const auto doc = getDocument(uri);
     if (!doc) {
         return {};
     }
-    auto analysis = doc->getAnalysis(ctx);
+    if (!analysis)
+        analysis = doc->getAnalysis(ctx);
     auto loc = toSourceLocation(analysis->getBuffer(), position, sm);
     if (!loc) {
         return {};
     }
-    auto maybeInfo = getDefinitionInfoAt(uri, position, ctx);
+    auto maybeInfo = getDefinitionInfoAt(uri, position, ctx, analysis);
     if (!maybeInfo) {
         if (s_debugHoversEnabled) {
             // Shows debug info for the token under cursor when debugging.

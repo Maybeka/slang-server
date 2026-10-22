@@ -174,9 +174,12 @@ semantic context in addition to the latest method; its memory cost must be inclu
 in measurements. It is no longer a DTO-only certificate.
 
 Preparation requires an existing current query analysis. It captures the exact
-macro environment by preprocessing the ordered original roots once up to the method
-entry; bundled UVM uses its existing precompiled macro prefix. This cost belongs to
-the first edit. Subsequent edits parse only the selected method. A certificate
+macro environment from a transient change journal recorded during the normal parse.
+The journal stores macro definitions/removals/reset events and function/task keyword
+entry positions, rather than a complete macro-map copy per method. It is enabled
+only with this experiment. Older/restored trees without entry metadata retain the
+ordered-root preprocessing replay; bundled UVM keeps its precompiled macro prefix.
+Both preparation and fallback costs belong to the first edit. Subsequent edits parse only the selected method. A certificate
 accepts at most 64 notifications. Context retirement, configuration / library
 replacement, other document edits and mutable dependency changes invalidate it.
 Explicit immutable library files retain their fixed-dependency / manual-rebuild
@@ -197,9 +200,10 @@ analysis. Runtime side effects outside the local diagnostic boundary use full cu
 Dependency tracking is enabled only with this experiment; the disabled path does
 not scan subroutine dependency scopes.
 
-Only completion, deferred member resolution and definition requests inside the
-selected body use this path. Incomplete macro completion lists, hover and other
-query families keep native behavior. Diagnostics use full current analysis by default.
+Completion, deferred member resolution, definition and eligible hover requests
+inside the selected body use this path. Incomplete macro completion lists and other
+query families keep native behavior. Hover requiring current persistent-value
+or design-driver information also uses native analysis. Diagnostics use full current analysis by default.
 The separate `experimentalMethodBodyDiagnostics` experiment described below can
 update diagnostics for eligible class methods. A body-query hit alone does not
 imply that the diagnostic path was local.
@@ -303,6 +307,36 @@ removing an existing state-changing directive or macro cannot retain its old suf
 
 There is no fixed debounce. First baseline preparation has a visible cost;
 unprimed typing and native fallbacks can still take around a second in CVA6.
-Hover continues through its existing native path. See the
+Hover can use the local path described below. See the
 [Mac diagnostic evaluation](../development/method-body-diagnostic-evaluation.md)
 for measured costs, complete diagnostic oracles, memory and limitations.
+
+
+## Local method-body hover
+
+`experimentalMethodBodyQueries` also enables local `textDocument/hover` and
+`slang.previewHover` within the retained body. There is no additional flag and the
+experiment remains disabled by default. `experimentalMethodBodyDiagnostics` is
+independent; enabling it avoids competing full diagnostics on eligible edits.
+
+Hover uses the same detached semantic index, original lexical context, evaluation
+guard and source projection as definition/completion. Changed local declarations,
+types and fields, inherited methods, system subroutines and macro source/expanded/
+both views keep native rendering. A valid empty hover does not rebuild the design.
+Canceled requests release the projection and retain a reusable context. Requests
+outside the selected body or beyond the existing dependency boundary use native
+analysis.
+
+The private body view has no complete driver graph. Automatic variables are excluded
+from native procedure driver registration; parameters cannot be driven and fields
+are selected through aggregate roots. These values can render locally. A persistent
+value, design signal, connected ref-port value or other unsupported driver target
+requests native analysis, preserving driver source snippets and links instead of
+silently omitting them. This includes ordinary module-task locals with static
+lifetime; automatic module-task locals can use the local path.
+
+Mutable inputs are still validated for each request. This has a visible cost even
+for a repeated hover; an idle native context can answer faster than a local view.
+The [CVA6 hover evaluation](../development/method-body-hover-evaluation.md) separates
+first certification, warm edits, repeated idle requests, retirement and fallback,
+and compares complete public results against native analysis.

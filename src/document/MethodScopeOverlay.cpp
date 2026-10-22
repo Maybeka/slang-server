@@ -553,56 +553,90 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
                     bodyLineSensitiveDeclaration = true;
             }
             phases.mark("body-prepare-context");
-            // Replay preprocessing only once, stopping at the original header. This
-            // captures definitions before this occurrence, including textual includes.
-            macroArena = std::make_unique<BumpAllocator>();
-            Diagnostics diagnostics;
-            auto replayOptions = tree->options();
-            auto preprocessorOptions = replayOptions.getOrDefault<parsing::PreprocessorOptions>();
-            syntax::SyntaxTree::MacroList initialMacros;
-            std::filesystem::path cachedEntry;
-            if (auto compiled = replayOptions.get<syntax::PrecompiledUvmSyntax>();
-                compiled && compiled->tree) {
-                initialMacros = compiled->tree->getDefinedMacros();
-                cachedEntry = compiled->entry.empty() ? compiled->root / "uvm_pkg.sv"
-                                                      : compiled->entry;
-                preprocessorOptions.predefines.clear();
-                preprocessorOptions.undefines.clear();
-                replayOptions.set(preprocessorOptions);
-            }
-            parsing::Preprocessor pp(d.sm, *macroArena, diagnostics, replayOptions, initialMacros);
-            auto roots = tree->getSourceBufferIds();
-            for (auto it = roots.begin(); it != roots.end(); ++it)
-                if (!d.sm.getIncludedFrom(*it) &&
-                    (cachedEntry.empty() || d.sm.getFullPath(*it) != cachedEntry))
-                    pp.pushSource(
-                        SourceBuffer{d.sm.getSourceText(*it), d.sm.getLibraryFor(*it), *it});
-            const auto targetPath = d.sm.getFullPath(occurrence);
-            bool reached = false;
-            size_t replayTokens = 0;
-            for (;;) {
-                if ((replayTokens++ & 1023) == 0)
-                    ctx.checkpoint("method macro environment replay");
-                auto token = pp.next();
-                if (token.kind == parsing::TokenKind::EndOfFile)
-                    break;
-                // Offsets almost always differ. Avoid resolving and copying a
-                // filesystem path for every token of the preceding design.
-                if (token.location().offset() == functionBegin &&
-                    d.sm.isFileLoc(token.location()) &&
-                    d.sm.getFullPath(token.location().buffer()) == targetPath) {
-                    reached = true;
-                    break;
+            const auto& history = tree->getPreprocessorMetadata();
+            const auto header = selected->prototype->keyword.location();
+            const parsing::PreprocessorMetadata::SubroutineEntry* entry = nullptr;
+            for (const auto& candidate : history.subroutineEntries)
+                if (candidate.location == header) {
+                    need(!entry, "ambiguous method macro entry");
+                    entry = &candidate;
                 }
+            if (entry) {
+                need(entry->changes <= history.macroChanges.size(), "invalid macro entry journal");
+                std::map<std::string_view, const syntax::DefineDirectiveSyntax*> macros;
+                for (size_t i = 0; i < entry->changes; ++i) {
+                    if ((i & 1023) == 0)
+                        ctx.checkpoint("method macro environment journal");
+                    const auto& change = history.macroChanges[i];
+                    if (change.name.empty())
+                        macros.clear();
+                    else if (change.definition)
+                        macros[change.name] = change.definition;
+                    else
+                        macros.erase(change.name);
+                }
+                std::vector<BufferID> pins;
+                for (const auto& [_, definition] : macros) {
+                    bodyMacros.push_back(definition);
+                    pins.push_back(definition->name.location().buffer());
+                }
+                bodyKeywordVersion = entry->keywordVersion;
+                macroPins = d.sm.retainBuffers(pins);
             }
-            need(reached, "method preprocessing context unavailable");
-            bodyMacros = pp.getDefinedMacros();
-            bodyKeywordVersion = int(pp.getCurrentKeywordVersion());
-            auto metadata = pp.getMetadata();
-            auto pins = metadata.sourceBufferIds;
-            for (auto macro : bodyMacros)
-                pins.push_back(macro->name.location().buffer());
-            macroPins = d.sm.retainBuffers(pins);
+            else {
+                // Replay preprocessing only once, stopping at the original header. This
+                // captures definitions before this occurrence, including textual includes.
+                macroArena = std::make_unique<BumpAllocator>();
+                Diagnostics diagnostics;
+                auto replayOptions = tree->options();
+                auto preprocessorOptions =
+                    replayOptions.getOrDefault<parsing::PreprocessorOptions>();
+                syntax::SyntaxTree::MacroList initialMacros;
+                std::filesystem::path cachedEntry;
+                if (auto compiled = replayOptions.get<syntax::PrecompiledUvmSyntax>();
+                    compiled && compiled->tree) {
+                    initialMacros = compiled->tree->getDefinedMacros();
+                    cachedEntry = compiled->entry.empty() ? compiled->root / "uvm_pkg.sv"
+                                                          : compiled->entry;
+                    preprocessorOptions.predefines.clear();
+                    preprocessorOptions.undefines.clear();
+                    replayOptions.set(preprocessorOptions);
+                }
+                parsing::Preprocessor pp(d.sm, *macroArena, diagnostics, replayOptions,
+                                         initialMacros);
+                auto roots = tree->getSourceBufferIds();
+                for (auto it = roots.begin(); it != roots.end(); ++it)
+                    if (!d.sm.getIncludedFrom(*it) &&
+                        (cachedEntry.empty() || d.sm.getFullPath(*it) != cachedEntry))
+                        pp.pushSource(
+                            SourceBuffer{d.sm.getSourceText(*it), d.sm.getLibraryFor(*it), *it});
+                const auto targetPath = d.sm.getFullPath(occurrence);
+                bool reached = false;
+                size_t replayTokens = 0;
+                for (;;) {
+                    if ((replayTokens++ & 1023) == 0)
+                        ctx.checkpoint("method macro environment replay");
+                    auto token = pp.next();
+                    if (token.kind == parsing::TokenKind::EndOfFile)
+                        break;
+                    // Offsets almost always differ. Avoid resolving and copying a
+                    // filesystem path for every token of the preceding design.
+                    if (token.location().offset() == functionBegin &&
+                        d.sm.isFileLoc(token.location()) &&
+                        d.sm.getFullPath(token.location().buffer()) == targetPath) {
+                        reached = true;
+                        break;
+                    }
+                }
+                need(reached, "method preprocessing context unavailable");
+                bodyMacros = pp.getDefinedMacros();
+                bodyKeywordVersion = int(pp.getCurrentKeywordVersion());
+                auto metadata = pp.getMetadata();
+                auto pins = metadata.sourceBufferIds;
+                for (auto macro : bodyMacros)
+                    pins.push_back(macro->name.location().buffer());
+                macroPins = d.sm.retainBuffers(pins);
+            }
             phases.mark("body-prepare-macros");
         }
     }
@@ -1500,6 +1534,27 @@ std::optional<std::vector<lsp::LocationLink>> MethodScopeOverlay::define(
     ctx.checkpoint("before method definition response");
     return std::vector<lsp::LocationLink>{
         {.targetUri = uri, .targetRange = target, .targetSelectionRange = target}};
+}
+catch (const lsp::RequestCancelled&) {
+    throw;
+}
+catch (const std::exception&) {
+    return {};
+}
+
+std::optional<std::optional<lsp::Hover>> MethodScopeOverlay::hover(
+    const URI& target, const lsp::Position& position, const Config& config,
+    const lsp::RequestContext& ctx, std::optional<Config::HoverConfig::MacroView> view) try {
+    if (!generalBody || !accepted || target != uri || !valid(config, ctx) || !generalSite(position))
+        return {};
+    ensureGeneralBinding(config, ctx);
+    ast::BodyQueryEvaluationGuard guard(bodyBlocked);
+    BodySourceProjection projection(driver->sm, driver->getDocument(uri)->getBuffer(),
+                                    miniAnalysis->getBuffer(), originalBodyEnd, bodyEnd,
+                                    bodyBufferLimit);
+    auto result = driver->getDocHover(uri, position, ctx, view, miniAnalysis);
+    ctx.checkpoint("before method hover response");
+    return std::optional<std::optional<lsp::Hover>>(std::in_place, std::move(result));
 }
 catch (const lsp::RequestCancelled&) {
     throw;

@@ -246,6 +246,19 @@ const analysis::AnalysisManager* ShallowCompilation::getAnalysisManager() {
 
 std::vector<const analysis::ValueDriver*> ShallowCompilation::getDrivers(
     const ast::ValueSymbol& symbol) {
+    if (m_bodyQueryOwner) {
+        // Native procedure analysis does not register automatic variables as
+        // value drivers. Fields are selected through their aggregate root and
+        // parameters cannot be driven. All other values require a current
+        // design-wide driver graph, which the private body view cannot supply.
+        if (auto variable = symbol.as_if<ast::VariableSymbol>();
+            variable && variable->lifetime == ast::VariableLifetime::Automatic &&
+            !symbol.isConnectedToRefPort())
+            return {};
+        if (symbol.kind == ast::SymbolKind::Field || ast::ParameterSymbol::isKind(symbol.kind))
+            return {};
+        throw std::logic_error("body hover requires current native driver information");
+    }
     if (!m_sourceInstances.empty())
         return m_activeDesign->getAnalysis().getDrivers(symbol);
     if (m_activeDesign) {

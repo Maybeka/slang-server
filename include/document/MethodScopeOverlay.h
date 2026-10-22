@@ -35,6 +35,10 @@ public:
                                                              const lsp::RequestContext&);
     std::optional<std::vector<lsp::LocationLink>> define(const lsp::DefinitionParams&,
                                                          const Config&, const lsp::RequestContext&);
+    // Outer nullopt requests native fallback; inner nullopt is a valid empty hover.
+    std::optional<std::optional<lsp::Hover>> hover(
+        const URI&, const lsp::Position&, const Config&, const lsp::RequestContext&,
+        std::optional<Config::HoverConfig::MacroView> = {});
     std::optional<lsp::CompletionItem> resolve(const lsp::CompletionItem&, const Config&,
                                                const lsp::RequestContext&);
     std::optional<ServerDriver::DiagnosticSnapshot> diagnostics(const Config&,

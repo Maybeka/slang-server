@@ -1,0 +1,282 @@
+{
+  "binarySha256": "8f4d096f62438e63b7453adda48fd397acf50d02672b20660d0f1ed1714078cf",
+  "previousBinarySha256": "cdd21786757b34a35057093ef821a17c0ab4917d1def571d6104fadb1ce1ff2d",
+  "baseCommit": "8dc0d4fadae3391f81cfd50720437d3c28b56745",
+  "experimentDefault": false,
+  "debounceAdded": false,
+  "completeDiagnosticUris": 612,
+  "primaryStates": 126,
+  "uvmSource": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/body-diagnostics-2026-10-22/install/share/slang-server/uvm/1.2/src",
+  "tests": {
+    "ctest": 779,
+    "python": 17,
+    "transport": 43,
+    "hoverCases": 2,
+    "hoverAssertions": 147,
+    "macroJournalCases": 1,
+    "macroJournalAssertions": 16
+  },
+  "latency": [
+    {
+      "mode": "native",
+      "order": "hover_first",
+      "firstEditToHoverMs": 746.821792,
+      "firstCompletionMs": 1.13075,
+      "firstDiagnosticCertificateEditToHoverMs": 761.989292,
+      "firstDiagnosticCertificateCompletionMs": 1.118959,
+      "sameWarmEditToHoverMs": 1417.0394165000002,
+      "sameWarmHoverRequestMs": 1416.6750835,
+      "sameWarmDiagnosticWindowMs": 1058.763208,
+      "sameWarmRepeatMs": 0.2285835,
+      "fallbackEditToHoverMs": 676.330333,
+      "sevenEditToHoverSumMs": 6635.659792,
+      "setupThroughInitialDiagnosticsMs": 3276.0385
+    },
+    {
+      "mode": "previous",
+      "order": "hover_first",
+      "firstEditToHoverMs": 1155.32375,
+      "firstCompletionMs": 19.0005,
+      "firstDiagnosticCertificateEditToHoverMs": 887.193834,
+      "firstDiagnosticCertificateCompletionMs": 17.721084,
+      "sameWarmEditToHoverMs": 774.6704165,
+      "sameWarmHoverRequestMs": 774.5053545,
+      "sameWarmDiagnosticWindowMs": 848.726666,
+      "sameWarmRepeatMs": 0.238625,
+      "fallbackEditToHoverMs": 740.692584,
+      "sevenEditToHoverSumMs": 6563.254252,
+      "setupThroughInitialDiagnosticsMs": 3357.445292
+    },
+    {
+      "mode": "local",
+      "order": "hover_first",
+      "firstEditToHoverMs": 119.117458,
+      "firstCompletionMs": 16.283792,
+      "firstDiagnosticCertificateEditToHoverMs": 189.632625,
+      "firstDiagnosticCertificateCompletionMs": 18.105167,
+      "sameWarmEditToHoverMs": 55.3761035,
+      "sameWarmHoverRequestMs": 55.222562499999995,
+      "sameWarmDiagnosticWindowMs": 197.73145799999998,
+      "sameWarmRepeatMs": 16.836396,
+      "fallbackEditToHoverMs": 725.693875,
+      "sevenEditToHoverSumMs": 1236.60829,
+      "setupThroughInitialDiagnosticsMs": 3407.073
+    },
+    {
+      "mode": "native",
+      "order": "completion_then_hover",
+      "firstEditToHoverMs": 735.822417,
+      "firstCompletionMs": 673.816375,
+      "firstDiagnosticCertificateEditToHoverMs": 723.7755,
+      "firstDiagnosticCertificateCompletionMs": 661.805792,
+      "sameWarmEditToHoverMs": 1312.0140415,
+      "sameWarmHoverRequestMs": 64.330292,
+      "sameWarmDiagnosticWindowMs": 988.591021,
+      "sameWarmRepeatMs": 0.2148545,
+      "fallbackEditToHoverMs": 681.884959,
+      "sevenEditToHoverSumMs": 6329.4677090000005,
+      "setupThroughInitialDiagnosticsMs": 3349.130375
+    },
+    {
+      "mode": "previous",
+      "order": "completion_then_hover",
+      "firstEditToHoverMs": 1080.261708,
+      "firstCompletionMs": 366.707667,
+      "firstDiagnosticCertificateEditToHoverMs": 962.860167,
+      "firstDiagnosticCertificateCompletionMs": 187.755625,
+      "sameWarmEditToHoverMs": 851.5331665,
+      "sameWarmHoverRequestMs": 787.4717295,
+      "sameWarmDiagnosticWindowMs": 903.5727085,
+      "sameWarmRepeatMs": 0.254958,
+      "fallbackEditToHoverMs": 717.361291,
+      "sevenEditToHoverSumMs": 6912.273416,
+      "setupThroughInitialDiagnosticsMs": 3424.75225
+    },
+    {
+      "mode": "local",
+      "order": "completion_then_hover",
+      "firstEditToHoverMs": 134.688042,
+      "firstCompletionMs": 116.126166,
+      "firstDiagnosticCertificateEditToHoverMs": 193.405125,
+      "firstDiagnosticCertificateCompletionMs": 178.499625,
+      "sameWarmEditToHoverMs": 64.6405415,
+      "sameWarmHoverRequestMs": 14.718125,
+      "sameWarmDiagnosticWindowMs": 171.25656249999997,
+      "sameWarmRepeatMs": 14.383604,
+      "fallbackEditToHoverMs": 690.778291,
+      "sevenEditToHoverSumMs": 1269.064789,
+      "setupThroughInitialDiagnosticsMs": 3358.781625
+    }
+  ],
+  "typing": {
+    "warm": [
+      {
+        "mode": "native",
+        "successful": 36,
+        "cancelled": 0,
+        "latestQueryMedianMs": 11732.50675,
+        "successfulQueryMedianMs": 6734.561063,
+        "successfulQueryMaxMs": 11734.431375,
+        "finalFiles": 612
+      },
+      {
+        "mode": "previous",
+        "successful": 3,
+        "cancelled": 33,
+        "latestQueryMedianMs": 1108.652584,
+        "successfulQueryMedianMs": 1108.652584,
+        "successfulQueryMaxMs": 1427.415,
+        "finalFiles": 612
+      },
+      {
+        "mode": "local",
+        "successful": 36,
+        "cancelled": 0,
+        "latestQueryMedianMs": 46.5705,
+        "successfulQueryMedianMs": 49.274042,
+        "successfulQueryMaxMs": 96.22475,
+        "finalFiles": 612
+      }
+    ],
+    "cold": [
+      {
+        "mode": "native",
+        "successful": 36,
+        "cancelled": 0,
+        "latestQueryMedianMs": 10033.508625,
+        "successfulQueryMedianMs": 5247.334145999999,
+        "successfulQueryMaxMs": 10425.317875,
+        "finalFiles": 612
+      },
+      {
+        "mode": "previous",
+        "successful": 3,
+        "cancelled": 33,
+        "latestQueryMedianMs": 989.678958,
+        "successfulQueryMedianMs": 989.678958,
+        "successfulQueryMaxMs": 1126.442583,
+        "finalFiles": 612
+      },
+      {
+        "mode": "local",
+        "successful": 9,
+        "cancelled": 27,
+        "latestQueryMedianMs": 1171.679708,
+        "successfulQueryMedianMs": 86.853625,
+        "successfulQueryMaxMs": 1180.012584,
+        "finalFiles": 612
+      }
+    ]
+  },
+  "completionOnlyStates": 42,
+  "completionOnly": [
+    {
+      "localDiagnostics": false,
+      "warmQueryMs": 519.2021465,
+      "warmDiagnosticWindowMs": 1123.1296255,
+      "firstQueryMs": 111.684083
+    },
+    {
+      "localDiagnostics": true,
+      "warmQueryMs": 56.3308745,
+      "warmDiagnosticWindowMs": 112.83435449999999,
+      "firstQueryMs": 102.633
+    }
+  ],
+  "completionPairedStates": 42,
+  "completionPaired": [
+    {
+      "mode": "previous",
+      "firstQueryMs": 400.583792,
+      "warmQueryMs": 54.251604,
+      "warmDiagnosticWindowMs": 107.9925415
+    },
+    {
+      "mode": "local",
+      "firstQueryMs": 115.6615,
+      "warmQueryMs": 53.670958,
+      "warmDiagnosticWindowMs": 106.22120849999999
+    }
+  ],
+  "memoryStates": 42,
+  "memory": [
+    {
+      "mode": "native",
+      "peakRssMiB": 1385.1171875,
+      "peakFootprintMiB": 1153.5717544555664,
+      "sessions": 2
+    },
+    {
+      "mode": "previous",
+      "peakRssMiB": 1627.3359375,
+      "peakFootprintMiB": 1345.7438354492188,
+      "sessions": 2
+    },
+    {
+      "mode": "local",
+      "peakRssMiB": 1263.765625,
+      "peakFootprintMiB": 1023.9622192382812,
+      "sessions": 2
+    }
+  ],
+  "macroMechanism": {
+    "previousReplayUs": [
+      284795,
+      241684,
+      216864,
+      257652
+    ],
+    "currentRestoreUs": {
+      "install-smoke": [
+        87
+      ],
+      "external-smoke": [
+        85
+      ]
+    },
+    "separateFromLatencyQualification": true
+  },
+  "sdkReplay": {
+    "base": "151a801ceaf6faf23d79a42d210ff67e50eb4660",
+    "patchSha256": "7bb939fa62fde799c98de6498e7a9b13b9831a1a8153d449a532a3b092bedebf",
+    "filesVerified": 709,
+    "archiveExportSubstRestoredFromGit": [
+      ".git_archival.txt"
+    ],
+    "passed": true
+  },
+  "installedSmoke": {
+    "default": true,
+    "explicitSource": true
+  },
+  "artifacts": {
+    "completion-paired.json": "2a28a209475d402061cff123b38086a03d027dc7a382a3810d6ad753116200ff",
+    "completion-paired.py": "e182f04c958582db166465776a20a542e67715db06858bdc4975d10fcb072cd5",
+    "qualified.json": "938571f3b71cc1ed054854a99e4027b4142edef9831b61b873850dca8809f7cb",
+    "completion-diagnostics.json": "16822fc4ba1aead5e47cae9675735add5af238fc0b9cd45f63a672252803e659",
+    "memory.json": "b10e9a0491fa098fdb5e3b2aa456c2ae57b58190e450642cbdd83c3bd9b139fa",
+    "ctest-qualified.log": "e8abd6c76f2ec82df63dc0993457068d3923c0fa987368638ddd2ba8fd3085d7",
+    "pytest-qualified.log": "e59f4ab0d75a66853b1ba0fb97921ff76ced24cb55b3e4b9dab628e0e332d4b7",
+    "transport.log": "aeb54e84e5253e137ced8036fbd14afdad303a41ba400118cb5c7429191082db",
+    "hover-test-qualified.log": "55a93a632157b6e6bd2c2030a79ebaa003e91cf14dfed618fc78c15d5e20aea8",
+    "sdk-journal.log": "cdb50ec83ac28f98111d962c7c76e8d85cb89baa4eb9f363f865f049bd0c25d8",
+    "sdk-replay.json": "9dbbe78fc2155f5433649730408f2752ca1fbffeae5a0044be09ce7f5ace060f",
+    "install-smoke.json": "cf4e452a9b36097c47780d5cd5b8d1757306a93c125d1f64ae54c090916b014b",
+    "external-smoke.json": "1b1f437b58be59a2bf1bbb24f81bddc800f7a62386b6758c10b4c26e14dd24a9",
+    "install-smoke.phases.tsv": "cd832aeb8de35d1238055544b40e2d75faa92ddcd82ca6c8bfdeed119ff8b14b",
+    "external-smoke.phases.tsv": "75a208de3b47a9c40715b87e3be9c6691cec276b05dd68f37a1aa0ae722ec4fc",
+    "pilot-shared.phases.tsv": "92fc5afe9306956673504f3052057cf7cbc11e92e7ab4161f2c7215f22eacf1e",
+    "pilot-shared.json": "8ff1404ed7699fc39a53d1d6e01de36c5feddf8137128e533981ed9938bff49e",
+    "pilot-path-only-mismatch.json": "f333aaec4476387e7d2db22861e0fe90386f98930cf436e8c5e6170a99c603fe",
+    "measure.py": "4451fa827a596258e843c3dc3c4744b228b2fbbd0f54fd47e275cac3e616ba76",
+    "typing.py": "dd52259815e8e1474e4802a0eabdf306bb29627aa1bca7422af097a8c79e9122",
+    "install-smoke.py": "0837806a3a5bd5e6e25082b40f244834d29c1ca35aa48e39bad08e6b3e231bc2",
+    "sdk-restore-check.py": "1d7fcb19342eea4b9e30f9861ccc9a351529ed6fea6a5aaebcaf591247638085",
+    "typing-warm-1.json": "1ca2c41d61c99ad0b931d42e08693c28fba4e389ec35859f6809209dedf01b31",
+    "typing-warm-2.json": "f0734d54facb4b98d8f8b3c50f5368ae8649511321399d7318ff3f1d44c64df5",
+    "typing-warm-3.json": "25ce588882351aac9145baba8f7534e47599b5006398755717b2af3f153eeafe",
+    "typing-cold-1.json": "41c728340247a73861973490c5939e75c5eaaa5af837ec3cd85f498fec371aed",
+    "typing-cold-2.json": "ab15a67aba446fc0a38ac1f21c23a987988f504a31787e29285dedb215fc69d9",
+    "typing-cold-3.json": "8ad4cfdd6251006f17fa647bd07bc7b865b9c26287f19c0f5625e6019d5459f8"
+  }
+}

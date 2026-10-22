@@ -1484,6 +1484,13 @@ rfl::Variant<lsp::Definition, std::vector<lsp::DefinitionLink>, std::monostate> 
 
 std::optional<lsp::Hover> SlangServer::getDocHover(const lsp::HoverParams& params,
                                                    lsp::RequestContext ctx) {
+    ensureMethodScopeDriver();
+    if (m_methodScope) {
+        if (auto hover = m_methodScope->hover(params.textDocument.uri, params.position, m_config,
+                                              ctx))
+            return std::move(*hover);
+        m_methodScope.reset();
+    }
     return m_driver->getDocHover(params.textDocument.uri, params.position, ctx);
 }
 
@@ -1499,6 +1506,13 @@ std::optional<lsp::Hover> SlangServer::previewHover(const PreviewHoverArgs& args
         view = View::both;
     else
         throw lsp::RequestFailed("macroView must be source, expanded or both");
+    ensureMethodScopeDriver();
+    if (m_methodScope) {
+        if (auto hover = m_methodScope->hover(args.textDocument.uri, args.position, m_config, ctx,
+                                              view))
+            return std::move(*hover);
+        m_methodScope.reset();
+    }
     return m_driver->getDocHover(args.textDocument.uri, args.position, ctx, view);
 }
 

@@ -274,7 +274,8 @@ public:
     /// @return Optional hover information, or nullopt if none available
     std::optional<lsp::Hover> getDocHover(
         const URI& uri, const lsp::Position& position, const lsp::RequestContext& ctx = {},
-        std::optional<Config::HoverConfig::MacroView> macroView = {});
+        std::optional<Config::HoverConfig::MacroView> macroView = {},
+        std::shared_ptr<ShallowAnalysis> analysis = {});
 
     /// @brief Gets highlight positions for a symbol and all its references in a document
     /// @param uri The URI of the document

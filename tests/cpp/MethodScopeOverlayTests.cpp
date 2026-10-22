@@ -1593,3 +1593,131 @@ TEST_CASE("Local diagnostics distinguish untyped generic value widths",
     CHECK(result.localDiagnosticUpdates == 0);
     checkNativeDiagnostics(workspace, server, text);
 }
+
+TEST_CASE("Local hover matches native values and macro views without rebuilding the document",
+          "[method-body][general-body][body-hover]") {
+    Workspace workspace;
+    bodyConfig(workspace);
+    workspace.write(
+        "owner.sv",
+        "`define VALUE 7\n`define SUM(x) ((x) + `VALUE)\npackage owner;\n`include \"item.svh\"\n"
+        "`undef VALUE\n`define VALUE missing_suffix_value\nendpackage\n");
+    const std::string original =
+        "class Base; int field; function int read(); return field; endfunction endclass\n"
+        "class C extends Base;\nfunction int run(input int arg);\n"
+        " int local_value = `SUM(1);\n return local_value + read() + arg;\n"
+        "endfunction\nendclass\n";
+    workspace.write("item.svh", original);
+    struct Probe {
+        size_t offset;
+        std::string view;
+    };
+    std::vector<std::string> actual;
+    std::vector<Probe> probes;
+    auto text = original;
+    text.replace(text.find("`SUM(1)"), 7, "`SUM(3)");
+    text.replace(text.find(" int local_value"), 16, " longint local_value");
+    text.insert(text.find(" return local_value"), " // added line\n");
+    probes = {{text.find("return local_value") + 9, ""},
+              {text.find("read() + arg") + 1, ""},
+              {text.find("read() + arg") + 10, ""},
+              {text.find("// added line") + 4, ""}};
+    for (auto view : {"source", "expanded", "both"})
+        probes.push_back({text.find("`SUM") + 2, view});
+    auto hover = [&](ServerHarness& s, DocumentHandle& doc, const Probe& probe) {
+        if (probe.view.empty())
+            return rfl::json::write(s.getDocHover(
+                {.textDocument = {.uri = doc.m_uri}, .position = doc.getPosition(probe.offset)}));
+        return rfl::json::write(s.previewHover({.textDocument = {.uri = doc.m_uri},
+                                                .position = doc.getPosition(probe.offset),
+                                                .macroView = probe.view}));
+    };
+    {
+        ServerHarness server(workspace.params());
+        auto doc = server.openFile("item.svh", original);
+        doc.doc->getAnalysis();
+        lsp::RequestContext ctx("textDocument/didChange", 17);
+        bool journal = false;
+        ctx.setCheckpointObserverForTesting([&](std::string_view at) {
+            if (at == "method macro environment journal")
+                journal = true;
+            CHECK(at != "method macro environment replay");
+        });
+        change(server, doc.m_uri, 2, text, ctx);
+        doc.m_text = text;
+        REQUIRE(journal);
+        REQUIRE(state(server).active);
+        CHECK_FALSE(doc.doc->hasAnalysis());
+        for (const auto& probe : probes) {
+            actual.push_back(hover(server, doc, probe));
+            CHECK(state(server).active);
+            CHECK_FALSE(doc.doc->hasAnalysis());
+        }
+        CHECK(actual[0].find("longint") != std::string::npos);
+        CHECK(actual[3] == "null");
+        CHECK(actual[4].find("SUM(3)") != std::string::npos);
+        lsp::RequestContext canceled("textDocument/hover", 18);
+        canceled.setCheckpointObserverForTesting([&](std::string_view at) {
+            if (at == "before method hover response")
+                canceled.cancel();
+        });
+        CHECK_THROWS_AS(server.getDocHover({.textDocument = {.uri = doc.m_uri},
+                                            .position = doc.getPosition(probes[0].offset)},
+                                           canceled),
+                        lsp::RequestCancelled);
+        CHECK(state(server).active);
+        CHECK(hover(server, doc, probes[0]) == actual[0]);
+    }
+    bodyConfig(workspace, false);
+    ServerHarness native(workspace.params());
+    auto oracle = native.openFile("item.svh", text);
+    for (size_t i = 0; i < probes.size(); ++i)
+        CHECK(hover(native, oracle, probes[i]) == actual[i]);
+}
+
+TEST_CASE("Local hover preserves local type and field values in package functions and module tasks",
+          "[method-body][general-body][body-hover]") {
+    for (int context : {0, 1, 2}) {
+        const bool module = context != 0, local = context != 2;
+        DYNAMIC_SECTION(context) {
+            Workspace workspace;
+            bodyConfig(workspace);
+            const std::string original =
+                (module ? (local ? "module M; task automatic run(input int arg);\n"
+                                 : "module M; task run(input int arg);\n")
+                        : "function automatic int run(input int arg);\n") +
+                std::string(" typedef struct packed { logic [7:0] value; } payload_t;\n"
+                            " payload_t payload;\n payload.value = arg;\n") +
+                (module ? "endtask endmodule\n" : "return payload.value; endfunction\n");
+            workspace.write("item.svh", original);
+            auto text = original;
+            text.replace(text.find("[7:0]"), 5, "[15:0]");
+            std::vector<std::string> actual;
+            const std::vector<size_t> offsets{text.find("payload.value =") + 2,
+                                              text.find("payload.value =") + 10};
+            {
+                ServerHarness server(workspace.params());
+                auto doc = server.openFile("item.svh", original);
+                doc.doc->getAnalysis();
+                change(server, doc.m_uri, 2, text);
+                doc.m_text = text;
+                REQUIRE(state(server).active);
+                for (auto offset : offsets) {
+                    actual.push_back(rfl::json::write(
+                        server.getDocHover({.textDocument = {.uri = doc.m_uri},
+                                            .position = doc.getPosition(offset)})));
+                    CHECK(actual.back() != "null");
+                    CHECK(state(server).active == local);
+                    CHECK(doc.doc->hasAnalysis() == !local);
+                }
+            }
+            bodyConfig(workspace, false);
+            ServerHarness native(workspace.params());
+            auto doc = native.openFile("item.svh", text);
+            for (size_t i = 0; i < offsets.size(); ++i)
+                CHECK(actual[i] == rfl::json::write(native.getDocHover(
+                                       {.textDocument = {.uri = doc.m_uri},
+                                        .position = doc.getPosition(offsets[i])})));
+        }
+    }
+}
