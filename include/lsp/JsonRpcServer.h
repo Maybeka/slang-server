@@ -166,19 +166,49 @@ protected:
         return params->textDocument.uri.str();
     }
 
+    // Only position queries whose input belongs to one document can be
+    // superseded this way. Commands and workspace queries retain their order.
+    std::optional<std::string> getDocumentQueryKey(const RpcRequest& request) const {
+        if (!request.id || !request.params ||
+            (request.method != "textDocument/completion" &&
+             request.method != "textDocument/hover" &&
+             request.method != "textDocument/definition" &&
+             request.method != "textDocument/signatureHelp"))
+            return {};
+        auto object = request.params->to_object();
+        if (!object)
+            return {};
+        for (const auto& [key, value] : *object)
+            if (key == "textDocument") {
+                auto document = rfl::from_generic<TextDocumentIdentifier>(value);
+                return document ? std::optional(document->uri.str()) : std::nullopt;
+            }
+        return {};
+    }
+
     void registerContext(const RpcRequest& request, const RequestContext& ctx) {
         if (!request.id && !ctx.supportsCancellation())
             return;
 
         std::lock_guard lock(cancellationMutex);
-        if (request.id)
+        if (request.id) {
             activeRequests.insert_or_assign(*request.id, ctx);
+            if (m_cancelObsoleteDocumentQueries.load(std::memory_order_relaxed) &&
+                ctx.supportsCancellation())
+                if (auto key = getDocumentQueryKey(request))
+                    pendingDocumentQueries[*key].insert_or_assign(*request.id, ctx);
+        }
 
         if (ctx.supportsCancellation()) {
             auto key = getDidChangeKey(request);
             if (!key)
                 return;
 
+            if (m_cancelObsoleteDocumentQueries.load(std::memory_order_relaxed))
+                if (auto queries = pendingDocumentQueries.find(*key);
+                    queries != pendingDocumentQueries.end())
+                    for (const auto& [_, query] : queries->second)
+                        query.cancelForContentChange();
             auto it = pendingDocumentChanges.find(*key);
             if (it != pendingDocumentChanges.end() && it->second.id() != ctx.id())
                 it->second.cancel();
@@ -195,6 +225,15 @@ protected:
             auto it = activeRequests.find(*request.id);
             if (it != activeRequests.end() && it->second.id() == ctx.id())
                 activeRequests.erase(it);
+            if (auto key = getDocumentQueryKey(request))
+                if (auto queries = pendingDocumentQueries.find(*key);
+                    queries != pendingDocumentQueries.end()) {
+                    auto query = queries->second.find(*request.id);
+                    if (query != queries->second.end() && query->second.id() == ctx.id())
+                        queries->second.erase(query);
+                    if (queries->second.empty())
+                        pendingDocumentQueries.erase(queries);
+                }
         }
 
         if (ctx.supportsCancellation()) {
@@ -336,8 +375,11 @@ protected:
         }
         catch (const RequestCancelled& e) {
             messageLog.setCancelled(e.what());
-            return RpcError{.code = static_cast<int>(LSPErrorCodes::RequestCancelled),
-                            .message = "Request cancelled"};
+            return RpcError{.code = static_cast<int>(ctx.isContentModified()
+                                                         ? LSPErrorCodes::ContentModified
+                                                         : LSPErrorCodes::RequestCancelled),
+                            .message = ctx.isContentModified() ? "Document content modified"
+                                                               : "Request cancelled"};
         }
         catch (const RequestFailed& e) {
             messageLog.setError(e.what());
@@ -387,6 +429,10 @@ protected:
     std::mutex serverStateMutex;
 
     std::unordered_set<std::string> cancellableMethods;
+    // Configured on the state worker, observed by the protocol reader.
+    std::atomic_bool m_cancelObsoleteDocumentQueries = false;
+    std::unordered_map<std::string, std::unordered_map<ID_t, RequestContext>>
+        pendingDocumentQueries;
 
     // Protects activeRequests and pendingDocumentChanges.
     std::mutex cancellationMutex;

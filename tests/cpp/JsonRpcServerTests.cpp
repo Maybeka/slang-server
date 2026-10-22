@@ -41,6 +41,10 @@ public:
             "failed-notification");
         registerNotification<std::nullopt_t, &TestJsonRpcServer::contextNotification>(
             "context-notification");
+        for (const auto* name : {"textDocument/completion", "textDocument/hover",
+                                 "textDocument/definition", "textDocument/signatureHelp"})
+            registerMethod<lsp::TextDocumentPositionParams, int, &TestJsonRpcServer::documentQuery>(
+                name);
         registerNotification<CancelParams, &TestJsonRpcServer::cancelRequestNotification>(
             "$/cancelRequest");
         registerNotification<lsp::DidChangeTextDocumentParams,
@@ -95,6 +99,12 @@ public:
         unregisterContext(request, ctx);
     }
 
+    int documentQuery(const lsp::TextDocumentPositionParams&, const lsp::RequestContext&) {
+        ++contextRequestCalls;
+        return 42;
+    }
+    void cancelQueriesOnEdit(bool enabled) { m_cancelObsoleteDocumentQueries = enabled; }
+    size_t documentQueryCount() const { return pendingDocumentQueries.size(); }
     void start(const lsp::RequestContext& ctx) { startRequest(ctx); }
 
     int contextRequestCalls = 0;
@@ -1075,4 +1085,63 @@ TEST_CASE("JSON-RPC asynchronous completion wake survives an active idle pass",
     }
     // Helper teardown may race loop shutdown. The retained callback is inert.
     expiredWake();
+}
+
+TEST_CASE("New document edits cancel only superseded position queries when enabled",
+          "[query-scheduling]") {
+    for (bool enabled : {false, true}) {
+        for (bool started : {false, true}) {
+            for (const auto* method : {"textDocument/completion", "textDocument/hover",
+                                       "textDocument/definition", "textDocument/signatureHelp"}) {
+                CAPTURE(enabled, started, method);
+                TestJsonRpcServer server;
+                server.cancelQueriesOnEdit(enabled);
+                auto query = [&](int id, const char* uri) {
+                    return lsp::RpcRequest{
+                        .jsonrpc = "2.0",
+                        .id = id,
+                        .method = method,
+                        .params = rfl::to_generic(lsp::TextDocumentPositionParams{
+                            .textDocument = {.uri = URI(uri)}, .position = {0, 0}})};
+                };
+                auto previous = query(20, "file:///tmp/edited.sv");
+                auto other = query(21, "file:///tmp/other.sv");
+                auto oldContext = server.track(previous);
+                auto otherContext = server.track(other);
+                if (started)
+                    server.start(oldContext);
+                lsp::RpcRequest change{
+                    .jsonrpc = "2.0",
+                    .method = "textDocument/didChange",
+                    .params = rfl::to_generic<rfl::UnderlyingEnums>(
+                        lsp::DidChangeTextDocumentParams{
+                            .textDocument = {.version = 2, .uri = URI("file:///tmp/edited.sv")},
+                            .contentChanges = {
+                                lsp::TextDocumentContentChangeWholeDocument{.text = "new"}}})};
+                auto editContext = server.track(change);
+                CHECK(oldContext.isCancelled() == enabled);
+                CHECK(oldContext.isContentModified() == enabled);
+                CHECK_FALSE(otherContext.isCancelled());
+                auto latest = query(22, "file:///tmp/edited.sv");
+                auto latestContext = server.track(latest);
+                CHECK_FALSE(latestContext.isCancelled());
+                auto result = server.processMessage(previous, oldContext);
+                if (enabled) {
+                    REQUIRE(std::holds_alternative<lsp::RpcError>(result));
+                    CHECK(std::get<lsp::RpcError>(result).code ==
+                          static_cast<int>(lsp::LSPErrorCodes::ContentModified));
+                    CHECK(server.contextRequestCalls == 0);
+                }
+                else
+                    CHECK(std::holds_alternative<rfl::Generic>(result));
+                CHECK(std::holds_alternative<rfl::Generic>(
+                    server.processMessage(latest, latestContext)));
+                server.untrack(previous, oldContext);
+                server.untrack(other, otherContext);
+                server.untrack(latest, latestContext);
+                server.untrack(change, editContext);
+                CHECK(server.documentQueryCount() == 0);
+            }
+        }
+    }
 }

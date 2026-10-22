@@ -87,8 +87,18 @@ public:
             m_state->cancelled.store(true, std::memory_order_relaxed);
     }
 
+    void cancelForContentChange() const {
+        if (m_state) {
+            m_state->contentModified.store(true, std::memory_order_relaxed);
+            m_state->cancelled.store(true, std::memory_order_release);
+        }
+    }
+    bool isContentModified() const {
+        return m_state && m_state->contentModified.load(std::memory_order_acquire);
+    }
+
     bool isCancelled() const {
-        return m_state && m_state->cancelled.load(std::memory_order_relaxed);
+        return m_state && m_state->cancelled.load(std::memory_order_acquire);
     }
 
     void markStarted() const {
@@ -187,6 +197,7 @@ private:
     struct State {
         std::atomic_bool cancelled = false;
         std::atomic_bool started = false;
+        std::atomic_bool contentModified = false;
         // Accessed only on the protocol worker, never by the cancellation reader.
         bool inputWitnessActive = false;
         std::weak_ptr<const void> inputWitnessOwner;

@@ -988,12 +988,15 @@ bool SlangServer::loadConfig(const Config& config, bool forceIndexing, bool requ
     if (preserveDesign && m_topFile) {
         newDriver = ServerDriver::createFromTop(m_indexer, m_client, config,
                                                 URI::fromFile(*m_topFile), workspacePath,
-                                                m_driver.get(), requireValidConfig);
+                                                m_driver.get(), requireValidConfig,
+                                                deferOpenDiagnostics &&
+                                                    config.experimentalMethodBodyQueries.value());
     }
     else if (buildfile) {
-        newDriver = ServerDriver::createFromFileLists(m_indexer, m_client, config, {*buildfile},
-                                                      workspacePath, m_driver.get(),
-                                                      requireValidConfig);
+        newDriver = ServerDriver::createFromFileLists(
+            m_indexer, m_client, config, {*buildfile}, workspacePath, m_driver.get(),
+            requireValidConfig,
+            deferOpenDiagnostics && config.experimentalMethodBodyQueries.value());
     }
     else {
         newDriver = ServerDriver::createForExplore(m_indexer, m_client, config, workspacePath,
@@ -1008,6 +1011,8 @@ bool SlangServer::loadConfig(const Config& config, bool forceIndexing, bool requ
         replacingDriver && newDriver->diagClient->sharesPublicationsWith(*m_driver->diagClient);
     auto old_config = m_config;
     m_config = config;
+    m_cancelObsoleteDocumentQueries.store(config.experimentalMethodBodyQueries.value(),
+                                          std::memory_order_relaxed);
     m_driver = std::move(newDriver);
     m_buildfile = std::move(buildfile);
     if (!preserveDesign)
@@ -1895,7 +1900,17 @@ void SlangServer::onDocDidChange(const lsp::DidChangeTextDocumentParams& params,
             }
         }
         catch (const lsp::RequestCancelled&) {
-            m_methodScope.reset();
+            bool retained = false;
+            if (!synced && m_methodScope && m_methodScope->isBodyQuery()) {
+                try {
+                    retained = m_methodScope->apply(params, m_config, {}, synced, true);
+                }
+                catch (const std::exception&) {
+                    // A changed interface / dependency still takes native sync.
+                }
+            }
+            if (!retained)
+                m_methodScope.reset();
             if (!synced)
                 m_driver->onDocDidChange(params,
                                          {}); // Cancellation never drops text synchronization.

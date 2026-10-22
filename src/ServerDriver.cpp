@@ -512,7 +512,7 @@ void ServerDriver::publishCompilationDiagnostics(const URI* priorityUri,
     for (const auto& tree : trees)
         for (const auto& diagnostic : tree->diagnostics())
             diagEngine.issue(diagnostic);
-    comp->issueDiagnosticsTo(diagEngine);
+    comp->issueDiagnosticsTo(diagEngine, ctx ? *ctx : lsp::RequestContext{});
     for (const auto& [uri, doc] : docs) {
         if (currentSources.contains(URI::fromFile(sm.getFullPath(doc->getBuffer())))) {
             issueExplicitContextDiagnostics(uri);
@@ -590,7 +590,8 @@ std::unique_ptr<ServerDriver> ServerDriver::createForExplore(
 std::unique_ptr<ServerDriver> ServerDriver::createFromFileLists(
     Indexer& indexer, SlangLspClient& client, const Config& config,
     std::vector<std::string> buildfiles, std::optional<std::string_view> workspaceFolder,
-    const ServerDriver* oldDriver, bool requireValidConfig) {
+    const ServerDriver* oldDriver, bool requireValidConfig, bool deferOpenDiagnostics) {
+    UvmPhaseTrace phases;
     auto newDriver = std::make_unique<ServerDriver>(indexer, client, config, std::move(buildfiles),
                                                     workspaceFolder, requireValidConfig, oldDriver);
     if (requireValidConfig && !newDriver->m_configLoaded)
@@ -610,6 +611,12 @@ std::unique_ptr<ServerDriver> ServerDriver::createFromFileLists(
         return newDriver;
     }
 
+    // The constructor seeded current editor overlays before parsing. Register
+    // their versions while still in exploration mode, without binding diagnostics
+    // for each document and again for the whole design during retirement.
+    if (deferOpenDiagnostics)
+        newDriver->copyOpenDocumentsFrom(oldDriver, true);
+    phases.mark("retirement-build-inputs");
     newDriver->m_designUsesConfiguredUnits = true;
     newDriver->comp = std::make_unique<ServerCompilation>(
         std::move(buildDocuments), newDriver->options, newDriver->sm, newDriver->client,
@@ -619,9 +626,13 @@ std::unique_ptr<ServerDriver> ServerDriver::createFromFileLists(
             : nullptr);
 
     newDriver->configureFrozenInstances();
-    newDriver->diagClient->clear();
-    newDriver->copyOpenDocumentsFrom(oldDriver);
-    newDriver->publishCompilationDiagnostics();
+    phases.mark("retirement-build-model");
+    if (!deferOpenDiagnostics) {
+        newDriver->diagClient->clear();
+        newDriver->copyOpenDocumentsFrom(oldDriver);
+        newDriver->publishCompilationDiagnostics();
+    }
+    phases.mark("retirement-build-diagnostics");
     return newDriver;
 }
 
@@ -1609,9 +1620,9 @@ std::vector<std::string> ServerDriver::getModulesInFile(const std::string& path)
 std::unique_ptr<ServerDriver> ServerDriver::createFromTop(
     Indexer& indexer, SlangLspClient& client, const Config& config, const URI& topUri,
     std::optional<std::string_view> workspaceFolder, const ServerDriver* oldDriver,
-    bool requireValidConfig) {
+    bool requireValidConfig, bool deferOpenDiagnostics) {
     auto newDriver = createForExplore(indexer, client, config, workspaceFolder, oldDriver,
-                                      requireValidConfig);
+                                      requireValidConfig, deferOpenDiagnostics);
     if (!newDriver)
         return nullptr;
     auto doc = newDriver->getDocument(topUri);
@@ -1671,7 +1682,8 @@ std::unique_ptr<ServerDriver> ServerDriver::createFromTop(
             : nullptr);
 
     newDriver->configureFrozenInstances();
-    newDriver->publishCompilationDiagnostics();
+    if (!deferOpenDiagnostics)
+        newDriver->publishCompilationDiagnostics();
     return newDriver;
 }
 

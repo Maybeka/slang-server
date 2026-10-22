@@ -1,0 +1,222 @@
+{
+  "binarySha256": "57f436beb0e617a38b05a373fc07750f1b1f952c9940a982e4cad414f929b833",
+  "baseCommit": "15b366aec506b68813e1823b83285b73dedd702a",
+  "experimentDefault": false,
+  "debounceAdded": false,
+  "tests": {
+    "ctest": 766,
+    "targetedCases": 23,
+    "targetedAssertions": 2069,
+    "python": 17,
+    "transport": 43
+  },
+  "synthetic": {
+    "general": [
+      {
+        "uvm": false,
+        "enabled": false,
+        "firstEditMedianMs": 11.27725,
+        "continuousMedianMs": 9.943917,
+        "diagnosticMedianMs": 84.77225
+      },
+      {
+        "uvm": false,
+        "enabled": true,
+        "firstEditMedianMs": 4.336042,
+        "continuousMedianMs": 2.298166,
+        "diagnosticMedianMs": 81.4651465
+      },
+      {
+        "uvm": true,
+        "enabled": false,
+        "firstEditMedianMs": 18.622834,
+        "continuousMedianMs": 17.57725,
+        "diagnosticMedianMs": 21.2624165
+      },
+      {
+        "uvm": true,
+        "enabled": true,
+        "firstEditMedianMs": 11.140916,
+        "continuousMedianMs": 8.849167,
+        "diagnosticMedianMs": 24.9649165
+      }
+    ],
+    "closed": [
+      {
+        "uvm": false,
+        "enabled": false,
+        "firstEditMedianMs": 12.060666,
+        "continuousMedianMs": 9.753292,
+        "diagnosticMedianMs": 83.805896
+      },
+      {
+        "uvm": false,
+        "enabled": true,
+        "firstEditMedianMs": 4.194458,
+        "continuousMedianMs": 2.162834,
+        "diagnosticMedianMs": 81.036083
+      },
+      {
+        "uvm": true,
+        "enabled": false,
+        "firstEditMedianMs": 18.752417,
+        "continuousMedianMs": 17.662167,
+        "diagnosticMedianMs": 21.294458499999998
+      },
+      {
+        "uvm": true,
+        "enabled": true,
+        "firstEditMedianMs": 11.108709,
+        "continuousMedianMs": 8.585083,
+        "diagnosticMedianMs": 24.648271
+      }
+    ]
+  },
+  "cva6": [
+    {
+      "enabled": false,
+      "firstMs": 620.996084,
+      "warmMs": null,
+      "sevenQuerySumMs": 5597.622541,
+      "diagnosticMs": 934.233458,
+      "perStateMs": [
+        620.996084,
+        612.75125,
+        1923.6315,
+        609.304333,
+        610.509917,
+        610.186041,
+        612.142333
+      ]
+    },
+    {
+      "enabled": true,
+      "firstMs": 303.344542,
+      "warmMs": 41.76725,
+      "sevenQuerySumMs": 2198.982583,
+      "diagnosticMs": 956.13575,
+      "perStateMs": [
+        303.344542,
+        41.650833,
+        42.2825,
+        42.527458,
+        822.877708,
+        301.569584,
+        636.318583
+      ]
+    }
+  ],
+  "typingWarm": [
+    {
+      "label": "native",
+      "lastQueryMs": [
+        10009.65475,
+        9927.810875,
+        9999.163042
+      ],
+      "lastQueryMedianMs": 9999.163042,
+      "cancelled": 0,
+      "successful": 36,
+      "maximumSuccessfulMs": 10009.65475
+    },
+    {
+      "label": "previous",
+      "lastQueryMs": [
+        9133.431708,
+        9374.024291,
+        9147.084541
+      ],
+      "lastQueryMedianMs": 9147.084541,
+      "cancelled": 0,
+      "successful": 36,
+      "maximumSuccessfulMs": 9374.024291
+    },
+    {
+      "label": "current",
+      "lastQueryMs": [
+        54.565667,
+        56.40175,
+        88.582375
+      ],
+      "lastQueryMedianMs": 56.40175,
+      "cancelled": 26,
+      "successful": 10,
+      "maximumSuccessfulMs": 103.151083
+    }
+  ],
+  "typingCold": [
+    {
+      "label": "native",
+      "lastQueryMs": 8475.288208,
+      "cancelled": 0,
+      "status": {
+        "active": false,
+        "accepted": 0,
+        "decline": "",
+        "version": 0
+      }
+    },
+    {
+      "label": "previous",
+      "lastQueryMs": 6166.691334,
+      "cancelled": 0,
+      "status": {
+        "active": true,
+        "accepted": 1,
+        "decline": "",
+        "version": 13
+      }
+    },
+    {
+      "label": "current",
+      "lastQueryMs": 1035.096708,
+      "cancelled": 11,
+      "status": {
+        "active": false,
+        "accepted": 0,
+        "decline": "current query context required",
+        "version": 0
+      }
+    }
+  ],
+  "memory": [
+    {
+      "workload": "memory",
+      "enabled": false,
+      "peakRssMiB": 173.171875,
+      "peakPhysicalMiB": 126.68807220458984
+    },
+    {
+      "workload": "memory",
+      "enabled": true,
+      "peakRssMiB": 220.90625,
+      "peakPhysicalMiB": 182.26622009277344
+    },
+    {
+      "workload": "cva6-memory",
+      "enabled": false,
+      "peakRssMiB": 1382.140625,
+      "peakPhysicalMiB": 1034.5483169555664
+    },
+    {
+      "workload": "cva6-memory",
+      "enabled": true,
+      "peakRssMiB": 1513.484375,
+      "peakPhysicalMiB": 1153.8921356201172
+    }
+  ],
+  "reports": {
+    "general": "06e34eb0d3513b54f9a91939c68bd4fb9430daa7336373bcf705c8673abba7da",
+    "closed": "adac6481f624faf15fadf2bbdb2ae75224a5d96287039946d4d5aa7cdf6fcb46",
+    "cva6": "992422dda01881cf68f811ba2918938407b3ce424f5174a2c3d22cf2ffa046bd",
+    "typing-warm-final": "750f97b7895620b6e56efa9b19a959ac5d0cd7d54d157d82d911f78194e82fb9",
+    "typing-warm-2": "222bfb88335f17b1c56bf7e59267507e74c734ebcf090b94529a11888b351169",
+    "typing-warm-3": "286092f2ab87974d4a4ecb87a923631676a2091e2cef0dda4dcf5f729e9e1d67",
+    "typing-cold": "ae1b93bcb5452c294379a0c77f3484f8f2fec5e1d747b3cdbb1acfb46330a00a",
+    "memory": "13a5d98ecbe3b2bf57522539a6c627f8e75f9fcd4da82632bbae78c3d35036e0",
+    "cva6-memory": "42090751931a1a8ac662f87fc22976eac817168c83eacfb8ae9817bebe92292b",
+    "parser-counts": "3020e65c7547fa2fec3f3c25914578f63bce69e10da3356999512370bd3687a3",
+    "install-smoke": "f7cd58c150e144dc8707d184740524ffe204663dee3cbdb3d3f38e8902a8c0ad",
+    "external-smoke": "0835c9d9a6f27fb948b4f327ba8c022a313b6e18ea6d2af8506295ea796460bf"
+  }
+}

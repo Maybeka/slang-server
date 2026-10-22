@@ -609,7 +609,7 @@ TEST_CASE("Body queries invalidate on dependencies and method boundary changes",
     }
 }
 
-TEST_CASE("Body queries discard candidates on cancellation without replaying text",
+TEST_CASE("Body queries retain text certificates on cancellation without replaying text",
           "[method-body]") {
     for (const auto* boundary : {"before method mini parse", "before method publication",
                                  "after method text synchronization"}) {
@@ -631,9 +631,18 @@ TEST_CASE("Body queries discard candidates on cancellation without replaying tex
             });
             REQUIRE_THROWS_AS(change(server, doc.m_uri, 2, text, ctx), lsp::RequestCancelled);
             REQUIRE(reached);
-            CHECK_FALSE(state(server).active);
+            CHECK(state(server).active ==
+                  (std::string_view(boundary) != "after method text synchronization"));
             CHECK(doc.doc->getText() == text + '\0');
             CHECK(doc.doc->getVersion() == 2);
+            doc.m_text = text;
+            const auto at = text.rfind("charl") + 2;
+            auto actual = bodyCompletions(server, doc, at);
+            bodyConfig(workspace, false);
+            ServerHarness native(workspace.params());
+            auto oracle = native.openFile("item.svh", text);
+            CHECK(rfl::json::write(actual) ==
+                  rfl::json::write(bodyCompletions(native, oracle, at)));
         }
     }
 }
@@ -1113,4 +1122,70 @@ TEST_CASE("Body source projection leaves freshly parsed native locations unchang
     CHECK(server::toPosition(SourceLocation(original.id, oldText.find('c')), sm) == expected);
     CHECK(server::toPosition(SourceLocation(native.id, currentText.find('c')), sm) == expected);
     CHECK(sm.isLatestData(original.id)); // Private query text never replaces the editor lookup.
+}
+
+TEST_CASE("Superseded body edits keep one lexical owner and bind only the latest query",
+          "[method-body][query-scheduling]") {
+    for (bool unsafe : {false, true}) {
+        Workspace workspace;
+        bodyConfig(workspace);
+        BodyTestServer server(workspace.params());
+        auto doc = server.openFile("item.svh", header);
+        doc.doc->getAnalysis();
+        change(server, doc.m_uri, 2, edited());
+        REQUIRE(state(server).active);
+        doc.m_text = edited();
+        std::string latest;
+        size_t parses = 0;
+        for (int version = 3; version <= 10; ++version) {
+            latest = header;
+            latest.replace(latest.find("local_1 + charl"), 15,
+                           version % 2 ? "local_0 + (charl" : "marker + earlier(charl)");
+            if (unsafe && version == 10)
+                latest.insert(latest.find("    int local_0"), "    `define BODY_GLOBAL 1\n");
+            lsp::RequestContext ctx("textDocument/didChange", version);
+            ctx.setCheckpointObserverForTesting(
+                [&](std::string_view phase) { parses += phase == "before method mini parse"; });
+            ctx.cancel();
+            if (version % 2) {
+                CHECK_THROWS_AS(change(server, doc.m_uri, version, latest, ctx),
+                                lsp::RequestCancelled);
+            }
+            else {
+                const auto previous = doc.m_text;
+                size_t begin = 0, suffix = 0;
+                while (begin < previous.size() && begin < latest.size() &&
+                       previous[begin] == latest[begin])
+                    ++begin;
+                while (suffix < previous.size() - begin && suffix < latest.size() - begin &&
+                       previous[previous.size() - suffix - 1] == latest[latest.size() - suffix - 1])
+                    ++suffix;
+                lsp::DidChangeTextDocumentParams params{
+                    .textDocument = {.version = version, .uri = doc.m_uri},
+                    .contentChanges = {lsp::TextDocumentContentChangePartial{
+                        .range = {doc.getPosition(begin),
+                                  doc.getPosition(previous.size() - suffix)},
+                        .text = latest.substr(begin, latest.size() - begin - suffix)}}};
+                CHECK_THROWS_AS(server.SlangServer::onDocDidChange(params, ctx),
+                                lsp::RequestCancelled);
+            }
+            doc.m_text = latest;
+            CHECK(doc.doc->getText() == latest + '\0');
+            CHECK(doc.doc->getVersion() == version);
+            REQUIRE(state(server).active);
+        }
+        CHECK(parses == 0);
+        CHECK(state(server).accepted == 9);
+        doc.m_text = latest;
+        const auto at = latest.rfind("charl") + 2;
+        auto actual = bodyCompletions(server, doc, at);
+        CHECK(state(server).active == !unsafe);
+        server.runBackgroundWork({});
+        const auto diagnostics = rfl::json::write(doc.getDiagnostics());
+        bodyConfig(workspace, false);
+        ServerHarness native(workspace.params());
+        auto oracle = native.openFile("item.svh", latest);
+        CHECK(rfl::json::write(actual) == rfl::json::write(bodyCompletions(native, oracle, at)));
+        CHECK(diagnostics == rfl::json::write(oracle.getDiagnostics()));
+    }
 }

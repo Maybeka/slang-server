@@ -134,7 +134,8 @@ public:
     std::optional<lsp::ShowDocumentParams> getHierDocParams(const std::string& path);
 
     /// Issue all semantic diagnostics from the compilation to the diagnostic engine
-    void issueDiagnosticsTo(slang::DiagnosticEngine& diagEngine);
+    void issueDiagnosticsTo(slang::DiagnosticEngine& diagEngine,
+                            const lsp::RequestContext& ctx = {});
 
     /// Return the driver cone for the given RTL path, valid until the compilation is refreshed.
     ConeResult getDriverCone(const std::string& path);

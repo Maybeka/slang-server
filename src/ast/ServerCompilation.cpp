@@ -1251,9 +1251,10 @@ std::optional<lsp::ShowDocumentParams> ServerCompilation::getHierDocParams(
     return params;
 }
 
-void ServerCompilation::issueDiagnosticsTo(slang::DiagnosticEngine& diagEngine) {
+void ServerCompilation::issueDiagnosticsTo(slang::DiagnosticEngine& diagEngine,
+                                           const lsp::RequestContext& ctx) {
     ensureCurrent();
-    m_analysis->issueDiagnosticsTo(diagEngine);
+    m_analysis->issueDiagnosticsTo(diagEngine, ctx);
 }
 
 ConeResult ServerCompilation::getDriverCone(const std::string& path) {

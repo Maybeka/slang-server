@@ -5,6 +5,7 @@
 #include "completions/InstanceCompletions.h"
 #include "completions/MemberCompletions.h"
 #include "util/Converters.h"
+#include "util/UvmPhaseTrace.h"
 #include <atomic>
 #include <cctype>
 #include <fstream>
@@ -208,16 +209,25 @@ std::optional<std::string> MethodScopeOverlay::read(const std::string& path) {
         return {};
     need(!error && fs::is_regular_file(status), ("nonregular certificate input: " + path).c_str());
     need(fs::canonical(path) == fs::absolute(path).lexically_normal(), "symlink input unsupported");
-    std::ifstream input(path, std::ios::binary);
+    // Read into one allocation. Iterator extraction spends most body-query time
+    // copying unchanged project bytes a character at a time on large designs.
+    // Keep exact byte comparison and reject files that shrink/grow during the read.
+    std::ifstream input(path, std::ios::binary | std::ios::ate);
     need(bool(input), "unreadable certificate input");
-    std::string bytes{std::istreambuf_iterator<char>(input), {}};
-    need(!input.bad(), "input read failed");
+    const auto size = input.tellg();
+    need(size >= 0, "input size unavailable");
+    std::string bytes(size_t(size), '\0');
+    input.seekg(0);
+    input.read(bytes.data(), std::streamsize(bytes.size()));
+    need(bool(input) && input.peek() == std::char_traits<char>::eof() && !input.bad(),
+         "input changed or read failed");
     return bytes;
 }
 
 MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, const URI& target,
                                        size_t editOffset, const lsp::RequestContext& ctx) :
     driver(&d), uri(target) {
+    UvmPhaseTrace phases;
     ctx.checkpoint("method certificate begin");
     bodyQueries = config.experimentalMethodBodyQueries.value();
     std::shared_ptr<syntax::SyntaxTree> tree;
@@ -492,6 +502,7 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
                 else
                     bodyLineSensitiveDeclaration = true;
             }
+            phases.mark("body-prepare-context");
             // Replay preprocessing only once, stopping at the original header. This
             // captures definitions before this occurrence, including textual includes.
             macroArena = std::make_unique<BumpAllocator>();
@@ -516,6 +527,7 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
                     (cachedEntry.empty() || d.sm.getFullPath(*it) != cachedEntry))
                     pp.pushSource(
                         SourceBuffer{d.sm.getSourceText(*it), d.sm.getLibraryFor(*it), *it});
+            const auto targetPath = d.sm.getFullPath(occurrence);
             bool reached = false;
             size_t replayTokens = 0;
             for (;;) {
@@ -524,9 +536,11 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
                 auto token = pp.next();
                 if (token.kind == parsing::TokenKind::EndOfFile)
                     break;
-                if (d.sm.isFileLoc(token.location()) &&
-                    d.sm.getFullPath(token.location().buffer()) == d.sm.getFullPath(occurrence) &&
-                    token.location().offset() == functionBegin) {
+                // Offsets almost always differ. Avoid resolving and copying a
+                // filesystem path for every token of the preceding design.
+                if (token.location().offset() == functionBegin &&
+                    d.sm.isFileLoc(token.location()) &&
+                    d.sm.getFullPath(token.location().buffer()) == targetPath) {
                     reached = true;
                     break;
                 }
@@ -539,6 +553,7 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
             for (auto macro : bodyMacros)
                 pins.push_back(macro->name.location().buffer());
             macroPins = d.sm.retainBuffers(pins);
+            phases.mark("body-prepare-macros");
         }
     }
     if (!generalBody) {
@@ -798,6 +813,7 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
     }
     if (!bodyQueries)
         need(frozen.metadata.trees.size() == 1, "diagnostic graph is not a single unit");
+    phases.mark("body-prepare-snapshot");
     ctx.checkpoint("method certificate snapshot ready");
     for (auto& [openUri, doc] : d.docs)
         if (doc->getVersion() && d.isDocumentOpen(openUri)) {
@@ -877,6 +893,7 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
     handles.reserve(bodyQueries ? 66 : 10);
     handles.push_back(originalBuffer);
     handles.push_back(currentBuffer);
+    phases.mark("body-prepare-witnesses");
     ctx.checkpoint("after method certificate");
 }
 
@@ -889,6 +906,7 @@ bool MethodScopeOverlay::belongsTo(const ServerDriver& d) const {
     return driver == &d && frozen.owner == d.m_snapshotOwner;
 }
 bool MethodScopeOverlay::valid(const Config& config, const lsp::RequestContext& ctx) const try {
+    UvmPhaseTrace phases;
     if (generalBody)
         for (auto original : bodyBlocked)
             if (original->bodyHasExternalDependents.load(std::memory_order_relaxed))
@@ -923,16 +941,19 @@ bool MethodScopeOverlay::valid(const Config& config, const lsp::RequestContext& 
         }
     if (count != documents.size())
         return false;
+    phases.mark("body-validate-context");
     for (const auto& [path, entries] : directories) {
         ctx.checkpoint("method directory validation");
         if (directoryEntries(path) != entries)
             return false;
     }
+    phases.mark("body-validate-directories");
     for (auto& [path, bytes] : disk) {
         ctx.checkpoint("method input validation");
         if (read(path) != bytes)
             return false;
     }
+    phases.mark("body-validate-files");
     return true;
 }
 catch (const lsp::RequestCancelled&) {
@@ -943,7 +964,7 @@ catch (const std::exception&) {
 }
 
 bool MethodScopeOverlay::apply(const lsp::DidChangeTextDocumentParams& p, const Config& config,
-                               const lsp::RequestContext& ctx, bool& synced) {
+                               const lsp::RequestContext& ctx, bool& synced, bool deferBinding) {
     need(valid(config, ctx) && p.textDocument.uri == uri && p.textDocument.version > version &&
              accepted < (bodyQueries ? 64u : 8u) && !p.contentChanges.empty() &&
              (bodyQueries || p.contentChanges.size() == 1),
@@ -985,8 +1006,17 @@ bool MethodScopeOverlay::apply(const lsp::DidChangeTextDocumentParams& p, const 
             need((next[i] == '\n') == (text[i] == '\n') && (next[i] == '\r') == (text[i] == '\r'),
                  "fixed line layout required");
     }
-    if (generalBody)
+    if (generalBody) {
+        if (deferBinding) {
+            // A superseded notification still advances text and its witness. Do
+            // not discard the fixed lexical owner or bind obsolete intermediate
+            // bodies; the next live query validates and binds the current body.
+            commitGeneralText(p, std::move(next), nextBodyEnd, nextFunctionEnd, ctx, synced);
+            return true;
+        }
         return generalApply(p, config, ctx, synced, std::move(next), nextBodyEnd, nextFunctionEnd);
+    }
+    need(!deferBinding, "deferred binding requires general body queries");
     need(std::all_of(next.begin(), next.end(), [](unsigned char c) { return c < 128; }),
          "ASCII source required");
     auto methodText = next.substr(functionBegin, nextFunctionEnd - functionBegin);
@@ -1134,7 +1164,8 @@ bool MethodScopeOverlay::apply(const lsp::DidChangeTextDocumentParams& p, const 
 bool MethodScopeOverlay::generalApply(const lsp::DidChangeTextDocumentParams& p,
                                       const Config& config, const lsp::RequestContext& ctx,
                                       bool& synced, std::string next, size_t nextBodyEnd,
-                                      size_t nextFunctionEnd) {
+                                      size_t nextFunctionEnd, bool bindOnly) {
+    UvmPhaseTrace phases;
     // These directives change the environment of subsequent declarations. They
     // require native dependency invalidation; ordinary macro invocations do not.
     static const std::regex directives(
@@ -1187,6 +1218,7 @@ bool MethodScopeOverlay::generalApply(const lsp::DidChangeTextDocumentParams& p,
             blocked.push_back(method);
         }
     }
+    phases.mark("body-apply-text");
     ast::BodyQueryEvaluationGuard guard(blocked);
     ctx.checkpoint("before method mini parse");
     auto tree = syntax::SyntaxTree::fromBuffer(source, driver->sm, treeOptions->bag(), bodyMacros);
@@ -1202,6 +1234,7 @@ bool MethodScopeOverlay::generalApply(const lsp::DidChangeTextDocumentParams& p,
                  !std::regex_search(expansion, conditionals),
              "macro expansion can change surrounding preprocessing state");
     }
+    phases.mark("body-apply-parse");
     auto unit = std::make_shared<ShallowCompilation>(driver->sm, tree,
                                                      bodyOwner->getShallowCompilation(),
                                                      bodyOriginals);
@@ -1240,6 +1273,7 @@ bool MethodScopeOverlay::generalApply(const lsp::DidChangeTextDocumentParams& p,
         (void)body->getBody();
         ctx.checkpoint("after detached body binding");
     }
+    phases.mark("body-apply-bind");
     auto resultingMacros = tree->getDefinedMacros();
     need(resultingMacros.size() == bodyMacros.size(), "body changes macro environment");
     for (size_t i = 0; i < resultingMacros.size(); ++i)
@@ -1248,15 +1282,29 @@ bool MethodScopeOverlay::generalApply(const lsp::DidChangeTextDocumentParams& p,
                   resultingMacros[i]->toString() == bodyMacros[i]->toString()),
              "body changes macro environment");
     auto analysis = std::make_shared<ShallowAnalysis>(source.id, unit, ctx);
-    auto witnessText = next;
+    phases.mark("body-apply-index");
     need(valid(config, ctx), "inputs changed before body publication");
+    phases.mark("body-apply-revalidate");
+    if (!bindOnly)
+        commitGeneralText(p, std::move(next), nextBodyEnd, nextFunctionEnd, ctx, synced);
+    miniAnalysis = std::move(analysis);
+    miniTree = std::move(tree);
+    bodyBlocked = std::move(blocked);
+    return true;
+}
+
+void MethodScopeOverlay::commitGeneralText(const lsp::DidChangeTextDocumentParams& p,
+                                           std::string next, size_t nextBodyEnd,
+                                           size_t nextFunctionEnd, const lsp::RequestContext& ctx,
+                                           bool& synced) {
+    auto witnessText = next;
     ctx.checkpoint("before method publication");
     synced = true;
     driver->onDocDidChange(p, ctx);
     ctx.checkpoint("after method text synchronization");
-    miniAnalysis = std::move(analysis);
-    miniTree = std::move(tree);
-    bodyBlocked = std::move(blocked);
+    // A null miniAnalysis means text is synchronized but binding was deferred.
+    miniAnalysis.reset();
+    miniTree.reset();
     text = std::move(next);
     bodyEnd = nextBodyEnd;
     functionEnd = nextFunctionEnd;
@@ -1268,7 +1316,14 @@ bool MethodScopeOverlay::generalApply(const lsp::DidChangeTextDocumentParams& p,
                                         std::move(witnessText)};
     inputRevision = driver->getContextInputRevision();
     ++accepted;
-    return true;
+}
+
+void MethodScopeOverlay::ensureGeneralBinding(const Config& config,
+                                              const lsp::RequestContext& ctx) {
+    if (!miniAnalysis) {
+        bool unused = false;
+        generalApply({}, config, ctx, unused, text, bodyEnd, functionEnd, true);
+    }
 }
 
 bool MethodScopeOverlay::generalSite(const lsp::Position& position) const {
@@ -1312,12 +1367,12 @@ const MethodScopeOverlay::DTO& MethodScopeOverlay::completion(size_t context, si
     return lexical[context][index];
 }
 std::optional<std::vector<lsp::CompletionItem>> MethodScopeOverlay::complete(
-    const lsp::CompletionParams& p, const Config& config, const lsp::RequestContext& ctx) const
-    try {
+    const lsp::CompletionParams& p, const Config& config, const lsp::RequestContext& ctx) try {
     if (generalBody) {
         if (!accepted || p.textDocument.uri != uri || !valid(config, ctx) ||
             !generalSite(p.position))
             return {};
+        ensureGeneralBinding(config, ctx);
         ast::BodyQueryEvaluationGuard guard(bodyBlocked);
         BodySourceProjection projection(driver->sm, driver->getDocument(uri)->getBuffer(),
                                         miniAnalysis->getBuffer(), originalBodyEnd, bodyEnd,
@@ -1381,13 +1436,13 @@ catch (const std::exception&) {
 }
 
 std::optional<std::vector<lsp::LocationLink>> MethodScopeOverlay::define(
-    const lsp::DefinitionParams& p, const Config& config, const lsp::RequestContext& ctx) const
-    try {
+    const lsp::DefinitionParams& p, const Config& config, const lsp::RequestContext& ctx) try {
     if (!accepted || p.textDocument.uri != uri || !valid(config, ctx))
         return {};
     if (generalBody) {
         if (!generalSite(p.position))
             return {};
+        ensureGeneralBinding(config, ctx);
         ast::BodyQueryEvaluationGuard guard(bodyBlocked);
         BodySourceProjection projection(driver->sm, driver->getDocument(uri)->getBuffer(),
                                         miniAnalysis->getBuffer(), originalBodyEnd, bodyEnd,
@@ -1415,8 +1470,7 @@ catch (const std::exception&) {
 
 std::optional<lsp::CompletionItem> MethodScopeOverlay::resolve(const lsp::CompletionItem& item,
                                                                const Config& config,
-                                                               const lsp::RequestContext& ctx) const
-    try {
+                                                               const lsp::RequestContext& ctx) try {
     if (!accepted || !valid(config, ctx))
         return {};
     if (item.data) {
@@ -1438,6 +1492,7 @@ std::optional<lsp::CompletionItem> MethodScopeOverlay::resolve(const lsp::Comple
         if (generalBody) {
             if (!rfl::from_generic<QueryPayload>(*item.data))
                 return {};
+            ensureGeneralBinding(config, ctx);
             // A containing class / outer routine's documentation includes this edited
             // body. Resolve that rare enclosing declaration through the current native
             // view rather than print its retained old syntax.

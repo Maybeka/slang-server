@@ -10,6 +10,7 @@
 
 #include "ast/TrustedUvmLibrary.h"
 #include "util/Logging.h"
+#include "util/UvmPhaseTrace.h"
 #include <algorithm>
 #include <unordered_set>
 
@@ -17,6 +18,7 @@
 #include "slang/analysis/ValueDriver.h"
 #include "slang/ast/Compilation.h"
 #include "slang/text/SourceManager.h"
+#include "slang/util/ScopeGuard.h"
 
 namespace server {
 
@@ -53,29 +55,62 @@ ServerCompilationAnalysis::ServerCompilationAnalysis(
     m_references.reset();
 }
 
-slang::analysis::AnalysisManager& ServerCompilationAnalysis::getAnalysisManager() {
+slang::analysis::AnalysisManager& ServerCompilationAnalysis::getAnalysisManager(
+    const lsp::RequestContext& ctx) {
     if (!m_driverAnalysis) {
         // A query can refresh the design before the save-triggered diagnostic
         // pass. Complete elaboration before freezing it for driver analysis.
+        ctx.throwIfCancelled("before full-design semantics");
         (void)compilation.getSemanticDiagnostics();
+        ctx.throwIfCancelled("after full-design semantics");
         if (auto self = weak_from_this().lock())
             compilation.offerInstanceBodies(std::shared_ptr<ast::Compilation>(self, &compilation));
-        m_driverAnalysis = std::make_unique<slang::analysis::AnalysisManager>(m_analysisOptions);
+        ctx.throwIfCancelled("before full-design dataflow");
+        // Analyze a private candidate. Cancellation must neither cache a partial
+        // manager nor leave the shared compilation frozen for foreground queries.
+        auto analysis = std::make_unique<slang::analysis::AnalysisManager>(m_analysisOptions);
+        auto active = std::make_shared<std::optional<lsp::RequestContext>>();
+        auto releaseRequest = slang::ScopeGuard([&] { active->reset(); });
+        if (ctx) {
+            active->emplace(ctx);
+            analysis->addListener([active](const slang::analysis::AnalyzedProcedure&) {
+                if (*active)
+                    (*active)->checkpoint("after diagnostic procedure");
+            });
+            analysis->addListener([active](const slang::analysis::AnalyzedScope&) {
+                if (*active)
+                    (*active)->checkpoint("after diagnostic scope");
+            });
+            analysis->addListener([active](const slang::analysis::AnalyzedAssertion&) {
+                if (*active)
+                    (*active)->checkpoint("after diagnostic assertion");
+            });
+        }
         compilation.freeze();
-        m_driverAnalysis->analyze(compilation);
-        compilation.unfreeze();
+        {
+            auto unfreeze = slang::ScopeGuard([&] { compilation.unfreeze(); });
+            analysis->analyze(compilation);
+        }
+        ctx.throwIfCancelled("after full-design dataflow");
+        m_driverAnalysis = std::move(analysis);
     }
     return *m_driverAnalysis;
 }
 
-void ServerCompilationAnalysis::issueDiagnosticsTo(slang::DiagnosticEngine& diagEngine) {
+void ServerCompilationAnalysis::issueDiagnosticsTo(slang::DiagnosticEngine& diagEngine,
+                                                   const lsp::RequestContext& ctx) {
+    UvmPhaseTrace phases;
+    ctx.throwIfCancelled("before full-design semantics");
     // Semantic diagnostics from compilation
     for (auto& diag : compilation.getSemanticDiagnostics()) {
         diagEngine.issue(diag);
     }
 
+    phases.mark("diagnostic-full-semantics");
+    ctx.throwIfCancelled("after full-design semantics");
     // Driver analysis diagnostics (multi-driven, unused, etc)
-    auto& driverAnalysis = getAnalysisManager();
+    auto& driverAnalysis = getAnalysisManager(ctx);
+    phases.mark("diagnostic-full-dataflow");
     INFO("Driver analysis found {} diagnostics", driverAnalysis.getDiagnostics().size());
     for (auto& diag : driverAnalysis.getDiagnostics()) {
         diagEngine.issue(diag);

@@ -1733,7 +1733,8 @@ TEST_CASE("Full-design retirement preserves unsaved inputs and active selection 
           "[frozen-instance][frozen-retirement][frozen-source-integration]") {
     const auto mode = GENERATE("configured", "interactive", "top");
     const auto experiment = GENERATE("off", "uvm", "frozen");
-    CAPTURE(mode, experiment);
+    const bool bodyQueries = GENERATE(false, true);
+    CAPTURE(mode, experiment, bodyQueries);
     std::optional<std::string> previous;
     if (auto* value = std::getenv("SLANG_UVM_GENERATION_EDIT_LIMIT"))
         previous = value;
@@ -1756,6 +1757,7 @@ TEST_CASE("Full-design retirement preserves unsaved inputs and active selection 
     files.write("design.f", "uvm_pkg.sv\ntop.sv\n");
     Config config;
     config.flags = "--single-unit --threads 1";
+    config.experimentalMethodBodyQueries = bodyQueries;
     config.experimentalFrozenSources = std::string_view(experiment) == "frozen";
     config.experimentalUvmPrefixCache = std::string_view(experiment) == "uvm";
     config.frozenSources = Config::FrozenSourcesConfig{

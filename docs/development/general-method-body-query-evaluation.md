@@ -1,5 +1,8 @@
 # General function/task body queries — Mac evaluation, 2026-10-22
 
+For subsequent continuous-input/cancellation improvements, see
+[body edit responsiveness](body-edit-responsiveness.md).
+
 This expands the [first restricted slice](method-body-query-evaluation.md).
 `experimentalMethodBodyQueries` remains **false by default**. Completion,
 completion-item resolution and definition queries can rebind a changed function

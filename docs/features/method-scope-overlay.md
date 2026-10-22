@@ -203,6 +203,32 @@ query families keep native behavior. Diagnostics always analyze complete current
 sources with current semantic library owners. A body hit does not imply local-only
 diagnostics or an end-to-end diagnostic latency improvement.
 
+With `experimentalMethodBodyQueries` enabled, new edits invalidate outstanding
+cancellable completion, hover and definition requests for the same document.
+Queued obsolete requests return LSP `ContentModified` before entering their
+handlers; running requests observe cancellation at existing checkpoints. Other
+documents and workspace commands are not canceled this way. No fixed edit-delay
+or debounce window is added.
+
+A canceled edit with an already certified body synchronizes its text exactly once
+and retains the fixed lexical owner when its body boundary and input witnesses
+still hold. Binding of that intermediate body is skipped. The next live query
+binds the latest body and rechecks macro state, interfaces and external semantic
+dependencies; an unsafe latest body still uses native analysis. The status counter
+includes these synchronized notifications and does not imply each intermediate
+version was bound. Versions still fence all completion handles.
+
+Full-design retirement now honors deferred diagnostics in this mode, migrating
+current unsaved overlays without immediately diagnosing every open document and
+then diagnosing the design again. Retirement still uses the existing memory
+threshold and can rebuild synchronously; it has not become an independent worker.
+Full-design dataflow checks cancellation after procedures/scopes/assertions and
+publishes only a complete analysis candidate. A canceled candidate is discarded
+and its compilation is unfrozen before foreground queries resume. Native parsing,
+semantic elaboration and some large individual procedures remain indivisible.
+These changes reduce queue amplification; they do not establish a hard response
+latency bound. See [continuous input measurements](../development/body-edit-responsiveness.md).
+
 Run `tests/method_scope/general_queries.py --binary <server> --output <report.json>`
 for broad body edits with large neighboring packages and an inherited UVM arm. It
 compares changed local declarations/types, struct/member/helper calls, nested

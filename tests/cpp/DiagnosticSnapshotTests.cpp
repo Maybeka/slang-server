@@ -1361,3 +1361,115 @@ endclass
     }
     CHECK(statistics.reusedPrefixes >= 1);
 }
+
+#if defined(__linux__) || defined(__APPLE__)
+TEST_CASE("Full-design body-query retirement defers diagnostics and keeps latest text",
+          "[method-body][frozen-retirement]") {
+    const bool topMode = GENERATE(false, true);
+    namespace fs = std::filesystem;
+    auto root = fs::canonical(fs::temp_directory_path()) /
+                ("slang-body-retire-" +
+                 std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    fs::create_directories(root / ".slang");
+    std::optional<std::string> previous;
+    if (auto* value = std::getenv("SLANG_UVM_GENERATION_EDIT_LIMIT"))
+        previous = value;
+    setenv("SLANG_UVM_GENERATION_EDIT_LIMIT", "1", 1);
+    auto cleanup = slang::ScopeGuard([&] {
+        if (previous)
+            setenv("SLANG_UVM_GENERATION_EDIT_LIMIT", previous->c_str(), 1);
+        else
+            unsetenv("SLANG_UVM_GENERATION_EDIT_LIMIT");
+        fs::remove_all(root);
+    });
+    Config config;
+    config.flags = "--single-unit --threads 1";
+    config.experimentalUvmPrefixCache = true;
+    config.experimentalMethodBodyQueries = true;
+    config.experimentalDiagnosticDeltaPublishing = true;
+    if (topMode)
+        config.compilationFilelist = "files.f";
+    else
+        config.build = "files.f";
+    std::ofstream(root / ".slang/server.json") << rfl::json::write(config);
+    std::ofstream(root / "files.f") << "uvm_pkg.sv\ntop.sv\n";
+    std::ofstream(root / "uvm_pkg.sv") << "package uvm_pkg; class base; endclass endpackage\n";
+    const std::string original = "module top; initial $display(1); endmodule\n";
+    std::ofstream(root / "top.sv") << original;
+    ServerHarness server(lsp::InitializeParams{
+        .workspaceFolders = {{lsp::WorkspaceFolder{.uri = URI::fromFile(root), .name = "body"}}}});
+    const auto uri = URI::fromFile(root / "top.sv");
+    if (topMode)
+        server.setTopLevel(std::string(uri.getPath()));
+    REQUIRE(server.m_driver->comp);
+    server.m_driver->openDocument(uri, original, 1, true);
+    const auto epoch = server.m_driver->completions.getCompletionEpoch();
+    const auto publications = server.client.diagnosticPublications.size();
+    changeWithoutDiagnostics(server, uri, 2, original + "\n");
+    // Deliberately incomplete latest input must survive retirement without
+    // foreground diagnosis of either the previous text or this intermediate edit.
+    const std::string latest = "module top; initial missing_user_task( ; endmodule\n";
+    changeWithoutDiagnostics(server, uri, 3, latest);
+    CHECK(server.m_driver->completions.getCompletionEpoch() != epoch);
+    CHECK(server.m_driver->getDocument(uri)->textMatches(latest));
+    CHECK(server.client.diagnosticPublications.size() == publications);
+    REQUIRE(server.m_driver->hasPendingDiagnostics());
+    server.m_driver->runPendingDiagnostics({});
+    CHECK(server.client.diagnosticVersions.at(uri) == 3);
+    CHECK_FALSE(server.client.getDiagnostics(uri).empty());
+    changeWithoutDiagnostics(server, uri, 4, original);
+    server.m_driver->runPendingDiagnostics({});
+    CHECK(server.client.diagnosticVersions.at(uri) == 4);
+    CHECK(server.client.getDiagnostics(uri).empty());
+}
+#endif
+
+TEST_CASE("Cancelled full-design dataflow leaves a queryable owner and retries native diagnostics",
+          "[diagnostic-cancellation][method-body]") {
+    const auto boundary = GENERATE("after diagnostic procedure", "after diagnostic scope");
+    namespace fs = std::filesystem;
+    auto root = fs::canonical(fs::temp_directory_path()) /
+                ("slang-dataflow-cancel-" +
+                 std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    fs::create_directories(root / ".slang");
+    auto cleanup = slang::ScopeGuard([&] { fs::remove_all(root); });
+    std::ofstream(root / ".slang/server.json")
+        << R"({"build":"files.f","flags":"--single-unit --threads 1"})";
+    std::ofstream(root / "files.f") << "top.sv\n";
+    const std::string original = "module top; int value; initial value=1; endmodule\n";
+    const std::string latest = "module top; int value; initial value=missing_user_value; "
+                               "always_comb value=2; endmodule\n";
+    std::ofstream(root / "top.sv") << original;
+    lsp::InitializeParams params{
+        .workspaceFolders = {{lsp::WorkspaceFolder{.uri = URI::fromFile(root), .name = "cancel"}}}};
+    ServerHarness server(params);
+    const auto uri = URI::fromFile(root / "top.sv");
+    server.m_driver->openDocument(uri, original, 1, true);
+    changeWithoutDiagnostics(server, uri, 2, latest);
+    const auto publications = server.client.diagnosticPublications.size();
+    lsp::RequestContext ctx("background/diagnostics", std::nullopt);
+    bool interrupted = false;
+    ctx.setCheckpointObserverForTesting([&](std::string_view phase) {
+        if (phase == boundary) {
+            interrupted = true;
+            ctx.cancel();
+        }
+    });
+    CHECK_THROWS_AS(server.m_driver->runPendingDiagnostics(ctx), lsp::RequestCancelled);
+    REQUIRE(interrupted);
+    CHECK(server.client.diagnosticPublications.size() == publications);
+    REQUIRE(server.m_driver->hasPendingDiagnostics());
+    auto current = server.m_driver->comp->createActiveDesignContext({});
+    CHECK_FALSE(current.getAnalysis().compilation.isFrozen());
+    auto completion = server.getDocCompletion(
+        {.textDocument = {.uri = uri}, .position = {.line = 0, .character = 40}});
+    REQUIRE(rfl::holds_alternative<std::vector<lsp::CompletionItem>>(completion));
+    server.m_driver->runPendingDiagnostics({});
+    CHECK(server.client.diagnosticVersions.at(uri) == 2);
+    REQUIRE_FALSE(server.client.getDiagnostics(uri).empty());
+    std::ofstream(root / "top.sv") << latest;
+    ServerHarness native(params);
+    native.m_driver->openDocument(uri, latest, 2, true);
+    CHECK(diagnosticObjects(server.client.getDiagnostics(uri)) ==
+          diagnosticObjects(native.client.getDiagnostics(uri)));
+}

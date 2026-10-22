@@ -27,15 +27,14 @@ public:
     bool valid(const Config&, const lsp::RequestContext&) const;
     /// synced becomes true before native sync starts. The caller must never replay after it.
     bool apply(const lsp::DidChangeTextDocumentParams&, const Config&, const lsp::RequestContext&,
-               bool& synced);
+               bool& synced, bool deferBinding = false);
     std::optional<std::vector<lsp::CompletionItem>> complete(const lsp::CompletionParams&,
                                                              const Config&,
-                                                             const lsp::RequestContext&) const;
+                                                             const lsp::RequestContext&);
     std::optional<std::vector<lsp::LocationLink>> define(const lsp::DefinitionParams&,
-                                                         const Config&,
-                                                         const lsp::RequestContext&) const;
+                                                         const Config&, const lsp::RequestContext&);
     std::optional<lsp::CompletionItem> resolve(const lsp::CompletionItem&, const Config&,
-                                               const lsp::RequestContext&) const;
+                                               const lsp::RequestContext&);
     std::optional<ServerDriver::DiagnosticSnapshot> diagnostics(const Config&,
                                                                 const lsp::RequestContext&) const;
     bool isBodyQuery() const { return bodyQueries; }
@@ -78,7 +77,11 @@ private:
     std::vector<const slang::syntax::DefineDirectiveSyntax*> bodyMacros;
     bool generalApply(const lsp::DidChangeTextDocumentParams&, const Config&,
                       const lsp::RequestContext&, bool&, std::string next, size_t nextBodyEnd,
-                      size_t nextFunctionEnd);
+                      size_t nextFunctionEnd, bool bindOnly = false);
+    void ensureGeneralBinding(const Config&, const lsp::RequestContext&);
+    void commitGeneralText(const lsp::DidChangeTextDocumentParams&, std::string next,
+                           size_t nextBodyEnd, size_t nextFunctionEnd, const lsp::RequestContext&,
+                           bool& synced);
     bool generalSite(const lsp::Position&) const;
     size_t functionBegin = 0, functionEnd = 0, bodyBegin = 0, bodyEnd = 0, localCount = 0;
     size_t originalBodyEnd = 0;

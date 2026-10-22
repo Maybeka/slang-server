@@ -54,7 +54,8 @@ public:
         Indexer& indexer, SlangLspClient& client, const Config& config,
         std::vector<std::string> buildfiles,
         std::optional<std::string_view> workspaceFolder = std::nullopt,
-        const ServerDriver* oldDriver = nullptr, bool requireValidConfig = false);
+        const ServerDriver* oldDriver = nullptr, bool requireValidConfig = false,
+        bool deferOpenDiagnostics = false);
     /// Mapping of URI to SlangDoc, which may hold a shallow analysis of the document
     std::unordered_map<URI, std::shared_ptr<SlangDoc>> docs;
 
@@ -302,7 +303,7 @@ public:
     static std::unique_ptr<ServerDriver> createFromTop(
         Indexer& indexer, SlangLspClient& client, const Config& config, const URI& topUri,
         std::optional<std::string_view> workspaceFolder, const ServerDriver* oldDriver,
-        bool requireValidConfig = false);
+        bool requireValidConfig = false, bool deferOpenDiagnostics = false);
 
     /// @brief Constructs a new ServerDriver instance by creating and configuring a driver
     /// internally

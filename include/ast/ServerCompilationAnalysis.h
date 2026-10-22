@@ -41,7 +41,8 @@ public:
     InstanceIndexer instances;
 
     /// Issue all semantic diagnostics from the compilation to the diagnostic engine
-    void issueDiagnosticsTo(slang::DiagnosticEngine& diagEngine);
+    void issueDiagnosticsTo(slang::DiagnosticEngine& diagEngine,
+                            const lsp::RequestContext& ctx = {});
 
     /// Get the full-design drivers for a value symbol.
     std::vector<const slang::analysis::ValueDriver*> getDrivers(
@@ -54,7 +55,7 @@ public:
     std::set<ConeLeaf> getLoadCone(const std::string& path);
 
     /// Share completed current driver analysis with readonly fixed-source views.
-    slang::analysis::AnalysisManager& getAnalysisManager();
+    slang::analysis::AnalysisManager& getAnalysisManager(const lsp::RequestContext& ctx = {});
 
 private:
     /// Resolve an RTL path for cone tracing, throwing if it is not in the compiled design.
