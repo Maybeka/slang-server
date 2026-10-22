@@ -257,8 +257,9 @@ public:
     /// @param uri The URI of the document
     /// @param position The LSP position to query
     /// @return Optional definition information
-    std::optional<DefinitionInfo> getDefinitionInfoAt(const URI& uri, const lsp::Position& position,
-                                                      const lsp::RequestContext& ctx = {});
+    std::optional<DefinitionInfo> getDefinitionInfoAt(
+        const URI& uri, const lsp::Position& position, const lsp::RequestContext& ctx = {},
+        std::shared_ptr<ShallowAnalysis> analysis = {});
 
     /// Return the concrete full-design instance referenced by an instantiation token.
     std::optional<std::string> getDesignInstancePathAt(const URI& uri,

@@ -220,7 +220,7 @@ lsp::InitializeResult SlangServer::getInitialize(const lsp::InitializeParams& pa
 
     if (std::getenv("SLANG_SERVER_TESTS")) {
         registerCommand<std::string, rfl::Generic>(
-            "slang.methodScopeStatus", [this](const std::string&) {
+            "slang.methodScopeStatus", [this](const std::string& detail) {
                 ensureMethodScopeDriver();
                 auto state = m_methodScope ? m_methodScope->statistics()
                                            : MethodScopeOverlay::Statistics{};
@@ -231,7 +231,7 @@ lsp::InitializeResult SlangServer::getInitialize(const lsp::InitializeParams& pa
                 };
                 std::vector<DocumentState> documents;
                 for (const auto& [uri, document] : m_driver->docs)
-                    if (document->getVersion())
+                    if (detail != "compact" && document->getVersion())
                         documents.push_back(
                             {uri.str(), document->getBuffer().getId(), *document->getVersion()});
                 struct SourceState {
@@ -241,7 +241,8 @@ lsp::InitializeResult SlangServer::getInitialize(const lsp::InitializeParams& pa
                     std::string bytes;
                 };
                 std::vector<SourceState> sources;
-                for (auto buffer : m_driver->sm.getAllBuffers()) {
+                for (auto buffer :
+                     detail == "compact" ? std::vector<BufferID>{} : m_driver->sm.getAllBuffers()) {
                     const auto& path = m_driver->sm.getFullPath(buffer);
                     if (path.empty())
                         continue;
@@ -1860,8 +1861,10 @@ void SlangServer::onDocDidChange(const lsp::DidChangeTextDocumentParams& params,
         try {
             ensureMethodScopeDriver();
             if (!m_methodScope) {
-                if (params.contentChanges.size() != 1)
-                    throw std::runtime_error("one method change required");
+                if (params.contentChanges.empty() ||
+                    (!m_config.experimentalMethodBodyQueries.value() &&
+                     params.contentChanges.size() != 1))
+                    throw std::runtime_error("method change list unavailable");
                 auto doc = m_driver->getDocument(params.textDocument.uri);
                 size_t offset = 0;
                 if (auto* whole = rfl::get_if<lsp::TextDocumentContentChangeWholeDocument>(

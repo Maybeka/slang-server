@@ -109,6 +109,12 @@ ShallowAnalysis::ShallowAnalysis(BufferID buffer, std::shared_ptr<ShallowCompila
          loc = m_sourceManager.getIncludedFrom(loc.buffer())) {
         m_symbolIndexer.enclosingBuffers.push_back(loc.buffer());
     }
+    if (!m_shallowCompilation->getBodyQueryRoots().empty()) {
+        for (auto* body : m_shallowCompilation->getBodyQueryRoots())
+            body->visit(m_symbolIndexer);
+        ctx.checkpoint("after detached body indexing");
+        return;
+    }
     ctx.checkpoint("before root binding");
     auto& root = getCompilation()->getRoot();
     ctx.checkpoint("after root binding");
@@ -171,6 +177,16 @@ ShallowAnalysis::ShallowAnalysis(
                                                          design, ctx, packageOnly, buffer),
                     ctx) {
     ctx.checkpoint("after per-file indexing");
+}
+
+std::vector<const ast::SubroutineSymbol*> ShallowAnalysis::getSubroutines(
+    const syntax::SyntaxNode& syntax) const {
+    std::vector<const ast::SubroutineSymbol*> result;
+    for (auto scope : m_symbolIndexer.getScopesForSyntax(syntax))
+        if (auto fn = scope->asSymbol().as_if<ast::SubroutineSymbol>();
+            fn && fn->getSyntax() == &syntax)
+            result.push_back(fn);
+    return result;
 }
 
 bool SemanticDiagnosticBatch::eligible(ShallowAnalysis& analysis) {
@@ -694,6 +710,12 @@ slang::SmallVector<const ast::Symbol*, 2> ShallowAnalysis::getSymbolsAtToken(
                 if (auto* elaboration = getGenvarElaborationAtToken(declTok))
                     candidate = elaboration->source;
             }
+
+            if (candidate->kind == ast::SymbolKind::Subroutine)
+                for (auto body : m_shallowCompilation->getBodyQueryRoots())
+                    if (candidate->getParentScope() == body->getParentScope() &&
+                        candidate->name == body->name)
+                        candidate = body;
 
             if (std::ranges::find(symbols, candidate) == symbols.end())
                 symbols.push_back(candidate);

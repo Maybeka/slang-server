@@ -120,7 +120,8 @@ struct CompletionContext {
     /// @returns The completion context at that location
     static CompletionContext fromLocation(SlangDoc& doc, slang::SourceLocation loc,
                                           lsp::CompletionContext lspContext = {},
-                                          const lsp::RequestContext& requestCtx = {});
+                                          const lsp::RequestContext& requestCtx = {},
+                                          std::shared_ptr<ShallowAnalysis> analysis = {});
 };
 
 } // namespace server

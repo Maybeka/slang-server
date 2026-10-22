@@ -115,10 +115,10 @@ class Client:
             raise RpcError(message)
         return message.get("result"), (end - start) / 1e6
 
-    def state(self):
+    def state(self, compact=False):
         return self.request(
             "workspace/executeCommand",
-            {"command": "slang.methodScopeStatus", "arguments": ["state"]},
+            {"command": "slang.methodScopeStatus", "arguments": ["compact" if compact else "state"]},
         )[0]
 
     def close(self):

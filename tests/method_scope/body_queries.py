@@ -18,6 +18,8 @@ import time
 from fixture import HEADER
 from protocol import Client
 
+WORKLOAD_SCOPE = "Synthetic closed scalar helper; no real-project speedup claim."
+
 
 def position(text, offset):
     prefix = text[:offset]
@@ -124,7 +126,7 @@ def main():
     args.output.parent.mkdir(parents=True, exist_ok=True)
     report = {"binarySha256": hashlib.sha256(binary.read_bytes()).hexdigest(),
               "classes": args.classes, "blocks": args.blocks, "rows": [],
-              "scope": "Synthetic closed scalar helper; no real-project speedup claim."}
+              "scope": WORKLOAD_SCOPE}
     rng = random.Random(20261022)
     with tempfile.TemporaryDirectory(prefix="body-query-", dir=args.output.parent) as temp:
         root = Path(temp)

@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: MIT
+#include "completions/MemberCompletions.h"
+#include "util/Converters.h"
 #include "utils/ServerHarness.h"
 #include <atomic>
 #include <chrono>
@@ -7,6 +9,8 @@
 #include <iostream>
 #include <rfl/json/write.hpp>
 
+#include "slang/ast/symbols/ClassSymbols.h"
+#include "slang/ast/symbols/SubroutineSymbols.h"
 #include "slang/util/ScopeGuard.h"
 
 namespace {
@@ -500,33 +504,50 @@ TEST_CASE("Body queries preserve native values through variable length multiline
     }
 }
 
-TEST_CASE("Body queries keep declarations fixed and reject incomplete input", "[method-body]") {
+struct BodyTestServer : ServerHarness {
+    using server::SlangServer::runBackgroundWork;
+    using ServerHarness::ServerHarness;
+};
+
+TEST_CASE("Body queries support calls declaration edits and incomplete expressions",
+          "[method-body]") {
     for (const auto& replacement : {std::string("local_1 + (charl"), std::string("marker + charl"),
                                     std::string("earlier(charl)"), std::string("`VALUE + charl")}) {
         DYNAMIC_SECTION(replacement) {
             Workspace workspace;
             bodyConfig(workspace);
-            ServerHarness server(workspace.params());
+            BodyTestServer server(workspace.params());
             auto doc = server.openFile("item.svh", header);
             doc.doc->getAnalysis();
             auto text = header;
             text.replace(text.find("local_1 + charl"), 15, replacement);
             change(server, doc.m_uri, 2, text);
-            CHECK_FALSE(state(server).active);
+            doc.m_text = text;
+            CHECK(state(server).active);
             CHECK(doc.doc->getText() == text + '\0');
+            const auto at = text.rfind("charl") + 2;
+            auto actual = bodyCompletions(server, doc, at);
+            server.runBackgroundWork({});
+            auto diagnostics = doc.getDiagnostics();
+            bodyConfig(workspace, false);
+            ServerHarness native(workspace.params());
+            auto oracle = native.openFile("item.svh", text);
+            CHECK(rfl::json::write(actual) ==
+                  rfl::json::write(bodyCompletions(native, oracle, at)));
+            CHECK(rfl::json::write(diagnostics) == rfl::json::write(oracle.getDiagnostics()));
         }
     }
     Workspace workspace;
     bodyConfig(workspace);
-    ServerHarness server(workspace.params());
+    BodyTestServer server(workspace.params());
     auto doc = server.openFile("item.svh", header);
     doc.doc->getAnalysis();
     auto text = header;
     for (size_t at = 0; (at = text.find("local_0", at)) != std::string::npos; at += 7)
         text.replace(at, 7, "value_0");
     change(server, doc.m_uri, 2, text);
-    CHECK_FALSE(state(server).active);
-    CHECK(state(server).decline == "local declaration changed");
+    CHECK(state(server).active);
+    CHECK(doc.doc->getText() == text + '\0');
 }
 
 TEST_CASE("Body queries accept a closed helper inside an inherited UVM class", "[method-body]") {
@@ -581,7 +602,8 @@ TEST_CASE("Body queries invalidate on dependencies and method boundary changes",
             else if (std::string_view(mode) == "local")
                 text.insert(text.find("    return"), "    int added = 0;\n");
             change(server, doc.m_uri, 2, text);
-            CHECK_FALSE(state(server).active);
+            CHECK(state(server).active ==
+                  (std::string_view(mode) == "local" || std::string_view(mode) == "directive"));
             CHECK(doc.doc->getText() == text + '\0');
         }
     }
@@ -703,4 +725,392 @@ TEST_CASE("Body query certificates have bounded edit lifetime and can prepare ag
     change(server, doc.m_uri, 67, header);
     CHECK(state(server).active);
     CHECK(state(server).accepted == 1);
+}
+
+TEST_CASE("General body queries rebind arbitrary class function and task bodies",
+          "[method-body][general-body]") {
+    const std::string original = R"(class Base;
+  int inherited;
+endclass
+class Accumulator extends Base;
+  typedef struct { int count; string label; } payload_t;
+  payload_t payload;
+  int tail_field;
+  function string format(input int count = this.tail_field);
+    string result;
+    result = $sformatf("%0d", count);
+    return result;
+  endfunction
+  task run(input int count);
+    int old_local;
+    old_local = count;
+    payload.count = old_local;
+  endtask
+endclass
+)";
+    for (bool task : {false, true}) {
+        DYNAMIC_SECTION((task ? "task" : "function")) {
+            Workspace workspace;
+            bodyConfig(workspace);
+            workspace.write("item.svh", original);
+            ServerHarness server(workspace.params());
+            auto doc = server.openFile("item.svh", original);
+            doc.doc->getAnalysis();
+            auto next = original;
+            std::string replacement;
+            size_t begin, end;
+            if (task) {
+                begin = next.find("    int old_local;");
+                end = next.find("  endtask", begin);
+                replacement = "    payload_t local_payload;\n    int fresh = count + inherited;\n"
+                              "    for (int i = 0; i < fresh; i++) begin\n"
+                              "      local_payload.count = i;\n    end\n"
+                              "    payload = local_payload;\n    #1;\n";
+            }
+            else {
+                begin = next.find("    string result;");
+                end = next.find("  endfunction", begin);
+                replacement = "    payload_t local_payload;\n    string fresh;\n"
+                              "    local_payload.count = count + inherited;\n"
+                              "    if (count > 1) fresh = local_payload.label;\n"
+                              "    else fresh = $sformatf(\"%0d\", payload.count);\n"
+                              "    return fresh;\n";
+            }
+            next.replace(begin, end - begin, replacement);
+            change(server, doc.m_uri, 2, next);
+            doc.m_text = next;
+            REQUIRE(state(server).active);
+            const std::vector<size_t> positions = {
+                next.find("local_payload.count", begin) + 16,
+                next.find(task ? "payload = local_payload" : "return fresh", begin) +
+                    (task ? 16 : 10),
+                next.find("inherited", begin) + 5};
+            std::vector<std::vector<lsp::CompletionItem>> actual;
+            std::vector<std::string> definitions;
+            for (auto at : positions) {
+                actual.push_back(bodyCompletions(server, doc, at));
+                definitions.push_back(rfl::json::write(server.getDocDefinition(
+                    {.textDocument = {.uri = doc.m_uri}, .position = doc.getPosition(at)})));
+            }
+            REQUIRE(state(server).active);
+            bodyConfig(workspace, false);
+            ServerHarness native(workspace.params());
+            auto oracle = native.openFile("item.svh", next);
+            for (size_t i = 0; i < positions.size(); ++i) {
+                auto expected = bodyCompletions(native, oracle, positions[i]);
+                CHECK(rfl::json::write(actual[i]) == rfl::json::write(expected));
+                CHECK(definitions[i] == rfl::json::write(native.getDocDefinition(
+                                            {.textDocument = {.uri = oracle.m_uri},
+                                             .position = oracle.getPosition(positions[i])})));
+            }
+        }
+    }
+}
+
+TEST_CASE("General body queries retain package module and out-of-block contexts",
+          "[method-body][general-body]") {
+    for (const auto& scope :
+         {std::string("package"), std::string("module"), std::string("out-of-block")}) {
+        DYNAMIC_SECTION(scope) {
+            Workspace workspace;
+            bodyConfig(workspace);
+            std::string original;
+            if (scope == "out-of-block")
+                original = "class C; int field; extern task run(input int arg); endclass\n"
+                           "task C::run(input int arg);\n int before_local; before_local = "
+                           "arg;\nendtask\n";
+            else if (scope == "module") {
+                workspace.write("owner.sv", "`include \"item.svh\"\n");
+                original = "module M #(parameter int WIDTH=32);\n logic [WIDTH-1:0] field;\n"
+                           "task run(input int arg);\n int before_local; before_local = "
+                           "arg;\nendtask\nendmodule\n";
+            }
+            else
+                original = "int field;\ntask run(input int arg);\n int before_local; before_local "
+                           "= arg;\nendtask\n";
+            workspace.write("item.svh", original);
+            ServerHarness server(workspace.params());
+            auto doc = server.openFile("item.svh", original);
+            doc.doc->getAnalysis();
+            auto text = original;
+            auto begin = text.find(" int before_local;");
+            text.replace(begin, text.find("endtask", begin) - begin,
+                         " int after_local[];\n after_local = new[2];\n foreach (after_local[i]) "
+                         "after_local[i] = arg + field;\n");
+            change(server, doc.m_uri, 2, text);
+            doc.m_text = text;
+            REQUIRE(state(server).active);
+            const auto at = text.find("arg + field") + 8;
+            auto actual = bodyCompletions(server, doc, at);
+            auto definition = rfl::json::write(server.getDocDefinition(
+                {.textDocument = {.uri = doc.m_uri}, .position = doc.getPosition(at)}));
+            REQUIRE(state(server).active);
+            bodyConfig(workspace, false);
+            ServerHarness native(workspace.params());
+            auto oracle = native.openFile("item.svh", text);
+            CHECK(rfl::json::write(actual) ==
+                  rfl::json::write(bodyCompletions(native, oracle, at)));
+            CHECK(definition ==
+                  rfl::json::write(native.getDocDefinition({.textDocument = {.uri = oracle.m_uri},
+                                                            .position = oracle.getPosition(at)})));
+        }
+    }
+}
+
+TEST_CASE("General body queries invalidate constant-function dependencies",
+          "[method-body][general-body]") {
+    for (const auto& initial : {std::string("4"), std::string("runtime_input")}) {
+        DYNAMIC_SECTION(initial) {
+            Workspace workspace;
+            bodyConfig(workspace);
+            const std::string original =
+                "int runtime_input;\nfunction automatic int width(); return " + initial +
+                "; endfunction\nlocalparam int W = width();\nlogic [W-1:0] data;\n";
+            workspace.write("item.svh", original);
+            ServerHarness server(workspace.params());
+            auto doc = server.openFile("item.svh", original);
+            (void)doc.doc->getAnalysis()->getCompilation()->getAllDiagnostics();
+            auto text = original;
+            text.replace(text.find("return " + initial), 7 + initial.size(), "return 8");
+            change(server, doc.m_uri, 2, text);
+            doc.m_text = text;
+            CHECK_FALSE(state(server).active);
+            CHECK(state(server).decline == "method has external constant dependencies");
+            CHECK(doc.doc->getText() == text + '\0');
+            auto actual = server.getDocHover({.textDocument = {.uri = doc.m_uri},
+                                              .position = doc.getPosition(text.find("data;") + 2)});
+            bodyConfig(workspace, false);
+            ServerHarness native(workspace.params());
+            auto oracle = native.openFile("item.svh", text);
+            CHECK(rfl::json::write(actual) ==
+                  rfl::json::write(native.getDocHover(
+                      {.textDocument = {.uri = oracle.m_uri},
+                       .position = oracle.getPosition(text.find("data;") + 2)})));
+        }
+    }
+}
+
+TEST_CASE("General body queries accept batched edits and inherited macro state",
+          "[method-body][general-body]") {
+    Workspace workspace;
+    bodyConfig(workspace);
+    workspace.write(
+        "owner.sv",
+        "`define ENTRY_VALUE 4\npackage owner;\n`include \"item.svh\"\n"
+        "`undef ENTRY_VALUE\n`define ENTRY_VALUE missing_later_definition\nendpackage\n");
+    const std::string original = "class C;\ntask run();\n  // 中文\n  int value = `ENTRY_VALUE;\n  "
+                                 "value += 1;\nendtask\nendclass\n";
+    workspace.write("item.svh", original);
+    ServerHarness server(workspace.params());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    lsp::DidChangeTextDocumentParams params{
+        .textDocument = {.version = 2, .uri = doc.m_uri},
+        .contentChanges = {
+            lsp::TextDocumentContentChangePartial{.range = {.start = {.line = 4, .character = 11},
+                                                            .end = {.line = 4, .character = 12}},
+                                                  .text = "123"},
+            lsp::TextDocumentContentChangePartial{.range = {.start = {.line = 4, .character = 2},
+                                                            .end = {.line = 4, .character = 2}},
+                                                  .text = "if (value > 0) "}}};
+    server.SlangServer::onDocDidChange(params, {});
+    const auto expected = std::string(
+        "class C;\ntask run();\n  // 中文\n  int value = `ENTRY_VALUE;\n  if (value > 0) value += "
+        "123;\nendtask\nendclass\n");
+    REQUIRE(doc.doc->getText() == expected + '\0');
+    doc.m_text = expected;
+    REQUIRE(state(server).active);
+    auto at = expected.find("value +=") + 3;
+    auto actual = bodyCompletions(server, doc, at);
+    bodyConfig(workspace, false);
+    ServerHarness native(workspace.params());
+    auto oracle = native.openFile("item.svh", expected);
+    CHECK(rfl::json::write(actual) == rfl::json::write(bodyCompletions(native, oracle, at)));
+}
+
+TEST_CASE("General body queries keep balanced conditional compilation local",
+          "[method-body][general-body]") {
+    Workspace workspace;
+    bodyConfig(workspace);
+    workspace.write("owner.sv",
+                    "`define LOCAL_ENABLED\npackage owner;\n`include \"item.svh\"\nendpackage\n");
+    const std::string original =
+        "class C;\nfunction int f(input int arg);\n`ifdef LOCAL_ENABLED\n  return arg;\n`else\n  "
+        "return 0;\n`endif\nendfunction\nendclass\n";
+    workspace.write("item.svh", original);
+    ServerHarness server(workspace.params());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    auto text = original;
+    text.replace(text.find("return arg;"), 11, "int local_value = arg + 1;\n  return local_value;");
+    change(server, doc.m_uri, 2, text);
+    doc.m_text = text;
+    REQUIRE(state(server).active);
+    const auto at = text.find("return local_value") + 11;
+    auto actual = bodyCompletions(server, doc, at);
+    bodyConfig(workspace, false);
+    ServerHarness native(workspace.params());
+    auto oracle = native.openFile("item.svh", text);
+    CHECK(rfl::json::write(actual) == rfl::json::write(bodyCompletions(native, oracle, at)));
+}
+
+TEST_CASE("Detached body construction owns attributes and preserves its lexical owner",
+          "[method-body][general-body]") {
+    using namespace slang;
+    SourceManager sm;
+    auto source = sm.assignText(
+        "class Box #(type T=int); T item; endclass\n"
+        "(* keep=1 *) function automatic int f(input int arg); return arg; endfunction");
+    auto tree = syntax::SyntaxTree::fromBuffer(source, sm);
+    ast::CompilationOptions options;
+    options.flags |= ast::CompilationFlags::TrackSubroutineBodyDependencies;
+    auto owner = std::make_shared<ast::Compilation>(options);
+    owner->addSyntaxTree(tree);
+    owner->getRoot();
+    auto original = owner->getCompilationUnits().front()->find("f");
+    REQUIRE(original);
+    auto& originalFn = original->as<ast::SubroutineSymbol>();
+    REQUIRE(owner->getAttributes(originalFn).size() == 1);
+    auto& generic =
+        owner->getCompilationUnits().front()->find("Box")->as<ast::GenericClassDefSymbol>();
+    size_t originalSpecializations = 0;
+    for (const auto& ignored : generic.specializations()) {
+        (void)ignored;
+        ++originalSpecializations;
+    }
+    auto changed = sm.assignText(
+        "(* keep=1 *) function automatic int f(input int arg); "
+        "typedef struct packed {logic [7:0] data;} local_t; Box#(local_t) value; "
+        "value = new; value.item.data = arg; return value.item.data; endfunction");
+    auto mini = syntax::SyntaxTree::fromBuffer(changed, sm);
+    auto& functionSyntax = mini->root()
+                               .as<syntax::CompilationUnitSyntax>()
+                               .members.front()
+                               ->as<syntax::FunctionDeclarationSyntax>();
+    auto query = std::make_shared<ast::Compilation>(options);
+    query->addSyntaxTree(mini);
+    query->setBodyQueryContext(owner);
+    CHECK(&query->getStdPackage() == &owner->getStdPackage());
+    CHECK(query->getCompilationUnits().front() == owner->getCompilationUnits().front());
+    auto& fn = ast::SubroutineSymbol::createBodyQuery(*query, functionSyntax, originalFn);
+    CHECK(owner->getAttributes(fn).empty());
+    CHECK(query->getAttributes(fn).size() == 1);
+    CHECK(owner->getCompilationUnits().front()->find("f") == &originalFn);
+    CHECK(fn.getParentScope() == originalFn.getParentScope());
+    CHECK(fn.getSyntax() == &functionSyntax);
+    (void)fn.getBody();
+    size_t retainedSpecializations = 0;
+    for (const auto& ignored : generic.specializations()) {
+        (void)ignored;
+        ++retainedSpecializations;
+    }
+    CHECK(retainedSpecializations == originalSpecializations);
+}
+
+TEST_CASE("Body line changes invalidate macro-dependent declarations and lazy sibling values",
+          "[method-body][general-body]") {
+    for (bool sibling : {false, true}) {
+        DYNAMIC_SECTION(sibling) {
+            Workspace workspace;
+            bodyConfig(workspace);
+            const std::string original =
+                sibling ? "function automatic int f(input int arg); return arg; endfunction\n"
+                          "function automatic int line_value(); return `__LINE__; endfunction\n"
+                        : "class C;\nfunction int f(input int arg); return arg; endfunction\n"
+                          "localparam int WIDTH=`__LINE__;\nlogic [WIDTH-1:0] data;\nendclass\n";
+            workspace.write("item.svh", original);
+            ServerHarness server(workspace.params());
+            auto doc = server.openFile("item.svh", original);
+            doc.doc->getAnalysis();
+            auto text = original;
+            text.replace(text.find("return arg;"), 11,
+                         sibling ? "localparam int value = line_value();\nreturn value;"
+                                 : "int value = arg;\nreturn value;");
+            change(server, doc.m_uri, 2, text);
+            doc.m_text = text;
+            CHECK_FALSE(state(server).active);
+            CHECK(doc.doc->getText() == text + '\0');
+            if (!sibling)
+                CHECK(state(server).decline == "body shifts line-dependent enclosing declarations");
+            auto at = text.find("return value") + 10;
+            auto actual = bodyCompletions(server, doc, at);
+            bodyConfig(workspace, false);
+            ServerHarness native(workspace.params());
+            auto oracle = native.openFile("item.svh", text);
+            CHECK(rfl::json::write(actual) ==
+                  rfl::json::write(bodyCompletions(native, oracle, at)));
+        }
+    }
+}
+
+TEST_CASE("Body queries resolve containing class documentation from current source",
+          "[method-body][general-body]") {
+    struct Ticket {
+        uint64_t contextEpoch;
+        rfl::Generic payload;
+        std::optional<uint64_t> methodBodyCertificate;
+        std::optional<int> methodBodyVersion;
+    };
+    struct Descriptor {
+        std::string documentUri, symbolPath, symbolName;
+        uint32_t bufferId;
+        uint64_t offset;
+        slang::ast::SymbolKind symbolKind;
+        bool labelOnly = false;
+    };
+    Workspace workspace;
+    bodyConfig(workspace);
+    const std::string original =
+        "class C;\nfunction int f(input int arg);\n  return arg;\nendfunction\nendclass\n";
+    workspace.write("item.svh", original);
+    ServerHarness server(workspace.params());
+    auto doc = server.openFile("item.svh", original);
+    auto baseline = doc.doc->getAnalysis();
+    auto cls = baseline->getCompilation()->getPackage("owner")->find("C");
+    REQUIRE(cls);
+    auto text = original;
+    text.replace(text.find("return arg;"), 11, "return arg + 123;");
+    change(server, doc.m_uri, 2, text);
+    doc.m_text = text;
+    REQUIRE(state(server).active);
+    auto response = server.getDocCompletion(
+        {.textDocument = {.uri = doc.m_uri}, .position = doc.getPosition(text.find("arg +") + 1)});
+    const auto& items = rfl::get<std::vector<lsp::CompletionItem>>(response);
+    auto found = std::ranges::find_if(items, [](const auto& i) { return i.label == "arg"; });
+    REQUIRE(found != items.end());
+    REQUIRE(found->data);
+    auto ticket = rfl::from_generic<Ticket>(*found->data).value();
+    ticket.payload = rfl::to_generic<rfl::UnderlyingEnums>(
+        Descriptor{doc.m_uri.str(), cls->getHierarchicalPath(), std::string(cls->name),
+                   cls->location.buffer().getId(), cls->location.offset(), cls->kind});
+    auto actual = server.getCompletionItemResolve(lsp::CompletionItem{
+        .label = "C", .kind = lsp::CompletionItemKind::Class, .data = rfl::to_generic(ticket)});
+    REQUIRE(actual.documentation);
+    CHECK(rfl::json::write(actual.documentation).find("arg + 123") != std::string::npos);
+    bodyConfig(workspace, false);
+    ServerHarness native(workspace.params());
+    auto oracle = native.openFile("item.svh", text);
+    auto currentClass = oracle.doc->getAnalysis()->getCompilation()->getPackage("owner")->find("C");
+    REQUIRE(currentClass);
+    lsp::CompletionItem expected{.label = "C"};
+    server::completions::MemberCompletionQuery::resolve(*currentClass, expected);
+    CHECK(rfl::json::write(actual.documentation) == rfl::json::write(expected.documentation));
+}
+
+TEST_CASE("Body source projection leaves freshly parsed native locations unchanged",
+          "[method-body][general-body]") {
+    using namespace slang;
+    SourceManager sm;
+    const std::string oldText = "a\nb\nc\n", currentText = "a\nb\ninserted\nc\n";
+    auto original = sm.assignText("projection.sv", oldText);
+    const auto limit = uint32_t(sm.getSourceLocationEntryCount());
+    auto current = sm.assignQueryText("projection.sv", currentText);
+    auto mini = sm.assignQueryText("projection.sv", currentText);
+    auto native = sm.assignQueryText("projection.sv", currentText);
+    server::BodySourceProjection projection(sm, current.id, mini.id, oldText.find('c'),
+                                            currentText.find('c'), limit);
+    auto expected = server::toPosition(SourceLocation(current.id, currentText.find('c')), sm);
+    CHECK(server::toPosition(SourceLocation(original.id, oldText.find('c')), sm) == expected);
+    CHECK(server::toPosition(SourceLocation(native.id, currentText.find('c')), sm) == expected);
+    CHECK(sm.isLatestData(original.id)); // Private query text never replaces the editor lookup.
 }

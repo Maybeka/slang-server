@@ -15,6 +15,7 @@
 #include "slang/ast/symbols/CompilationUnitSymbols.h"
 #include "slang/ast/symbols/InstanceSymbols.h"
 #include "slang/ast/symbols/ParameterSymbols.h"
+#include "slang/ast/symbols/SubroutineSymbols.h"
 #include "slang/ast/symbols/ValueSymbol.h"
 #include "slang/diagnostics/AnalysisDiags.h"
 
@@ -139,6 +140,34 @@ ShallowCompilation::ShallowCompilation(
     }
 }
 
+ShallowCompilation::ShallowCompilation(SourceManager& sm, std::shared_ptr<syntax::SyntaxTree> tree,
+                                       std::shared_ptr<ShallowCompilation> owner,
+                                       std::span<const ast::SubroutineSymbol* const> originals) :
+    m_bodyQueryOwner(std::move(owner)), m_sourceManager(sm), m_tree(std::move(tree)) {
+    m_compilation = std::make_shared<ast::Compilation>(
+        Bag{m_bodyQueryOwner->getCompilation()->getOptions()});
+    m_compilation->addSyntaxTree(m_tree);
+    m_compilation->setBodyQueryContext(m_bodyQueryOwner->getCompilation());
+    const syntax::FunctionDeclarationSyntax* syntax = nullptr;
+    auto find = [&](auto&& self, const syntax::SyntaxNode& node) -> void {
+        if (auto fn = node.as_if<syntax::FunctionDeclarationSyntax>()) {
+            if (syntax)
+                throw std::runtime_error("multiple query bodies");
+            syntax = fn;
+            return;
+        }
+        for (uint32_t i = 0; i < node.getChildCount(); ++i)
+            if (auto child = node.childNode(i))
+                self(self, *child);
+    };
+    find(find, m_tree->root());
+    if (!syntax)
+        throw std::runtime_error("missing query body");
+    for (auto original : originals)
+        m_bodyQueryRoots.push_back(
+            &ast::SubroutineSymbol::createBodyQuery(*m_compilation, *syntax, *original));
+}
+
 bool ShallowCompilation::hasValidBuffers() const {
     for (auto& tree : m_allTrees) {
         if (!server::hasValidBuffers(m_sourceManager, tree))
@@ -148,6 +177,8 @@ bool ShallowCompilation::hasValidBuffers() const {
 }
 
 const Diagnostics& ShallowCompilation::getSemanticDiagnostics() {
+    if (m_bodyQueryOwner)
+        throw std::logic_error("body query diagnostics require current native compilation");
     if (!m_editedDefinitionsElaborated &&
         !m_compilation->hasFlag(ast::CompilationFlags::PackageAnalysis)) {
         auto& root = m_compilation->getRoot();
@@ -180,6 +211,8 @@ Diagnostics ShallowCompilation::getAnalysisDiags() {
 }
 
 const analysis::AnalysisManager* ShallowCompilation::getAnalysisManager() {
+    if (m_bodyQueryOwner)
+        return nullptr;
     if (!m_sourceInstances.empty()) {
         auto& manager = m_activeDesign->getAnalysis().getAnalysisManager();
         if (!m_cachedAnalysisDiags)

@@ -45,7 +45,8 @@ public:
                                const lsp::RequestContext& ctx);
 
     static void resolve(CompletionDispatch& dispatch, lsp::CompletionItem& item,
-                        const lsp::RequestContext& ctx);
+                        const lsp::RequestContext& ctx,
+                        std::shared_ptr<ShallowAnalysis> analysis = {});
 
     /// Populate deferred member properties while the symbol is already available.
     static void resolve(const slang::ast::Symbol& symbol, lsp::CompletionItem& item,

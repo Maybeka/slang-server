@@ -22,6 +22,7 @@ slang::syntax::CompilationUnitSyntax& slang_server_record_parse(
     // fixture has three roots; its mini source has exactly one package/class/method.
     bool mini = false;
     if (result.members.size() == 1) {
+        mini = result.members.front()->as_if<slang::syntax::FunctionDeclarationSyntax>() != nullptr;
         auto* package = result.members.front()->as_if<slang::syntax::ModuleDeclarationSyntax>();
         if (package && package->kind == slang::syntax::SyntaxKind::PackageDeclaration &&
             package->members.size() == 1) {

@@ -14,6 +14,7 @@
 #include <tuple>
 
 #include "slang/ast/ASTVisitor.h"
+#include "slang/ast/EvalContext.h"
 #include "slang/ast/expressions/LiteralExpressions.h"
 #include "slang/ast/expressions/MiscExpressions.h"
 #include "slang/ast/expressions/OperatorExpressions.h"
@@ -415,8 +416,10 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
         // The per-document index already exists. Do not walk a large package's
         // complete syntax graph to reject an edit outside an eligible method.
         auto* token = analysis->syntaxes.getTokenAt(SourceLocation(occurrence, editOffset));
-        for (auto* node = token ? analysis->syntaxes.getTokenParent(token) : nullptr; node;
-             node = node->parent) {
+        for (auto* node =
+                 token ? analysis->syntaxes.getTokenParent(token)
+                       : analysis->syntaxes.getSyntaxAt(SourceLocation(occurrence, editOffset));
+             node; node = node->parent) {
             if (auto* fn = node->as_if<syntax::FunctionDeclarationSyntax>()) {
                 selected = fn;
                 break;
@@ -430,201 +433,327 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
              selected->getFirstToken().location().offset() <= editOffset &&
              editOffset < selected->getLastToken().range().end().offset(),
          "edit outside function");
-    auto* declaration = selected->parent
-                            ? selected->parent->as_if<syntax::ClassMethodDeclarationSyntax>()
-                            : nullptr;
-    auto* cls = declaration && declaration->parent
-                    ? declaration->parent->as_if<syntax::ClassDeclarationSyntax>()
-                    : nullptr;
-    auto* package = cls && cls->parent ? cls->parent->as_if<syntax::ModuleDeclarationSyntax>()
-                                       : nullptr;
-    need(cls && package && package->kind == syntax::SyntaxKind::PackageDeclaration &&
-             !cls->parameters && (bodyQueries || (!cls->extendsClause && !cls->implementsClause)) &&
-             !cls->virtualOrInterface && cls->attributes.empty(),
-         "ordinary package class");
-    need(declaration->qualifiers.empty() && declaration->attributes.empty() &&
-             selected->attributes.empty() && !selected->endBlockName &&
-             selected->prototype->specifiers.empty() &&
-             selected->prototype->lifetime.kind != parsing::TokenKind::StaticKeyword &&
-             selected->prototype->keyword.kind == parsing::TokenKind::FunctionKeyword &&
-             plainInt(selected->prototype->returnType),
-         "ordinary int instance function");
-    auto* name = selected->prototype->name->as_if<syntax::IdentifierNameSyntax>();
-    need(name, "plain method name");
-    packageName = package->header->name.valueText();
-    className = cls->name.valueText();
-    functionName = name->identifier.valueText();
-    auto& fn = method(compilation, packageName, className, functionName);
-    need(fn.getSyntax() == selected, "target semantic identity");
-    functionPath = fn.getHierarchicalPath();
-    need(bool(selected->prototype->portList), "explicit formal list required");
-    std::regex identifier("[A-Za-z_][A-Za-z_0-9]*");
-    need(std::regex_match(packageName, identifier) && std::regex_match(className, identifier) &&
-             std::regex_match(functionName, identifier),
-         "ordinary identifiers required");
-    for (auto* port : selected->prototype->portList->ports) {
-        auto* p = port->as_if<syntax::FunctionPortSyntax>();
-        need(p && p->attributes.empty() && p->direction.kind == parsing::TokenKind::InputKeyword &&
-                 !p->constKeyword && !p->staticKeyword && !p->varKeyword && plainInt(p->dataType) &&
-                 p->declarator->dimensions.empty() && !p->declarator->initializer,
-             "plain input int");
-    }
-    if (!bodyQueries) {
-        auto imports = [&](auto&& self, const syntax::SyntaxNode& node) -> void {
-            need(node.kind != syntax::SyntaxKind::PackageImportDeclaration,
-                 "import environment unsupported");
-            for (uint32_t i = 0; i < node.getChildCount(); ++i)
-                if (auto* child = node.childNode(i))
-                    self(self, *child);
-        };
-        imports(imports, *package);
-        for (auto* member : cls->items) {
-            if (auto* field = member->as_if<syntax::ClassPropertyDeclarationSyntax>()) {
-                auto* value = field->declaration->as_if<syntax::DataDeclarationSyntax>();
-                need(field->attributes.empty() && field->qualifiers.empty() && value &&
-                         value->attributes.empty() && value->modifiers.empty() &&
-                         plainInt(value->type),
-                     "ordinary int field interface");
-                for (auto* declarator : value->declarators)
-                    need(declarator->dimensions.empty() && !declarator->initializer,
-                         "dependent field interface");
-            }
-            else {
-                auto* other = member->as_if<syntax::ClassMethodDeclarationSyntax>();
-                need(other && other->qualifiers.empty() && other->attributes.empty(),
-                     "ordinary method interface");
-                auto& prototype = *other->declaration->prototype;
-                need(other->declaration->attributes.empty() && prototype.specifiers.empty() &&
-                         prototype.keyword.kind == parsing::TokenKind::FunctionKeyword &&
-                         prototype.lifetime.kind != parsing::TokenKind::StaticKeyword &&
-                         plainInt(prototype.returnType),
-                     "explicit int return interface");
-                if (prototype.portList)
-                    for (auto* port : prototype.portList->ports) {
-                        auto* argument = port->as_if<syntax::FunctionPortSyntax>();
-                        need(argument && argument->attributes.empty() &&
-                                 argument->direction.kind == parsing::TokenKind::InputKeyword &&
-                                 !argument->constKeyword && !argument->staticKeyword &&
-                                 !argument->varKeyword && plainInt(argument->dataType) &&
-                                 argument->declarator->dimensions.empty() &&
-                                 !argument->declarator->initializer,
-                             "dependent method interface");
-                    }
-            }
-        }
-    }
-    for (const ast::Scope* scope = fn.getParentScope(); scope;
-         scope = scope->asSymbol().getParentScope())
-        for (auto& member : scope->members())
-            if (&member != &fn && !member.name.empty())
-                outerNames.emplace_back(member.name);
-    auto body = shape(*selected);
-    bodyBegin = body.begin;
-    bodyEnd = body.end;
-    localCount = body.locals;
-    originalBodyEnd = bodyEnd;
-    localDeclarations = declarations(*selected);
-    verify(fn, outerNames);
-    functionBegin = selected->getFirstToken().location().offset();
-    functionEnd = selected->getLastToken().range().end().offset();
-    text = plain(*document);
-    need(std::all_of(text.begin(), text.end(), [](unsigned char c) { return c < 128; }),
-         "ASCII header only");
-    need(text.substr(functionBegin, functionEnd - functionBegin).find('\\') == std::string::npos,
-         "escaped method tokens unsupported");
     if (bodyQueries) {
-        need(text.substr(functionBegin, functionEnd - functionBegin).find('`') == std::string::npos,
-             "macro-free method required");
-        auto tokens = [&](auto&& self, const syntax::SyntaxNode& node) -> void {
-            for (uint32_t i = 0; i < node.getChildCount(); ++i) {
-                if (auto* child = node.childNode(i))
-                    self(self, *child);
-                else if (auto token = node.childToken(i); token)
-                    need(token.location().buffer() == occurrence, "expanded method token");
-            }
-        };
-        tokens(tokens, *selected);
-    }
-    originalBuffer = occurrence.getId();
-    currentBuffer = document->getBuffer().getId();
-    version = *document->getVersion();
-    ctx.checkpoint("method certificate method ready");
-    // Completion order still comes from the native queries below. Index only
-    // identity resolution, once, instead of scanning every visible member for
-    // each item. Pointers live only during this constructor; the retained
-    // interface consists of value DTOs. Outer matches overwrite inner matches
-    // in the same traversal order as the previous per-item search.
-    using Identity = std::tuple<ast::SymbolKind, std::string, std::string, uint32_t, uint64_t>;
-    std::map<Identity, const ast::Symbol*> symbols;
-    auto indexScope = [&](const ast::Scope& scope) {
-        for (auto& member : scope.members()) {
-            const ast::Symbol* symbol = &member;
-            while (auto* proxy = symbol->as_if<ast::TransparentMemberSymbol>())
-                symbol = &proxy->wrapped;
-            if (auto* import = symbol->as_if<ast::ExplicitImportSymbol>())
-                symbol = import->importedSymbol();
-            if (symbol && !symbol->name.empty())
-                symbols.insert_or_assign(
-                    Identity{symbol->kind, std::string(symbol->name), symbol->getHierarchicalPath(),
-                             symbol->location.buffer().getId(), symbol->location.offset()},
-                    symbol);
+        auto contexts = analysis->getSubroutines(*selected);
+        need(!contexts.empty(), "unbound function / task context");
+        for (auto fn : contexts) {
+            need(fn->getCompilation().hasFlag(
+                     ast::CompilationFlags::TrackSubroutineBodyDependencies),
+                 "method context lacks dependency tracking");
+            need(!fn->bodyHasExternalDependents.load(std::memory_order_relaxed),
+                 "method has external constant dependencies");
         }
-    };
-    for (const ast::Scope* scope = &fn; scope; scope = scope->asSymbol().getParentScope()) {
-        ctx.checkpoint("method certificate completion scope");
-        indexScope(*scope);
-        if (bodyQueries)
-            if (auto* imports = scope->getWildcardImportData())
-                for (auto* import : imports->wildcardImports)
-                    if (auto* imported = import->getPackage())
-                        indexScope(*imported);
-    }
-    for (size_t kind = 0; kind < 2; ++kind) {
-        std::vector<lsp::CompletionItem> items;
-        CompletionContext context;
-        context.kind = kind ? CompletionContextKind::Expression : CompletionContextKind::Procedural;
-        completions::InstanceCompletionQuery::addCompletions(items, d.m_indexer, context);
-        Formatting::addCompletions(items, &fn, context.kind, &fn, uri.str(), false, false);
-        lexical[kind].reserve(items.size());
-        for (auto& item : items) {
-            DTO dto{.item = std::move(item)};
-            lsp::CompletionItem resolved;
-            if (!dto.item.data)
-                resolved = dto.item;
-            if (dto.item.data) {
-                auto data = rfl::from_generic<Data, rfl::UnderlyingEnums>(*dto.item.data);
-                need(bool(data), "completion identity");
-                auto symbol = symbols.find(Identity{data->symbolKind, data->symbolName,
-                                                    data->symbolPath, data->bufferId,
-                                                    data->offset});
-                need(symbol != symbols.end(), "unaccounted completion symbol");
-                const auto* found = symbol->second;
-                dto.methodOwned = found->getParentScope() == &fn;
-                completions::MemberCompletionQuery::resolve(*found, resolved, false);
-                if (!dto.methodOwned && found->getSyntax()) {
-                    auto span = found->getSyntax()->sourceRange();
-                    dto.changedDocumentation = span.start().buffer() == occurrence &&
-                                               span.start().offset() < bodyEnd &&
-                                               span.end().offset() > bodyBegin;
+        generalBody = true;
+        if (generalBody) {
+            bodyOwner = analysis;
+            bodyOriginals = std::move(contexts);
+            functionBegin = selected->getFirstToken().location().offset();
+            functionEnd = selected->getLastToken().range().end().offset();
+            bodyBegin = selected->semi.range().end().offset();
+            bodyEnd = selected->end.location().offset();
+            originalBodyEnd = bodyEnd;
+            originalBuffer = occurrence.getId();
+            currentBuffer = document->getBuffer().getId();
+            version = *document->getVersion();
+            text = plain(*document);
+            functionName = bodyOriginals.front()->name;
+            functionPath = bodyOriginals.front()->getHierarchicalPath();
+            bodyBlocked = bodyOriginals;
+            bodyBufferLimit = uint32_t(d.sm.getSourceLocationEntryCount());
+            // Macro expansions after this method can use __LINE__, including through
+            // nested macros or token pasting. Conservatively retain their enclosing
+            // methods as dependencies; declaration / signature expansions need a full
+            // update whenever the method's line count changes.
+            for (const auto& [usage, expansion] : analysis->syntaxes.macroExpansions) {
+                auto location = d.sm.getFullyExpandedLoc(usage->getFirstToken().location());
+                if (d.sm.getFullPath(location.buffer()) != d.sm.getFullPath(occurrence) ||
+                    location.offset() < originalBodyEnd)
+                    continue;
+                const syntax::FunctionDeclarationSyntax* enclosing = nullptr;
+                for (auto node = usage; node; node = node->parent)
+                    if (auto fn = node->as_if<syntax::FunctionDeclarationSyntax>()) {
+                        enclosing = fn;
+                        break;
+                    }
+                if (enclosing && location.offset() >= enclosing->semi.range().end().offset() &&
+                    location.offset() < enclosing->end.location().offset()) {
+                    auto methods = analysis->getSubroutines(*enclosing);
+                    if (methods.empty())
+                        bodyLineSensitiveDeclaration = true;
+                    for (auto method : methods) {
+                        if (!method->getCompilation().hasFlag(
+                                ast::CompilationFlags::TrackSubroutineBodyDependencies))
+                            bodyLineSensitiveDeclaration = true;
+                        if (std::ranges::find(bodyLineDependents, method) ==
+                            bodyLineDependents.end())
+                            bodyLineDependents.push_back(method);
+                    }
+                }
+                else
+                    bodyLineSensitiveDeclaration = true;
+            }
+            // Replay preprocessing only once, stopping at the original header. This
+            // captures definitions before this occurrence, including textual includes.
+            macroArena = std::make_unique<BumpAllocator>();
+            Diagnostics diagnostics;
+            auto replayOptions = tree->options();
+            auto preprocessorOptions = replayOptions.getOrDefault<parsing::PreprocessorOptions>();
+            syntax::SyntaxTree::MacroList initialMacros;
+            std::filesystem::path cachedEntry;
+            if (auto compiled = replayOptions.get<syntax::PrecompiledUvmSyntax>();
+                compiled && compiled->tree) {
+                initialMacros = compiled->tree->getDefinedMacros();
+                cachedEntry = compiled->entry.empty() ? compiled->root / "uvm_pkg.sv"
+                                                      : compiled->entry;
+                preprocessorOptions.predefines.clear();
+                preprocessorOptions.undefines.clear();
+                replayOptions.set(preprocessorOptions);
+            }
+            parsing::Preprocessor pp(d.sm, *macroArena, diagnostics, replayOptions, initialMacros);
+            auto roots = tree->getSourceBufferIds();
+            for (auto it = roots.begin(); it != roots.end(); ++it)
+                if (!d.sm.getIncludedFrom(*it) &&
+                    (cachedEntry.empty() || d.sm.getFullPath(*it) != cachedEntry))
+                    pp.pushSource(
+                        SourceBuffer{d.sm.getSourceText(*it), d.sm.getLibraryFor(*it), *it});
+            bool reached = false;
+            size_t replayTokens = 0;
+            for (;;) {
+                if ((replayTokens++ & 1023) == 0)
+                    ctx.checkpoint("method macro environment replay");
+                auto token = pp.next();
+                if (token.kind == parsing::TokenKind::EndOfFile)
+                    break;
+                if (d.sm.isFileLoc(token.location()) &&
+                    d.sm.getFullPath(token.location().buffer()) == d.sm.getFullPath(occurrence) &&
+                    token.location().offset() == functionBegin) {
+                    reached = true;
+                    break;
                 }
             }
-            else if (dto.item.kind == lsp::CompletionItemKind::Module) {
-                completions::InstanceCompletionQuery::resolve(*tree, dto.item.label, resolved);
-                need(bool(resolved.documentation), "global module outside frozen tree");
-            }
-            dto.documentation = std::move(resolved.documentation);
-            dto.insertText = std::move(resolved.insertText);
-            dto.insertTextFormat = resolved.insertTextFormat;
-            if (dto.methodOwned)
-                methodSlots[kind].push_back(lexical[kind].size());
-            lexical[kind].push_back(std::move(dto));
+            need(reached, "method preprocessing context unavailable");
+            bodyMacros = pp.getDefinedMacros();
+            bodyKeywordVersion = int(pp.getCurrentKeywordVersion());
+            auto metadata = pp.getMetadata();
+            auto pins = metadata.sourceBufferIds;
+            for (auto macro : bodyMacros)
+                pins.push_back(macro->name.location().buffer());
+            macroPins = d.sm.retainBuffers(pins);
         }
     }
-    // No AST-backed lookup is needed while capturing the diagnostic snapshot.
-    symbols.clear();
-    ctx.checkpoint("method certificate completions ready");
+    if (!generalBody) {
+        auto* declaration = selected->parent
+                                ? selected->parent->as_if<syntax::ClassMethodDeclarationSyntax>()
+                                : nullptr;
+        auto* cls = declaration && declaration->parent
+                        ? declaration->parent->as_if<syntax::ClassDeclarationSyntax>()
+                        : nullptr;
+        auto* package = cls && cls->parent ? cls->parent->as_if<syntax::ModuleDeclarationSyntax>()
+                                           : nullptr;
+        need(cls && package && package->kind == syntax::SyntaxKind::PackageDeclaration &&
+                 !cls->parameters &&
+                 (bodyQueries || (!cls->extendsClause && !cls->implementsClause)) &&
+                 !cls->virtualOrInterface && cls->attributes.empty(),
+             "ordinary package class");
+        need(declaration->qualifiers.empty() && declaration->attributes.empty() &&
+                 selected->attributes.empty() && !selected->endBlockName &&
+                 selected->prototype->specifiers.empty() &&
+                 selected->prototype->lifetime.kind != parsing::TokenKind::StaticKeyword &&
+                 selected->prototype->keyword.kind == parsing::TokenKind::FunctionKeyword &&
+                 plainInt(selected->prototype->returnType),
+             "ordinary int instance function");
+        auto* name = selected->prototype->name->as_if<syntax::IdentifierNameSyntax>();
+        need(name, "plain method name");
+        packageName = package->header->name.valueText();
+        className = cls->name.valueText();
+        functionName = name->identifier.valueText();
+        auto& fn = method(compilation, packageName, className, functionName);
+        need(fn.getSyntax() == selected, "target semantic identity");
+        functionPath = fn.getHierarchicalPath();
+        need(bool(selected->prototype->portList), "explicit formal list required");
+        std::regex identifier("[A-Za-z_][A-Za-z_0-9]*");
+        need(std::regex_match(packageName, identifier) && std::regex_match(className, identifier) &&
+                 std::regex_match(functionName, identifier),
+             "ordinary identifiers required");
+        for (auto* port : selected->prototype->portList->ports) {
+            auto* p = port->as_if<syntax::FunctionPortSyntax>();
+            need(p && p->attributes.empty() &&
+                     p->direction.kind == parsing::TokenKind::InputKeyword && !p->constKeyword &&
+                     !p->staticKeyword && !p->varKeyword && plainInt(p->dataType) &&
+                     p->declarator->dimensions.empty() && !p->declarator->initializer,
+                 "plain input int");
+        }
+        if (!bodyQueries) {
+            auto imports = [&](auto&& self, const syntax::SyntaxNode& node) -> void {
+                need(node.kind != syntax::SyntaxKind::PackageImportDeclaration,
+                     "import environment unsupported");
+                for (uint32_t i = 0; i < node.getChildCount(); ++i)
+                    if (auto* child = node.childNode(i))
+                        self(self, *child);
+            };
+            imports(imports, *package);
+            for (auto* member : cls->items) {
+                if (auto* field = member->as_if<syntax::ClassPropertyDeclarationSyntax>()) {
+                    auto* value = field->declaration->as_if<syntax::DataDeclarationSyntax>();
+                    need(field->attributes.empty() && field->qualifiers.empty() && value &&
+                             value->attributes.empty() && value->modifiers.empty() &&
+                             plainInt(value->type),
+                         "ordinary int field interface");
+                    for (auto* declarator : value->declarators)
+                        need(declarator->dimensions.empty() && !declarator->initializer,
+                             "dependent field interface");
+                }
+                else {
+                    auto* other = member->as_if<syntax::ClassMethodDeclarationSyntax>();
+                    need(other && other->qualifiers.empty() && other->attributes.empty(),
+                         "ordinary method interface");
+                    auto& prototype = *other->declaration->prototype;
+                    need(other->declaration->attributes.empty() && prototype.specifiers.empty() &&
+                             prototype.keyword.kind == parsing::TokenKind::FunctionKeyword &&
+                             prototype.lifetime.kind != parsing::TokenKind::StaticKeyword &&
+                             plainInt(prototype.returnType),
+                         "explicit int return interface");
+                    if (prototype.portList)
+                        for (auto* port : prototype.portList->ports) {
+                            auto* argument = port->as_if<syntax::FunctionPortSyntax>();
+                            need(argument && argument->attributes.empty() &&
+                                     argument->direction.kind == parsing::TokenKind::InputKeyword &&
+                                     !argument->constKeyword && !argument->staticKeyword &&
+                                     !argument->varKeyword && plainInt(argument->dataType) &&
+                                     argument->declarator->dimensions.empty() &&
+                                     !argument->declarator->initializer,
+                                 "dependent method interface");
+                        }
+                }
+            }
+        }
+        for (const ast::Scope* scope = fn.getParentScope(); scope;
+             scope = scope->asSymbol().getParentScope())
+            for (auto& member : scope->members())
+                if (&member != &fn && !member.name.empty())
+                    outerNames.emplace_back(member.name);
+        auto body = shape(*selected);
+        bodyBegin = body.begin;
+        bodyEnd = body.end;
+        localCount = body.locals;
+        originalBodyEnd = bodyEnd;
+        localDeclarations = declarations(*selected);
+        verify(fn, outerNames);
+        functionBegin = selected->getFirstToken().location().offset();
+        functionEnd = selected->getLastToken().range().end().offset();
+        text = plain(*document);
+        need(std::all_of(text.begin(), text.end(), [](unsigned char c) { return c < 128; }),
+             "ASCII header only");
+        need(text.substr(functionBegin, functionEnd - functionBegin).find('\\') ==
+                 std::string::npos,
+             "escaped method tokens unsupported");
+        if (bodyQueries) {
+            need(text.substr(functionBegin, functionEnd - functionBegin).find('`') ==
+                     std::string::npos,
+                 "macro-free method required");
+            auto tokens = [&](auto&& self, const syntax::SyntaxNode& node) -> void {
+                for (uint32_t i = 0; i < node.getChildCount(); ++i) {
+                    if (auto* child = node.childNode(i))
+                        self(self, *child);
+                    else if (auto token = node.childToken(i); token)
+                        need(token.location().buffer() == occurrence, "expanded method token");
+                }
+            };
+            tokens(tokens, *selected);
+        }
+        originalBuffer = occurrence.getId();
+        currentBuffer = document->getBuffer().getId();
+        version = *document->getVersion();
+        ctx.checkpoint("method certificate method ready");
+        // Completion order still comes from the native queries below. Index only
+        // identity resolution, once, instead of scanning every visible member for
+        // each item. Pointers live only during this constructor; the retained
+        // interface consists of value DTOs. Outer matches overwrite inner matches
+        // in the same traversal order as the previous per-item search.
+        using Identity = std::tuple<ast::SymbolKind, std::string, std::string, uint32_t, uint64_t>;
+        std::map<Identity, const ast::Symbol*> symbols;
+        auto indexScope = [&](const ast::Scope& scope) {
+            for (auto& member : scope.members()) {
+                const ast::Symbol* symbol = &member;
+                while (auto* proxy = symbol->as_if<ast::TransparentMemberSymbol>())
+                    symbol = &proxy->wrapped;
+                if (auto* import = symbol->as_if<ast::ExplicitImportSymbol>())
+                    symbol = import->importedSymbol();
+                if (symbol && !symbol->name.empty())
+                    symbols.insert_or_assign(Identity{symbol->kind, std::string(symbol->name),
+                                                      symbol->getHierarchicalPath(),
+                                                      symbol->location.buffer().getId(),
+                                                      symbol->location.offset()},
+                                             symbol);
+            }
+        };
+        for (const ast::Scope* scope = &fn; scope; scope = scope->asSymbol().getParentScope()) {
+            ctx.checkpoint("method certificate completion scope");
+            indexScope(*scope);
+            if (bodyQueries)
+                if (auto* imports = scope->getWildcardImportData())
+                    for (auto* import : imports->wildcardImports)
+                        if (auto* imported = import->getPackage())
+                            indexScope(*imported);
+        }
+        for (size_t kind = 0; kind < 2; ++kind) {
+            std::vector<lsp::CompletionItem> items;
+            CompletionContext context;
+            context.kind = kind ? CompletionContextKind::Expression
+                                : CompletionContextKind::Procedural;
+            completions::InstanceCompletionQuery::addCompletions(items, d.m_indexer, context);
+            Formatting::addCompletions(items, &fn, context.kind, &fn, uri.str(), false, false);
+            lexical[kind].reserve(items.size());
+            for (auto& item : items) {
+                DTO dto{.item = std::move(item)};
+                lsp::CompletionItem resolved;
+                if (!dto.item.data)
+                    resolved = dto.item;
+                if (dto.item.data) {
+                    auto data = rfl::from_generic<Data, rfl::UnderlyingEnums>(*dto.item.data);
+                    need(bool(data), "completion identity");
+                    auto symbol = symbols.find(Identity{data->symbolKind, data->symbolName,
+                                                        data->symbolPath, data->bufferId,
+                                                        data->offset});
+                    need(symbol != symbols.end(), "unaccounted completion symbol");
+                    const auto* found = symbol->second;
+                    dto.methodOwned = found->getParentScope() == &fn;
+                    completions::MemberCompletionQuery::resolve(*found, resolved, false);
+                    if (!dto.methodOwned && found->getSyntax()) {
+                        auto span = found->getSyntax()->sourceRange();
+                        dto.changedDocumentation = span.start().buffer() == occurrence &&
+                                                   span.start().offset() < bodyEnd &&
+                                                   span.end().offset() > bodyBegin;
+                    }
+                }
+                else if (dto.item.kind == lsp::CompletionItemKind::Module) {
+                    completions::InstanceCompletionQuery::resolve(*tree, dto.item.label, resolved);
+                    need(bool(resolved.documentation), "global module outside frozen tree");
+                }
+                dto.documentation = std::move(resolved.documentation);
+                dto.insertText = std::move(resolved.insertText);
+                dto.insertTextFormat = resolved.insertTextFormat;
+                if (dto.methodOwned)
+                    methodSlots[kind].push_back(lexical[kind].size());
+                lexical[kind].push_back(std::move(dto));
+            }
+        }
+        // No AST-backed lookup is needed while capturing the diagnostic snapshot.
+        symbols.clear();
+        ctx.checkpoint("method certificate completions ready");
+    }
     Bag miniOptions = tree->options();
-    if (bodyQueries) {
+    if (generalBody) {
+        auto pp = miniOptions.getOrDefault<parsing::PreprocessorOptions>();
+        pp.predefines.clear();
+        pp.undefines.clear();
+        pp.keywordMapping = {{"*", parsing::KeywordVersion(bodyKeywordVersion)}};
+        pp.captureUvmPrefix = false;
+        pp.bufferChangeCB = {};
+        miniOptions = Bag{miniOptions.getOrDefault<parsing::LexerOptions>(),
+                          miniOptions.getOrDefault<parsing::ParserOptions>(), pp};
+    }
+    if (bodyQueries && !generalBody) {
         // Mini sources have no includes, macros or semantic-library imports.
         // Retain language / lexer behavior without copying live owner options.
         parsing::PreprocessorOptions pp;
@@ -760,18 +889,24 @@ bool MethodScopeOverlay::belongsTo(const ServerDriver& d) const {
     return driver == &d && frozen.owner == d.m_snapshotOwner;
 }
 bool MethodScopeOverlay::valid(const Config& config, const lsp::RequestContext& ctx) const try {
+    if (generalBody)
+        for (auto original : bodyBlocked)
+            if (original->bodyHasExternalDependents.load(std::memory_order_relaxed))
+                return false;
     if (bodyQueries && (frozen.revision != driver->completions.getCompletionEpoch() ||
                         immutableUvm.lock() != driver->m_trustedUvm ||
-                        immutableScopes.lock() != driver->m_trustedScopes))
+                        immutableScopes.lock() != driver->m_trustedScopes)) {
         return false;
+    }
     if (!belongsTo(*driver) || driver->getContextInputRevision() != inputRevision ||
         driver->getDependencyIndexRevision() != indexRevision ||
         fs::current_path().string() != frozen.input->sources.cwd ||
         rfl::json::write(config) != configKey ||
         rfl::json::write(diagnostic_snapshot::captureOptions(
             bodyQueries ? Bag{driver->options.getOrDefault<ast::CompilationOptions>()}
-                        : driver->options)) != optionsKey)
+                        : driver->options)) != optionsKey) {
         return false;
+    }
     size_t count = 0;
     for (auto& [openUri, document] : driver->docs)
         if (document->getVersion()) {
@@ -782,8 +917,9 @@ bool MethodScopeOverlay::valid(const Config& config, const lsp::RequestContext& 
             const auto& w = it->second;
             if (document.get() != w.document || document->getBuffer().getId() != w.buffer ||
                 *document->getVersion() != w.version || plain(*document) != w.text ||
-                !driver->sm.isLatestData(document->getBuffer()))
+                !driver->sm.isLatestData(document->getBuffer())) {
                 return false;
+            }
         }
     if (count != documents.size())
         return false;
@@ -809,22 +945,32 @@ catch (const std::exception&) {
 bool MethodScopeOverlay::apply(const lsp::DidChangeTextDocumentParams& p, const Config& config,
                                const lsp::RequestContext& ctx, bool& synced) {
     need(valid(config, ctx) && p.textDocument.uri == uri && p.textDocument.version > version &&
-             accepted < (bodyQueries ? 64u : 8u) && p.contentChanges.size() == 1,
+             accepted < (bodyQueries ? 64u : 8u) && !p.contentChanges.empty() &&
+             (bodyQueries || p.contentChanges.size() == 1),
          "method context/version/bound changed");
     std::string next = text;
-    if (auto* whole = rfl::get_if<lsp::TextDocumentContentChangeWholeDocument>(
-            &p.contentChanges[0]))
-        next = whole->text;
-    else {
-        auto& edit = rfl::get<lsp::TextDocumentContentChangePartial>(p.contentChanges[0]);
-        auto document = driver->getDocument(uri);
-        auto begin = toSourceLocation(document->getBuffer(), edit.range.start, driver->sm);
-        auto end = toSourceLocation(document->getBuffer(), edit.range.end, driver->sm);
-        need(begin && end && begin->offset() <= end->offset() && end->offset() <= text.size(),
-             "invalid range");
-        need(!edit.rangeLength || *edit.rangeLength == end->offset() - begin->offset(),
-             "range length mismatch");
-        next.replace(begin->offset(), end->offset() - begin->offset(), edit.text);
+    for (const auto& change : p.contentChanges) {
+        if (auto* whole = rfl::get_if<lsp::TextDocumentContentChangeWholeDocument>(&change)) {
+            next = whole->text;
+            continue;
+        }
+        const auto& edit = rfl::get<lsp::TextDocumentContentChangePartial>(change);
+        auto offset = [&](const lsp::Position& position) {
+            size_t start = 0;
+            for (uint32_t line = 0; line < position.line; ++line) {
+                auto newline = next.find('\n', start);
+                need(newline != std::string::npos, "invalid edit line");
+                start = newline + 1;
+            }
+            auto end = next.find('\n', start);
+            if (end == std::string::npos)
+                end = next.size();
+            return start + utf16ColumnToByte(std::string_view(next).substr(start, end - start),
+                                             position.character);
+        };
+        auto begin = offset(edit.range.start), end = offset(edit.range.end);
+        need(begin <= end && end <= next.size(), "invalid edit range");
+        next.replace(begin, end - begin, edit.text);
     }
     need(next != text && next.size() >= bodyBegin + text.size() - bodyEnd,
          "empty edit or missing method suffix");
@@ -839,6 +985,8 @@ bool MethodScopeOverlay::apply(const lsp::DidChangeTextDocumentParams& p, const 
             need((next[i] == '\n') == (text[i] == '\n') && (next[i] == '\r') == (text[i] == '\r'),
                  "fixed line layout required");
     }
+    if (generalBody)
+        return generalApply(p, config, ctx, synced, std::move(next), nextBodyEnd, nextFunctionEnd);
     need(std::all_of(next.begin(), next.end(), [](unsigned char c) { return c < 128; }),
          "ASCII source required");
     auto methodText = next.substr(functionBegin, nextFunctionEnd - functionBegin);
@@ -983,6 +1131,151 @@ bool MethodScopeOverlay::apply(const lsp::DidChangeTextDocumentParams& p, const 
     return true;
 }
 
+bool MethodScopeOverlay::generalApply(const lsp::DidChangeTextDocumentParams& p,
+                                      const Config& config, const lsp::RequestContext& ctx,
+                                      bool& synced, std::string next, size_t nextBodyEnd,
+                                      size_t nextFunctionEnd) {
+    // These directives change the environment of subsequent declarations. They
+    // require native dependency invalidation; ordinary macro invocations do not.
+    static const std::regex directives(
+        R"(`(define|undef|undefineall|include|begin_keywords|end_keywords|timescale|default_nettype|resetall|line|celldefine|endcelldefine|pragma|unconnected_drive|nounconnected_drive|default_decay_time|default_trireg_strength|delay_mode_distributed|delay_mode_path|delay_mode_unit|delay_mode_zero|uselib)\b)");
+    auto methodText = next.substr(functionBegin, nextFunctionEnd - functionBegin);
+    need(!std::regex_search(methodText, directives), "body changes preprocessing state");
+    static const std::regex conditionals(R"(`(ifdef|ifndef|elsif|else|endif)\b)");
+    size_t depth = 0;
+    for (std::sregex_iterator i(methodText.begin(), methodText.end(), conditionals), end; i != end;
+         ++i) {
+        auto directive = (*i)[1].str();
+        if (directive == "ifdef" || directive == "ifndef")
+            ++depth;
+        else {
+            need(depth != 0, "body changes enclosing conditional state");
+            if (directive == "endif")
+                --depth;
+        }
+    }
+    need(depth == 0, "body leaves conditional preprocessing state open");
+    for (auto original : bodyOriginals)
+        need(!original->bodyHasExternalDependents.load(std::memory_order_relaxed),
+             "method has constant dependencies");
+    // Preserve byte positions and line layout without reparsing any outer declaration.
+    std::string padded = next.substr(0, functionBegin);
+    for (auto& c : padded)
+        if (c != '\n' && c != '\r')
+            c = ' ';
+    padded += methodText;
+    auto source = driver->sm.assignQueryText(
+        driver->sm.getFullPath(driver->getDocument(uri)->getBuffer()).string(), padded);
+    for (const auto& line :
+         driver->sm.getLineDirectives(BufferID(originalBuffer, "body logical lines"))) {
+        auto originalLine = driver->sm.getSourceLocation(
+            BufferID(originalBuffer, "body logical lines"), line.lineInFile, 1);
+        if (originalLine && originalLine->offset() < functionBegin)
+            driver->sm.addLineDirective(SourceLocation(source.id, originalLine->offset()),
+                                        line.lineOfDirective, line.name, line.level, true);
+    }
+    auto blocked = bodyOriginals;
+    const bool shiftedLines = driver->sm.getRawLineNumber(SourceLocation(source.id, nextBodyEnd)) !=
+                              driver->sm.getRawLineNumber(
+                                  SourceLocation(BufferID(originalBuffer, "original body lines"),
+                                                 originalBodyEnd));
+    if (shiftedLines) {
+        need(!bodyLineSensitiveDeclaration, "body shifts line-dependent enclosing declarations");
+        for (auto method : bodyLineDependents) {
+            need(!method->bodyHasExternalDependents.load(std::memory_order_relaxed),
+                 "body shifts a method with external semantic dependencies");
+            blocked.push_back(method);
+        }
+    }
+    ast::BodyQueryEvaluationGuard guard(blocked);
+    ctx.checkpoint("before method mini parse");
+    auto tree = syntax::SyntaxTree::fromBuffer(source, driver->sm, treeOptions->bag(), bodyMacros);
+    for (const auto& reference : tree->getPreprocessorMetadata().macroRefs) {
+        if (!reference.definition)
+            continue;
+        std::string expansion;
+        for (auto token : reference.definition->body) {
+            expansion += token.rawText();
+            expansion += ' ';
+        }
+        need(!std::regex_search(expansion, directives) &&
+                 !std::regex_search(expansion, conditionals),
+             "macro expansion can change surrounding preprocessing state");
+    }
+    auto unit = std::make_shared<ShallowCompilation>(driver->sm, tree,
+                                                     bodyOwner->getShallowCompilation(),
+                                                     bodyOriginals);
+    for (size_t i = 0; i < unit->getBodyQueryRoots().size(); ++i) {
+        auto body = unit->getBodyQueryRoots()[i];
+        auto syntax = body->getSyntax()->as_if<syntax::FunctionDeclarationSyntax>();
+        need(syntax && syntax->semi.range().end().offset() == bodyBegin &&
+                 syntax->end.location().buffer() == source.id &&
+                 syntax->end.location().offset() == nextBodyEnd &&
+                 syntax->getLastToken().range().end().offset() == nextFunctionEnd,
+             "method parse escaped body boundary");
+        auto before = bodyOriginals[i]->getArguments(), after = body->getArguments();
+        need(before.size() == after.size(), "body changes non-ANSI argument interface");
+        need(bodyOriginals[i]->getReturnType().isMatching(body->getReturnType()),
+             "body changes return type");
+        for (size_t a = 0; a < before.size(); ++a) {
+            need(before[a]->name == after[a]->name && before[a]->direction == after[a]->direction &&
+                     before[a]->flags == after[a]->flags &&
+                     before[a]->getType().isMatching(after[a]->getType()),
+                 "body changes non-ANSI argument interface");
+            auto previous = before[a]->getDefaultValue(), current = after[a]->getDefaultValue();
+            need(previous == current ||
+                     (previous && current && previous->syntax && current->syntax &&
+                      previous->syntax->toString() == current->syntax->toString()),
+                 "body changes non-ANSI argument default");
+            if (previous && current) {
+                need(previous->bad() == current->bad() &&
+                         previous->type->isMatching(*current->type),
+                     "body changes argument default validity");
+                ast::EvalContext beforeContext(*before[a]), afterContext(*after[a]);
+                need(previous->eval(beforeContext) == current->eval(afterContext),
+                     "body changes argument default value");
+            }
+        }
+        ctx.checkpoint("before detached body binding");
+        (void)body->getBody();
+        ctx.checkpoint("after detached body binding");
+    }
+    auto resultingMacros = tree->getDefinedMacros();
+    need(resultingMacros.size() == bodyMacros.size(), "body changes macro environment");
+    for (size_t i = 0; i < resultingMacros.size(); ++i)
+        need(resultingMacros[i] == bodyMacros[i] ||
+                 (resultingMacros[i]->name.valueText() == bodyMacros[i]->name.valueText() &&
+                  resultingMacros[i]->toString() == bodyMacros[i]->toString()),
+             "body changes macro environment");
+    auto analysis = std::make_shared<ShallowAnalysis>(source.id, unit, ctx);
+    auto witnessText = next;
+    need(valid(config, ctx), "inputs changed before body publication");
+    ctx.checkpoint("before method publication");
+    synced = true;
+    driver->onDocDidChange(p, ctx);
+    ctx.checkpoint("after method text synchronization");
+    miniAnalysis = std::move(analysis);
+    miniTree = std::move(tree);
+    bodyBlocked = std::move(blocked);
+    text = std::move(next);
+    bodyEnd = nextBodyEnd;
+    functionEnd = nextFunctionEnd;
+    version = p.textDocument.version;
+    auto document = driver->getDocument(uri);
+    currentBuffer = document->getBuffer().getId();
+    handles.push_back(currentBuffer);
+    documents.at(uri) = DocumentWitness{document.get(), currentBuffer, version,
+                                        std::move(witnessText)};
+    inputRevision = driver->getContextInputRevision();
+    ++accepted;
+    return true;
+}
+
+bool MethodScopeOverlay::generalSite(const lsp::Position& position) const {
+    auto at = toSourceLocation(driver->getDocument(uri)->getBuffer(), position, driver->sm);
+    return at && bodyBegin <= at->offset() && at->offset() < bodyEnd;
+}
+
 const MethodScopeOverlay::Site* MethodScopeOverlay::site(const lsp::Position& position) const {
     auto at = toSourceLocation(driver->getDocument(uri)->getBuffer(), position, driver->sm);
     if (!at)
@@ -1019,7 +1312,37 @@ const MethodScopeOverlay::DTO& MethodScopeOverlay::completion(size_t context, si
     return lexical[context][index];
 }
 std::optional<std::vector<lsp::CompletionItem>> MethodScopeOverlay::complete(
-    const lsp::CompletionParams& p, const Config& config, const lsp::RequestContext& ctx) const {
+    const lsp::CompletionParams& p, const Config& config, const lsp::RequestContext& ctx) const
+    try {
+    if (generalBody) {
+        if (!accepted || p.textDocument.uri != uri || !valid(config, ctx) ||
+            !generalSite(p.position))
+            return {};
+        ast::BodyQueryEvaluationGuard guard(bodyBlocked);
+        BodySourceProjection projection(driver->sm, driver->getDocument(uri)->getBuffer(),
+                                        miniAnalysis->getBuffer(), originalBodyEnd, bodyEnd,
+                                        bodyBufferLimit);
+        auto doc = driver->getDocument(uri);
+        auto location = toSourceLocation(miniAnalysis->getBuffer(), p.position, driver->sm);
+        if (!location)
+            return {};
+        auto context = CompletionContext::fromLocation(*doc, *location,
+                                                       p.context.value_or(lsp::CompletionContext{}),
+                                                       ctx, miniAnalysis);
+        if (context.query->isIncomplete())
+            return {};
+        std::vector<lsp::CompletionItem> out;
+        driver->completions.getCompletions(out, doc, context);
+        for (auto& item : out)
+            if (item.data && item.data->to_object()) {
+                auto native = rfl::from_generic<NativePayload>(*item.data);
+                if (native)
+                    item.data = rfl::to_generic(QueryPayload{frozen.revision,
+                                                             std::move(native->payload),
+                                                             frozen.indexRevision, version});
+            }
+        return out;
+    }
     if (!accepted || p.textDocument.uri != uri || !valid(config, ctx) ||
         (p.context && p.context->triggerKind == lsp::CompletionTriggerKind::TriggerCharacter)) {
         return {};
@@ -1050,10 +1373,28 @@ std::optional<std::vector<lsp::CompletionItem>> MethodScopeOverlay::complete(
     ctx.checkpoint("before method completion response");
     return out;
 }
+catch (const lsp::RequestCancelled&) {
+    throw;
+}
+catch (const std::exception&) {
+    return {};
+}
+
 std::optional<std::vector<lsp::LocationLink>> MethodScopeOverlay::define(
-    const lsp::DefinitionParams& p, const Config& config, const lsp::RequestContext& ctx) const {
+    const lsp::DefinitionParams& p, const Config& config, const lsp::RequestContext& ctx) const
+    try {
     if (!accepted || p.textDocument.uri != uri || !valid(config, ctx))
         return {};
+    if (generalBody) {
+        if (!generalSite(p.position))
+            return {};
+        ast::BodyQueryEvaluationGuard guard(bodyBlocked);
+        BodySourceProjection projection(driver->sm, driver->getDocument(uri)->getBuffer(),
+                                        miniAnalysis->getBuffer(), originalBodyEnd, bodyEnd,
+                                        bodyBufferLimit);
+        auto info = driver->getDefinitionInfoAt(uri, p.position, ctx, miniAnalysis);
+        return info ? info->getDefinitionLspLinks() : std::vector<lsp::LocationLink>{};
+    }
     auto* where = site(p.position);
     if (!where)
         return {};
@@ -1065,8 +1406,17 @@ std::optional<std::vector<lsp::LocationLink>> MethodScopeOverlay::define(
     return std::vector<lsp::LocationLink>{
         {.targetUri = uri, .targetRange = target, .targetSelectionRange = target}};
 }
-std::optional<lsp::CompletionItem> MethodScopeOverlay::resolve(
-    const lsp::CompletionItem& item, const Config& config, const lsp::RequestContext& ctx) const {
+catch (const lsp::RequestCancelled&) {
+    throw;
+}
+catch (const std::exception&) {
+    return {};
+}
+
+std::optional<lsp::CompletionItem> MethodScopeOverlay::resolve(const lsp::CompletionItem& item,
+                                                               const Config& config,
+                                                               const lsp::RequestContext& ctx) const
+    try {
     if (!accepted || !valid(config, ctx))
         return {};
     if (item.data) {
@@ -1084,6 +1434,51 @@ std::optional<lsp::CompletionItem> MethodScopeOverlay::resolve(
                 return out;
             }
             payload = std::move(owner->payload);
+        }
+        if (generalBody) {
+            if (!rfl::from_generic<QueryPayload>(*item.data))
+                return {};
+            // A containing class / outer routine's documentation includes this edited
+            // body. Resolve that rare enclosing declaration through the current native
+            // view rather than print its retained old syntax.
+            auto data = rfl::from_generic<Data, rfl::UnderlyingEnums>(payload);
+            if (data && data->documentUri == uri.str()) {
+                auto position = driver->sm.getFullyExpandedLoc(SourceLocation(
+                    BufferID(data->bufferId, "body completion declaration"), data->offset));
+                if (driver->sm.getFullPath(position.buffer()) ==
+                    driver->sm.getFullPath(driver->getDocument(uri)->getBuffer())) {
+                    bool enclosing = false;
+                    for (auto original : bodyOriginals)
+                        for (auto parent = original->getParentScope(); parent;
+                             parent = parent->asSymbol().getParentScope()) {
+                            const auto& symbol = parent->asSymbol();
+                            if (!symbol.name.empty() && symbol.name == data->symbolName &&
+                                driver->sm.getFullyExpandedLoc(symbol.location) == position)
+                                enclosing = true;
+                        }
+                    if (enclosing) {
+                        auto native = driver->getDocument(uri)->getAnalysis(ctx);
+                        data->bufferId = native->getBuffer().getId();
+                        data->offset = position.offset();
+                        if (data->receiverBufferId)
+                            data->receiverBufferId = native->getBuffer().getId();
+                        auto out = item;
+                        out.data = rfl::to_generic<rfl::UnderlyingEnums>(*data);
+                        completions::MemberCompletionQuery::resolve(driver->completions, out, ctx,
+                                                                    native);
+                        return out;
+                    }
+                }
+            }
+            ast::BodyQueryEvaluationGuard guard(bodyBlocked);
+            BodySourceProjection projection(driver->sm, driver->getDocument(uri)->getBuffer(),
+                                            miniAnalysis->getBuffer(), originalBodyEnd, bodyEnd,
+                                            bodyBufferLimit);
+            auto out = item;
+            out.data = std::move(payload);
+            completions::MemberCompletionQuery::resolve(driver->completions, out, ctx,
+                                                        miniAnalysis);
+            return out;
         }
         auto data = rfl::from_generic<Data, rfl::UnderlyingEnums>(payload);
         if (!data || data->documentUri != uri.str())
@@ -1148,6 +1543,13 @@ std::optional<lsp::CompletionItem> MethodScopeOverlay::resolve(
             }
     return {};
 }
+catch (const lsp::RequestCancelled&) {
+    throw;
+}
+catch (const std::exception&) {
+    return {};
+}
+
 std::optional<ServerDriver::DiagnosticSnapshot> MethodScopeOverlay::diagnostics(
     const Config& config, const lsp::RequestContext& ctx) const {
     if (bodyQueries || !accepted || !valid(config, ctx))

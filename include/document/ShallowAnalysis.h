@@ -111,6 +111,9 @@ public:
     /// Whether the shared compilation still uses the latest source buffers.
     bool hasValidBuffers() const { return m_shallowCompilation->hasValidBuffers(); }
 
+    /// Exact native contexts for a function / task syntax (including specializations).
+    std::vector<const ast::SubroutineSymbol*> getSubroutines(const syntax::SyntaxNode&) const;
+
     /// Shared owner of the syntax, symbols, and compilation-wide analysis state.
     const std::shared_ptr<ShallowCompilation>& getShallowCompilation() const {
         return m_shallowCompilation;

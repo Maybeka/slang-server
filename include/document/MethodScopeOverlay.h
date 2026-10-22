@@ -11,8 +11,8 @@
 
 namespace server {
 
-/// Opt-in closed-method queries. No base AST/symbol pointer survives preparation.
-/// The legacy overlay keeps fixed layout; body queries project variable source offsets.
+/// Opt-in local function/task queries retaining one original lexical context.
+/// The legacy closed-int overlay keeps its independent value-only implementation.
 class MethodScopeOverlay {
 public:
     struct Statistics {
@@ -66,7 +66,20 @@ private:
     ServerDriver* driver;
     URI uri;
     std::string text, configKey, optionsKey, packageName, className, functionName, functionPath;
-    bool bodyQueries = false;
+    bool bodyQueries = false, generalBody = false;
+    int bodyKeywordVersion = 0;
+    std::vector<std::shared_ptr<void>> macroPins;
+    std::shared_ptr<ShallowAnalysis> bodyOwner;
+    std::vector<const slang::ast::SubroutineSymbol*> bodyOriginals;
+    std::vector<const slang::ast::SubroutineSymbol*> bodyLineDependents, bodyBlocked;
+    bool bodyLineSensitiveDeclaration = false;
+    uint32_t bodyBufferLimit = 0;
+    std::unique_ptr<slang::BumpAllocator> macroArena;
+    std::vector<const slang::syntax::DefineDirectiveSyntax*> bodyMacros;
+    bool generalApply(const lsp::DidChangeTextDocumentParams&, const Config&,
+                      const lsp::RequestContext&, bool&, std::string next, size_t nextBodyEnd,
+                      size_t nextFunctionEnd);
+    bool generalSite(const lsp::Position&) const;
     size_t functionBegin = 0, functionEnd = 0, bodyBegin = 0, bodyEnd = 0, localCount = 0;
     size_t originalBodyEnd = 0;
     std::vector<std::string> localDeclarations;

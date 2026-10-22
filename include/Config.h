@@ -91,11 +91,10 @@ struct Config {
         experimentalMethodScopeOverlay = false;
 
     rfl::Description<
-        "Experimental body-only queries for closed scalar int class methods. "
-        "Default off. Supports variable-length and multiline expression edits with "
-        "unchanged signatures and local declarations, including imported and inherited "
-        "class environments and semantic libraries. Unsupported edits or queries use "
-        "native analysis; diagnostics always analyze the complete current snapshot.",
+        "Experimental local function/task body queries. Default off. Supports changed local "
+        "declarations, types, statements, member access, calls and macro expansions in retained "
+        "class, package and module contexts. Signatures and external dependencies remain fixed; "
+        "unsafe edits or queries use native analysis. Diagnostics analyze the complete current snapshot.",
         bool>
         experimentalMethodBodyQueries = false;
 

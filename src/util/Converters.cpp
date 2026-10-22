@@ -43,8 +43,35 @@ std::optional<const parsing::Token> findNameToken(const syntax::SyntaxNode* node
     return std::nullopt;
 }
 
+namespace {
+thread_local const BodySourceProjection* bodyProjection = nullptr;
+}
+BodySourceProjection::BodySourceProjection(const SourceManager& sm, BufferID current,
+                                           BufferID query, size_t oldEnd, size_t newEnd,
+                                           uint32_t baselineBufferLimit) :
+    previous(bodyProjection), sources(sm), current(current), query(query), oldEnd(oldEnd),
+    newEnd(newEnd), baselineBufferLimit(baselineBufferLimit) {
+    bodyProjection = this;
+}
+BodySourceProjection::~BodySourceProjection() {
+    bodyProjection = previous;
+}
+SourceLocation BodySourceProjection::project(SourceLocation location,
+                                             const SourceManager& sm) const {
+    if (&sm != &sources || !location || location.buffer() == query ||
+        location.buffer() == current || location.buffer().getId() >= baselineBufferLimit ||
+        sm.getFullPath(location.buffer()) != sm.getFullPath(current))
+        return location;
+    auto offset = location.offset();
+    if (offset >= oldEnd)
+        offset = newEnd + (offset - oldEnd);
+    return SourceLocation(current, offset);
+}
+
 lsp::Position toPosition(const SourceLocation& loc, const SourceManager& sourceManager) {
     auto actualLoc = sourceManager.getFullyExpandedLoc(loc);
+    if (bodyProjection)
+        actualLoc = bodyProjection->project(actualLoc, sourceManager);
     auto character = sourceManager.getColumnNumber(actualLoc);
     return lsp::Position{.line = static_cast<lsp::uint>(sourceManager.getRawLineNumber(actualLoc) -
                                                         1),

@@ -1,5 +1,8 @@
 # Method-body query first slice — 2026-10-22
 
+Historical first-slice results. For current coverage and real CVA6 measurements,
+see [general function/task body queries](general-method-body-query-evaluation.md).
+
 The new `experimentalMethodBodyQueries` flag remains **off by default**. It
 implements independent method-sized binding for a restricted closed scalar
 helper, reusing value snapshots of the enclosing query environment. It does not

@@ -259,6 +259,9 @@ bool ServerDriver::parseAndLoadSources(const std::vector<std::string>& buildfile
                                 !std::getenv("SLANG_FROZEN_NATIVE_SEED_DISABLE");
     driver.options.captureUvmPrefix = isUvmPrefixCacheEnabled() || m_captureFrozenNativeSeed;
     options = driver.createOptionBag();
+    if (m_config.experimentalMethodBodyQueries.value())
+        options.insertOrGet<ast::CompilationOptions>().flags |=
+            ast::CompilationFlags::TrackSubroutineBodyDependencies;
     options.set(driver.getAnalysisOptions());
     // Native command files can change cwd and install include paths. Only the
     // subsequent source parse belongs to the immutable diagnostic replay graph.
@@ -1744,14 +1747,15 @@ std::optional<DefinitionInfo> ServerDriver::getMacroDefinitionInfo(
     return DefinitionInfo{sm, std::move(targets)};
 }
 
-std::optional<DefinitionInfo> ServerDriver::getDefinitionInfoAt(const URI& uri,
-                                                                const lsp::Position& position,
-                                                                const lsp::RequestContext& ctx) {
+std::optional<DefinitionInfo> ServerDriver::getDefinitionInfoAt(
+    const URI& uri, const lsp::Position& position, const lsp::RequestContext& ctx,
+    std::shared_ptr<ShallowAnalysis> analysis) {
     auto doc = getDocument(uri);
     if (!doc) {
         return {};
     }
-    auto analysis = doc->getAnalysis(ctx);
+    if (!analysis)
+        analysis = doc->getAnalysis(ctx);
 
     // Get location, token, and syntax node at position
     auto loc = toSourceLocation(analysis->getBuffer(), position, sm);

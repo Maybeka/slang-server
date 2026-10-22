@@ -110,12 +110,13 @@ bool isProceduralBlockContext(SyntaxKind kind) {
 
 CompletionContext CompletionContext::fromLocation(SlangDoc& doc, SourceLocation loc,
                                                   lsp::CompletionContext lspContext,
-                                                  const lsp::RequestContext& requestCtx) {
+                                                  const lsp::RequestContext& requestCtx,
+                                                  std::shared_ptr<ShallowAnalysis> analysis) {
     CompletionContext ctx;
     ctx.lspContext = std::move(lspContext);
     // Hold analysis alive so that scope/syntax pointers remain valid
     // for the entire lifetime of the CompletionContext.
-    ctx.analysis = doc.getAnalysis(requestCtx);
+    ctx.analysis = analysis ? std::move(analysis) : doc.getAnalysis(requestCtx);
     requestCtx.throwIfCancelled("before completion context");
     ctx.scope = ctx.analysis->getScopeAt(loc);
     ctx.syntax = ctx.analysis->syntaxes.getSyntaxAt(loc);

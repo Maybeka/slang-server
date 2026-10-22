@@ -37,6 +37,14 @@ public:
                        const ServerCompilation* design, const lsp::RequestContext& ctx = {},
                        bool packageOnly = false, slang::BufferID sourceBuffer = {});
 
+    /// Index only detached subroutines while retaining their original lexical owner.
+    ShallowCompilation(slang::SourceManager&, std::shared_ptr<slang::syntax::SyntaxTree>,
+                       std::shared_ptr<ShallowCompilation> owner,
+                       std::span<const slang::ast::SubroutineSymbol* const> originals);
+    const std::vector<const slang::ast::SubroutineSymbol*>& getBodyQueryRoots() const {
+        return m_bodyQueryRoots;
+    }
+
     /// Source manager supplying the buffers used by this compilation.
     slang::SourceManager& getSourceManager() const { return m_sourceManager; }
 
@@ -82,6 +90,8 @@ public:
     }
 
 private:
+    std::shared_ptr<ShallowCompilation> m_bodyQueryOwner;
+    std::vector<const slang::ast::SubroutineSymbol*> m_bodyQueryRoots;
     std::shared_ptr<const void> m_sourceOwnerLease;
     /// Source manager used to validate the compilation's buffers.
     slang::SourceManager& m_sourceManager;

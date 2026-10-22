@@ -156,55 +156,70 @@ flag with UVM semantic caching. The new flag can accompany
 `experimentalUvmSemanticCache`, `experimentalScopeSemanticCache` and diagnostic
 delta publishing; it does not change their defaults.
 
-This slice supports a uniquely occurring, inline, ordinary instance function in
-a non-parameterized package class. The containing class may inherit from a UVM
-class and use imports and registration macros outside the selected function.
-The function itself must be macro-free, return plain scalar `int`, and have
-explicit `input int` arguments, flat initialized `int` locals and a final return.
-Expressions use arguments, locals, integer literals, parentheses and unary
-`+`/`-` or binary `+`/`-`/`*`. Method signatures and all local declaration tokens
-remain unchanged; initializer expressions may change. The current slice requires
-ASCII source. Calls, member-dependent expressions, control flow, out-of-block
-methods, parameterized classes and declaration edits use native analysis.
+The body-query experiment supports uniquely occurring functions and tasks in class,
+package and module contexts, including inherited and parameterized contexts and
+out-of-block definitions. Local declarations and types can change, as can arbitrary
+statements, control flow, calls and member accesses. Macro invocations inherit the
+macro environment at the original method entry. Variable-length, multiline and
+batched LSP changes are supported. The header and the enclosing source must remain
+unchanged. Parser recovery inside the original body boundaries is allowed.
 
-Unlike the legacy experiment, body edits may grow, shrink and insert or remove
-lines. Each accepted edit builds an independent method-sized compilation.
-Completion values for the enclosing environment remain immutable, while local
-bindings and source positions are regenerated. Unchanged declarations after the
-method receive projected current offsets. Old local completion handles cannot
-resolve to a later generation. No base semantic graph or symbol pointer is kept.
-The source snapshot used for certification is released after creating witnesses
-and query values, leaving no additional retained copy of the complete project.
+Each edit parses one method and binds new semantic objects against the retained
+original lexical scopes. The original member tables are never replaced or edited.
+Native completion classification, ordered candidate generation, deferred resolve
+and definition lookup operate on the detached body index. Definitions after the
+edited body receive projected current locations. Old local completion handles
+cannot resolve to a later generation. This implementation retains one original
+semantic context in addition to the latest method; its memory cost must be included
+in measurements. It is no longer a DTO-only certificate.
 
-Preparation requires an existing current query analysis; an edit never forces
-analysis of the previous generation solely to prepare this optimization. A
-certificate accepts at most 64 edits, after which the next edit takes the native
-path. Context retirement, configuration changes, library generation replacement,
-other document edits, dependency changes and unsupported queries also cause
-native fallback. The implementation validates mutable source bytes, successful
-and failed lookups, and watched directory membership. Explicit immutable library
-files keep their existing fixed-dependency / manual-rebuild contract; they are
-not read again for every local query.
+Preparation requires an existing current query analysis. It captures the exact
+macro environment by preprocessing the ordered original roots once up to the method
+entry; bundled UVM uses its existing precompiled macro prefix. This cost belongs to
+the first edit. Subsequent edits parse only the selected method. A certificate
+accepts at most 64 notifications. Context retirement, configuration / library
+replacement, other document edits and mutable dependency changes invalidate it.
+Explicit immutable library files retain their fixed-dependency / manual-rebuild
+contract and are not reread for every query.
 
-Only lexical completion at verified local/argument reference sites, definition
-at those sites and matching deferred completion resolution use this path. Hover
-and other queries retain their native implementation. Diagnostics always use the
-complete current source and the current semantic library owners; the new mode
-never replays an old diagnostic result or substitutes local diagnostics for a
-full pass. A hit therefore does not imply a local-only diagnostic update.
+Edits that change signatures (including non-ANSI body argument declarations),
+escape method parse boundaries, change the surrounding preprocessing environment,
+or affect outside semantic dependencies use native analysis. Constant
+function evaluation, including failed evaluations, and external references to method-local declarations prevent
+reuse. A scoped evaluation guard also rejects newly encountered lazy dependencies
+on the obsolete body. Macro expansions in later declarations or signatures also
+force native analysis when a newline edit could change their `__LINE__` values;
+line-sensitive sibling bodies are guarded against constant / local-type reuse.
+These are nonlocal changes even when their spelling lies
+inside a function. An unbound / ambiguous source occurrence also uses native
+analysis. Runtime side effects are analyzed through current native diagnostics.
+
+Dependency tracking is enabled only with this experiment; the disabled path does
+not scan subroutine dependency scopes.
+
+Only completion, deferred member resolution and definition requests inside the
+selected body use this path. Incomplete macro completion lists, hover and other
+query families keep native behavior. Diagnostics always analyze complete current
+sources with current semantic library owners. A body hit does not imply local-only
+diagnostics or an end-to-end diagnostic latency improvement.
+
+Run `tests/method_scope/general_queries.py --binary <server> --output <report.json>`
+for broad body edits with large neighboring packages and an inherited UVM arm. It
+compares changed local declarations/types, struct/member/helper calls, nested
+foreach blocks, deliberately invalid references and recovery against the disabled
+native path, including completion ordering, resolves, definition ranges and
+published diagnostics. C++ `[general-body]` tests additionally cover module and
+package tasks, out-of-block methods and constant-function invalidation.
 
 Run `tests/method_scope/body_queries.py --binary <server> --output <report.json>`
-for a paired oracle and timing check with large synthetic packages, both with and
-without the bundled UVM semantic library. It covers variable lengths, line
-changes, twelve edits, completion ordering, selected resolves, definition ranges
-and diagnostic values. These are closed-helper fixtures, not proof of coverage or
-performance on arbitrary UVM project methods. C++ `[method-body]` tests additionally
-cover rejected declaration / dependency / macro edits and cancellation.
+for the original closed-helper regression workload. It now exercises the same
+retained-context implementation. These synthetic fixtures do not establish a
+real-project speedup.
 
 For actual parser scope, run `body_counts.py` with the separate
 `slang_server_counted` executable. It observes counters in the same queued
 foreground batch and records later diagnostic parsing separately. Never use the
 counted binary for latency measurements. See the
-[Mac evaluation](../development/method-body-query-evaluation.md) for measured
+[Mac evaluation](../development/general-method-body-query-evaluation.md) for measured
 first-edit cost, continuous-query gains, diagnostic and memory tradeoffs, and
 real CVA6 fallback coverage.

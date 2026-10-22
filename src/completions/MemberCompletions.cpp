@@ -782,7 +782,12 @@ void MemberCompletionQuery::addCompletions(std::vector<lsp::CompletionItem>& res
     while (currentScope) {
         // Add members from the current scope
         for (auto& member : currentScope->members()) {
-            if (&member == prevSym) {
+            if (&member == prevSym || (prevSym && prevSym->kind == ast::SymbolKind::Subroutine &&
+                                       member.kind == ast::SymbolKind::Subroutine &&
+                                       &member.as<ast::SubroutineSymbol>().getCompilation() !=
+                                           &prevSym->as<ast::SubroutineSymbol>().getCompilation() &&
+                                       member.name == prevSym->name &&
+                                       member.getParentScope() == prevSym->getParentScope())) {
                 // Skip the previous scope, as we should have no reason to reference it
                 continue;
             }
@@ -883,7 +888,8 @@ void MemberCompletionQuery::resolveLogical(CompletionDispatch& dispatch, lsp::Co
 }
 
 void MemberCompletionQuery::resolve(CompletionDispatch& dispatch, lsp::CompletionItem& item,
-                                    const lsp::RequestContext& ctx) {
+                                    const lsp::RequestContext& ctx,
+                                    std::shared_ptr<ShallowAnalysis> analysis) {
     if (!item.data)
         return;
 
@@ -898,7 +904,8 @@ void MemberCompletionQuery::resolve(CompletionDispatch& dispatch, lsp::Completio
     if (!doc)
         return;
 
-    auto analysis = doc->getAnalysis(ctx);
+    if (!analysis)
+        analysis = doc->getAnalysis(ctx);
     if (!analysis || !analysis->getCompilation())
         return;
 
@@ -928,7 +935,10 @@ void MemberCompletionQuery::resolve(CompletionDispatch& dispatch, lsp::Completio
         CompletionSymbolFinder finder(
             SourceLocation(BufferID(data->bufferId, "completion item resolve"), data->offset),
             data->symbolKind, data->symbolName, data->symbolPath, ctx);
-        root.visit(finder);
+        for (auto fn : analysis->getShallowCompilation()->getBodyQueryRoots())
+            fn->visit(finder);
+        if (!finder.result)
+            root.visit(finder);
         // Imported packages are registered in the compilation's package map,
         // but are not children of its current compilation units. Enum members
         // reached through retained typedefs still need the same exact search.
@@ -954,6 +964,10 @@ void MemberCompletionQuery::resolve(CompletionDispatch& dispatch, lsp::Completio
         return;
     }
 
+    if (symbol->kind == ast::SymbolKind::Subroutine)
+        for (auto body : analysis->getShallowCompilation()->getBodyQueryRoots())
+            if (symbol->getParentScope() == body->getParentScope() && symbol->name == body->name)
+                symbol = body;
     ctx.throwIfCancelled("before formatting completion item");
     resolve(*symbol, item, resolvesCompletionEdits(dispatch));
     if (!data->labelOnly)

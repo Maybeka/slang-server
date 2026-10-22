@@ -26,6 +26,23 @@ using namespace slang;
 std::optional<const parsing::Token> findNameToken(const syntax::SyntaxNode* node,
                                                   std::string_view name);
 
+/// Scoped projection of retained outer source positions after a variable-length body edit.
+class BodySourceProjection {
+public:
+    BodySourceProjection(const SourceManager&, BufferID current, BufferID query, size_t oldEnd,
+                         size_t newEnd, uint32_t baselineBufferLimit);
+    ~BodySourceProjection();
+    BodySourceProjection(const BodySourceProjection&) = delete;
+    SourceLocation project(SourceLocation, const SourceManager&) const;
+
+private:
+    const BodySourceProjection* previous;
+    const SourceManager& sources;
+    BufferID current, query;
+    size_t oldEnd, newEnd;
+    uint32_t baselineBufferLimit;
+};
+
 lsp::Position toPosition(const SourceLocation& loc, const SourceManager& sourceManager);
 
 std::optional<SourceLocation> toSourceLocation(BufferID buffer, const lsp::Position& position,
