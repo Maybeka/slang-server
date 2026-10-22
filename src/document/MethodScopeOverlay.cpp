@@ -4,6 +4,7 @@
 #include "ast/TrustedUvmLibrary.h"
 #include "completions/InstanceCompletions.h"
 #include "completions/MemberCompletions.h"
+#include "document/BodyDiagnosticCache.h"
 #include "util/Converters.h"
 #include "util/UvmPhaseTrace.h"
 #include <atomic>
@@ -61,6 +62,43 @@ std::atomic_uint64_t nextBodyCertificate{1};
 void need(bool condition, const char* message) {
     if (!condition)
         throw std::runtime_error(message);
+}
+const std::regex& stateDirectives() {
+    static const std::regex directives(
+        R"(`(define|undef|undefineall|include|begin_keywords|end_keywords|timescale|default_nettype|resetall|line|celldefine|endcelldefine|pragma|unconnected_drive|nounconnected_drive|default_decay_time|default_trireg_strength|delay_mode_distributed|delay_mode_path|delay_mode_unit|delay_mode_zero|uselib)\b)");
+    return directives;
+}
+const std::regex& bodyConditionals() {
+    static const std::regex conditionals(R"(`(ifdef|ifndef|elsif|else|endif)\b)");
+    return conditionals;
+}
+void validateBodyPreprocessing(const std::string& methodText) {
+    need(!std::regex_search(methodText, stateDirectives()), "body changes preprocessing state");
+    size_t depth = 0;
+    for (std::sregex_iterator i(methodText.begin(), methodText.end(), bodyConditionals()), end;
+         i != end; ++i) {
+        auto directive = (*i)[1].str();
+        if (directive == "ifdef" || directive == "ifndef")
+            ++depth;
+        else {
+            need(depth != 0, "body changes enclosing conditional state");
+            if (directive == "endif")
+                --depth;
+        }
+    }
+    need(depth == 0, "body leaves conditional preprocessing state open");
+}
+void validateMacroPreprocessing(const parsing::MacroRefMetadata& reference) {
+    if (!reference.definition)
+        return;
+    std::string expansion;
+    for (auto token : reference.definition->body) {
+        expansion += token.rawText();
+        expansion += ' ';
+    }
+    need(!std::regex_search(expansion, stateDirectives()) &&
+             !std::regex_search(expansion, bodyConditionals()),
+         "macro expansion can change surrounding preprocessing state");
 }
 std::vector<std::string> directoryEntries(const fs::path& path) {
     need(fs::canonical(path) == fs::absolute(path).lexically_normal(),
@@ -466,6 +504,18 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
             currentBuffer = document->getBuffer().getId();
             version = *document->getVersion();
             text = plain(*document);
+            // Removing an existing directive or state-changing macro is just as
+            // unsafe as introducing one: the borrowed suffix used its old state.
+            validateBodyPreprocessing(text.substr(functionBegin, functionEnd - functionBegin));
+            size_t checkedMacros = 0;
+            for (const auto& reference : tree->getPreprocessorMetadata().macroRefs) {
+                if ((checkedMacros++ & 1023) == 0)
+                    ctx.checkpoint("original method preprocessing witness");
+                auto at = d.sm.getFullyExpandedLoc(reference.syntax->getFirstToken().location());
+                if (at && functionBegin <= at.offset() && at.offset() < functionEnd &&
+                    d.sm.getFullPath(at.buffer()) == d.sm.getFullPath(occurrence))
+                    validateMacroPreprocessing(reference);
+            }
             functionName = bodyOriginals.front()->name;
             functionPath = bodyOriginals.front()->getHierarchicalPath();
             bodyBlocked = bodyOriginals;
@@ -898,6 +948,7 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
 }
 
 MethodScopeOverlay::~MethodScopeOverlay() {
+    bodyDiagnostics.reset();
     miniAnalysis.reset();
     miniTree.reset();
     miniManager.reset();
@@ -1014,6 +1065,15 @@ bool MethodScopeOverlay::apply(const lsp::DidChangeTextDocumentParams& p, const 
             commitGeneralText(p, std::move(next), nextBodyEnd, nextFunctionEnd, ctx, synced);
             return true;
         }
+        const bool changedLines = std::count(text.begin(), text.begin() + functionEnd, '\n') !=
+                                  std::count(next.begin(), next.begin() + nextFunctionEnd, '\n');
+        if (config.experimentalMethodBodyDiagnostics.value() && !bodyDiagnostics && changedLines &&
+            (bodyLineSensitiveDeclaration || !bodyLineDependents.empty())) {
+            diagnosticBaselineVersion = version;
+            diagnosticDecline = "line shift affects diagnostics in later macro bodies";
+        }
+        else
+            prepareLocalDiagnostics(config, ctx);
         return generalApply(p, config, ctx, synced, std::move(next), nextBodyEnd, nextFunctionEnd);
     }
     need(!deferBinding, "deferred binding requires general body queries");
@@ -1166,26 +1226,8 @@ bool MethodScopeOverlay::generalApply(const lsp::DidChangeTextDocumentParams& p,
                                       bool& synced, std::string next, size_t nextBodyEnd,
                                       size_t nextFunctionEnd, bool bindOnly) {
     UvmPhaseTrace phases;
-    // These directives change the environment of subsequent declarations. They
-    // require native dependency invalidation; ordinary macro invocations do not.
-    static const std::regex directives(
-        R"(`(define|undef|undefineall|include|begin_keywords|end_keywords|timescale|default_nettype|resetall|line|celldefine|endcelldefine|pragma|unconnected_drive|nounconnected_drive|default_decay_time|default_trireg_strength|delay_mode_distributed|delay_mode_path|delay_mode_unit|delay_mode_zero|uselib)\b)");
     auto methodText = next.substr(functionBegin, nextFunctionEnd - functionBegin);
-    need(!std::regex_search(methodText, directives), "body changes preprocessing state");
-    static const std::regex conditionals(R"(`(ifdef|ifndef|elsif|else|endif)\b)");
-    size_t depth = 0;
-    for (std::sregex_iterator i(methodText.begin(), methodText.end(), conditionals), end; i != end;
-         ++i) {
-        auto directive = (*i)[1].str();
-        if (directive == "ifdef" || directive == "ifndef")
-            ++depth;
-        else {
-            need(depth != 0, "body changes enclosing conditional state");
-            if (directive == "endif")
-                --depth;
-        }
-    }
-    need(depth == 0, "body leaves conditional preprocessing state open");
+    validateBodyPreprocessing(methodText);
     for (auto original : bodyOriginals)
         need(!original->bodyHasExternalDependents.load(std::memory_order_relaxed),
              "method has constant dependencies");
@@ -1205,6 +1247,14 @@ bool MethodScopeOverlay::generalApply(const lsp::DidChangeTextDocumentParams& p,
             driver->sm.addLineDirective(SourceLocation(source.id, originalLine->offset()),
                                         line.lineOfDirective, line.name, line.level, true);
     }
+    auto diagnosticDirectives = driver->sm.getDiagnosticDirectives(
+        BufferID(originalBuffer, "body diagnostic directives"));
+    auto inherited = std::vector<SourceManager::DiagnosticDirectiveInfo>(
+        diagnosticDirectives.begin(), diagnosticDirectives.end());
+    for (const auto& directive : inherited)
+        if (directive.offset < functionBegin)
+            driver->sm.addDiagnosticDirective(SourceLocation(source.id, directive.offset),
+                                              directive.name, directive.severity, true);
     auto blocked = bodyOriginals;
     const bool shiftedLines = driver->sm.getRawLineNumber(SourceLocation(source.id, nextBodyEnd)) !=
                               driver->sm.getRawLineNumber(
@@ -1222,18 +1272,8 @@ bool MethodScopeOverlay::generalApply(const lsp::DidChangeTextDocumentParams& p,
     ast::BodyQueryEvaluationGuard guard(blocked);
     ctx.checkpoint("before method mini parse");
     auto tree = syntax::SyntaxTree::fromBuffer(source, driver->sm, treeOptions->bag(), bodyMacros);
-    for (const auto& reference : tree->getPreprocessorMetadata().macroRefs) {
-        if (!reference.definition)
-            continue;
-        std::string expansion;
-        for (auto token : reference.definition->body) {
-            expansion += token.rawText();
-            expansion += ' ';
-        }
-        need(!std::regex_search(expansion, directives) &&
-                 !std::regex_search(expansion, conditionals),
-             "macro expansion can change surrounding preprocessing state");
-    }
+    for (const auto& reference : tree->getPreprocessorMetadata().macroRefs)
+        validateMacroPreprocessing(reference);
     phases.mark("body-apply-parse");
     auto unit = std::make_shared<ShallowCompilation>(driver->sm, tree,
                                                      bodyOwner->getShallowCompilation(),
@@ -1603,6 +1643,103 @@ catch (const lsp::RequestCancelled&) {
 }
 catch (const std::exception&) {
     return {};
+}
+
+void MethodScopeOverlay::prepareLocalDiagnostics(const Config& config,
+                                                 const lsp::RequestContext& ctx) {
+    if (!generalBody || !config.experimentalMethodBodyDiagnostics.value() || bodyDiagnostics ||
+        diagnosticBaselineVersion == version)
+        return;
+    diagnosticBaselineVersion = version;
+    try {
+        std::string padded = text.substr(0, functionBegin);
+        for (auto& c : padded)
+            if (c != '\n' && c != '\r')
+                c = ' ';
+        padded += text.substr(functionBegin, functionEnd - functionBegin);
+        auto source = driver->sm.assignQueryText(
+            driver->sm.getFullPath(driver->getDocument(uri)->getBuffer()).string(), padded);
+        for (const auto& line :
+             driver->sm.getLineDirectives(BufferID(originalBuffer, "body lines"))) {
+            auto at = driver->sm.getSourceLocation(BufferID(originalBuffer, "body lines"),
+                                                   line.lineInFile, 1);
+            if (at && at->offset() < functionBegin)
+                driver->sm.addLineDirective(SourceLocation(source.id, at->offset()),
+                                            line.lineOfDirective, line.name, line.level, true);
+        }
+        auto directives = driver->sm.getDiagnosticDirectives(
+            BufferID(originalBuffer, "body pragmas"));
+        auto inherited = std::vector<SourceManager::DiagnosticDirectiveInfo>(directives.begin(),
+                                                                             directives.end());
+        for (const auto& directive : inherited)
+            if (directive.offset < functionBegin)
+                driver->sm.addDiagnosticDirective(SourceLocation(source.id, directive.offset),
+                                                  directive.name, directive.severity, true);
+        auto tree = syntax::SyntaxTree::fromBuffer(source, driver->sm, treeOptions->bag(),
+                                                   bodyMacros);
+        bodyDiagnostics = std::make_unique<BodyDiagnosticCache>(
+            *driver, uri, functionBegin, functionEnd, tree,
+            bodyLineSensitiveDeclaration || !bodyLineDependents.empty(), ctx);
+        diagnosticDecline.clear();
+    }
+    catch (const lsp::RequestCancelled&) {
+        diagnosticBaselineVersion = -1;
+        throw;
+    }
+    catch (const std::exception& error) {
+        diagnosticDecline = error.what();
+    }
+}
+
+uint64_t MethodScopeOverlay::localDiagnosticUpdates() const {
+    return diagnosticUpdates;
+}
+std::string MethodScopeOverlay::localDiagnosticDecline() const {
+    return diagnosticDecline;
+}
+
+bool MethodScopeOverlay::publishLocalDiagnostics(const Config& config,
+                                                 const lsp::RequestContext& ctx) {
+    if (!generalBody || !accepted || !config.experimentalMethodBodyDiagnostics.value() ||
+        !bodyDiagnostics || !valid(config, ctx))
+        return false;
+    try {
+        ensureGeneralBinding(config, ctx);
+        bodyDiagnostics->publish(miniTree, functionEnd, ctx, [&] {
+            need(valid(config, ctx), "inputs changed during local diagnostics");
+        });
+        ++diagnosticUpdates;
+        diagnosticDecline.clear();
+        if (driver->client.capabilities.inactiveRegionsSupported) {
+            BodySourceProjection projection(driver->sm, driver->getDocument(uri)->getBuffer(),
+                                            miniAnalysis->getBuffer(), originalBodyEnd, bodyEnd,
+                                            bodyBufferLimit);
+            std::vector<lsp::Range> regions;
+            for (auto region : bodyOwner->syntaxes.disabledRegions) {
+                auto start = driver->sm.getFullyExpandedLoc(region.start());
+                if (bodyBegin <= start.offset() && start.offset() < originalBodyEnd)
+                    continue;
+                regions.push_back(toRange(region, driver->sm));
+            }
+            for (auto region : miniAnalysis->syntaxes.disabledRegions)
+                regions.push_back(toRange(region, driver->sm));
+            std::sort(regions.begin(), regions.end(), [](const auto& a, const auto& b) {
+                return std::tie(a.start.line, a.start.character) <
+                       std::tie(b.start.line, b.start.character);
+            });
+            driver->client.onTextDocumentInactiveRegions(
+                {.uri = uri, .regions = std::move(regions)});
+        }
+        return true;
+    }
+    catch (const lsp::RequestCancelled&) {
+        throw;
+    }
+    catch (const std::exception& error) {
+        diagnosticDecline = error.what();
+        bodyDiagnostics.reset();
+        return false;
+    }
 }
 
 std::optional<ServerDriver::DiagnosticSnapshot> MethodScopeOverlay::diagnostics(

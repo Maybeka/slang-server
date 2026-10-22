@@ -255,6 +255,8 @@ lsp::InitializeResult SlangServer::getInitialize(const lsp::InitializeParams& pa
                     uint64_t accepted;
                     int version;
                     std::string decline;
+                    uint64_t localDiagnosticUpdates;
+                    std::string localDiagnosticDecline;
                     std::optional<uint64_t> parserUnits;
                     std::vector<DocumentState> documents;
                     std::vector<SourceState> sources;
@@ -264,8 +266,11 @@ lsp::InitializeResult SlangServer::getInitialize(const lsp::InitializeParams& pa
                 if (slang_server_parser_units)
                     count = slang_server_parser_units();
 #endif
-                return rfl::to_generic(State{state.active, state.accepted, state.version,
-                                             m_methodScopeDecline, count, documents, sources});
+                return rfl::to_generic(
+                    State{state.active, state.accepted, state.version, m_methodScopeDecline,
+                          m_methodScope ? m_methodScope->localDiagnosticUpdates() : 0,
+                          m_methodScope ? m_methodScope->localDiagnosticDecline() : "", count,
+                          documents, sources});
             });
     }
 
@@ -1712,6 +1717,9 @@ void SlangServer::runBackgroundWork(const lsp::RequestContext& ctx) {
         }
     }
     if (m_activeDiagnosticSnapshot || !m_driver->hasPendingDiagnostics())
+        return;
+    ensureMethodScopeDriver();
+    if (m_methodScope && m_methodScope->publishLocalDiagnostics(m_config, ctx))
         return;
     if (!m_diagnosticExecutable.empty()) {
         try {

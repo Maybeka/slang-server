@@ -1,5 +1,5 @@
 diff --git a/bindings/python/CompBindings.cpp b/bindings/python/CompBindings.cpp
-index 77d26408f..bc4cbb9c2 100644
+index 77d26408fb47792b621a321ed614057140e17a82..bc4cbb9c2e6151090f054a1a0acadd8aeaf34e74 100644
 --- a/bindings/python/CompBindings.cpp
 +++ b/bindings/python/CompBindings.cpp
 @@ -221,7 +221,8 @@ void registerCompilation(nb::module_& m, nb::module_& ast, nb::module_& driver)
@@ -13,7 +13,7 @@ index 77d26408f..bc4cbb9c2 100644
          .def("getRoot", nb::overload_cast<>(&Compilation::getRoot), byrefint)
          .def(
 diff --git a/docs/command-line-ref.dox b/docs/command-line-ref.dox
-index 153bb54e1..e752fcbac 100644
+index 153bb54e1b1ba9c278a844e004f3099f4cdce6f4..e752fcbacf6a5ab9c46c8e73f12a3f8c70101999 100644
 --- a/docs/command-line-ref.dox
 +++ b/docs/command-line-ref.dox
 @@ -576,8 +576,11 @@ permit this, but some tools allow it anyway so this flag can be used for compati
@@ -43,7 +43,7 @@ index 153bb54e1..e752fcbac 100644
  
  Set a limit on the number of errors that will be printed. Setting this to zero will
 diff --git a/include/slang/analysis/AnalysisManager.h b/include/slang/analysis/AnalysisManager.h
-index c34ea6d4c..0b1eedda3 100644
+index c34ea6d4cf3cf4b11f6825c6fac46a7e8aaa4076..6d8971edd359ed6396eca2b47eebac7c3c39c150 100644
 --- a/include/slang/analysis/AnalysisManager.h
 +++ b/include/slang/analysis/AnalysisManager.h
 @@ -93,6 +93,7 @@ public:
@@ -54,7 +54,19 @@ index c34ea6d4c..0b1eedda3 100644
  
      /// Returns true if the given flag(s) are enabled for this analysis.
      bool hasFlag(bitmask<AnalysisFlags> flags) const { return options.flags.has(flags); }
-@@ -264,6 +265,8 @@ private:
+@@ -138,6 +139,11 @@ public:
+     ///       before it can be analyzed.
+     void analyze(const ast::Compilation& compilation);
+ 
++    /// Analyze one already bound subroutine and its local declaration scopes.
++    /// The caller owns cross-procedure dependency and driver invalidation.
++    void analyzeBody(const ast::Compilation& compilation, const ast::SubroutineSymbol& symbol);
++    std::vector<const ast::SubroutineSymbol*> getAnalyzedSubroutines() const;
++
+     /// Returns the drivers recorded directly for the given symbol without elaborating it.
+     /// Use AnalysisQueries to include drivers from a non-canonical instance's canonical body.
+     ///
+@@ -264,6 +270,8 @@ private:
      std::vector<std::function<void(const AnalyzedAssertion&)>> assertListeners;
  
      const SourceManager* sourceManager = nullptr;
@@ -64,7 +76,7 @@ index c34ea6d4c..0b1eedda3 100644
      std::shared_ptr<ThreadPool> threadPool;
  
 diff --git a/include/slang/ast/ASTDiagMap.h b/include/slang/ast/ASTDiagMap.h
-index 68513c503..20aa61385 100644
+index 68513c50333fe3710625be10c621c7a16caec4c5..20aa61385cc7febf52fa0485150ce41d7e608f3f 100644
 --- a/include/slang/ast/ASTDiagMap.h
 +++ b/include/slang/ast/ASTDiagMap.h
 @@ -14,6 +14,7 @@
@@ -96,7 +108,7 @@ index 68513c503..20aa61385 100644
  private:
      flat_hash_map<std::tuple<DiagCode, SourceLocation>, std::vector<Diagnostic>> map;
 diff --git a/include/slang/ast/ASTVisitor.h b/include/slang/ast/ASTVisitor.h
-index 133958b90..6208d7475 100644
+index 133958b902d1d14a385158be0f64acfc62cfcab7..6208d74756b29fcfcaad116cfb2e229dc5ede725 100644
 --- a/include/slang/ast/ASTVisitor.h
 +++ b/include/slang/ast/ASTVisitor.h
 @@ -452,6 +452,8 @@ void InstanceSymbol::visitExprs(TVisitor&& visitor) const {
@@ -109,7 +121,7 @@ index 133958b90..6208d7475 100644
  
  template<typename TVisitor>
 diff --git a/include/slang/ast/Compilation.h b/include/slang/ast/Compilation.h
-index b7ddc64e4..3c9676d8f 100644
+index b7ddc64e46b08cf082b7e7ffec12ffe769afc693..97525163b70d022e90d648a47138fe114edd9789 100644
 --- a/include/slang/ast/Compilation.h
 +++ b/include/slang/ast/Compilation.h
 @@ -7,6 +7,7 @@
@@ -120,7 +132,28 @@ index b7ddc64e4..3c9676d8f 100644
  #include <memory>
  #include <variant>
  
-@@ -50,6 +51,9 @@ class SystemSubroutine;
+@@ -28,6 +29,20 @@ class SyntaxTree;
+ 
+ namespace slang::ast {
+ 
++class Compilation;
++
++/// Route lookup reference bookkeeping into a private detached compilation,
++/// including lookups that traverse borrowed import scopes. Single-thread scoped.
++class SLANG_EXPORT BodyQueryReferenceGuard {
++public:
++    explicit BodyQueryReferenceGuard(Compilation& target);
++    ~BodyQueryReferenceGuard();
++    BodyQueryReferenceGuard(const BodyQueryReferenceGuard&) = delete;
++    BodyQueryReferenceGuard& operator=(const BodyQueryReferenceGuard&) = delete;
++private:
++    Compilation* previous;
++};
++
+ class AttributeSymbol;
+ class ASTContext;
+ class CompilationUnitSymbol;
+@@ -50,6 +65,9 @@ class SystemSubroutine;
  struct AssertionInstanceDetails;
  struct ConfigRule;
  struct ResolvedConfig;
@@ -130,7 +163,7 @@ index b7ddc64e4..3c9676d8f 100644
  
  enum class IntegralFlags : uint8_t;
  enum class SymbolIndex : uint32_t;
-@@ -88,7 +92,8 @@ enum class SLANG_EXPORT CompilationFlags {
+@@ -88,7 +106,8 @@ enum class SLANG_EXPORT CompilationFlags {
      /// for an unknown definition.
      IgnoreUnknownModules = 1 << 5,
  
@@ -140,7 +173,7 @@ index b7ddc64e4..3c9676d8f 100644
      RelaxStringConversions = 1 << 6,
  
      /// Allow implicit call expressions (lacking parentheses) to be recursive function calls.
-@@ -151,11 +156,24 @@ enum class SLANG_EXPORT CompilationFlags {
+@@ -151,11 +170,24 @@ enum class SLANG_EXPORT CompilationFlags {
      /// (untaken generate branches and uninstantiated module instances) so that
      /// additional lints, like port and parameter name checks, can run on it.
      CheckUninstantiated = 1 << 21,
@@ -166,7 +199,7 @@ index b7ddc64e4..3c9676d8f 100644
      /// Various flags that control compilation behavior.
      bitmask<CompilationFlags> flags = CompilationFlags::AllowTopLevelIfacePorts;
  
-@@ -331,6 +349,10 @@ public:
+@@ -331,6 +363,10 @@ public:
      Compilation(Compilation&& other) = delete;
      ~Compilation();
  
@@ -177,7 +210,7 @@ index b7ddc64e4..3c9676d8f 100644
      /// @name Top-level API
      /// @{
  
-@@ -349,7 +371,78 @@ public:
+@@ -349,7 +385,78 @@ public:
  
      /// Adds a syntax tree to the compilation. If the compilation has already been finalized
      /// by calling @a getRoot this call will throw an exception.
@@ -257,13 +290,19 @@ index b7ddc64e4..3c9676d8f 100644
  
      /// Gets the override node for a top-level definition, creating it if necessary. This must be
      /// called before the compilation is finalized. The syntax node can come from another
-@@ -366,10 +459,16 @@ public:
+@@ -366,10 +473,22 @@ public:
      /// so will result in an exception.
      const RootSymbol& getRoot();
  
 +    /// Detached method bodies allocate privately while borrowing lexical / global lookup context.
 +    /// The owner must outlive this compilation. No syntax trees may be added to this view.
-+    void setBodyQueryContext(std::shared_ptr<Compilation> owner);
++    void setBodyQueryContext(std::shared_ptr<Compilation> owner,
++                             std::shared_ptr<syntax::SyntaxTree> bodyTree = {});
++
++    /// Diagnostics and reference witnesses from an already bound detached body.
++    /// Does not elaborate the borrowed lexical root.
++    Diagnostics getBodyQueryDiagnostics();
++    const auto& getBodyQueryReferences() const { return referenceStatusMap; }
 +
      /// Gets the root of the design without attempting to finalize it.
      /// This means that (if the design has not been finalized previously) things like
@@ -275,7 +314,15 @@ index b7ddc64e4..3c9676d8f 100644
  
      /// Indicates whether the design has been compiled and can no longer accept modifications.
      bool isFinalized() const { return finalized; }
-@@ -512,6 +611,11 @@ public:
+@@ -396,6 +515,7 @@ public:
+ 
+     /// Queries if any errors have been issued on any scope within this compilation.
+     bool hasIssuedErrors() const { return numErrors > 0; };
++    size_t getIssuedErrorCount() const { return numErrors; }
+ 
+     /// Returns true if there are any fatal errors reported in the compilation,
+     /// or if we've hit the configured error limit and stopped elaboration early
+@@ -512,6 +632,11 @@ public:
  
      /// Gets the package with the give name, or nullptr if there is no such package.
      const PackageSymbol* getPackage(std::string_view name) const;
@@ -287,7 +334,7 @@ index b7ddc64e4..3c9676d8f 100644
  
      /// Gets the built-in 'std' package.
      const PackageSymbol& getStdPackage() const { return *stdPkg; }
-@@ -681,7 +785,13 @@ public:
+@@ -681,7 +806,13 @@ public:
      /// Notes that the given symbol is "referenced" somewhere in the AST.
      /// This is used to diagnose unused variables, nets, etc. The @a isLValue parameter
      /// is used to tell whether a value is only assigned or whether it's also read somewhere.
@@ -302,7 +349,7 @@ index b7ddc64e4..3c9676d8f 100644
  
      /// Checks whether the given syntax node has been referenced in the AST thus far.
      /// The result is a pair, the first item of which is true if the node has been used
-@@ -857,6 +967,50 @@ private:
+@@ -857,6 +988,50 @@ private:
      friend class Scope;
      friend struct DiagnosticVisitor;
  
@@ -353,7 +400,7 @@ index b7ddc64e4..3c9676d8f 100644
      // Collected information about a resolved bind directive.
      struct ResolvedBind {
          SmallVector<const Symbol*> instTargets;
-@@ -937,6 +1091,10 @@ private:
+@@ -937,6 +1112,10 @@ private:
      // for things like variables and nets.
      flat_hash_map<const syntax::SyntaxNode*, std::pair<bool, bool>> referenceStatusMap;
  
@@ -364,7 +411,7 @@ index b7ddc64e4..3c9676d8f 100644
      // The name map for all module, interface, program, and primitive definitions.
      // The key is a combination of definition name + the scope in which it was declared.
      // The value is a pair -- the first element is a list of definitions that share
-@@ -996,6 +1154,7 @@ private:
+@@ -996,6 +1175,7 @@ private:
      std::unique_ptr<RootSymbol> root;
      SourceManager* sourceManager = nullptr;
      size_t numErrors = 0; // total number of errors inserted into the diagMap
@@ -372,7 +419,7 @@ index b7ddc64e4..3c9676d8f 100644
      bool finalized = false;
      bool finalizing = false; // to prevent reentrant calls to getRoot()
      bool anyElemsWithTimescales = false;
-@@ -1134,6 +1293,16 @@ private:
+@@ -1134,6 +1314,16 @@ private:
      // The default library.
      std::unique_ptr<SourceLibrary> defaultLibMem;
      const SourceLibrary* defaultLibPtr;
@@ -390,7 +437,7 @@ index b7ddc64e4..3c9676d8f 100644
  
  } // namespace slang::ast
 diff --git a/include/slang/ast/EvalContext.h b/include/slang/ast/EvalContext.h
-index ee13c73b0..9dd554cd6 100644
+index ee13c73b0e6f6466c2b9de28311082c56b9f6ca6..9dd554cd64a2a2510e0b3a3c6bdfdf112521677e 100644
 --- a/include/slang/ast/EvalContext.h
 +++ b/include/slang/ast/EvalContext.h
 @@ -25,6 +25,18 @@ class ValueSymbol;
@@ -413,7 +460,7 @@ index ee13c73b0..9dd554cd6 100644
  public:
      /// The AST context in which the evaluation is occurring.
 diff --git a/include/slang/ast/Scope.h b/include/slang/ast/Scope.h
-index 04b935cb0..127874b12 100644
+index 04b935cb0050dc4926412213725400ee3cbfd0f8..127874b1287d5ad874c6298e76879a013bd2b6f2 100644
 --- a/include/slang/ast/Scope.h
 +++ b/include/slang/ast/Scope.h
 @@ -215,12 +215,20 @@ public:
@@ -492,7 +539,7 @@ index 04b935cb0..127874b12 100644
  
  } // namespace slang::ast
 diff --git a/include/slang/ast/symbols/ClassSymbols.h b/include/slang/ast/symbols/ClassSymbols.h
-index bb4820890..dde3e19fb 100644
+index bb4820890a4166ae55d670833b6ed5dd60b65a91..dde3e19fbe9dcd985b803897e2d937e6663d0c3b 100644
 --- a/include/slang/ast/symbols/ClassSymbols.h
 +++ b/include/slang/ast/symbols/ClassSymbols.h
 @@ -228,6 +228,17 @@ struct ClassSpecializationHasher {
@@ -514,7 +561,7 @@ index bb4820890..dde3e19fb 100644
  
  /// Represents a generic class definition, which is a parameterized class that has not
 diff --git a/include/slang/ast/symbols/InstanceSymbols.h b/include/slang/ast/symbols/InstanceSymbols.h
-index 074d9d3c1..a2569cf3c 100644
+index 074d9d3c1482a807df66326b89d67e5d11ed3254..a2569cf3ceb963bf07ffe41d1d63a60c06f39bf3 100644
 --- a/include/slang/ast/symbols/InstanceSymbols.h
 +++ b/include/slang/ast/symbols/InstanceSymbols.h
 @@ -204,6 +204,10 @@ public:
@@ -545,7 +592,7 @@ index 074d9d3c1..a2569cf3c 100644
  
  /// Represents an array of instances.
 diff --git a/include/slang/ast/symbols/PortSymbols.h b/include/slang/ast/symbols/PortSymbols.h
-index 76ff9a76c..b1971fb24 100644
+index 76ff9a76cecc8f7e3144fc92f43ad1f93a4bc52e..b1971fb24ceb237ac316671c22d987f0ddff3fd8 100644
 --- a/include/slang/ast/symbols/PortSymbols.h
 +++ b/include/slang/ast/symbols/PortSymbols.h
 @@ -212,6 +212,7 @@ public:
@@ -557,7 +604,7 @@ index 76ff9a76c..b1971fb24 100644
      const Symbol* connectedSymbol = nullptr;
      mutable const Expression* expr = nullptr;
 diff --git a/include/slang/ast/symbols/SubroutineSymbols.h b/include/slang/ast/symbols/SubroutineSymbols.h
-index aadb0e766..f233808f6 100644
+index aadb0e766a90d9721d3df73260e389e5ccc50d10..f233808f63809f9828cbaf4fd9edd892cef6cb75 100644
 --- a/include/slang/ast/symbols/SubroutineSymbols.h
 +++ b/include/slang/ast/symbols/SubroutineSymbols.h
 @@ -7,6 +7,8 @@
@@ -582,7 +629,7 @@ index aadb0e766..f233808f6 100644
      VariableLifetime defaultLifetime;
      SubroutineKind subroutineKind;
 diff --git a/include/slang/ast/types/DeclaredType.h b/include/slang/ast/types/DeclaredType.h
-index 562415765..b916eb73f 100644
+index 5624157655141b42deb47fbd9401d799d454723d..b916eb73f8993709d927845f2ea525aae602eedd 100644
 --- a/include/slang/ast/types/DeclaredType.h
 +++ b/include/slang/ast/types/DeclaredType.h
 @@ -94,7 +94,7 @@ enum class SLANG_EXPORT DeclaredTypeFlags {
@@ -609,7 +656,7 @@ index 562415765..b916eb73f 100644
      /// when resolution is requested.
      /// @param syntax The initializer expression syntax.
 diff --git a/include/slang/ast/types/TypePrinter.h b/include/slang/ast/types/TypePrinter.h
-index 9b2fe5cb9..3a54057a2 100644
+index 9b2fe5cb9b06ede36a1a8e39427e5a035c010fdb..3a54057a23b5dc6bb5f99b1eac4979feaef83393 100644
 --- a/include/slang/ast/types/TypePrinter.h
 +++ b/include/slang/ast/types/TypePrinter.h
 @@ -122,6 +122,7 @@ private:
@@ -642,7 +689,7 @@ index 9b2fe5cb9..3a54057a2 100644
      flat_hash_set<const Type*> seenTypes;
      flat_hash_set<const Type*> typesToDisambiguate;
 diff --git a/include/slang/diagnostics/DiagnosticEngine.h b/include/slang/diagnostics/DiagnosticEngine.h
-index bc43d0037..a615af8d1 100644
+index bc43d0037063e9e47d7c4fbd85473077d953a4a4..a615af8d1ec98d669140ca8e15bc36cc6caf3ac7 100644
 --- a/include/slang/diagnostics/DiagnosticEngine.h
 +++ b/include/slang/diagnostics/DiagnosticEngine.h
 @@ -21,8 +21,9 @@
@@ -765,7 +812,7 @@ index bc43d0037..a615af8d1 100644
  
  } // namespace slang
 diff --git a/include/slang/driver/Driver.h b/include/slang/driver/Driver.h
-index 0f9cff2a3..c7b61d17a 100644
+index 0f9cff2a3c5865d20a9f6c570e07ab640a1b0f69..c7b61d17ac025fdca531a25694ab4a4bbe03097c 100644
 --- a/include/slang/driver/Driver.h
 +++ b/include/slang/driver/Driver.h
 @@ -18,6 +18,7 @@
@@ -835,7 +882,7 @@ index 0f9cff2a3..c7b61d17a 100644
  
      /// Creates a compilation object from all of the current loaded state of the driver.
 diff --git a/include/slang/driver/SourceLoader.h b/include/slang/driver/SourceLoader.h
-index 0913e369e..e583d9e63 100644
+index 0913e369e9dfcbcc41ca5dc07b1892631b767833..e583d9e63c0216e51b815797460ea8c70a7c25b0 100644
 --- a/include/slang/driver/SourceLoader.h
 +++ b/include/slang/driver/SourceLoader.h
 @@ -59,6 +59,8 @@ struct SLANG_EXPORT SourceOptions {
@@ -935,7 +982,7 @@ index 0913e369e..e583d9e63 100644
  
      static constexpr int MinFilesForThreading = 4;
 diff --git a/include/slang/parsing/Preprocessor.h b/include/slang/parsing/Preprocessor.h
-index 88d571c1a..f81977f25 100644
+index 88d571c1a80cd25fdc86c49f3663bbfc57fd3d69..f81977f25ad720ad3cd49df6d83cfb1978c0a7e8 100644
 --- a/include/slang/parsing/Preprocessor.h
 +++ b/include/slang/parsing/Preprocessor.h
 @@ -22,6 +22,7 @@
@@ -992,7 +1039,7 @@ index 88d571c1a..f81977f25 100644
  
      // Special handling for pulling directives when in an ifdef condition expr.
 diff --git a/include/slang/parsing/PreprocessorMetadata.h b/include/slang/parsing/PreprocessorMetadata.h
-index fc3236bf1..ce4f76927 100644
+index fc3236bf12bc3f64d131decc19c66be949bda1a4..ce4f769274e44cc1acb2229f52c1435eb76fddf3 100644
 --- a/include/slang/parsing/PreprocessorMetadata.h
 +++ b/include/slang/parsing/PreprocessorMetadata.h
 @@ -45,6 +45,9 @@ struct SLANG_EXPORT PreprocessorMetadata {
@@ -1006,7 +1053,7 @@ index fc3236bf1..ce4f76927 100644
  
  } // namespace slang::parsing
 diff --git a/include/slang/parsing/Token.h b/include/slang/parsing/Token.h
-index 0253f93fe..08d757877 100644
+index 0253f93fe6238366176b753c900f4d363847e9aa..08d75787742ed6b3672955f01c90c07703dec44f 100644
 --- a/include/slang/parsing/Token.h
 +++ b/include/slang/parsing/Token.h
 @@ -25,6 +25,7 @@ class Diagnostics;
@@ -1026,7 +1073,7 @@ index 0253f93fe..08d757877 100644
  
      void init(BumpAllocator& alloc, TokenKind kind, const TriviaView& trivia,
 diff --git a/include/slang/syntax/SyntaxTree.h b/include/slang/syntax/SyntaxTree.h
-index a8d51f774..1b486f2ac 100644
+index a8d51f7746b0d8d0b2d5baf9c3dd9ef6477b4154..1b486f2ac1db7ad6c074412fd8f9b302eb8582bd 100644
 --- a/include/slang/syntax/SyntaxTree.h
 +++ b/include/slang/syntax/SyntaxTree.h
 @@ -9,6 +9,7 @@
@@ -1155,7 +1202,7 @@ index a8d51f774..1b486f2ac 100644
 +};
  } // namespace slang::syntax
 diff --git a/include/slang/text/SourceManager.h b/include/slang/text/SourceManager.h
-index de1d1c271..ea2798b86 100644
+index de1d1c27195b364570eab007408f2aac14f86a17..ea2798b865b69e3dd1a7ad8b69239d7ebce762eb 100644
 --- a/include/slang/text/SourceManager.h
 +++ b/include/slang/text/SourceManager.h
 @@ -16,15 +16,22 @@
@@ -1469,7 +1516,7 @@ index de1d1c271..ea2798b86 100644
      bool disableProximatePaths = false;
      bool disableLocalIncludes = false;
 diff --git a/include/slang/util/Bag.h b/include/slang/util/Bag.h
-index 989512211..9998e942d 100644
+index 989512211f988a20c626534386bcf9c817c380ff..9998e942d0f4886b556712d85db657a6e87d6ba9 100644
 --- a/include/slang/util/Bag.h
 +++ b/include/slang/util/Bag.h
 @@ -36,6 +36,9 @@ public:
@@ -1483,7 +1530,7 @@ index 989512211..9998e942d 100644
      /// (making a copy in the process).
      template<typename T>
 diff --git a/scripts/syntax_gen.py b/scripts/syntax_gen.py
-index eb1dbca66..69567859c 100755
+index eb1dbca6668605f530af9b0b7c5af0bb29e2202a..69567859ce626c06215930b38d2db5eb063225b1 100755
 --- a/scripts/syntax_gen.py
 +++ b/scripts/syntax_gen.py
 @@ -66,6 +66,7 @@ def main():
@@ -1541,7 +1588,7 @@ index eb1dbca66..69567859c 100755
  if __name__ == "__main__":
      main()
 diff --git a/source/CMakeLists.txt b/source/CMakeLists.txt
-index ce1415ffd..50c6fd3ac 100644
+index ce1415ffde4d4ad8d37542cec33691a79ed56a2b..50c6fd3ac6765cab300f70777a4f6fce4710608e 100644
 --- a/source/CMakeLists.txt
 +++ b/source/CMakeLists.txt
 @@ -38,6 +38,7 @@ add_custom_command(
@@ -1569,7 +1616,7 @@ index ce1415ffd..50c6fd3ac 100644
    util/IntervalMap.cpp
    util/OS.cpp
 diff --git a/source/analysis/AnalysisManager.cpp b/source/analysis/AnalysisManager.cpp
-index c3eee251f..3599f6b5a 100644
+index c3eee251f86864413e55ae42174860681bdf3171..da143f87f8623f292e2d0c2d383e05783925961d 100644
 --- a/source/analysis/AnalysisManager.cpp
 +++ b/source/analysis/AnalysisManager.cpp
 @@ -20,11 +20,12 @@ namespace slang::analysis {
@@ -1616,7 +1663,29 @@ index c3eee251f..3599f6b5a 100644
      for (auto instance : root.topInstances)
          analyzeSymbolAsync(*instance);
      wait();
-@@ -297,7 +307,7 @@ Diagnostics AnalysisManager::getDiagnostics() {
+@@ -113,6 +123,21 @@ const AnalyzedScope* AnalysisManager::getAnalyzedScope(const Scope& scope) const
+     return result;
+ }
+ 
++void AnalysisManager::analyzeBody(const Compilation& compilation, const SubroutineSymbol& symbol) {
++    SLANG_ASSERT(compilation.isFrozen() && !sourceCompilation);
++    sourceCompilation = analyzedCompilation = &compilation;
++    sourceManager = compilation.getSourceManager();
++    analyzeSubroutine(getState().context, symbol);
++    analyzeScopeAsync(symbol);
++    wait();
++}
++
++std::vector<const SubroutineSymbol*> AnalysisManager::getAnalyzedSubroutines() const {
++    std::vector<const SubroutineSymbol*> result;
++    analyzedSubroutines.cvisit_all([&](const auto& item) { result.push_back(item.first); });
++    return result;
++}
++
+ const AnalyzedProcedure* AnalysisManager::getAnalyzedSubroutine(
+     const SubroutineSymbol& symbol) const {
+ 
+@@ -297,7 +322,7 @@ Diagnostics AnalysisManager::getDiagnostics() {
          }
      }
  
@@ -1625,7 +1694,7 @@ index c3eee251f..3599f6b5a 100644
  }
  
  AnalysisManager::Stats AnalysisManager::getStats() const {
-@@ -357,13 +367,14 @@ const AnalyzedScope& AnalysisManager::analyzeScopeBlocking(
+@@ -357,13 +382,14 @@ const AnalyzedScope& AnalysisManager::analyzeScopeBlocking(
  }
  
  void AnalysisManager::analyzeSymbolAsync(const Symbol& symbol) {
@@ -1643,7 +1712,7 @@ index c3eee251f..3599f6b5a 100644
              driverTracker.noteNonCanonicalInstance(state.context, state.driverAlloc, inst);
          }
 diff --git a/source/analysis/AnalysisQueries.cpp b/source/analysis/AnalysisQueries.cpp
-index 25f1ea99a..c6206f30b 100644
+index 25f1ea99ae00c6e32ed463862d5a969f928d457a..c6206f30bb43542336634b1d225571eb2a50d3a3 100644
 --- a/source/analysis/AnalysisQueries.cpp
 +++ b/source/analysis/AnalysisQueries.cpp
 @@ -11,6 +11,7 @@
@@ -1709,7 +1778,7 @@ index 25f1ea99a..c6206f30b 100644
                  canonicalBody = &canonicalInstance.body;
  
 diff --git a/source/analysis/AnalysisScopeVisitor.h b/source/analysis/AnalysisScopeVisitor.h
-index 347cd532c..44a311429 100644
+index 347cd532c5ae91d4b5c35eb43197b6713e42a6eb..44a311429610ed5afcb54ffb7ba5a60942c42330 100644
 --- a/source/analysis/AnalysisScopeVisitor.h
 +++ b/source/analysis/AnalysisScopeVisitor.h
 @@ -584,7 +584,28 @@ private:
@@ -1743,7 +1812,7 @@ index 347cd532c..44a311429 100644
  };
  
 diff --git a/source/analysis/DriverTracker.cpp b/source/analysis/DriverTracker.cpp
-index 736b99c9c..0a79267f5 100644
+index 736b99c9c08fe33bf7ce1f2bafb8dd4ea58b9642..0a79267f5ec362e2653f0349e50c8c1d1470c377 100644
 --- a/source/analysis/DriverTracker.cpp
 +++ b/source/analysis/DriverTracker.cpp
 @@ -11,6 +11,7 @@
@@ -1781,7 +1850,7 @@ index 736b99c9c..0a79267f5 100644
  
      std::vector<HierPortDriver> hierPortDrivers;
 diff --git a/source/ast/ASTContext.cpp b/source/ast/ASTContext.cpp
-index 49c40373c..90810d826 100644
+index 49c40373c1e39392ecdc8d33aac359077dcc65a9..90810d826ecb8769513fc29b382d47900fa11393 100644
 --- a/source/ast/ASTContext.cpp
 +++ b/source/ast/ASTContext.cpp
 @@ -418,10 +418,10 @@ void ASTContext::noteReference(const ValueSymbol& symbol, bool isDottedAccess) c
@@ -1798,7 +1867,7 @@ index 49c40373c..90810d826 100644
          // Modport ports are aliases for interface members; references to the
          // facade also count as references to the connected value(s).
 diff --git a/source/ast/ASTDiagMap.cpp b/source/ast/ASTDiagMap.cpp
-index cb4f631f8..664d00b20 100644
+index cb4f631f8f0fe237a9bf4b0212627f3069fc5721..664d00b200f4f2802a3b2b902675a1f0f1265d89 100644
 --- a/source/ast/ASTDiagMap.cpp
 +++ b/source/ast/ASTDiagMap.cpp
 @@ -22,7 +22,8 @@ Diagnostic& ASTDiagMap::add(Diagnostic diag, bool& isNew) {
@@ -1827,7 +1896,7 @@ index cb4f631f8..664d00b20 100644
              // information to point the user towards the right ones.
              Diagnostic diag = *found;
 diff --git a/source/ast/Compilation.cpp b/source/ast/Compilation.cpp
-index ed7528f2c..dea7036e4 100644
+index ed7528f2c63e43df29c59538afa58b94099e6df0..07faefa34bf1fc880347c38704088f27499a09b8 100644
 --- a/source/ast/Compilation.cpp
 +++ b/source/ast/Compilation.cpp
 @@ -9,12 +9,14 @@
@@ -3814,19 +3883,58 @@ index ed7528f2c..dea7036e4 100644
      std::vector<const PackageSymbol*> result;
      for (auto& [name, pkg] : packageMap) {
          result.insert(
-@@ -293,11 +2175,24 @@ const SourceLibrary* Compilation::getSourceLibrary(std::string_view name) const
+@@ -293,11 +2175,63 @@ const SourceLibrary* Compilation::getSourceLibrary(std::string_view name) const
      return nullptr;
  }
  
-+void Compilation::setBodyQueryContext(std::shared_ptr<Compilation> owner) {
++namespace {
++thread_local Compilation* bodyQueryReferenceTarget = nullptr;
++}
++BodyQueryReferenceGuard::BodyQueryReferenceGuard(Compilation& target) :
++    previous(bodyQueryReferenceTarget) {
++    bodyQueryReferenceTarget = &target;
++}
++BodyQueryReferenceGuard::~BodyQueryReferenceGuard() {
++    bodyQueryReferenceTarget = previous;
++}
++
++void Compilation::setBodyQueryContext(std::shared_ptr<Compilation> owner,
++                                      std::shared_ptr<SyntaxTree> bodyTree) {
 +    if (!owner || owner.get() == this || bodyQueryContext || finalized || !owner->isFinalized())
 +        SLANG_THROW(std::invalid_argument("body query requires a finalized original context"));
++    if (bodyTree && (sourceManager || !syntaxTrees.empty() ||
++                     &bodyTree->sourceManager() != owner->getSourceManager()))
++        SLANG_THROW(std::invalid_argument("fresh detached body source context required"));
 +    bodyQueryContext = std::move(owner);
++    if (bodyTree) {
++        sourceManager = &bodyTree->sourceManager();
++        syntaxTrees.push_back(std::move(bodyTree));
++    }
 +    // Built-in process / mailbox / semaphore handles must retain nominal identity
 +    // with declarations in the borrowed lexical scopes.
 +    stdPkg = bodyQueryContext->stdPkg;
 +    packageMap[stdPkg->name] = stdPkg;
 +    finalized = true;
++}
++
++Diagnostics Compilation::getBodyQueryDiagnostics() {
++    if (!bodyQueryContext)
++        SLANG_THROW(std::logic_error("detached body context required"));
++    if (!hierarchicalAssignments.empty() || !virtualIfaceInstances.empty())
++        SLANG_THROW(std::logic_error("detached body requires design-dependent finalization"));
++    // Realize method-local attributes and deferred declaration conflicts, just as
++    // full elaboration does. Never finalize the borrowed root or its instances.
++    auto attributes = attributeMap;
++    for (const auto& [_, values] : attributes)
++        for (auto attribute : values)
++            attribute->getValue();
++    auto conflicts = std::move(nameConflicts);
++    nameConflicts.clear();
++    for (auto symbol : conflicts)
++        symbol->getParentScope()->handleNameConflict(*symbol);
++    if (!hierarchicalAssignments.empty() || !virtualIfaceInstances.empty())
++        SLANG_THROW(std::logic_error("detached body requires design-dependent finalization"));
++    return diagMap.coalesce(sourceManager, this);
 +}
 +
  const RootSymbol& Compilation::getRoot() {
@@ -3839,7 +3947,7 @@ index ed7528f2c..dea7036e4 100644
      if (finalized)
          return *root;
  
-@@ -310,6 +2205,15 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
+@@ -310,6 +2244,15 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
              defaultLiblist.push_back(lib);
      }
  
@@ -3855,7 +3963,7 @@ index ed7528f2c..dea7036e4 100644
      // If any top-level parameter overrides were provided, parse them now.
      flat_hash_map<std::string_view, HierarchyOverrideNode::ParamOverride> cliOverrides;
      parseParamOverrides(skipDefParamsAndBinds, cliOverrides);
-@@ -398,7 +2302,7 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
+@@ -398,7 +2341,7 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
              if (inserted) {
                  topDefs.push_back({result, sourceRange});
                  SLANG_ASSERT(def->kind == SymbolKind::Definition);
@@ -3864,7 +3972,7 @@ index ed7528f2c..dea7036e4 100644
              }
              else {
                  auto& diag = root->addDiag(diag::MultipleTopDupName, sourceRange.start()
-@@ -465,8 +2369,7 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
+@@ -465,8 +2408,7 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
                          else {
                              // Otherwise, issue an error because the user asked us to instantiate
                              // this.
@@ -3874,7 +3982,7 @@ index ed7528f2c..dea7036e4 100644
                                  << userProvidedName;
                          }
                          continue;
-@@ -510,7 +2413,7 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
+@@ -510,7 +2452,7 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
  
                  auto& def = defSym->as<DefinitionSymbol>();
                  if (globalInstantiations.find(def.name) == globalInstantiations.end() &&
@@ -3883,7 +3991,7 @@ index ed7528f2c..dea7036e4 100644
                      unreferencedDefs.push_back(&def);
                  }
              }
-@@ -551,6 +2454,10 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
+@@ -551,6 +2493,10 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
  
          auto& instance = InstanceSymbol::createDefault(*this, def, hierarchyOverrideNode,
                                                         result.configRoot, result.configRule);
@@ -3894,7 +4002,7 @@ index ed7528f2c..dea7036e4 100644
          root->addMember(instance);
          topList.push_back(&instance);
      }
-@@ -562,7 +2469,7 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
+@@ -562,7 +2508,7 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
  
      // For unreferenced definitions, go through and instantiate them with all empty
      // parameter values so that we get at least some semantic checking of the contents.
@@ -3903,7 +4011,7 @@ index ed7528f2c..dea7036e4 100644
          for (auto def : unreferencedDefs) {
              const HierarchyOverrideNode* hierarchyOverrideNode = nullptr;
              if (auto* syntax = def->getSyntax()) {
-@@ -595,6 +2502,7 @@ const CompilationUnitSymbol* Compilation::getCompilationUnit(
+@@ -595,6 +2541,7 @@ const CompilationUnitSymbol* Compilation::getCompilationUnit(
  
  Compilation::DefinitionLookupResult Compilation::tryGetDefinition(std::string_view lookupName,
                                                                    const Scope& scope) const {
@@ -3911,7 +4019,7 @@ index ed7528f2c..dea7036e4 100644
      // Try to find a config block for this scope to help choose the right definition.
      const ResolvedConfig* resolvedConfig = nullptr;
      if (auto inst = scope.getContainingInstance(); inst && inst->parentInstance)
-@@ -734,6 +2642,10 @@ const DefinitionSymbol* Compilation::getDefinition(const Scope& scope,
+@@ -734,6 +2681,10 @@ const DefinitionSymbol* Compilation::getDefinition(const Scope& scope,
  
              lookupScope = lookupScope->asSymbol().getParentScope();
          } while (lookupScope);
@@ -3922,7 +4030,7 @@ index ed7528f2c..dea7036e4 100644
      }
      return nullptr;
  }
-@@ -824,6 +2736,27 @@ void Compilation::createDefinition(const Scope& scope, LookupLocation location,
+@@ -824,6 +2775,27 @@ void Compilation::createDefinition(const Scope& scope, LookupLocation location,
                                     const ModuleDeclarationSyntax& syntax) {
      SLANG_ASSERT(!isFrozen());
  
@@ -3950,7 +4058,7 @@ index ed7528f2c..dea7036e4 100644
      // We can only be missing metadata if the definition is created programmatically
      // (i.e. not via the parser) so we just fill in the parent's default net type
      // so that it's not a null pointer.
-@@ -893,7 +2826,7 @@ void Compilation::insertDefinition(Symbol& symbol, const Scope& scope) {
+@@ -893,7 +2865,7 @@ void Compilation::insertDefinition(Symbol& symbol, const Scope& scope) {
              for (auto v = vecIt; v != defList.end(); v++) {
                  auto vSym = *v;
                  auto vLib = vSym->getSourceLibrary();
@@ -3959,7 +4067,7 @@ index ed7528f2c..dea7036e4 100644
                      // Duplicate in the same library.
                      if (hasFlag(CompilationFlags::AllowLibModuleRedefinition)) {
                          // Silently keep the first definition and discard all subsequent ones,
-@@ -971,12 +2904,31 @@ void Compilation::insertDefinition(Symbol& symbol, const Scope& scope) {
+@@ -971,12 +2943,31 @@ void Compilation::insertDefinition(Symbol& symbol, const Scope& scope) {
  }
  
  const PackageSymbol* Compilation::getPackage(std::string_view lookupName) const {
@@ -3992,7 +4100,7 @@ index ed7528f2c..dea7036e4 100644
  const PackageSymbol& Compilation::createPackage(const Scope& scope,
                                                  const ModuleDeclarationSyntax& syntax) {
      SLANG_ASSERT(!isFrozen());
-@@ -1077,6 +3029,7 @@ void Compilation::addSystemMethod(SymbolKind typeKind,
+@@ -1077,6 +3068,7 @@ void Compilation::addSystemMethod(SymbolKind typeKind,
  }
  
  const SystemSubroutine* Compilation::getSystemSubroutine(std::string_view name) const {
@@ -4000,7 +4108,7 @@ index ed7528f2c..dea7036e4 100644
      auto it = subroutineNameMap.find(name);
      if (it == subroutineNameMap.end())
          return nullptr;
-@@ -1085,12 +3038,13 @@ const SystemSubroutine* Compilation::getSystemSubroutine(std::string_view name)
+@@ -1085,12 +3077,13 @@ const SystemSubroutine* Compilation::getSystemSubroutine(std::string_view name)
  
  const SystemSubroutine* Compilation::getSystemSubroutine(
      parsing::KnownSystemName knownNameId) const {
@@ -4015,7 +4123,7 @@ index ed7528f2c..dea7036e4 100644
      auto it = methodMap.find(std::make_tuple(name, typeKind));
      if (it == methodMap.end())
          return nullptr;
-@@ -1136,10 +3090,14 @@ std::span<const AttributeSymbol* const> Compilation::getAttributes(
+@@ -1136,10 +3129,14 @@ std::span<const AttributeSymbol* const> Compilation::getAttributes(
  
  std::span<const AttributeSymbol* const> Compilation::getAttributes(const void* ptr) const {
      auto it = attributeMap.find(ptr);
@@ -4034,7 +4142,7 @@ index ed7528f2c..dea7036e4 100644
  }
  
  void Compilation::noteBindDirective(const BindDirectiveSyntax& syntax, const Scope& scope) {
-@@ -1254,7 +3212,7 @@ const Symbol* Compilation::getDefaultClocking(const Scope& scope) const {
+@@ -1254,7 +3251,7 @@ const Symbol* Compilation::getDefaultClocking(const Scope& scope) const {
              return getDefaultClocking(*parent);
      }
  
@@ -4043,7 +4151,7 @@ index ed7528f2c..dea7036e4 100644
  }
  
  void Compilation::noteGlobalClocking(const Scope& scope, const Symbol& clocking,
-@@ -1409,7 +3367,7 @@ const Expression* Compilation::getDefaultDisable(const Scope& scope) const {
+@@ -1409,7 +3406,7 @@ const Expression* Compilation::getDefaultDisable(const Scope& scope) const {
  
          curr = curr->asSymbol().getParentScope();
          if (!curr || curr->asSymbol().kind == SymbolKind::CompilationUnit)
@@ -4052,7 +4160,18 @@ index ed7528f2c..dea7036e4 100644
      }
  }
  
-@@ -1467,18 +3425,79 @@ void Compilation::noteReference(const SyntaxNode& node, bool isLValue) {
+@@ -1459,6 +3456,10 @@ const SyntaxNode* Compilation::getExternDefinition(std::string_view name,
+ }
+ 
+ void Compilation::noteReference(const SyntaxNode& node, bool isLValue) {
++    if (bodyQueryReferenceTarget && bodyQueryReferenceTarget != this) {
++        bodyQueryReferenceTarget->noteReference(node, isLValue);
++        return;
++    }
+     SLANG_ASSERT(!isFrozen());
+     auto [it, inserted] = referenceStatusMap.emplace(&node, std::pair{!isLValue, isLValue});
+     if (!inserted) {
+@@ -1467,18 +3468,83 @@ void Compilation::noteReference(const SyntaxNode& node, bool isLValue) {
      }
  }
  
@@ -4064,6 +4183,10 @@ index ed7528f2c..dea7036e4 100644
 +}
 +
 +void Compilation::noteReference(const Symbol& symbol, bool isLValue, const Scope* origin) {
++    if (bodyQueryReferenceTarget && bodyQueryReferenceTarget != this) {
++        bodyQueryReferenceTarget->noteReference(symbol, isLValue, origin);
++        return;
++    }
      SLANG_ASSERT(!isFrozen());
 -    if (auto syntax = symbol.getSyntax())
 +    // A hierarchical reference to a method's locals can make outside declarations
@@ -4139,7 +4262,7 @@ index ed7528f2c..dea7036e4 100644
  }
  
  const NameSyntax& Compilation::parseName(std::string_view name) {
-@@ -1560,10 +3579,12 @@ void Compilation::elaborate() {
+@@ -1560,10 +3626,12 @@ void Compilation::elaborate() {
      // Double check any bind directives for correctness. These were already
      // resolved prior to full elaboration but their diagnostics were not
      // issued so we need to check again.
@@ -4156,7 +4279,7 @@ index ed7528f2c..dea7036e4 100644
      }
  
      // Report any lingering name conflicts.
-@@ -1680,6 +3701,49 @@ const Diagnostics& Compilation::getParseDiagnostics() {
+@@ -1680,6 +3748,49 @@ const Diagnostics& Compilation::getParseDiagnostics() {
      return *cachedParseDiagnostics;
  }
  
@@ -4206,7 +4329,7 @@ index ed7528f2c..dea7036e4 100644
  const Diagnostics& Compilation::getSemanticDiagnostics() {
      if (cachedSemanticDiagnostics)
          return *cachedSemanticDiagnostics;
-@@ -1687,7 +3751,99 @@ const Diagnostics& Compilation::getSemanticDiagnostics() {
+@@ -1687,7 +3798,99 @@ const Diagnostics& Compilation::getSemanticDiagnostics() {
      // Elaborate the design.
      elaborate();
  
@@ -4308,7 +4431,7 @@ index ed7528f2c..dea7036e4 100644
  }
  
 diff --git a/source/ast/DefParamResolver.cpp b/source/ast/DefParamResolver.cpp
-index 20da49191..4a81bf314 100644
+index 20da49191e1783e167e65f988365dc788000ff3b..4a81bf314347f16796ce785f15c9b35ef7487deb 100644
 --- a/source/ast/DefParamResolver.cpp
 +++ b/source/ast/DefParamResolver.cpp
 @@ -610,7 +610,7 @@ void Compilation::resolveDefParamsAndBinds() {
@@ -4340,7 +4463,7 @@ index 20da49191..4a81bf314 100644
          copyStateInto(c, false);
      };
 diff --git a/source/ast/ElabVisitors.h b/source/ast/ElabVisitors.h
-index 2f346fa60..bdc738b71 100644
+index 2f346fa600e460dd4df92866801bf263296174c7..bdc738b7144c04e2eee4401a92742a05c804a9a5 100644
 --- a/source/ast/ElabVisitors.h
 +++ b/source/ast/ElabVisitors.h
 @@ -9,6 +9,7 @@
@@ -4499,7 +4622,7 @@ index 2f346fa60..bdc738b71 100644
          // If this is an interface or an instance instantiated within an interface
          // we want to return false so that we continue visiting the body. This is
 diff --git a/source/ast/EvalContext.cpp b/source/ast/EvalContext.cpp
-index bcb414415..dfff1ba86 100644
+index bcb4144155bf08dc3f4823e4f887d0e430ae696b..dfff1ba8610a54d5715ad46fd3b3e89e49ea0e82 100644
 --- a/source/ast/EvalContext.cpp
 +++ b/source/ast/EvalContext.cpp
 @@ -68,8 +68,29 @@ void EvalContext::deleteLocal(const ValueSymbol* symbol) {
@@ -4533,7 +4656,7 @@ index bcb414415..dfff1ba86 100644
      if (stack.size() >= maxDepth) {
          addDiag(diag::ConstEvalExceededMaxCallDepth, subroutine.location) << maxDepth;
 diff --git a/source/ast/Expression.cpp b/source/ast/Expression.cpp
-index ff5f11750..20bb06266 100644
+index ff5f117504f07152778090649eb2bfcb673987fd..20bb062669cff51162c011965b7c76fcba950c20 100644
 --- a/source/ast/Expression.cpp
 +++ b/source/ast/Expression.cpp
 @@ -415,7 +415,7 @@ const Expression& Expression::bindRefArg(const Type& lhs, bitmask<VariableFlags>
@@ -4546,7 +4669,7 @@ index ff5f11750..20bb06266 100644
  
      return expr;
 diff --git a/source/ast/Lookup.cpp b/source/ast/Lookup.cpp
-index 9210c3588..2eee74570 100644
+index 9210c35889a73eee6c987f0defa70ae722118365..2eee7457048eb3b1060a8a237aabf8f76e496b85 100644
 --- a/source/ast/Lookup.cpp
 +++ b/source/ast/Lookup.cpp
 @@ -157,7 +157,7 @@ struct NamePlusLoc {
@@ -4584,7 +4707,7 @@ index 9210c3588..2eee74570 100644
  
      // If the found symbol is a generic class, unwrap into
 diff --git a/source/ast/Scope.cpp b/source/ast/Scope.cpp
-index 1ea78c836..cd405ede8 100644
+index 1ea78c836ea11c6e64408923173b25ee191f45d9..cd405ede8cc502d94ffdb44d2135012d6b1c7482 100644
 --- a/source/ast/Scope.cpp
 +++ b/source/ast/Scope.cpp
 @@ -41,6 +41,7 @@ using namespace slang::ast;
@@ -4670,7 +4793,7 @@ index 1ea78c836..cd405ede8 100644
  
      auto& inst = InstanceSymbol::createDefaultNested(*this, syntax);
 diff --git a/source/ast/SystemSubroutine.cpp b/source/ast/SystemSubroutine.cpp
-index fcd98d9a9..423b81da6 100644
+index fcd98d9a989300c0443acb46b53d8f20707480ab..423b81da6f9c91340b75d35b5542f6865a6461e6 100644
 --- a/source/ast/SystemSubroutine.cpp
 +++ b/source/ast/SystemSubroutine.cpp
 @@ -64,7 +64,7 @@ ASTContext SystemSubroutine::unevaluatedContext(const ASTContext& sourceContext)
@@ -4683,7 +4806,7 @@ index fcd98d9a9..423b81da6 100644
  
  const Type& SystemSubroutine::badArg(const ASTContext& context, const Expression& arg) const {
 diff --git a/source/ast/builtins/MiscSystemFuncs.cpp b/source/ast/builtins/MiscSystemFuncs.cpp
-index fcdb3f436..1e4ab3f97 100644
+index fcdb3f43617be3c20b8a3f6d9e8b2bcfd37dced4..1e4ab3f975c0eae196060e6a3f7e9b0d853a36cc 100644
 --- a/source/ast/builtins/MiscSystemFuncs.cpp
 +++ b/source/ast/builtins/MiscSystemFuncs.cpp
 @@ -141,7 +141,7 @@ public:
@@ -4708,7 +4831,7 @@ index fcdb3f436..1e4ab3f97 100644
                  return comp.getErrorType();
              }
 diff --git a/source/ast/expressions/CallExpression.cpp b/source/ast/expressions/CallExpression.cpp
-index 18ed6845d..fdf802672 100644
+index 18ed6845d809f058edb3414c355f243aebddd49b..fdf8026729f3e63a6cfd69e4e48bb4d98d320cf2 100644
 --- a/source/ast/expressions/CallExpression.cpp
 +++ b/source/ast/expressions/CallExpression.cpp
 @@ -308,7 +308,7 @@ Expression& CallExpression::fromArgs(Compilation& comp, const Subroutine& subrou
@@ -4721,7 +4844,7 @@ index 18ed6845d..fdf802672 100644
      SmallVector<const Expression*> boundArgs;
      bool bad = !bindArgs(argSyntax, symbol.getArguments(), symbol.name, range, context, boundArgs);
 diff --git a/source/ast/expressions/MiscExpressions.cpp b/source/ast/expressions/MiscExpressions.cpp
-index 268c7f917..868328a0a 100644
+index 268c7f917b4e798941ac6ccf908adfe449d5b02d..868328a0a65b6e7c3121d75a2865ac211c6c2a92 100644
 --- a/source/ast/expressions/MiscExpressions.cpp
 +++ b/source/ast/expressions/MiscExpressions.cpp
 @@ -566,7 +566,7 @@ Expression& ArbitrarySymbolExpression::fromSyntax(Compilation& comp, const NameS
@@ -4743,7 +4866,7 @@ index 268c7f917..868328a0a 100644
          case SymbolKind::Sequence: {
              auto& seq = symbol.as<SequenceSymbol>();
 diff --git a/source/ast/expressions/OperatorExpressions.cpp b/source/ast/expressions/OperatorExpressions.cpp
-index e51460a5c..9f18dcc90 100644
+index e51460a5ccaad10cdffb74b8f7b965f705e25673..9f18dcc907b9d66f09647ea225207f43cb828520 100644
 --- a/source/ast/expressions/OperatorExpressions.cpp
 +++ b/source/ast/expressions/OperatorExpressions.cpp
 @@ -1985,8 +1985,11 @@ Expression& ConcatenationExpression::fromSyntax(Compilation& comp,
@@ -4770,7 +4893,7 @@ index e51460a5c..9f18dcc90 100644
              return badResult();
  
 diff --git a/source/ast/statements/MiscStatements.cpp b/source/ast/statements/MiscStatements.cpp
-index a53c6c258..452f2e3ca 100644
+index a53c6c25876ea7e3c506d77ee91bfcb9e1585162..452f2e3ca6685dbadc9bcec278dfb3fe0c78b336 100644
 --- a/source/ast/statements/MiscStatements.cpp
 +++ b/source/ast/statements/MiscStatements.cpp
 @@ -531,7 +531,7 @@ Statement& EventTriggerStatement::fromSyntax(Compilation& compilation,
@@ -4783,7 +4906,7 @@ index a53c6c258..452f2e3ca 100644
      const TimingControl* timing = nullptr;
      if (syntax.timing) {
 diff --git a/source/ast/symbols/BlockSymbols.cpp b/source/ast/symbols/BlockSymbols.cpp
-index 1609a2073..3bc61ed3d 100644
+index 1609a20734ae5a42ee3e1ad7e410139de010053a..3bc61ed3d8ff7ebde98a34dbc495cb5da7d7da12 100644
 --- a/source/ast/symbols/BlockSymbols.cpp
 +++ b/source/ast/symbols/BlockSymbols.cpp
 @@ -522,6 +522,7 @@ void GenerateBlockSymbol::fromSyntax(Compilation& compilation, const IfGenerateS
@@ -4805,7 +4928,7 @@ index 1609a2073..3bc61ed3d 100644
      auto condExpr = *boundIt++;
  
 diff --git a/source/ast/symbols/ClassSymbols.cpp b/source/ast/symbols/ClassSymbols.cpp
-index a9250508e..3287cfe64 100644
+index a9250508e04225bb26e7120b246ebc90ea417346..3287cfe64018e087003f7d21f27059e6f50e79fe 100644
 --- a/source/ast/symbols/ClassSymbols.cpp
 +++ b/source/ast/symbols/ClassSymbols.cpp
 @@ -691,7 +691,7 @@ const SubroutineSymbol* ClassType::getConstructor() const {
@@ -4879,7 +5002,7 @@ index a9250508e..3287cfe64 100644
                  return it->second;
          }
 diff --git a/source/ast/symbols/InstanceSymbols.cpp b/source/ast/symbols/InstanceSymbols.cpp
-index 15e54e38a..657cbbc31 100644
+index 15e54e38a553d0968a77ef3cfea3927e0ef890f9..657cbbc316185985b3ba18c6739578f4b4fae57e 100644
 --- a/source/ast/symbols/InstanceSymbols.cpp
 +++ b/source/ast/symbols/InstanceSymbols.cpp
 @@ -611,7 +611,7 @@ void InstanceSymbol::fromSyntax(Compilation& comp, const HierarchyInstantiationS
@@ -4934,7 +5057,7 @@ index 15e54e38a..657cbbc31 100644
      }
  }
 diff --git a/source/ast/symbols/ParameterBuilder.cpp b/source/ast/symbols/ParameterBuilder.cpp
-index ae1880f3f..0edd581b8 100644
+index ae1880f3fbc5c225323eed09d1d637008e22d15f..0edd581b85641f81c3b48304111e21e22283a086 100644
 --- a/source/ast/symbols/ParameterBuilder.cpp
 +++ b/source/ast/symbols/ParameterBuilder.cpp
 @@ -131,7 +131,7 @@ const ParameterSymbolBase& ParameterBuilder::createParam(
@@ -4984,7 +5107,7 @@ index ae1880f3f..0edd581b8 100644
          if (decl.hasSyntax) {
              param->defaultValSyntax = decl.valueDecl;
 diff --git a/source/ast/symbols/ParameterSymbols.cpp b/source/ast/symbols/ParameterSymbols.cpp
-index 9860ee446..5fcfd6df8 100644
+index 9860ee446115ff4c07975a3a656fb494cf7f0155..5fcfd6df8a9d0bb65370ec69e515baaf0ce9f46e 100644
 --- a/source/ast/symbols/ParameterSymbols.cpp
 +++ b/source/ast/symbols/ParameterSymbols.cpp
 @@ -61,7 +61,8 @@ void ParameterSymbolBase::checkDefaultExpression() const {
@@ -4998,7 +5121,7 @@ index 9860ee446..5fcfd6df8 100644
              for (auto& selector : result.selectors) {
                  if (auto elemSel = std::get_if<0>(&selector))
 diff --git a/source/ast/symbols/PortSymbols.cpp b/source/ast/symbols/PortSymbols.cpp
-index 0d7a8a191..c13ca41f4 100644
+index 0d7a8a191db7c9c537552caef3915a3cb48f9f71..c13ca41f402695a190cee32bfc0ce1a664d1cd7e 100644
 --- a/source/ast/symbols/PortSymbols.cpp
 +++ b/source/ast/symbols/PortSymbols.cpp
 @@ -1809,6 +1809,8 @@ PortConnection::IfaceConn PortConnection::getIfaceConn() const {
@@ -5022,7 +5145,7 @@ index 0d7a8a191..c13ca41f4 100644
  }
  
 diff --git a/source/ast/symbols/SubroutineSymbols.cpp b/source/ast/symbols/SubroutineSymbols.cpp
-index 0e4e7e2c6..8070252ef 100644
+index 0e4e7e2c6c8d30e746b9a2661aebc2f7d6568812..8070252efb31eb5883a2cb89a37c754d6cbe5ff9 100644
 --- a/source/ast/symbols/SubroutineSymbols.cpp
 +++ b/source/ast/symbols/SubroutineSymbols.cpp
 @@ -64,6 +64,30 @@ const Statement& SubroutineSymbol::getBody() const {
@@ -5111,7 +5234,7 @@ index 0e4e7e2c6..8070252ef 100644
      if (declSyntax && (declSyntax->kind == SyntaxKind::FunctionDeclaration ||
                         declSyntax->kind == SyntaxKind::TaskDeclaration)) {
 diff --git a/source/ast/types/Type.cpp b/source/ast/types/Type.cpp
-index 82108e97b..65f4cf20b 100644
+index 82108e97bff58c825bd70d98a6ef441ef8610f99..65f4cf20b07762a4428a65d9d603ecc6b997cd18 100644
 --- a/source/ast/types/Type.cpp
 +++ b/source/ast/types/Type.cpp
 @@ -437,6 +437,14 @@ bool Type::isMatching(const Type& rhs) const {
@@ -5130,7 +5253,7 @@ index 82108e97b..65f4cf20b 100644
          auto lChild = l->as<ErrorType>().child;
          auto rChild = r->as<ErrorType>().child;
 diff --git a/source/ast/types/TypePrinter.cpp b/source/ast/types/TypePrinter.cpp
-index 8944debab..e69e1c442 100644
+index 8944debab856e415200b4a3f656681e6b21863a4..e69e1c44242576b84d0223ba55d6a4350fa41ed1 100644
 --- a/source/ast/types/TypePrinter.cpp
 +++ b/source/ast/types/TypePrinter.cpp
 @@ -10,9 +10,31 @@
@@ -5301,7 +5424,7 @@ index 8944debab..e69e1c442 100644
      printer.options.quoteChar = '\'';
      printer.options.elideScopeNames = true;
 diff --git a/source/diagnostics/DiagnosticEngine.cpp b/source/diagnostics/DiagnosticEngine.cpp
-index 3fa297e9c..0eb352284 100644
+index 3fa297e9c399e3143a30eeebacbcd569f3f30159..0eb352284b87411bfd3576392b14b0948d61f655 100644
 --- a/source/diagnostics/DiagnosticEngine.cpp
 +++ b/source/diagnostics/DiagnosticEngine.cpp
 @@ -9,7 +9,10 @@
@@ -5501,7 +5624,7 @@ index 3fa297e9c..0eb352284 100644
      for (auto& [key, formatter] : formatters)
          formatter->startMessage(diag);
 diff --git a/source/driver/Driver.cpp b/source/driver/Driver.cpp
-index d049078b0..4e9fd85d8 100644
+index d049078b09193791a4dfbc2e7dd89db458bf61f6..4e9fd85d810fb148f7409ecf5003e1100528f4fe 100644
 --- a/source/driver/Driver.cpp
 +++ b/source/driver/Driver.cpp
 @@ -26,6 +26,7 @@
@@ -5654,7 +5777,7 @@ index d049078b0..4e9fd85d8 100644
      ppoptions.undefines = options.undefines;
      ppoptions.predefineSource = "<command-line>";
 diff --git a/source/driver/SourceLoader.cpp b/source/driver/SourceLoader.cpp
-index 99b853be7..1d29a9515 100644
+index 99b853be78fe889077b3cd38965417c5955788e7..1d29a95153668119266c904fdb1c4de18953e371 100644
 --- a/source/driver/SourceLoader.cpp
 +++ b/source/driver/SourceLoader.cpp
 @@ -14,6 +14,7 @@
@@ -5883,7 +6006,7 @@ index 99b853be7..1d29a9515 100644
 +}
 +} // namespace slang::driver
 diff --git a/source/parsing/Lexer.cpp b/source/parsing/Lexer.cpp
-index a91519cb4..cd32fd4f8 100644
+index a91519cb4e865e7b578b6f3f458e13cd7a67963e..cd32fd4f81f9fce7e0dd895d91934f91d6413cf3 100644
 --- a/source/parsing/Lexer.cpp
 +++ b/source/parsing/Lexer.cpp
 @@ -1426,16 +1426,20 @@ bool Lexer::tryApplyCommentHandler() {
@@ -5912,7 +6035,7 @@ index a91519cb4..cd32fd4f8 100644
      }
      SLANG_UNREACHABLE;
 diff --git a/source/parsing/Preprocessor.cpp b/source/parsing/Preprocessor.cpp
-index 5601d7e73..4d36b2721 100644
+index 5601d7e738142d8a7906fef416c07b9f927543d0..4d36b272104a641c2694b0cb0f65b7d76129ecd1 100644
 --- a/source/parsing/Preprocessor.cpp
 +++ b/source/parsing/Preprocessor.cpp
 @@ -99,11 +99,18 @@ void Preprocessor::pushSource(std::string_view source, std::string_view name) {
@@ -5969,7 +6092,7 @@ index 5601d7e73..4d36b2721 100644
      }
      return Trivia(TriviaKind::Directive, result);
 diff --git a/source/parsing/Preprocessor_pragmas.cpp b/source/parsing/Preprocessor_pragmas.cpp
-index e86c15c68..0a360224a 100644
+index e86c15c68a361c3168d7948e294e33fdbd0b9b92..0a360224ad6ee4611b79e5a8e1191dceb6667bc2 100644
 --- a/source/parsing/Preprocessor_pragmas.cpp
 +++ b/source/parsing/Preprocessor_pragmas.cpp
 @@ -257,11 +257,11 @@ void Preprocessor::applyDiagnosticPragma(const PragmaDirectiveSyntax& pragma) {
@@ -5997,7 +6120,7 @@ index e86c15c68..0a360224a 100644
                      else {
                          addDiag(diag::ExpectedDiagPragmaArg, simple.value.range());
 diff --git a/source/syntax/SyntaxTree.cpp b/source/syntax/SyntaxTree.cpp
-index ac681a4db..771e3e201 100644
+index ac681a4db5f9b15af26152781d4260c8db59d68f..771e3e20152a01fd39b367cfbdd92bd40bb03c52 100644
 --- a/source/syntax/SyntaxTree.cpp
 +++ b/source/syntax/SyntaxTree.cpp
 @@ -7,16 +7,92 @@
@@ -7227,7 +7350,7 @@ index ac681a4db..771e3e201 100644
 +}
 +} // namespace slang::syntax
 diff --git a/source/text/SourceManager.cpp b/source/text/SourceManager.cpp
-index 386684b5a..7d0cc3b9f 100644
+index 386684b5adada5a55d10eb0152211b4ce63be7e4..7d0cc3b9fe10691a122155c3a1b6840492006e34 100644
 --- a/source/text/SourceManager.cpp
 +++ b/source/text/SourceManager.cpp
 @@ -7,14 +7,32 @@
@@ -8712,7 +8835,7 @@ index 386684b5a..7d0cc3b9f 100644
 +}
  } // namespace slang
 diff --git a/tests/regression/driver/suppress-macro-warnings.sv b/tests/regression/driver/suppress-macro-warnings.sv
-index 33564b4e0..5afd75590 100644
+index 33564b4e0e712145af6e0e1b617c03a55da197f4..5afd755904228e0e926cd6c9820e55e2f2afc480 100644
 --- a/tests/regression/driver/suppress-macro-warnings.sv
 +++ b/tests/regression/driver/suppress-macro-warnings.sv
 @@ -2,7 +2,9 @@
@@ -8727,7 +8850,7 @@ index 33564b4e0..5afd75590 100644
  `include "nested/macro.svh"
  
 diff --git a/tests/unittests/CMakeLists.txt b/tests/unittests/CMakeLists.txt
-index f1b0a80f7..d51707507 100644
+index f1b0a80f7ac9be510a57709c2f92953be448d534..d51707507c2bf8cb3c8db6373b194abc96164801 100644
 --- a/tests/unittests/CMakeLists.txt
 +++ b/tests/unittests/CMakeLists.txt
 @@ -25,6 +25,7 @@ add_executable(
@@ -8747,7 +8870,7 @@ index f1b0a80f7..d51707507 100644
    Test.cpp)
  
 diff --git a/tests/unittests/DriverTests.cpp b/tests/unittests/DriverTests.cpp
-index b4f6b728e..43327ebd3 100644
+index b4f6b728ec76e88401c81479159b7cc702b4e74a..43327ebd3fca6b7ad44be34d22a5d495c0c8d344 100644
 --- a/tests/unittests/DriverTests.cpp
 +++ b/tests/unittests/DriverTests.cpp
 @@ -41,6 +41,33 @@ TEST_CASE("Driver processOptions can skip input file check") {
@@ -9176,7 +9299,7 @@ index b4f6b728e..43327ebd3 100644
 +    CHECK(compilation.getRoot().topInstances.front()->name == "wanted_top");
 +}
 diff --git a/tests/unittests/FileTests.cpp b/tests/unittests/FileTests.cpp
-index d3e9fbb31..1668b07cd 100644
+index d3e9fbb31e44cdb6bac0817c03e01b3f83e52fe4..1668b07cdfbe4e7e1f93b50c06692c6fd18a5e5d 100644
 --- a/tests/unittests/FileTests.cpp
 +++ b/tests/unittests/FileTests.cpp
 @@ -3,6 +3,7 @@
@@ -9286,7 +9409,7 @@ index d3e9fbb31..1668b07cd 100644
      SourceManager manager;
  
 diff --git a/tests/unittests/ast/ClassTests.cpp b/tests/unittests/ast/ClassTests.cpp
-index 2353d2143..72709888e 100644
+index 2353d21435f167a21bb448971b690d482d541bf5..72709888ec652c537fcd6ed9d2314d9092a147a9 100644
 --- a/tests/unittests/ast/ClassTests.cpp
 +++ b/tests/unittests/ast/ClassTests.cpp
 @@ -2199,6 +2199,105 @@ endclass
@@ -9396,7 +9519,7 @@ index 2353d2143..72709888e 100644
      auto tree = SyntaxTree::fromText(R"(
  module m;
 diff --git a/tests/unittests/ast/ExpressionTests.cpp b/tests/unittests/ast/ExpressionTests.cpp
-index 444eb7a05..6b3c4b868 100644
+index 444eb7a0567e5a4db447035d4cb7d9b886b8e6df..6b3c4b8683fd0fad3f76d66785d10671bb2b4fdd 100644
 --- a/tests/unittests/ast/ExpressionTests.cpp
 +++ b/tests/unittests/ast/ExpressionTests.cpp
 @@ -4262,6 +4262,82 @@ endmodule
@@ -9483,7 +9606,7 @@ index 444eb7a05..6b3c4b868 100644
      auto tree = SyntaxTree::fromText(R"(
  module m;
 diff --git a/tests/unittests/parsing/DiagnosticTests.cpp b/tests/unittests/parsing/DiagnosticTests.cpp
-index 322dabb6a..45e78f42e 100644
+index 322dabb6a2b6442a0a22db9e3e46fce53ab16dfd..45e78f42e2b747c1cf6b56cb5fe70c8bf6f16211 100644
 --- a/tests/unittests/parsing/DiagnosticTests.cpp
 +++ b/tests/unittests/parsing/DiagnosticTests.cpp
 @@ -3,6 +3,7 @@
@@ -9701,7 +9824,7 @@ index 322dabb6a..45e78f42e 100644
 +    CHECK(run(true, true) == filtered);
 +}
 diff --git a/tests/unittests/parsing/SyntaxPrinterTests.cpp b/tests/unittests/parsing/SyntaxPrinterTests.cpp
-index d7e50037e..41fe2d3f1 100644
+index d7e50037e018017f55b6ee55b273d9c8d20e8baf..41fe2d3f129147155e2885a310638bb0edfcf825 100644
 --- a/tests/unittests/parsing/SyntaxPrinterTests.cpp
 +++ b/tests/unittests/parsing/SyntaxPrinterTests.cpp
 @@ -3,9 +3,12 @@
@@ -9806,7 +9929,7 @@ index d7e50037e..41fe2d3f1 100644
 +}
 diff --git a/include/slang/syntax/ParseArchive.h b/include/slang/syntax/ParseArchive.h
 new file mode 100644
-index 000000000..9047f29b5
+index 0000000000000000000000000000000000000000..9047f29b596f19a5ff36a96b8476b73724d59a02
 --- /dev/null
 +++ b/include/slang/syntax/ParseArchive.h
 @@ -0,0 +1,209 @@
@@ -10021,7 +10144,7 @@ index 000000000..9047f29b5
 +} // namespace slang::syntax
 diff --git a/include/slang/util/CwdCoordinator.h b/include/slang/util/CwdCoordinator.h
 new file mode 100644
-index 000000000..2512673c7
+index 0000000000000000000000000000000000000000..2512673c765eb0d38c7dcdaf7656398ea4b9f46f
 --- /dev/null
 +++ b/include/slang/util/CwdCoordinator.h
 @@ -0,0 +1,37 @@
@@ -10064,7 +10187,7 @@ index 000000000..2512673c7
 +} // namespace slang
 diff --git a/source/util/CwdCoordinator.cpp b/source/util/CwdCoordinator.cpp
 new file mode 100644
-index 000000000..f9e9cae53
+index 0000000000000000000000000000000000000000..f9e9cae5301841b1a3b0b789846403d702941a4b
 --- /dev/null
 +++ b/source/util/CwdCoordinator.cpp
 @@ -0,0 +1,36 @@
@@ -10106,7 +10229,7 @@ index 000000000..f9e9cae53
 +} // namespace slang
 diff --git a/tests/unittests/SourceSnapshotTests.cpp b/tests/unittests/SourceSnapshotTests.cpp
 new file mode 100644
-index 000000000..c770624b9
+index 0000000000000000000000000000000000000000..c770624b956dcae565401abb3920f6bdb073f5da
 --- /dev/null
 +++ b/tests/unittests/SourceSnapshotTests.cpp
 @@ -0,0 +1,877 @@
@@ -10989,7 +11112,7 @@ index 000000000..c770624b9
 +}
 diff --git a/tests/unittests/ast/PackageAnalysisTests.cpp b/tests/unittests/ast/PackageAnalysisTests.cpp
 new file mode 100644
-index 000000000..b0cb1f87a
+index 0000000000000000000000000000000000000000..b0cb1f87aa73a79fcd0710226d2e5c366c751a8e
 --- /dev/null
 +++ b/tests/unittests/ast/PackageAnalysisTests.cpp
 @@ -0,0 +1,785 @@

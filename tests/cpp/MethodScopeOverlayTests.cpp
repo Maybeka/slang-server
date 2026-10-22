@@ -1189,3 +1189,407 @@ TEST_CASE("Superseded body edits keep one lexical owner and bind only the latest
         CHECK(diagnostics == rfl::json::write(oracle.getDiagnostics()));
     }
 }
+
+TEST_CASE("Local body diagnostics match full design through errors repair and line shifts",
+          "[method-body-diagnostics]") {
+    Workspace workspace;
+    bodyConfig(workspace);
+    auto config = std::string("{\"indexingThreads\":1,\"flags\":\"--single-unit --threads 1\",") +
+                  "\"compilationFilelist\":\"design.f\",\"experimentalMethodBodyQueries\":true,"
+                  "\"experimentalMethodBodyDiagnostics\":true}";
+    workspace.write(".slang/server.json", config);
+    BodyTestServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", header);
+    doc.doc->getAnalysis();
+    struct DiagnosticState {
+        uint64_t localDiagnosticUpdates;
+        std::string localDiagnosticDecline;
+    };
+    std::vector<std::string> sequence;
+    for (auto expr : {"local_0 + charl", "local_0 + absent_local", "local_0 + charl",
+                      "local_0 +\n        charl", "local_0 + (charl"}) {
+        auto text = header;
+        text.replace(text.find("local_1 + charl"), 15, expr);
+        sequence.push_back(text);
+    }
+    auto initializerError = header;
+    initializerError.replace(initializerError.find("alpha + bravo"), 13, "missing_initializer");
+    sequence.push_back(initializerError);
+    auto noReturn = header;
+    noReturn.replace(noReturn.find("return (local_1 + charl);"), 25, "alpha = bravo;");
+    sequence.push_back(noReturn);
+    sequence.push_back(header);
+    int version = 1;
+    for (const auto& text : sequence) {
+        change(server, doc.m_uri, ++version, text);
+        doc.m_text = text;
+        REQUIRE(state(server).active);
+        server.runBackgroundWork({});
+        auto status =
+            rfl::from_generic<DiagnosticState>(
+                *server.executeCommand({.command = "slang.methodScopeStatus",
+                                        .arguments = std::vector<lsp::LSPAny>{rfl::to_generic(
+                                            std::string("compact"))}}))
+                .value();
+        INFO(status.localDiagnosticDecline);
+        CHECK(status.localDiagnosticUpdates == uint64_t(version - 1));
+        auto actual = rfl::json::write(doc.getDiagnostics());
+        bodyConfig(workspace, false);
+        {
+            BodyTestServer native(workspace.params());
+            native.setBuildFile((workspace.root / "design.f").string());
+            auto oracle = native.openFile("item.svh", text);
+            CHECK(actual == rfl::json::write(oracle.getDiagnostics()));
+        }
+        workspace.write(".slang/server.json", config);
+    }
+}
+
+namespace {
+const std::string localDiagnosticConfig =
+    "{\"indexingThreads\":1,\"flags\":\"--single-unit --threads 1\","
+    "\"compilationFilelist\":\"design.f\",\"experimentalMethodBodyQueries\":true,"
+    "\"experimentalMethodBodyDiagnostics\":true}";
+struct LocalDiagnosticState {
+    uint64_t localDiagnosticUpdates;
+    std::string localDiagnosticDecline;
+};
+LocalDiagnosticState diagnosticState(ServerHarness& server) {
+    return rfl::from_generic<LocalDiagnosticState>(
+               *server.executeCommand({.command = "slang.methodScopeStatus",
+                                       .arguments = std::vector<lsp::LSPAny>{rfl::to_generic(
+                                           std::string("compact"))}}))
+        .value();
+}
+auto diagnosticMap(ServerHarness& server) {
+    std::map<std::string, std::vector<std::string>> result;
+    for (const auto& [key, values] : server.m_driver->diagClient->renderedDiagnostics()) {
+        auto& out = result[key.str()];
+        for (const auto& value : values)
+            out.push_back(rfl::json::write(value));
+        std::sort(out.begin(), out.end());
+    }
+    return result;
+}
+void checkNativeDiagnostics(Workspace& workspace, ServerHarness& server, const std::string& text) {
+    auto actual = diagnosticMap(server);
+    bodyConfig(workspace, false);
+    auto restore = slang::ScopeGuard(
+        [&] { workspace.write(".slang/server.json", localDiagnosticConfig); });
+    BodyTestServer native(workspace.params());
+    native.setBuildFile((workspace.root / "design.f").string());
+    auto oracle = native.openFile("item.svh", text);
+    CHECK(actual == diagnosticMap(native));
+}
+} // namespace
+
+TEST_CASE("Local diagnostics reject changed outside usage and rebase on a native result",
+          "[method-body-diagnostics]") {
+    Workspace workspace;
+    workspace.write(".slang/server.json", localDiagnosticConfig);
+    BodyTestServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", header);
+    doc.doc->getAnalysis();
+    auto text = header;
+    text.replace(text.find("local_1 + charl"), 15, "marker + charl");
+    change(server, doc.m_uri, 2, text);
+    server.runBackgroundWork({});
+    REQUIRE(state(server).active);
+    auto first = diagnosticState(server);
+    CHECK(first.localDiagnosticUpdates == 0);
+    CHECK(first.localDiagnosticDecline == "method changes external reference usage");
+    checkNativeDiagnostics(workspace, server, text);
+    text.replace(text.find("marker + charl"), 14, "marker + charl + 10");
+    change(server, doc.m_uri, 3, text);
+    server.runBackgroundWork({});
+    auto second = diagnosticState(server);
+    INFO(second.localDiagnosticDecline);
+    CHECK(second.localDiagnosticUpdates == 1);
+    CHECK_FALSE(server.m_driver->comp->containsCurrentSource(workspace.root / "item.svh"));
+    CHECK(server.client.diagnosticVersions.at(doc.m_uri) == 3);
+    checkNativeDiagnostics(workspace, server, text);
+}
+
+TEST_CASE("Local diagnostic cancellation publishes no partial state and retries safely",
+          "[method-body-diagnostics][diagnostic-cancellation]") {
+    for (auto boundary :
+         {"after local diagnostic binding", "after local diagnostic procedure",
+          "retained local diagnostic publication", "before local diagnostic publication"}) {
+        DYNAMIC_SECTION(boundary) {
+            Workspace workspace;
+            workspace.write(".slang/server.json", localDiagnosticConfig);
+            BodyTestServer server(workspace.params());
+            server.setBuildFile((workspace.root / "design.f").string());
+            auto doc = server.openFile("item.svh", header);
+            doc.doc->getAnalysis();
+            auto before = diagnosticMap(server);
+            auto text = header;
+            text.replace(text.find("alpha + bravo"), 13, "missing_initializer");
+            change(server, doc.m_uri, 2, text);
+            lsp::RequestContext ctx("background", 91);
+            bool reached = false;
+            ctx.setCheckpointObserverForTesting([&](std::string_view phase) {
+                if (phase == boundary) {
+                    reached = true;
+                    ctx.cancel();
+                }
+            });
+            CHECK_THROWS_AS(server.runBackgroundWork(ctx), lsp::RequestCancelled);
+            REQUIRE(reached);
+            CHECK(before == diagnosticMap(server));
+            CHECK(server.client.diagnosticVersions.at(doc.m_uri) == 1);
+            CHECK(diagnosticState(server).localDiagnosticUpdates == 0);
+            server.runBackgroundWork({});
+            auto result = diagnosticState(server);
+            INFO(result.localDiagnosticDecline);
+            CHECK(result.localDiagnosticUpdates == 1);
+            CHECK(server.client.diagnosticVersions.at(doc.m_uri) == 2);
+            checkNativeDiagnostics(workspace, server, text);
+        }
+    }
+}
+
+TEST_CASE("Local task diagnostics preserve timing caller invalidation",
+          "[method-body-diagnostics]") {
+    Workspace workspace;
+    const std::string original = "class C; task update(input int value); int local_value = value; "
+                                 "local_value += 1; endtask endclass\n";
+    workspace.write("item.svh", original);
+    workspace.write(".slang/server.json", localDiagnosticConfig);
+    BodyTestServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    auto text = original;
+    text.replace(text.find("+= 1"), 4, "+= 2");
+    change(server, doc.m_uri, 2, text);
+    server.runBackgroundWork({});
+    auto first = diagnosticState(server);
+    INFO(first.localDiagnosticDecline);
+    CHECK(first.localDiagnosticUpdates == 1);
+    checkNativeDiagnostics(workspace, server, text);
+    text.insert(text.find("local_value +="), "#1; ");
+    change(server, doc.m_uri, 3, text);
+    server.runBackgroundWork({});
+    auto second = diagnosticState(server);
+    CHECK(second.localDiagnosticUpdates == 1);
+    CHECK(second.localDiagnosticDecline == "task timing changes require caller analysis");
+    checkNativeDiagnostics(workspace, server, text);
+}
+
+TEST_CASE("Local diagnostics inherit warning pragmas and current line macro values",
+          "[method-body-diagnostics]") {
+    for (bool pragma : {false, true}) {
+        DYNAMIC_SECTION(pragma) {
+            Workspace workspace;
+            auto original = header;
+            if (pragma)
+                original = "`pragma diagnostic ignore=\"unused-variable\"\n" + original;
+            else {
+                original = "`define BODY_LINE `__LINE__\n" + original;
+                original.replace(original.rfind("return value;"), 13, "return `BODY_LINE;");
+            }
+            workspace.write("item.svh", original);
+            workspace.write(".slang/server.json", localDiagnosticConfig);
+            BodyTestServer server(workspace.params());
+            server.setBuildFile((workspace.root / "design.f").string());
+            auto doc = server.openFile("item.svh", original);
+            doc.doc->getAnalysis();
+            auto text = original;
+            text.replace(text.find("local_1 + charl"), 15,
+                         pragma ? "local_0 + charl" : "local_0 +\n charl");
+            change(server, doc.m_uri, 2, text);
+            server.runBackgroundWork({});
+            REQUIRE(state(server).active);
+            auto result = diagnosticState(server);
+            INFO(result.localDiagnosticDecline);
+            CHECK(result.localDiagnosticUpdates == (pragma ? 1 : 0));
+            if (!pragma)
+                CHECK(result.localDiagnosticDecline ==
+                      "line shift affects diagnostics in later macro bodies");
+            checkNativeDiagnostics(workspace, server, text);
+        }
+    }
+}
+
+TEST_CASE("Local diagnostics realize attributes local conflicts and vector types",
+          "[method-body-diagnostics]") {
+    for (const auto& declaration :
+         {"(* keep = missing_attribute *) int extra = alpha;\n", "logic [7:0] local_0 = alpha;\n",
+          "logic [127:0] extra = 128'h1;\n"}) {
+        DYNAMIC_SECTION(declaration) {
+            Workspace workspace;
+            workspace.write(".slang/server.json", localDiagnosticConfig);
+            BodyTestServer server(workspace.params());
+            server.setBuildFile((workspace.root / "design.f").string());
+            auto doc = server.openFile("item.svh", header);
+            doc.doc->getAnalysis();
+            auto text = header;
+            text.insert(text.find("    int local_0"), declaration);
+            change(server, doc.m_uri, 2, text);
+            server.runBackgroundWork({});
+            REQUIRE(state(server).active);
+            auto result = diagnosticState(server);
+            INFO(result.localDiagnosticDecline);
+            CHECK(result.localDiagnosticUpdates == 1);
+            checkNativeDiagnostics(workspace, server, text);
+        }
+    }
+}
+
+TEST_CASE("Local diagnostics track imported uses and evaluated generic parameters",
+          "[method-body-diagnostics]") {
+    for (bool generic : {false, true}) {
+        DYNAMIC_SECTION(generic) {
+            Workspace workspace;
+            const std::string original =
+                generic ? "class Box #(int N=1); int data; endclass\n"
+                          "class C; function int work(input int arg); localparam int N=2; "
+                          "Box#(N) box; return arg + N; endfunction endclass\n"
+                        : "import prelude::*; class C; function int work(input int arg); "
+                          "return arg + value; endfunction endclass\n";
+            workspace.write("item.svh", original);
+            workspace.write(".slang/server.json", localDiagnosticConfig);
+            BodyTestServer server(workspace.params());
+            server.setBuildFile((workspace.root / "design.f").string());
+            auto doc = server.openFile("item.svh", original);
+            doc.doc->getAnalysis();
+            auto text = original;
+            if (generic)
+                text.replace(text.find("N=2"), 3, "N=3");
+            else
+                text.replace(text.find("arg + value"), 11, "arg + 1");
+            change(server, doc.m_uri, 2, text);
+            server.runBackgroundWork({});
+            REQUIRE(state(server).active);
+            auto result = diagnosticState(server);
+            CHECK(result.localDiagnosticUpdates == 0);
+            CHECK_FALSE(result.localDiagnosticDecline.empty());
+            checkNativeDiagnostics(workspace, server, text);
+        }
+    }
+}
+
+#if defined(__linux__) || defined(__APPLE__)
+TEST_CASE("Local diagnostic owners retire with the context and preserve unsaved errors",
+          "[method-body-diagnostics][frozen-retirement]") {
+    Workspace workspace;
+    auto config = localDiagnosticConfig;
+    config.insert(1, "\"experimentalUvmPrefixCache\":true,");
+    workspace.write(".slang/server.json", config);
+    std::optional<std::string> previous;
+    if (auto value = std::getenv("SLANG_UVM_GENERATION_EDIT_LIMIT"))
+        previous = value;
+    setenv("SLANG_UVM_GENERATION_EDIT_LIMIT", "1", 1);
+    auto restore = slang::ScopeGuard([&] {
+        if (previous)
+            setenv("SLANG_UVM_GENERATION_EDIT_LIMIT", previous->c_str(), 1);
+        else
+            unsetenv("SLANG_UVM_GENERATION_EDIT_LIMIT");
+    });
+    BodyTestServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", header);
+    doc.doc->getAnalysis();
+    auto epoch = server.m_driver->completions.getCompletionEpoch();
+    change(server, doc.m_uri, 2, edited());
+    server.runBackgroundWork({});
+    REQUIRE(diagnosticState(server).localDiagnosticUpdates == 1);
+    auto text = header;
+    text.replace(text.find("alpha + bravo"), 13, "missing_after_retirement");
+    change(server, doc.m_uri, 3, text);
+    server.runBackgroundWork({});
+    CHECK(server.m_driver->completions.getCompletionEpoch() != epoch);
+    CHECK_FALSE(state(server).active);
+    CHECK(server.m_driver->getDocument(doc.m_uri)->getVersion() == 3);
+    CHECK(server.client.diagnosticVersions.at(doc.m_uri) == 3);
+    auto actual = diagnosticMap(server);
+    unsetenv("SLANG_UVM_GENERATION_EDIT_LIMIT");
+    bodyConfig(workspace, false);
+    BodyTestServer native(workspace.params());
+    native.setBuildFile((workspace.root / "design.f").string());
+    auto oracle = native.openFile("item.svh", text);
+    CHECK(actual == diagnosticMap(native));
+}
+#endif
+
+TEST_CASE("Removing existing preprocessing state cannot retain stale method suffixes",
+          "[method-body][method-body-diagnostics]") {
+    Workspace workspace;
+    const std::string original =
+        "class C; function int work(input int arg);\n"
+        "`define SAVED_BODY_FLAG 1\n"
+        "return arg; endfunction\n"
+        "function int later(); return `SAVED_BODY_FLAG; endfunction endclass\n";
+    workspace.write("item.svh", original);
+    workspace.write(".slang/server.json", localDiagnosticConfig);
+    BodyTestServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    auto text = original;
+    text.replace(text.find("`define SAVED_BODY_FLAG 1"), 25, "// removed definition");
+    change(server, doc.m_uri, 2, text);
+    server.runBackgroundWork({});
+    CHECK_FALSE(state(server).active);
+    CHECK(state(server).decline == "body changes preprocessing state");
+    checkNativeDiagnostics(workspace, server, text);
+}
+
+TEST_CASE("Local diagnostics preserve nonlocal persistent driver analysis",
+          "[method-body-diagnostics]") {
+    for (bool initializer : {false, true}) {
+        DYNAMIC_SECTION(initializer) {
+            Workspace workspace;
+            workspace.write("prelude.sv",
+                            "package prelude; int value; function automatic int bump(int arg); "
+                            "value=arg; return arg; endfunction endpackage\n");
+            const std::string original =
+                initializer
+                    ? "class C; function int work(input int arg); int "
+                      "local_value=prelude::bump(arg); return local_value; endfunction endclass\n"
+                    : "class C; function int work(input int arg); prelude::value=arg; return arg; "
+                      "endfunction endclass\n";
+            workspace.write("item.svh", original);
+            workspace.write(".slang/server.json", localDiagnosticConfig);
+            BodyTestServer server(workspace.params());
+            server.setBuildFile((workspace.root / "design.f").string());
+            auto doc = server.openFile("item.svh", original);
+            doc.doc->getAnalysis();
+            auto text = original;
+            text.insert(text.rfind("return ") + 7, "1 + ");
+            change(server, doc.m_uri, 2, text);
+            server.runBackgroundWork({});
+            auto result = diagnosticState(server);
+            INFO(result.localDiagnosticDecline);
+            CHECK(result.localDiagnosticUpdates == 0);
+            CHECK_FALSE(result.localDiagnosticDecline.empty());
+            checkNativeDiagnostics(workspace, server, text);
+        }
+    }
+}
+
+TEST_CASE("Local diagnostics distinguish untyped generic value widths",
+          "[method-body-diagnostics]") {
+    Workspace workspace;
+    const std::string original =
+        "class Box #(parameter N=1); int values[($bits(N)==32)?2:0]; endclass\n"
+        "class C; function int work(input int arg); localparam N=32'd2; "
+        "Box#(N) box; return arg; endfunction endclass\n";
+    workspace.write("item.svh", original);
+    workspace.write(".slang/server.json", localDiagnosticConfig);
+    BodyTestServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    auto text = original;
+    text.replace(text.find("32'd2"), 5, "64'd2");
+    change(server, doc.m_uri, 2, text);
+    server.runBackgroundWork({});
+    auto result = diagnosticState(server);
+    INFO(result.localDiagnosticDecline);
+    CHECK(result.localDiagnosticUpdates == 0);
+    checkNativeDiagnostics(workspace, server, text);
+}

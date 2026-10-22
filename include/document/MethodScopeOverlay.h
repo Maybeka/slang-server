@@ -11,6 +11,8 @@
 
 namespace server {
 
+class BodyDiagnosticCache;
+
 /// Opt-in local function/task queries retaining one original lexical context.
 /// The legacy closed-int overlay keeps its independent value-only implementation.
 class MethodScopeOverlay {
@@ -38,6 +40,9 @@ public:
     std::optional<ServerDriver::DiagnosticSnapshot> diagnostics(const Config&,
                                                                 const lsp::RequestContext&) const;
     bool isBodyQuery() const { return bodyQueries; }
+    bool publishLocalDiagnostics(const Config&, const lsp::RequestContext&);
+    uint64_t localDiagnosticUpdates() const;
+    std::string localDiagnosticDecline() const;
     Statistics statistics() const { return {accepted != 0, accepted, version}; }
 
 private:
@@ -63,6 +68,11 @@ private:
         std::string text;
     };
     ServerDriver* driver;
+    std::unique_ptr<BodyDiagnosticCache> bodyDiagnostics;
+    std::string diagnosticDecline;
+    uint64_t diagnosticUpdates = 0;
+    int diagnosticBaselineVersion = -1;
+    void prepareLocalDiagnostics(const Config&, const lsp::RequestContext&);
     URI uri;
     std::string text, configKey, optionsKey, packageName, className, functionName, functionPath;
     bool bodyQueries = false, generalBody = false;

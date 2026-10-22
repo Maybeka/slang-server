@@ -94,9 +94,16 @@ struct Config {
         "Experimental local function/task body queries. Default off. Supports changed local "
         "declarations, types, statements, member access, calls and macro expansions in retained "
         "class, package and module contexts. Signatures and external dependencies remain fixed; "
-        "unsafe edits or queries use native analysis. Diagnostics analyze the complete current snapshot.",
+        "unsafe edits or queries use native analysis. Diagnostics analyze the complete current "
+        "snapshot.",
         bool>
         experimentalMethodBodyQueries = false;
+
+    rfl::Description<"Experimental local method-body diagnostics. Default off. Requires "
+                     "experimentalMethodBodyQueries and a completed full-design diagnostic "
+                     "context. Unsupported dependency changes use full current analysis.",
+                     bool>
+        experimentalMethodBodyDiagnostics = false;
 
     rfl::Description<"Experimental immutable UVM prefix reuse. Default off. External macros "
                      "affecting UVM must come from command-line/configuration flags. Unsupported "

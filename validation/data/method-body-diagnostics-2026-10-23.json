@@ -1,0 +1,196 @@
+{
+  "binarySha256": "cdd21786757b34a35057093ef821a17c0ab4917d1def571d6104fadb1ce1ff2d",
+  "baseCommit": "b6a752ece67922fcabdae44fe78ff189341d5035",
+  "experimentDefault": false,
+  "debounceAdded": false,
+  "pairedBlocks": 3,
+  "completeDiagnosticUris": 612,
+  "serializedStates": 42,
+  "tests": {
+    "ctest": 777,
+    "python": 17,
+    "transport": 43,
+    "localCases": 11,
+    "localAssertions": 329
+  },
+  "latency": [
+    {
+      "localDiagnostics": false,
+      "firstQueryMs": 303.313958,
+      "firstDiagnosticsMs": 1082.512833,
+      "certificationQueryMs": 42.367167,
+      "certificationDiagnosticsMs": 828.731916,
+      "continuousQueryMs": 171.7478125,
+      "continuousDiagnosticsMs": 944.3083125,
+      "sameWarmQueryMs": 41.703146000000004,
+      "sameWarmDiagnosticsMs": 814.2715000000001,
+      "querySumMs": 2192.343042,
+      "diagnosticWindowSumMs": 6695.000418,
+      "fallbackQueryMs": 629.75775,
+      "fallbackDiagnosticsMs": 947.725917
+    },
+    {
+      "localDiagnostics": true,
+      "firstQueryMs": 301.493833,
+      "firstDiagnosticsMs": 1077.5445,
+      "certificationQueryMs": 169.289458,
+      "certificationDiagnosticsMs": 208.862125,
+      "continuousQueryMs": 41.870791499999996,
+      "continuousDiagnosticsMs": 81.23195799999999,
+      "sameWarmQueryMs": 41.688583,
+      "sameWarmDiagnosticsMs": 81.24264600000001,
+      "querySumMs": 1290.729124,
+      "diagnosticWindowSumMs": 2584.026667,
+      "fallbackQueryMs": 642.884833,
+      "fallbackDiagnosticsMs": 962.758292
+    }
+  ],
+  "memory": [
+    {
+      "localDiagnostics": false,
+      "peakRssMiB": 1508.734375,
+      "peakFootprintMiB": 1147.8608856201172
+    },
+    {
+      "localDiagnostics": true,
+      "peakRssMiB": 1284.453125,
+      "peakFootprintMiB": 1022.7044067382812
+    }
+  ],
+  "typing": [
+    {
+      "mode": "native",
+      "requests": 36,
+      "successful": 36,
+      "cancelled": 0,
+      "latestQueryMedianMs": 9821.91825,
+      "successfulQueryMedianMs": 5533.875416499999,
+      "successfulQueryMaxMs": 9842.221209
+    },
+    {
+      "mode": "query-only",
+      "requests": 36,
+      "successful": 9,
+      "cancelled": 27,
+      "latestQueryMedianMs": 817.611958,
+      "successfulQueryMedianMs": 88.788792,
+      "successfulQueryMaxMs": 818.016792
+    },
+    {
+      "mode": "local-diag",
+      "requests": 36,
+      "successful": 36,
+      "cancelled": 0,
+      "latestQueryMedianMs": 40.797791,
+      "successfulQueryMedianMs": 41.136417,
+      "successfulQueryMaxMs": 49.170083
+    }
+  ],
+  "coldTyping": [
+    {
+      "mode": "native",
+      "successful": 12,
+      "cancelled": 0,
+      "latestQueryMs": 8360.888042
+    },
+    {
+      "mode": "query-only",
+      "successful": 1,
+      "cancelled": 11,
+      "latestQueryMs": 1032.390417
+    },
+    {
+      "mode": "local-diag",
+      "successful": 1,
+      "cancelled": 11,
+      "latestQueryMs": 1040.490334
+    }
+  ],
+  "longMemory": [
+    {
+      "localDiagnostics": true,
+      "edits": 84,
+      "peakRssMiB": 1276.546875,
+      "peakFootprintMiB": 1302.1888961791992,
+      "certificateFallbacks": [
+        66
+      ]
+    },
+    {
+      "localDiagnostics": false,
+      "edits": 84,
+      "peakRssMiB": 1526.796875,
+      "peakFootprintMiB": 1447.298454284668,
+      "certificateFallbacks": []
+    }
+  ],
+  "parserCounts": [
+    {
+      "localDiagnostics": true,
+      "deltas": [
+        2,
+        2,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "localDiagnostics": false,
+      "deltas": [
+        2,
+        2,
+        2,
+        2,
+        5,
+        2,
+        1
+      ]
+    }
+  ],
+  "incompleteInputStates": 26,
+  "forcedRetirementStates": 14,
+  "longOracleStates": 168,
+  "liveFullGraph": {
+    "passed": true,
+    "files": 612,
+    "digest": "aa7a613fc053b13be43e56bca0567ded87be4ea4aa584492de7f800c295c5d2c"
+  },
+  "sdkReplay": {
+    "base": "151a801ceaf6faf23d79a42d210ff67e50eb4660",
+    "patchSha256": "353a03f00a9ae3294f01acd4fea559f268f737dfa640319380164419d6ce200c",
+    "filesVerified": 709,
+    "archiveExportSubstRestoredFromGit": [
+      ".git_archival.txt"
+    ],
+    "passed": true
+  },
+  "installedSmoke": {
+    "default": true,
+    "explicitSource": true
+  },
+  "functionalGenericLoop": true,
+  "artifacts": {
+    "cva6-qualified.json": "b5bceff44133ddcf0e37b91c609c2eb3855803443dc2a0ae1e6552517b605ee3",
+    "cva6-forced.json": "8caa700fc235703cb836dcd420d8d39c2583e4f0517ef0c06a61ce550649a450",
+    "cva6-counted.json": "73b7786b3176fe19946c4661dda21a6d3adcb363031719244dea2469346b2a47",
+    "cva6-memory-qualified.json": "a1b44aa8dc440172a2593efbc8f4aa3cafe6a22b92d28d6df971e5e21dee2cc6",
+    "cva6-long-memory.json": "2a8641ad92ec6258831267e00cf08532a351c4c2d904bdc80106e00f407d19d6",
+    "typing-warm-1.json": "37040412224c28c25d1fb729de5fc8ee21bf193fff404f8b085a1b0c8553d876",
+    "typing-warm-2.json": "b8295c650b29a59767d92dd5c767fb77bc30f036451fcb1decf897fb7af94f5a",
+    "typing-warm-3.json": "a0ff8dc913b4ab9bff60116217484604511ceb66790ea1ffe5139ad61731a9fb",
+    "typing-cold.json": "41b63bcc2421116a4abb0e2ad8427c2c5720065ba041a2ae0a903bbe5bf58dac",
+    "typing-serialized.json": "b8179e168ad638d37dccfca1a318f675b76250b2e3a54bf72edfe1f7c724f9c6",
+    "typing-fullgraph.json": "f4442b8eadf4393669859949b5b5509aea8d823894ccebcef3bd5f228588bd61",
+    "generic-loop-check.json": "11a4d5c6b72a3c0657d4368e2e4a5c15773f4d0ed57ab5670839e0e97fbea28b",
+    "install-smoke.json": "647b866ae9a69b149f9b8d1afb3da3722cef11b3f391bb7f746a716f1355d573",
+    "external-smoke.json": "57086864d92363c2cd0ab896a87ddfe71b8e90bc4b4ca6017232923fd545b45d",
+    "targeted-qualified-2.log": "d0fe3ac3595036f07d0fe109fb202adfecdd73140cd9aa26da935b143d42520e",
+    "ctest-qualified-2.log": "a4c17f654e52f251027e22e2f0d0805852870fc21b38f53dfb4e7993eaabe2be",
+    "pytest-qualified.log": "d9841cf421b482613f5d4f9a6f7577c5343615823e5ff238fd3243a3fc6cb58e",
+    "transport.log": "d847d47877be75b6742169a14541566a35bea82abe811baa8647e1bcdab99408",
+    "sdk-replay.json": "b2b43ecef1f58219d27ca9fe2535aa5b5f6240a92519a5782ca4609fa1128ccd"
+  }
+}

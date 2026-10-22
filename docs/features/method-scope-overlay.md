@@ -192,16 +192,17 @@ force native analysis when a newline edit could change their `__LINE__` values;
 line-sensitive sibling bodies are guarded against constant / local-type reuse.
 These are nonlocal changes even when their spelling lies
 inside a function. An unbound / ambiguous source occurrence also uses native
-analysis. Runtime side effects are analyzed through current native diagnostics.
+analysis. Runtime side effects outside the local diagnostic boundary use full current diagnostics.
 
 Dependency tracking is enabled only with this experiment; the disabled path does
 not scan subroutine dependency scopes.
 
 Only completion, deferred member resolution and definition requests inside the
 selected body use this path. Incomplete macro completion lists, hover and other
-query families keep native behavior. Diagnostics always analyze complete current
-sources with current semantic library owners. A body hit does not imply local-only
-diagnostics or an end-to-end diagnostic latency improvement.
+query families keep native behavior. Diagnostics use full current analysis by default.
+The separate `experimentalMethodBodyDiagnostics` experiment described below can
+update diagnostics for eligible class methods. A body-query hit alone does not
+imply that the diagnostic path was local.
 
 With `experimentalMethodBodyQueries` enabled, new edits invalidate outstanding
 cancellable completion, hover and definition requests for the same document.
@@ -249,3 +250,59 @@ counted binary for latency measurements. See the
 [Mac evaluation](../development/general-method-body-query-evaluation.md) for measured
 first-edit cost, continuous-query gains, diagnostic and memory tradeoffs, and
 real CVA6 fallback coverage.
+
+
+## Local class-method diagnostics (default off)
+
+```json
+{
+  "experimentalMethodBodyQueries": true,
+  "experimentalMethodBodyDiagnostics": true
+}
+```
+
+This first implementation requires a selected full build (`slang.setBuildFile`
+or `slang.setTopLevel`) and an already completed current full-design diagnostic
+baseline. Setting only `compilationFilelist` selects exploration and does not
+satisfy that requirement. UVM / RTL semantic freezing remains independent and
+can be combined with this experiment.
+
+The local unit is an entire nonstatic class function, or a class task without
+timing controls or calls to other tasks. Only one full-design method context
+may correspond to the edited source occurrence. The signature, enclosing code,
+other inputs and immutable-library generations must remain fixed. Ordinary
+local declarations, scalar/vector types, expressions, control flow, calls,
+logging macros and parser recovery within the method boundary can be updated.
+
+A private compilation borrows the completed full-design lexical owner, not the
+shallower completion context. It realizes local declarations, initializers,
+attributes and deferred name conflicts, then runs the native procedure and
+local-scope dataflow checks. Its reference bookkeeping, including borrowed
+import lookups, stays private. Native-rendered local baseline diagnostics must
+match the full design before the certificate is admitted.
+
+The original complete diagnostics are partitioned by analysis phase and actual
+publication URI. An update replaces the method's results, projects retained
+source locations and related notes, and republishes affected files. Unaffected
+files retain their diagnostics without rebinding, reformatting or serialization.
+Cancellation discards the private candidate; text/version/input witnesses are
+checked again before the diagnostic transaction is published.
+
+Full current analysis is used when external read/write references or evaluated
+generic dependencies change. Generic arguments that refer to method-local
+names are deliberately outside this first boundary: equal numeric values with
+different widths can change a specialization's diagnostics. Constructors,
+static methods, package/module subroutines, exploration-only projects, multiple
+method contexts, persistent nonlocal drivers, non-instance initializer calls,
+hierarchy/virtual-interface finalization, local nominal types/imports/checkers,
+and concurrent assertion declarations also use full diagnostics. So do bounded
+or fatal diagnostic streams and newline edits affecting later macro bodies.
+Existing body-query invalidation and the 64-notification certificate bound still
+apply. Both the original and replacement preprocessing environments are checked;
+removing an existing state-changing directive or macro cannot retain its old suffix.
+
+There is no fixed debounce. First baseline preparation has a visible cost;
+unprimed typing and native fallbacks can still take around a second in CVA6.
+Hover continues through its existing native path. See the
+[Mac diagnostic evaluation](../development/method-body-diagnostic-evaluation.md)
+for measured costs, complete diagnostic oracles, memory and limitations.

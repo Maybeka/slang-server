@@ -39,6 +39,7 @@ using namespace slang;
 /// options passed in a filelist
 class ServerDriver {
     friend class MethodScopeOverlay;
+    friend class BodyDiagnosticCache;
     std::shared_ptr<driver::Driver> m_driverOwner;
 
 public:
