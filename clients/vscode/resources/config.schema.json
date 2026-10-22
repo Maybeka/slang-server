@@ -53,6 +53,10 @@
           "description": "Experimental closed flat int method overlay. Default off. Phase one requires equal-length ASCII edits with fixed line layout and local count; unknown contexts and unsupported queries use the complete native path.",
           "type": "boolean"
         },
+        "experimentalMethodBodyQueries": {
+          "description": "Experimental body-only queries for closed scalar int class methods. Default off. Supports variable-length and multiline expression edits with unchanged signatures and local declarations, including imported and inherited class environments and semantic libraries. Unsupported edits or queries use native analysis; diagnostics always analyze the complete current snapshot.",
+          "type": "boolean"
+        },
         "experimentalUvmPrefixCache": {
           "description": "Experimental immutable UVM prefix reuse. Default off. External macros affecting UVM must come from command-line/configuration flags. Unsupported source changes or preprocessing state use native parsing.",
           "type": "boolean"

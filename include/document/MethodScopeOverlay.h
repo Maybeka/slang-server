@@ -11,8 +11,8 @@
 
 namespace server {
 
-/// Opt-in closed-method experiment. No base AST/symbol pointer survives preparation.
-/// Phase one deliberately requires equal-length ASCII edits and unchanged line layout.
+/// Opt-in closed-method queries. No base AST/symbol pointer survives preparation.
+/// The legacy overlay keeps fixed layout; body queries project variable source offsets.
 class MethodScopeOverlay {
 public:
     struct Statistics {
@@ -38,6 +38,7 @@ public:
                                                const lsp::RequestContext&) const;
     std::optional<ServerDriver::DiagnosticSnapshot> diagnostics(const Config&,
                                                                 const lsp::RequestContext&) const;
+    bool isBodyQuery() const { return bodyQueries; }
     Statistics statistics() const { return {accepted != 0, accepted, version}; }
 
 private:
@@ -65,13 +66,18 @@ private:
     ServerDriver* driver;
     URI uri;
     std::string text, configKey, optionsKey, packageName, className, functionName, functionPath;
+    bool bodyQueries = false;
     size_t functionBegin = 0, functionEnd = 0, bodyBegin = 0, bodyEnd = 0, localCount = 0;
+    size_t originalBodyEnd = 0;
+    std::vector<std::string> localDeclarations;
     uint32_t originalBuffer = 0, currentBuffer = 0;
     int version = 0;
     uint64_t accepted = 0, inputRevision = 0, indexRevision = 0;
     std::vector<uint32_t> handles;
     std::vector<std::string> outerNames;
     std::map<std::string, std::optional<std::string>> disk;
+    std::map<std::string, std::vector<std::string>> directories;
+    std::weak_ptr<TrustedUvmLibrary> immutableUvm, immutableScopes;
     std::unordered_map<URI, DocumentWitness> documents;
     ServerDriver::DiagnosticSnapshot frozen;
     std::unique_ptr<diagnostic_snapshot::ReconstructedOptions> treeOptions, compilationOptions;
@@ -92,6 +98,6 @@ private:
     const DTO& completion(size_t context, size_t index) const;
     const Site* site(const lsp::Position&) const;
     lsp::Range range(size_t begin, size_t end) const;
-    lsp::CompletionItem rebase(lsp::CompletionItem) const;
+    lsp::CompletionItem rebase(lsp::CompletionItem, bool methodOwned = false) const;
 };
 } // namespace server

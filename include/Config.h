@@ -90,6 +90,15 @@ struct Config {
                      bool>
         experimentalMethodScopeOverlay = false;
 
+    rfl::Description<
+        "Experimental body-only queries for closed scalar int class methods. "
+        "Default off. Supports variable-length and multiline expression edits with "
+        "unchanged signatures and local declarations, including imported and inherited "
+        "class environments and semantic libraries. Unsupported edits or queries use "
+        "native analysis; diagnostics always analyze the complete current snapshot.",
+        bool>
+        experimentalMethodBodyQueries = false;
+
     rfl::Description<"Experimental immutable UVM prefix reuse. Default off. External macros "
                      "affecting UVM must come from command-line/configuration flags. Unsupported "
                      "source changes or preprocessing state use native parsing.",

@@ -1722,7 +1722,8 @@ void SlangServer::runBackgroundWork(const lsp::RequestContext& ctx) {
             auto snapshot = m_methodScope ? m_methodScope->diagnostics(m_config, ctx)
                                           : std::optional<ServerDriver::DiagnosticSnapshot>{};
             if (!snapshot) {
-                m_methodScope.reset();
+                if (m_methodScope && !m_methodScope->isBodyQuery())
+                    m_methodScope.reset();
                 snapshot = m_driver->captureDiagnosticSnapshot(ctx);
             }
             if (snapshot) {
@@ -1765,6 +1766,8 @@ void SlangServer::runBackgroundWork(const lsp::RequestContext& ctx) {
 
 void SlangServer::onDocDidOpen(const lsp::DidOpenTextDocumentParams& params) {
     m_methodScope.reset();
+    if (m_config.experimentalMethodBodyQueries.value())
+        m_driver->completions.requireCompletionEpoch();
     m_driver->openDocument(params.textDocument.uri, params.textDocument.text,
                            params.textDocument.version, !m_diagnosticExecutable.empty());
 }
@@ -1851,7 +1854,8 @@ void SlangServer::maybeRetireParsedContext() {
 
 void SlangServer::onDocDidChange(const lsp::DidChangeTextDocumentParams& params,
                                  lsp::RequestContext ctx) {
-    if (m_config.experimentalMethodScopeOverlay.value() && !m_driver->comp) {
+    if (m_config.experimentalMethodBodyQueries.value() ||
+        (m_config.experimentalMethodScopeOverlay.value() && !m_driver->comp)) {
         bool synced = false;
         try {
             ensureMethodScopeDriver();
@@ -2156,6 +2160,18 @@ lsp::CompletionItem SlangServer::getCompletionItemResolve(const lsp::CompletionI
         // other items from this same completion response still resolve safely.
         if (!m_methodScope->valid(m_config, ctx))
             m_methodScope.reset();
+    }
+    // A method query's values belong to one certificate and document version.
+    // Never reinterpret an expired handle in a replacement SourceManager, even
+    // if a later context happens to reuse the same numeric buffer ID.
+    if (item.data) {
+        if (const auto* object = std::get_if<rfl::Generic::Object>(&item.data->variant()))
+            for (const auto& [key, _] : *object)
+                if (key == "methodBodyCertificate") {
+                    auto expired = item;
+                    expired.data.reset();
+                    return expired;
+                }
     }
     lsp::CompletionItem ret = item;
     if (m_contextRetired && (m_config.experimentalUvmPrefixCache.value() ||

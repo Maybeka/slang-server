@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: MIT
 #include "document/MethodScopeOverlay.h"
 
+#include "ast/TrustedUvmLibrary.h"
 #include "completions/InstanceCompletions.h"
 #include "completions/MemberCompletions.h"
 #include "util/Converters.h"
+#include <atomic>
 #include <cctype>
 #include <fstream>
 #include <regex>
@@ -15,10 +17,13 @@
 #include "slang/ast/expressions/LiteralExpressions.h"
 #include "slang/ast/expressions/MiscExpressions.h"
 #include "slang/ast/expressions/OperatorExpressions.h"
+#include "slang/ast/symbols/MemberSymbols.h"
 #include "slang/ast/symbols/SubroutineSymbols.h"
 #include "slang/ast/symbols/VariableSymbols.h"
 #include "slang/ast/types/AllTypes.h"
 #include "slang/driver/SourceLoader.h"
+#include "slang/parsing/Lexer.h"
+#include "slang/parsing/Parser.h"
 #include "slang/parsing/Preprocessor.h"
 #include "slang/syntax/AllSyntax.h"
 
@@ -40,9 +45,31 @@ struct Data {
     std::optional<uint64_t> receiverOffset;
     bool operator==(const Data&) const = default;
 };
+struct QueryPayload {
+    uint64_t contextEpoch;
+    rfl::Generic payload;
+    std::optional<uint64_t> methodBodyCertificate;
+    std::optional<int> methodBodyVersion;
+};
+struct NativePayload {
+    uint64_t contextEpoch;
+    rfl::Generic payload;
+};
+std::atomic_uint64_t nextBodyCertificate{1};
 void need(bool condition, const char* message) {
     if (!condition)
         throw std::runtime_error(message);
+}
+std::vector<std::string> directoryEntries(const fs::path& path) {
+    need(fs::canonical(path) == fs::absolute(path).lexically_normal(),
+         "symlink directory input unsupported");
+    need(fs::is_directory(path), "directory input changed");
+    std::vector<std::string> entries;
+    for (const auto& entry : fs::directory_iterator(path))
+        entries.push_back(entry.path().filename().string() + ":" +
+                          std::to_string(int(entry.symlink_status().type())));
+    std::sort(entries.begin(), entries.end());
+    return entries;
 }
 bool plainInt(const syntax::DataTypeSyntax* type) {
     auto* value = type ? type->as_if<syntax::IntegerTypeSyntax>() : nullptr;
@@ -70,6 +97,26 @@ Shape shape(const syntax::FunctionDeclarationSyntax& fn) {
          "one final return required");
     return {fn.items.front()->getFirstToken().location().offset(),
             statement->getLastToken().range().end().offset(), locals};
+}
+// The method interface includes all local declarations. Only their initializer
+// expressions may change. Token identity deliberately ignores formatting trivia.
+std::vector<std::string> declarations(const syntax::FunctionDeclarationSyntax& fn) {
+    std::vector<std::string> result;
+    auto collect = [&](auto&& self, const syntax::SyntaxNode& node) -> void {
+        if (node.kind == syntax::SyntaxKind::EqualsValueClause)
+            return;
+        for (uint32_t i = 0; i < node.getChildCount(); ++i) {
+            if (auto* child = node.childNode(i))
+                self(self, *child);
+            else if (auto token = node.childToken(i); token)
+                result.emplace_back(std::string(toString(token.kind)) + ":" +
+                                    std::string(token.rawText()));
+        }
+    };
+    for (auto* item : fn.items)
+        if (item->kind == syntax::SyntaxKind::DataDeclaration)
+            collect(collect, *item);
+    return result;
 }
 void verify(const ast::SubroutineSymbol& fn, const std::vector<std::string>& outerNames) {
     const auto& expected = fn.getCompilation().getIntType();
@@ -158,7 +205,7 @@ std::optional<std::string> MethodScopeOverlay::read(const std::string& path) {
     auto status = fs::status(path, error);
     if (error == std::errc::no_such_file_or_directory || (!error && !fs::exists(status)))
         return {};
-    need(!error && fs::is_regular_file(status), "nonregular certificate input");
+    need(!error && fs::is_regular_file(status), ("nonregular certificate input: " + path).c_str());
     need(fs::canonical(path) == fs::absolute(path).lexically_normal(), "symlink input unsupported");
     std::ifstream input(path, std::ios::binary);
     need(bool(input), "unreadable certificate input");
@@ -171,157 +218,184 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
                                        size_t editOffset, const lsp::RequestContext& ctx) :
     driver(&d), uri(target) {
     ctx.checkpoint("method certificate begin");
-    need(!d.comp && d.hasConfiguredCompilationInputs() && !d.completions.resolveEdits,
-         "configured package exploration required");
-    need(config.compilationFilelist.value().has_value() &&
-             config.explorePreincludeFiles.value().empty(),
-         "literal filelist without preinclude required");
-    auto flags = [](const std::string& value) {
-        std::istringstream words(value);
-        std::string word;
-        while (words >> word) {
-            if (word == "--single-unit")
-                continue;
-            if (word == "--threads") {
-                need(bool(words >> word) && word == "1", "one parse worker");
-                continue;
-            }
-            need(false, "unsupported source-loading flag");
-        }
-    };
-    flags(config.flags.value());
-    for (const auto& source : config.flagsByFile.value())
-        flags(source.flags);
-    std::set<fs::path> listings;
-    std::vector<fs::path> recipe;
-    auto literal = [](std::string_view value) {
-        return !value.empty() && value.find_first_of("*?[$`@{}\"'\\") == std::string_view::npos &&
-               value.find("...") == std::string_view::npos;
-    };
-    auto visit = [&](auto&& self, fs::path path, size_t depth) -> void {
-        path = fs::absolute(path).lexically_normal();
-        need(depth < 16 && listings.insert(path).second, "cyclic/deep filelist");
-        auto bytes = read(path.string());
-        need(bool(bytes), "missing filelist");
-        disk[path.string()] = bytes;
-        std::istringstream lines(*bytes);
-        std::string line;
-        while (std::getline(lines, line)) {
-            std::istringstream tokens(line);
-            std::string token;
-            while (tokens >> token) {
-                ctx.checkpoint("method certificate filelist");
-                if (token.starts_with("//"))
-                    break;
-                need(literal(token), "nonliteral recipe");
-                if (token == "-F") {
-                    need(bool(tokens >> token) && literal(token), "nested filelist");
-                    self(self, path.parent_path() / token, depth + 1);
-                }
-                else if (token.starts_with("+incdir+"))
-                    continue; // Every actual/failed lookup is frozen below.
-                else {
-                    need(!token.starts_with('-') && !token.starts_with('+'),
-                         "unsupported recipe option");
-                    recipe.push_back(fs::absolute(path.parent_path() / token).lexically_normal());
-                }
-            }
-        }
-    };
-    auto list = fs::path(*config.compilationFilelist.value());
-    if (list.is_relative())
-        list = fs::path(d.m_workspacePathPrefix) / list;
-    visit(visit, list, 0);
-    ctx.checkpoint("method certificate recipe ready");
-    std::shared_ptr<SlangDoc> unit;
-    for (auto& [_, document] : d.docs)
-        if (document->isNativeCompilationUnit()) {
-            need(!unit, "one native unit required");
-            unit = document;
-        }
-    need(unit && unit->getOptions().getOrDefault<driver::SourceOptions>().singleUnit &&
-             !unit->requiresNativeReplay(),
-         "single-unit without inherited replay required");
-    auto roots = unit->getRootPaths();
-    need(roots.size() == recipe.size() && std::equal(roots.begin(), roots.end(), recipe.begin()),
-         "ordered recipe mismatch");
-    auto tree = unit->getSyntaxTree(ctx);
-    auto& pp = tree->getPreprocessorMetadata();
-    need(pp.sourceBufferIds.size() == roots.size() + pp.includeDirectives.size() &&
-             pp.macroRefs.empty() && pp.predefineBufferIds.empty() && !tree->getSourceLibrary() &&
-             !tree->isLibraryUnit,
-         "complete include graph without user macro environment");
-    for (auto* macro : pp.definedMacros)
-        need(macro->name.location() == SourceLocation::NoLocation, "user macro definition");
-    // Certify every occurrence, not just the edited header. Each non-root buffer
-    // must have exactly one literal include edge and reach a configured root.
-    // Repeated physical files are allowed outside the target, but recursive
-    // physical paths and unexplained preprocessing inputs are not.
-    std::set<BufferID> buffers(pp.sourceBufferIds.begin(), pp.sourceBufferIds.end());
-    need(buffers.size() == pp.sourceBufferIds.size(), "duplicate source buffer identity");
-    std::map<BufferID, BufferID> parents;
-    std::map<BufferID, std::vector<std::pair<size_t, size_t>>> directives;
+    bodyQueries = config.experimentalMethodBodyQueries.value();
+    std::shared_ptr<syntax::SyntaxTree> tree;
     BufferID occurrence;
-    for (const auto& include : pp.includeDirectives) {
-        need(include.syntax && include.buffer && !include.isSystem, "unsupported include");
-        auto range = include.syntax->sourceRange();
-        auto parent = range.start().buffer();
-        auto child = include.buffer.id;
-        need(buffers.contains(parent) && buffers.contains(child) &&
-                 range.end().buffer() == parent && parents.emplace(child, parent).second,
-             "ambiguous include graph");
-        directives[parent].emplace_back(range.start().offset(), range.end().offset());
-        if (URI::fromFile(d.sm.getFullPath(child)) == uri) {
-            need(!occurrence.valid(), "repeated target include");
-            occurrence = child;
-        }
-    }
-    need(occurrence.valid(), "target must be included");
-    need(std::count_if(pp.sourceBufferIds.begin(), pp.sourceBufferIds.end(),
-                       [&](auto id) {
-                           return d.sm.getFullPath(id) == d.sm.getFullPath(occurrence);
-                       }) == 1,
-         "repeated header occurrence");
-    auto options = tree->options().getOrDefault<parsing::PreprocessorOptions>();
-    need(options.predefines.empty() && options.undefines.empty() &&
-             options.additionalIncludePaths.empty() && options.ignoreDirectives.empty() &&
-             options.keywordMapping.empty() && !options.bufferChangeCB,
-         "preprocessor override");
-    for (auto id : pp.sourceBufferIds) {
-        std::string bytes(d.sm.getSourceText(id));
-        auto& ranges = directives[id];
-        std::sort(ranges.begin(), ranges.end());
-        size_t previousEnd = 0;
-        for (auto [begin, end] : ranges) {
-            need(begin >= previousEnd && begin < end && end <= bytes.size(),
-                 "invalid include directive range");
-            std::fill(bytes.begin() + begin, bytes.begin() + end, ' ');
-            previousEnd = end;
-        }
-        need(bytes.find('`') == std::string::npos, "other directive");
-        std::set<fs::path> ancestors;
-        auto current = id;
-        while (true) {
-            need(ancestors.insert(d.sm.getFullPath(current)).second, "recursive include graph");
-            auto parent = parents.find(current);
-            if (parent == parents.end())
-                break;
-            current = parent->second;
-        }
-    }
-    std::multiset<fs::path> actualRoots, expectedRoots(roots.begin(), roots.end());
-    for (auto id : buffers)
-        if (!parents.contains(id))
-            actualRoots.insert(d.sm.getFullPath(id));
-    need(actualRoots == expectedRoots, "include graph root mismatch");
     auto document = d.getDocument(uri);
-    auto graph = document->getAnalysisInputs(ctx);
-    need(graph.tree == tree && graph.buffer == occurrence && graph.trees.size() == 1,
-         "nonunique owner graph");
+    need(document && document->getVersion(), "open target required");
+    if (bodyQueries) {
+        // Never force a full previous-generation analysis merely to speculate
+        // about an edit. Preparation requires a previously queried live view.
+        need(document->hasAnalysis(), "current query context required");
+        need(!d.completions.resolveEdits, "deferred callable edits required");
+        auto graph = document->getAnalysisInputs(ctx);
+        tree = graph.tree;
+        occurrence = graph.buffer;
+        need(tree && occurrence.valid(), "source context unavailable");
+        // This first slice does not choose between repeated textual occurrences.
+        size_t occurrences = 0;
+        for (const auto& candidate : graph.trees)
+            for (auto id : candidate->getPreprocessorMetadata().sourceBufferIds)
+                occurrences += d.sm.getFullPath(id) == d.sm.getFullPath(occurrence);
+        need(occurrences == 1, "nonunique target occurrence");
+    }
+    else {
+        need(!d.comp && d.hasConfiguredCompilationInputs() && !d.completions.resolveEdits,
+             "configured package exploration required");
+        need(config.compilationFilelist.value().has_value() &&
+                 config.explorePreincludeFiles.value().empty(),
+             "literal filelist without preinclude required");
+        auto flags = [](const std::string& value) {
+            std::istringstream words(value);
+            std::string word;
+            while (words >> word) {
+                if (word == "--single-unit")
+                    continue;
+                if (word == "--threads") {
+                    need(bool(words >> word) && word == "1", "one parse worker");
+                    continue;
+                }
+                need(false, "unsupported source-loading flag");
+            }
+        };
+        flags(config.flags.value());
+        for (const auto& source : config.flagsByFile.value())
+            flags(source.flags);
+        std::set<fs::path> listings;
+        std::vector<fs::path> recipe;
+        auto literal = [](std::string_view value) {
+            return !value.empty() &&
+                   value.find_first_of("*?[$`@{}\"'\\") == std::string_view::npos &&
+                   value.find("...") == std::string_view::npos;
+        };
+        auto visit = [&](auto&& self, fs::path path, size_t depth) -> void {
+            path = fs::absolute(path).lexically_normal();
+            need(depth < 16 && listings.insert(path).second, "cyclic/deep filelist");
+            auto bytes = read(path.string());
+            need(bool(bytes), "missing filelist");
+            disk[path.string()] = bytes;
+            std::istringstream lines(*bytes);
+            std::string line;
+            while (std::getline(lines, line)) {
+                std::istringstream tokens(line);
+                std::string token;
+                while (tokens >> token) {
+                    ctx.checkpoint("method certificate filelist");
+                    if (token.starts_with("//"))
+                        break;
+                    need(literal(token), "nonliteral recipe");
+                    if (token == "-F") {
+                        need(bool(tokens >> token) && literal(token), "nested filelist");
+                        self(self, path.parent_path() / token, depth + 1);
+                    }
+                    else if (token.starts_with("+incdir+"))
+                        continue; // Every actual/failed lookup is frozen below.
+                    else {
+                        need(!token.starts_with('-') && !token.starts_with('+'),
+                             "unsupported recipe option");
+                        recipe.push_back(
+                            fs::absolute(path.parent_path() / token).lexically_normal());
+                    }
+                }
+            }
+        };
+        auto list = fs::path(*config.compilationFilelist.value());
+        if (list.is_relative())
+            list = fs::path(d.m_workspacePathPrefix) / list;
+        visit(visit, list, 0);
+        ctx.checkpoint("method certificate recipe ready");
+        std::shared_ptr<SlangDoc> unit;
+        for (auto& [_, document] : d.docs)
+            if (document->isNativeCompilationUnit()) {
+                need(!unit, "one native unit required");
+                unit = document;
+            }
+        need(unit && unit->getOptions().getOrDefault<driver::SourceOptions>().singleUnit &&
+                 !unit->requiresNativeReplay(),
+             "single-unit without inherited replay required");
+        auto roots = unit->getRootPaths();
+        need(roots.size() == recipe.size() &&
+                 std::equal(roots.begin(), roots.end(), recipe.begin()),
+             "ordered recipe mismatch");
+        tree = unit->getSyntaxTree(ctx);
+        auto& pp = tree->getPreprocessorMetadata();
+        need(pp.sourceBufferIds.size() == roots.size() + pp.includeDirectives.size() &&
+                 pp.macroRefs.empty() && pp.predefineBufferIds.empty() &&
+                 !tree->getSourceLibrary() && !tree->isLibraryUnit,
+             "complete include graph without user macro environment");
+        for (auto* macro : pp.definedMacros)
+            need(macro->name.location() == SourceLocation::NoLocation, "user macro definition");
+        // Certify every occurrence, not just the edited header. Each non-root buffer
+        // must have exactly one literal include edge and reach a configured root.
+        // Repeated physical files are allowed outside the target, but recursive
+        // physical paths and unexplained preprocessing inputs are not.
+        std::set<BufferID> buffers(pp.sourceBufferIds.begin(), pp.sourceBufferIds.end());
+        need(buffers.size() == pp.sourceBufferIds.size(), "duplicate source buffer identity");
+        std::map<BufferID, BufferID> parents;
+        std::map<BufferID, std::vector<std::pair<size_t, size_t>>> directives;
+
+        for (const auto& include : pp.includeDirectives) {
+            need(include.syntax && include.buffer && !include.isSystem, "unsupported include");
+            auto range = include.syntax->sourceRange();
+            auto parent = range.start().buffer();
+            auto child = include.buffer.id;
+            need(buffers.contains(parent) && buffers.contains(child) &&
+                     range.end().buffer() == parent && parents.emplace(child, parent).second,
+                 "ambiguous include graph");
+            directives[parent].emplace_back(range.start().offset(), range.end().offset());
+            if (URI::fromFile(d.sm.getFullPath(child)) == uri) {
+                need(!occurrence.valid(), "repeated target include");
+                occurrence = child;
+            }
+        }
+        need(occurrence.valid(), "target must be included");
+        need(std::count_if(pp.sourceBufferIds.begin(), pp.sourceBufferIds.end(),
+                           [&](auto id) {
+                               return d.sm.getFullPath(id) == d.sm.getFullPath(occurrence);
+                           }) == 1,
+             "repeated header occurrence");
+        auto options = tree->options().getOrDefault<parsing::PreprocessorOptions>();
+        need(options.predefines.empty() && options.undefines.empty() &&
+                 options.additionalIncludePaths.empty() && options.ignoreDirectives.empty() &&
+                 options.keywordMapping.empty() && !options.bufferChangeCB,
+             "preprocessor override");
+        for (auto id : pp.sourceBufferIds) {
+            std::string bytes(d.sm.getSourceText(id));
+            auto& ranges = directives[id];
+            std::sort(ranges.begin(), ranges.end());
+            size_t previousEnd = 0;
+            for (auto [begin, end] : ranges) {
+                need(begin >= previousEnd && begin < end && end <= bytes.size(),
+                     "invalid include directive range");
+                std::fill(bytes.begin() + begin, bytes.begin() + end, ' ');
+                previousEnd = end;
+            }
+            need(bytes.find('`') == std::string::npos, "other directive");
+            std::set<fs::path> ancestors;
+            auto current = id;
+            while (true) {
+                need(ancestors.insert(d.sm.getFullPath(current)).second, "recursive include graph");
+                auto parent = parents.find(current);
+                if (parent == parents.end())
+                    break;
+                current = parent->second;
+            }
+        }
+        std::multiset<fs::path> actualRoots, expectedRoots(roots.begin(), roots.end());
+        for (auto id : buffers)
+            if (!parents.contains(id))
+                actualRoots.insert(d.sm.getFullPath(id));
+        need(actualRoots == expectedRoots, "include graph root mismatch");
+
+        auto graph = document->getAnalysisInputs(ctx);
+        need(graph.tree == tree && graph.buffer == occurrence && graph.trees.size() == 1,
+             "nonunique owner graph");
+    }
     ctx.checkpoint("method certificate graph ready");
     auto analysis = document->getAnalysis(ctx);
     auto& compilation = *analysis->getCompilation();
-    need(compilation.getAllDiagnostics().empty(), "base semantic diagnostics");
+    if (!bodyQueries)
+        need(compilation.getAllDiagnostics().empty(), "base semantic diagnostics");
     ctx.checkpoint("method certificate semantics ready");
     const syntax::FunctionDeclarationSyntax* selected = nullptr;
     auto find = [&](auto&& self, const syntax::SyntaxNode& node) -> void {
@@ -337,8 +411,25 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
             if (auto* child = node.childNode(i))
                 self(self, *child);
     };
-    find(find, tree->root());
-    need(selected, "edit outside function");
+    if (bodyQueries) {
+        // The per-document index already exists. Do not walk a large package's
+        // complete syntax graph to reject an edit outside an eligible method.
+        auto* token = analysis->syntaxes.getTokenAt(SourceLocation(occurrence, editOffset));
+        for (auto* node = token ? analysis->syntaxes.getTokenParent(token) : nullptr; node;
+             node = node->parent) {
+            if (auto* fn = node->as_if<syntax::FunctionDeclarationSyntax>()) {
+                selected = fn;
+                break;
+            }
+        }
+    }
+    else {
+        find(find, tree->root());
+    }
+    need(selected && selected->getFirstToken().location().buffer() == occurrence &&
+             selected->getFirstToken().location().offset() <= editOffset &&
+             editOffset < selected->getLastToken().range().end().offset(),
+         "edit outside function");
     auto* declaration = selected->parent
                             ? selected->parent->as_if<syntax::ClassMethodDeclarationSyntax>()
                             : nullptr;
@@ -348,7 +439,7 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
     auto* package = cls && cls->parent ? cls->parent->as_if<syntax::ModuleDeclarationSyntax>()
                                        : nullptr;
     need(cls && package && package->kind == syntax::SyntaxKind::PackageDeclaration &&
-             !cls->parameters && !cls->extendsClause && !cls->implementsClause &&
+             !cls->parameters && (bodyQueries || (!cls->extendsClause && !cls->implementsClause)) &&
              !cls->virtualOrInterface && cls->attributes.empty(),
          "ordinary package class");
     need(declaration->qualifiers.empty() && declaration->attributes.empty() &&
@@ -378,45 +469,48 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
                  p->declarator->dimensions.empty() && !p->declarator->initializer,
              "plain input int");
     }
-    auto imports = [&](auto&& self, const syntax::SyntaxNode& node) -> void {
-        need(node.kind != syntax::SyntaxKind::PackageImportDeclaration,
-             "import environment unsupported");
-        for (uint32_t i = 0; i < node.getChildCount(); ++i)
-            if (auto* child = node.childNode(i))
-                self(self, *child);
-    };
-    imports(imports, *package);
-    for (auto* member : cls->items) {
-        if (auto* field = member->as_if<syntax::ClassPropertyDeclarationSyntax>()) {
-            auto* value = field->declaration->as_if<syntax::DataDeclarationSyntax>();
-            need(field->attributes.empty() && field->qualifiers.empty() && value &&
-                     value->attributes.empty() && value->modifiers.empty() && plainInt(value->type),
-                 "ordinary int field interface");
-            for (auto* declarator : value->declarators)
-                need(declarator->dimensions.empty() && !declarator->initializer,
-                     "dependent field interface");
-        }
-        else {
-            auto* other = member->as_if<syntax::ClassMethodDeclarationSyntax>();
-            need(other && other->qualifiers.empty() && other->attributes.empty(),
-                 "ordinary method interface");
-            auto& prototype = *other->declaration->prototype;
-            need(other->declaration->attributes.empty() && prototype.specifiers.empty() &&
-                     prototype.keyword.kind == parsing::TokenKind::FunctionKeyword &&
-                     prototype.lifetime.kind != parsing::TokenKind::StaticKeyword &&
-                     plainInt(prototype.returnType),
-                 "explicit int return interface");
-            if (prototype.portList)
-                for (auto* port : prototype.portList->ports) {
-                    auto* argument = port->as_if<syntax::FunctionPortSyntax>();
-                    need(argument && argument->attributes.empty() &&
-                             argument->direction.kind == parsing::TokenKind::InputKeyword &&
-                             !argument->constKeyword && !argument->staticKeyword &&
-                             !argument->varKeyword && plainInt(argument->dataType) &&
-                             argument->declarator->dimensions.empty() &&
-                             !argument->declarator->initializer,
-                         "dependent method interface");
-                }
+    if (!bodyQueries) {
+        auto imports = [&](auto&& self, const syntax::SyntaxNode& node) -> void {
+            need(node.kind != syntax::SyntaxKind::PackageImportDeclaration,
+                 "import environment unsupported");
+            for (uint32_t i = 0; i < node.getChildCount(); ++i)
+                if (auto* child = node.childNode(i))
+                    self(self, *child);
+        };
+        imports(imports, *package);
+        for (auto* member : cls->items) {
+            if (auto* field = member->as_if<syntax::ClassPropertyDeclarationSyntax>()) {
+                auto* value = field->declaration->as_if<syntax::DataDeclarationSyntax>();
+                need(field->attributes.empty() && field->qualifiers.empty() && value &&
+                         value->attributes.empty() && value->modifiers.empty() &&
+                         plainInt(value->type),
+                     "ordinary int field interface");
+                for (auto* declarator : value->declarators)
+                    need(declarator->dimensions.empty() && !declarator->initializer,
+                         "dependent field interface");
+            }
+            else {
+                auto* other = member->as_if<syntax::ClassMethodDeclarationSyntax>();
+                need(other && other->qualifiers.empty() && other->attributes.empty(),
+                     "ordinary method interface");
+                auto& prototype = *other->declaration->prototype;
+                need(other->declaration->attributes.empty() && prototype.specifiers.empty() &&
+                         prototype.keyword.kind == parsing::TokenKind::FunctionKeyword &&
+                         prototype.lifetime.kind != parsing::TokenKind::StaticKeyword &&
+                         plainInt(prototype.returnType),
+                     "explicit int return interface");
+                if (prototype.portList)
+                    for (auto* port : prototype.portList->ports) {
+                        auto* argument = port->as_if<syntax::FunctionPortSyntax>();
+                        need(argument && argument->attributes.empty() &&
+                                 argument->direction.kind == parsing::TokenKind::InputKeyword &&
+                                 !argument->constKeyword && !argument->staticKeyword &&
+                                 !argument->varKeyword && plainInt(argument->dataType) &&
+                                 argument->declarator->dimensions.empty() &&
+                                 !argument->declarator->initializer,
+                             "dependent method interface");
+                    }
+            }
         }
     }
     for (const ast::Scope* scope = fn.getParentScope(); scope;
@@ -428,6 +522,8 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
     bodyBegin = body.begin;
     bodyEnd = body.end;
     localCount = body.locals;
+    originalBodyEnd = bodyEnd;
+    localDeclarations = declarations(*selected);
     verify(fn, outerNames);
     functionBegin = selected->getFirstToken().location().offset();
     functionEnd = selected->getLastToken().range().end().offset();
@@ -436,6 +532,19 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
          "ASCII header only");
     need(text.substr(functionBegin, functionEnd - functionBegin).find('\\') == std::string::npos,
          "escaped method tokens unsupported");
+    if (bodyQueries) {
+        need(text.substr(functionBegin, functionEnd - functionBegin).find('`') == std::string::npos,
+             "macro-free method required");
+        auto tokens = [&](auto&& self, const syntax::SyntaxNode& node) -> void {
+            for (uint32_t i = 0; i < node.getChildCount(); ++i) {
+                if (auto* child = node.childNode(i))
+                    self(self, *child);
+                else if (auto token = node.childToken(i); token)
+                    need(token.location().buffer() == occurrence, "expanded method token");
+            }
+        };
+        tokens(tokens, *selected);
+    }
     originalBuffer = occurrence.getId();
     currentBuffer = document->getBuffer().getId();
     version = *document->getVersion();
@@ -445,15 +554,30 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
     // each item. Pointers live only during this constructor; the retained
     // interface consists of value DTOs. Outer matches overwrite inner matches
     // in the same traversal order as the previous per-item search.
-    using Identity = std::tuple<ast::SymbolKind, std::string, std::string>;
+    using Identity = std::tuple<ast::SymbolKind, std::string, std::string, uint32_t, uint64_t>;
     std::map<Identity, const ast::Symbol*> symbols;
+    auto indexScope = [&](const ast::Scope& scope) {
+        for (auto& member : scope.members()) {
+            const ast::Symbol* symbol = &member;
+            while (auto* proxy = symbol->as_if<ast::TransparentMemberSymbol>())
+                symbol = &proxy->wrapped;
+            if (auto* import = symbol->as_if<ast::ExplicitImportSymbol>())
+                symbol = import->importedSymbol();
+            if (symbol && !symbol->name.empty())
+                symbols.insert_or_assign(
+                    Identity{symbol->kind, std::string(symbol->name), symbol->getHierarchicalPath(),
+                             symbol->location.buffer().getId(), symbol->location.offset()},
+                    symbol);
+        }
+    };
     for (const ast::Scope* scope = &fn; scope; scope = scope->asSymbol().getParentScope()) {
         ctx.checkpoint("method certificate completion scope");
-        for (auto& member : scope->members())
-            if (!member.name.empty())
-                symbols.insert_or_assign(Identity{member.kind, std::string(member.name),
-                                                  member.getHierarchicalPath()},
-                                         &member);
+        indexScope(*scope);
+        if (bodyQueries)
+            if (auto* imports = scope->getWildcardImportData())
+                for (auto* import : imports->wildcardImports)
+                    if (auto* imported = import->getPackage())
+                        indexScope(*imported);
     }
     for (size_t kind = 0; kind < 2; ++kind) {
         std::vector<lsp::CompletionItem> items;
@@ -470,8 +594,9 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
             if (dto.item.data) {
                 auto data = rfl::from_generic<Data, rfl::UnderlyingEnums>(*dto.item.data);
                 need(bool(data), "completion identity");
-                auto symbol = symbols.find(
-                    Identity{data->symbolKind, data->symbolName, data->symbolPath});
+                auto symbol = symbols.find(Identity{data->symbolKind, data->symbolName,
+                                                    data->symbolPath, data->bufferId,
+                                                    data->offset});
                 need(symbol != symbols.end(), "unaccounted completion symbol");
                 const auto* found = symbol->second;
                 dto.methodOwned = found->getParentScope() == &fn;
@@ -498,30 +623,72 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
     // No AST-backed lookup is needed while capturing the diagnostic snapshot.
     symbols.clear();
     ctx.checkpoint("method certificate completions ready");
+    Bag miniOptions = tree->options();
+    if (bodyQueries) {
+        // Mini sources have no includes, macros or semantic-library imports.
+        // Retain language / lexer behavior without copying live owner options.
+        parsing::PreprocessorOptions pp;
+        pp.languageVersion =
+            miniOptions.getOrDefault<parsing::PreprocessorOptions>().languageVersion;
+        miniOptions = Bag{miniOptions.getOrDefault<parsing::LexerOptions>(),
+                          miniOptions.getOrDefault<parsing::ParserOptions>(), pp};
+    }
     treeOptions = std::make_unique<diagnostic_snapshot::ReconstructedOptions>(
-        diagnostic_snapshot::captureOptions(tree->options()));
+        diagnostic_snapshot::captureOptions(miniOptions));
     compilationOptions = std::make_unique<diagnostic_snapshot::ReconstructedOptions>(
         diagnostic_snapshot::captureOptions(compilation.getOptions()));
-    auto saved = d.m_pendingIncludedDiagnostics;
-    d.m_pendingIncludedDiagnostics.emplace(uri, d.m_diagnosticGeneration);
-    try {
-        auto value = d.captureDiagnosticSnapshot(ctx);
-        need(bool(value), "diagnostic freeze unavailable");
-        frozen = std::move(*value);
-        d.m_pendingIncludedDiagnostics = std::move(saved);
+    if (bodyQueries) {
+        // Query certificates do not replay diagnostics or serialize semantic
+        // owners. Native diagnostics retain the current UVM / RTL owners.
+        auto input = std::make_shared<diagnostic_snapshot::Input>();
+        std::vector<BufferID> buffers;
+        for (const auto& syntaxTree : compilation.getSyntaxTrees()) {
+            const auto& pp = syntaxTree->getPreprocessorMetadata();
+            buffers.insert(buffers.end(), pp.sourceBufferIds.begin(), pp.sourceBufferIds.end());
+        }
+        input->sources = d.sm.captureSnapshot(buffers);
+        frozen.owner = d.m_snapshotOwner;
+        d.completions.requireCompletionEpoch();
+        frozen.revision = d.completions.getCompletionEpoch();
+        frozen.indexRevision = nextBodyCertificate.fetch_add(1, std::memory_order_relaxed);
+        frozen.input = std::move(input);
     }
-    catch (...) {
-        d.m_pendingIncludedDiagnostics = std::move(saved);
-        throw;
+    else {
+        auto saved = d.m_pendingIncludedDiagnostics;
+        d.m_pendingIncludedDiagnostics.emplace(uri, d.m_diagnosticGeneration);
+        try {
+            auto value = d.captureDiagnosticSnapshot(ctx);
+            need(bool(value), "diagnostic freeze unavailable");
+            frozen = std::move(*value);
+            d.m_pendingIncludedDiagnostics = std::move(saved);
+        }
+        catch (...) {
+            d.m_pendingIncludedDiagnostics = std::move(saved);
+            throw;
+        }
     }
-    need(frozen.metadata.trees.size() == 1, "diagnostic graph is not a single unit");
+    if (!bodyQueries)
+        need(frozen.metadata.trees.size() == 1, "diagnostic graph is not a single unit");
     ctx.checkpoint("method certificate snapshot ready");
     for (auto& [openUri, doc] : d.docs)
         if (doc->getVersion() && d.isDocumentOpen(openUri)) {
-            need(openUri == uri, "phase one requires only target header open");
+            need(bodyQueries || openUri == uri, "phase one requires only target header open");
             documents.emplace(openUri, DocumentWitness{doc.get(), doc->getBuffer().getId(),
                                                        *doc->getVersion(), plain(*doc)});
         }
+    // Explicit immutable libraries keep their existing manual-rebuild contract.
+    // Re-reading those sources on every local query defeats semantic reuse.
+    // Hold weak generation identities rather than another live semantic graph.
+    std::unordered_set<std::string> immutableFiles;
+    if (bodyQueries) {
+        immutableUvm = d.m_trustedUvm;
+        immutableScopes = d.m_trustedScopes;
+        for (const auto& library : {d.m_trustedUvm, d.m_trustedScopes})
+            if (library)
+                immutableFiles.insert(library->files.begin(), library->files.end());
+        need(!immutableFiles.contains(d.sm.getFullPath(occurrence).string()),
+             "edited method belongs to an immutable library");
+    }
     // A path can appear as a source, lookup and context watch input. Never let
     // a later read replace a witness already checked against the parsed bytes.
     auto witness = [&](const std::string& path) -> const std::optional<std::string>& {
@@ -531,6 +698,10 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
         return it->second;
     };
     for (auto& file : frozen.input->sources.files) {
+        if (immutableFiles.contains(file.fullPath))
+            continue;
+        if (bodyQueries && file.generated)
+            continue; // Immutable generated bytes are retained by the snapshot.
         need(!file.generated, "generated input");
         const auto& bytes = witness(file.fullPath);
         if (URI::fromFile(file.fullPath) != uri) {
@@ -543,22 +714,38 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
     }
     ctx.checkpoint("method certificate sources ready");
     for (auto& lookup : frozen.input->sources.lookups) {
+        if (immutableFiles.contains(lookup.path))
+            continue;
         need(lookup.fileId || lookup.errorValue == int(std::errc::no_such_file_or_directory),
              "unsupported lookup failure");
         need(bool(witness(lookup.path)) == bool(lookup.fileId), "lookup changed");
     }
     for (auto& [path, _] : d.driver.getCommandFileMetadata())
         witness(path.string());
-    for (auto& path : d.getContextWatchPaths())
-        witness(path.string());
+    for (auto& path : d.getContextWatchPaths()) {
+        if (immutableFiles.contains(path.string()))
+            continue;
+        if (bodyQueries && fs::is_directory(path))
+            directories.emplace(path.string(), directoryEntries(path));
+        else
+            witness(path.string());
+    }
     for (auto path : {fs::path(d.m_workspacePathPrefix) / ".slang/server.json",
                       fs::path(d.m_workspacePathPrefix) / ".slang/local/server.json"})
         witness(path.string());
     configKey = rfl::json::write(config);
-    optionsKey = rfl::json::write(diagnostic_snapshot::captureOptions(d.options));
+    optionsKey = rfl::json::write(diagnostic_snapshot::captureOptions(
+        bodyQueries ? Bag{d.options.getOrDefault<ast::CompilationOptions>()} : d.options));
     inputRevision = d.getContextInputRevision();
     indexRevision = d.getDependencyIndexRevision();
-    handles.reserve(10);
+    if (bodyQueries) {
+        // Only the cwd is needed after the witnesses / value DTOs are built.
+        // Do not keep a second project-sized source snapshot for query reuse.
+        auto compact = std::make_shared<diagnostic_snapshot::Input>();
+        compact->sources.cwd = frozen.input->sources.cwd;
+        frozen.input = std::move(compact);
+    }
+    handles.reserve(bodyQueries ? 66 : 10);
     handles.push_back(originalBuffer);
     handles.push_back(currentBuffer);
     ctx.checkpoint("after method certificate");
@@ -573,11 +760,17 @@ bool MethodScopeOverlay::belongsTo(const ServerDriver& d) const {
     return driver == &d && frozen.owner == d.m_snapshotOwner;
 }
 bool MethodScopeOverlay::valid(const Config& config, const lsp::RequestContext& ctx) const try {
+    if (bodyQueries && (frozen.revision != driver->completions.getCompletionEpoch() ||
+                        immutableUvm.lock() != driver->m_trustedUvm ||
+                        immutableScopes.lock() != driver->m_trustedScopes))
+        return false;
     if (!belongsTo(*driver) || driver->getContextInputRevision() != inputRevision ||
         driver->getDependencyIndexRevision() != indexRevision ||
         fs::current_path().string() != frozen.input->sources.cwd ||
         rfl::json::write(config) != configKey ||
-        rfl::json::write(diagnostic_snapshot::captureOptions(driver->options)) != optionsKey)
+        rfl::json::write(diagnostic_snapshot::captureOptions(
+            bodyQueries ? Bag{driver->options.getOrDefault<ast::CompilationOptions>()}
+                        : driver->options)) != optionsKey)
         return false;
     size_t count = 0;
     for (auto& [openUri, document] : driver->docs)
@@ -594,6 +787,11 @@ bool MethodScopeOverlay::valid(const Config& config, const lsp::RequestContext& 
         }
     if (count != documents.size())
         return false;
+    for (const auto& [path, entries] : directories) {
+        ctx.checkpoint("method directory validation");
+        if (directoryEntries(path) != entries)
+            return false;
+    }
     for (auto& [path, bytes] : disk) {
         ctx.checkpoint("method input validation");
         if (read(path) != bytes)
@@ -611,7 +809,7 @@ catch (const std::exception&) {
 bool MethodScopeOverlay::apply(const lsp::DidChangeTextDocumentParams& p, const Config& config,
                                const lsp::RequestContext& ctx, bool& synced) {
     need(valid(config, ctx) && p.textDocument.uri == uri && p.textDocument.version > version &&
-             accepted < 8 && p.contentChanges.size() == 1,
+             accepted < (bodyQueries ? 64u : 8u) && p.contentChanges.size() == 1,
          "method context/version/bound changed");
     std::string next = text;
     if (auto* whole = rfl::get_if<lsp::TextDocumentContentChangeWholeDocument>(
@@ -628,21 +826,28 @@ bool MethodScopeOverlay::apply(const lsp::DidChangeTextDocumentParams& p, const 
              "range length mismatch");
         next.replace(begin->offset(), end->offset() - begin->offset(), edit.text);
     }
-    need(next.size() == text.size() && next != text, "phase one requires equal-length edits");
+    need(next != text && next.size() >= bodyBegin + text.size() - bodyEnd,
+         "empty edit or missing method suffix");
+    const auto nextBodyEnd = next.size() - (text.size() - bodyEnd);
+    const auto nextFunctionEnd = next.size() - (text.size() - functionEnd);
     need(next.substr(0, bodyBegin) == text.substr(0, bodyBegin) &&
-             next.substr(bodyEnd) == text.substr(bodyEnd),
+             next.substr(nextBodyEnd) == text.substr(bodyEnd),
          "edit crosses body/interface boundary");
-    for (size_t i = 0; i < text.size(); ++i)
-        need(uint8_t(next[i]) < 128 && (next[i] == '\n') == (text[i] == '\n') &&
-                 (next[i] == '\r') == (text[i] == '\r'),
-             "ASCII and fixed line layout required");
-    need(next.find('`') == std::string::npos, "directives unsupported");
-    need(next.substr(functionBegin, functionEnd - functionBegin).find('\\') == std::string::npos,
-         "escaped method tokens unsupported");
+    if (!bodyQueries) {
+        need(next.size() == text.size(), "phase one requires equal-length edits");
+        for (size_t i = 0; i < text.size(); ++i)
+            need((next[i] == '\n') == (text[i] == '\n') && (next[i] == '\r') == (text[i] == '\r'),
+                 "fixed line layout required");
+    }
+    need(std::all_of(next.begin(), next.end(), [](unsigned char c) { return c < 128; }),
+         "ASCII source required");
+    auto methodText = next.substr(functionBegin, nextFunctionEnd - functionBegin);
+    need((bodyQueries ? methodText : next).find('`') == std::string::npos,
+         "method directives unsupported");
+    need(methodText.find('\\') == std::string::npos, "escaped method tokens unsupported");
     auto manager = std::make_unique<SourceManager>();
     auto prefix = "package " + packageName + "; class " + className + "; ";
-    auto source = manager->assignText(
-        prefix + next.substr(functionBegin, functionEnd - functionBegin) + " endclass endpackage");
+    auto source = manager->assignText(prefix + methodText + " endclass endpackage");
     ctx.checkpoint("before method mini parse");
     auto tree = syntax::SyntaxTree::fromBuffer(source, *manager, treeOptions->bag());
     need(tree->diagnostics().empty(), "method syntax diagnostics");
@@ -653,6 +858,10 @@ bool MethodScopeOverlay::apply(const lsp::DidChangeTextDocumentParams& p, const 
     auto& fn = method(compilation, packageName, className, functionName);
     auto currentShape = shape(fn.getSyntax()->as<syntax::FunctionDeclarationSyntax>());
     need(currentShape.locals == localCount, "local additions/removals are a later slice");
+    if (bodyQueries)
+        need(declarations(fn.getSyntax()->as<syntax::FunctionDeclarationSyntax>()) ==
+                 localDeclarations,
+             "local declaration changed");
     verify(fn, outerNames);
     need(compilation.getAllDiagnostics().empty(), "method semantic diagnostics");
     std::array<DTOList, 2> fresh;
@@ -684,7 +893,7 @@ bool MethodScopeOverlay::apply(const lsp::DidChangeTextDocumentParams& p, const 
             completions::MemberCompletionQuery::resolve(*symbol, resolved, false);
             dto.documentation = std::move(resolved.documentation);
             if (data->offset >= prefix.size() &&
-                data->offset < prefix.size() + functionEnd - functionBegin)
+                data->offset < prefix.size() + nextFunctionEnd - functionBegin)
                 data->offset = functionBegin + data->offset - prefix.size();
             else {
                 // `this` denotes the unchanged containing class, outside the method slice.
@@ -726,7 +935,8 @@ bool MethodScopeOverlay::apply(const lsp::DidChangeTextDocumentParams& p, const 
                 node->kind == syntax::SyntaxKind::ParenthesizedExpression)
                 kind = 1;
         auto map = [&](size_t offset) {
-            need(offset >= prefix.size() && offset <= prefix.size() + functionEnd - functionBegin,
+            need(offset >= prefix.size() &&
+                     offset <= prefix.size() + nextFunctionEnd - functionBegin,
                  "reference mapping bounds");
             return functionBegin + offset - prefix.size();
         };
@@ -761,6 +971,8 @@ bool MethodScopeOverlay::apply(const lsp::DidChangeTextDocumentParams& p, const 
     methodValues = std::move(fresh);
     sites = std::move(freshSites);
     text = std::move(next);
+    bodyEnd = nextBodyEnd;
+    functionEnd = nextFunctionEnd;
     version = p.textDocument.version;
     currentBuffer = document->getBuffer().getId();
     handles.push_back(currentBuffer);
@@ -785,13 +997,16 @@ lsp::Range MethodScopeOverlay::range(size_t begin, size_t end) const {
     return {toPosition(SourceLocation(id, begin), driver->sm),
             toPosition(SourceLocation(id, end), driver->sm)};
 }
-lsp::CompletionItem MethodScopeOverlay::rebase(lsp::CompletionItem item) const {
+lsp::CompletionItem MethodScopeOverlay::rebase(lsp::CompletionItem item, bool methodOwned) const {
     if (item.data) {
         auto data = rfl::from_generic<Data, rfl::UnderlyingEnums>(*item.data);
         need(bool(data), "completion source identity");
         need(!data->receiverBufferId, "receiver handles unsupported");
-        if (data->bufferId == originalBuffer)
+        if (data->bufferId == originalBuffer) {
+            if (bodyQueries && !methodOwned && data->offset >= originalBodyEnd)
+                data->offset = bodyEnd + (data->offset - originalBodyEnd);
             data->bufferId = currentBuffer;
+        }
         item.data = rfl::to_generic<rfl::UnderlyingEnums>(*data);
     }
     return item;
@@ -806,24 +1021,30 @@ const MethodScopeOverlay::DTO& MethodScopeOverlay::completion(size_t context, si
 std::optional<std::vector<lsp::CompletionItem>> MethodScopeOverlay::complete(
     const lsp::CompletionParams& p, const Config& config, const lsp::RequestContext& ctx) const {
     if (!accepted || p.textDocument.uri != uri || !valid(config, ctx) ||
-        (p.context && p.context->triggerKind == lsp::CompletionTriggerKind::TriggerCharacter))
+        (p.context && p.context->triggerKind == lsp::CompletionTriggerKind::TriggerCharacter)) {
         return {};
+    }
     auto* where = site(p.position);
-    if (!where)
+    if (!where) {
         return {};
+    }
     auto edit = completions::MemberCompletionQuery::createLexical(range(where->begin, where->end),
                                                                   false, false);
     std::vector<lsp::CompletionItem> out;
     for (size_t i = 0; i < lexical[where->context].size(); ++i) {
         const auto& dto = completion(where->context, i);
-        if (dto.item.documentation && dto.changedDocumentation)
+        if (dto.item.documentation && dto.changedDocumentation) {
             return {};
-        auto item = rebase(dto.item);
+        }
+        auto item = rebase(dto.item, dto.methodOwned);
         // CompletionDispatch supplies the requesting document for items whose
         // producer has no symbol handle (including indexed package/module items).
         if (item.kind == lsp::CompletionItemKind::Module)
             item.data = uri.str();
         edit->setCompletionEdit(item);
+        if (bodyQueries && item.data && item.data->to_object())
+            item.data = rfl::to_generic(QueryPayload{frozen.revision, std::move(*item.data),
+                                                     frozen.indexRevision, version});
         out.push_back(std::move(item));
     }
     ctx.checkpoint("before method completion response");
@@ -849,7 +1070,22 @@ std::optional<lsp::CompletionItem> MethodScopeOverlay::resolve(
     if (!accepted || !valid(config, ctx))
         return {};
     if (item.data) {
-        auto data = rfl::from_generic<Data, rfl::UnderlyingEnums>(*item.data);
+        auto payload = *item.data;
+        if (bodyQueries && payload.to_object()) {
+            auto owner = rfl::from_generic<QueryPayload>(payload);
+            if (!owner)
+                return {}; // Untagged handles belong to the native dispatcher.
+            if (owner->contextEpoch != frozen.revision ||
+                (owner->methodBodyCertificate &&
+                 (*owner->methodBodyCertificate != frozen.indexRevision ||
+                  owner->methodBodyVersion != version))) {
+                auto out = item;
+                out.data.reset();
+                return out;
+            }
+            payload = std::move(owner->payload);
+        }
+        auto data = rfl::from_generic<Data, rfl::UnderlyingEnums>(payload);
         if (!data || data->documentUri != uri.str())
             return {};
         // Automatic locals/formals from any earlier generation never bind a new declaration.
@@ -860,19 +1096,31 @@ std::optional<lsp::CompletionItem> MethodScopeOverlay::resolve(
             out.data.reset();
             return out;
         }
-        // Header aliases are generation-specific; unchanged outer sources keep
-        // their exact frozen identity and must match the complete DTO below.
-        if (std::find(handles.begin(), handles.end(), data->bufferId) != handles.end())
+        // Old automatic locals are rejected above. Variable-length edits also
+        // move unchanged declarations after the method: compare current handles
+        // against projected DTOs instead of treating offsets as generation-free.
+        if (bodyQueries && data->bufferId != currentBuffer &&
+            std::find(handles.begin(), handles.end(), data->bufferId) != handles.end())
+            return {};
+        if (!bodyQueries &&
+            std::find(handles.begin(), handles.end(), data->bufferId) != handles.end())
             data->bufferId = originalBuffer;
         for (size_t kind = 0; kind < lexical.size(); ++kind)
             for (size_t i = 0; i < lexical[kind].size(); ++i) {
                 const auto& dto = completion(kind, i);
                 if (dto.item.data) {
-                    auto expected = rfl::from_generic<Data, rfl::UnderlyingEnums>(*dto.item.data);
+                    auto projected = bodyQueries ? rebase(dto.item, dto.methodOwned) : dto.item;
+                    auto expected = rfl::from_generic<Data, rfl::UnderlyingEnums>(*projected.data);
                     if (expected && *data == *expected && item.label == dto.item.label &&
                         item.kind == dto.item.kind) {
-                        if (dto.changedDocumentation)
-                            return {};
+                        if (dto.changedDocumentation) {
+                            if (!bodyQueries)
+                                return {};
+                            auto out = item;
+                            out.data = rfl::to_generic(NativePayload{frozen.revision, payload});
+                            driver->completions.getCompletionItemResolve(out, ctx);
+                            return out;
+                        }
                         auto out = item;
                         out.data.reset();
                         out.documentation = dto.documentation;
@@ -902,7 +1150,7 @@ std::optional<lsp::CompletionItem> MethodScopeOverlay::resolve(
 }
 std::optional<ServerDriver::DiagnosticSnapshot> MethodScopeOverlay::diagnostics(
     const Config& config, const lsp::RequestContext& ctx) const {
-    if (!accepted || !valid(config, ctx))
+    if (bodyQueries || !accepted || !valid(config, ctx))
         return {};
     auto out = frozen;
     out.owner = driver->m_snapshotOwner;

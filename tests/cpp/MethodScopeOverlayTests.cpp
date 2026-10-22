@@ -417,3 +417,290 @@ TEST_CASE("Profile first method certificate by phase", "[.method-profile]") {
         }
     }
 }
+
+namespace {
+void bodyConfig(Workspace& workspace, bool enabled = true, bool uvm = false) {
+    workspace.write(".slang/server.json",
+                    std::string("{\"indexingThreads\":1,\"flags\":\"--single-unit --threads 1\",") +
+                        "\"compilationFilelist\":\"design.f\",\"experimentalMethodBodyQueries\":" +
+                        (enabled ? "true" : "false") +
+                        (uvm ? ",\"uvm\":{\"useBundled\":true},"
+                               "\"experimentalUvmSemanticCache\":true,"
+                               "\"experimentalScopeSemanticCache\":true,"
+                               "\"frozenSources\":{\"packages\":[\"uvm_pkg\"]}"
+                             : "") +
+                        "}");
+}
+std::vector<lsp::CompletionItem> bodyCompletions(ServerHarness& server, DocumentHandle& doc,
+                                                 size_t offset) {
+    auto response = server.getDocCompletion(
+        {.textDocument = {.uri = doc.m_uri}, .position = doc.getPosition(offset)});
+    auto* items = rfl::get_if<std::vector<lsp::CompletionItem>>(&response);
+    REQUIRE(items);
+    auto result = *items;
+    for (auto& item : result) {
+        if (result.size() < 100 || item.label == "local_0" || item.label == "local_1" ||
+            item.label == "this" || item.label == "tail_field" || item.label == "get_name")
+            item = server.getCompletionItemResolve(item);
+        item.data.reset(); // Source handles are owner-specific, all public values must match.
+    }
+    return result;
+}
+} // namespace
+
+TEST_CASE("Body queries preserve native values through variable length multiline edits",
+          "[method-body]") {
+    Workspace workspace;
+    bodyConfig(workspace);
+    const auto baseline = header;
+    std::vector<std::string> sequence;
+    auto text = baseline;
+    text.replace(text.find("local_1 + charl"), 15, "local_0 +\n      (charl * 123)");
+    sequence.push_back(text);
+    text.replace(text.find("alpha + bravo"), 13, "(alpha - bravo) * 12");
+    sequence.push_back(text);
+    sequence.push_back(baseline);
+    std::vector<std::vector<lsp::CompletionItem>> actual;
+    std::vector<std::string> definitions;
+
+    {
+        ServerHarness server(workspace.params());
+        auto doc = server.openFile("item.svh", baseline);
+        doc.doc->getAnalysis();
+        int version = 1;
+        for (const auto& current : sequence) {
+            change(server, doc.m_uri, ++version, current);
+            doc.m_text = current;
+            REQUIRE(state(server).active);
+            const auto offset = current.find("return (local_") + 10;
+            definitions.push_back(rfl::json::write(server.getDocDefinition(
+                {.textDocument = {.uri = doc.m_uri}, .position = doc.getPosition(offset)})));
+            REQUIRE(state(server).active);
+            // Exercise native public completion and deferred resolution, including
+            // class members declared after the moved method and method-owned locals.
+            actual.push_back(bodyCompletions(server, doc, offset));
+            REQUIRE(state(server).active);
+        }
+        CHECK(state(server).accepted == sequence.size());
+    }
+    bodyConfig(workspace, false);
+    ServerHarness native(workspace.params());
+    auto doc = native.openFile("item.svh", baseline);
+    int version = 1;
+    for (size_t i = 0; i < sequence.size(); ++i) {
+        const auto& current = sequence[i];
+        change(native, doc.m_uri, ++version, current);
+        doc.m_text = current;
+        const auto offset = current.find("return (local_") + 10;
+        CHECK(definitions[i] ==
+              rfl::json::write(native.getDocDefinition(
+                  {.textDocument = {.uri = doc.m_uri}, .position = doc.getPosition(offset)})));
+        CHECK(rfl::json::write(actual[i]) ==
+              rfl::json::write(bodyCompletions(native, doc, offset)));
+    }
+}
+
+TEST_CASE("Body queries keep declarations fixed and reject incomplete input", "[method-body]") {
+    for (const auto& replacement : {std::string("local_1 + (charl"), std::string("marker + charl"),
+                                    std::string("earlier(charl)"), std::string("`VALUE + charl")}) {
+        DYNAMIC_SECTION(replacement) {
+            Workspace workspace;
+            bodyConfig(workspace);
+            ServerHarness server(workspace.params());
+            auto doc = server.openFile("item.svh", header);
+            doc.doc->getAnalysis();
+            auto text = header;
+            text.replace(text.find("local_1 + charl"), 15, replacement);
+            change(server, doc.m_uri, 2, text);
+            CHECK_FALSE(state(server).active);
+            CHECK(doc.doc->getText() == text + '\0');
+        }
+    }
+    Workspace workspace;
+    bodyConfig(workspace);
+    ServerHarness server(workspace.params());
+    auto doc = server.openFile("item.svh", header);
+    doc.doc->getAnalysis();
+    auto text = header;
+    for (size_t at = 0; (at = text.find("local_0", at)) != std::string::npos; at += 7)
+        text.replace(at, 7, "value_0");
+    change(server, doc.m_uri, 2, text);
+    CHECK_FALSE(state(server).active);
+    CHECK(state(server).decline == "local declaration changed");
+}
+
+TEST_CASE("Body queries accept a closed helper inside an inherited UVM class", "[method-body]") {
+    Workspace workspace;
+    bodyConfig(workspace, true, true);
+    workspace.write("owner.sv", "package owner; import uvm_pkg::*;\n"
+                                "`include \"uvm_macros.svh\"\n"
+                                "`include \"item.svh\"\nendpackage\n");
+    auto text = header;
+    text.replace(text.find("class Accumulator;"), 18,
+                 "class Accumulator extends uvm_object;\n  `uvm_object_utils(Accumulator)\n"
+                 "  function new(string name=\"Accumulator\"); super.new(name); endfunction");
+    workspace.write("item.svh", text);
+    ServerHarness server(workspace.params());
+    auto doc = server.openFile("item.svh", text);
+    doc.doc->getAnalysis();
+    text.replace(text.find("local_1 + charl"), 15, "local_0 +\n      (charl * 123)");
+    change(server, doc.m_uri, 2, text);
+    doc.m_text = text;
+    REQUIRE(state(server).active);
+    auto actual = bodyCompletions(server, doc, text.find("return (local_") + 10);
+    REQUIRE(actual.size() > 10);
+    REQUIRE(state(server).active);
+    bodyConfig(workspace, false, true);
+    ServerHarness native(workspace.params());
+    auto current = native.openFile("item.svh", text);
+    auto expected = bodyCompletions(native, current, text.find("return (local_") + 10);
+    CHECK(rfl::json::write(actual) == rfl::json::write(expected));
+}
+
+TEST_CASE("Body queries invalidate on dependencies and method boundary changes", "[method-body]") {
+    for (const auto* mode : {"dependency", "signature", "local", "directive"}) {
+        DYNAMIC_SECTION(mode) {
+            Workspace workspace;
+            bodyConfig(workspace);
+            auto original = header;
+            if (std::string_view(mode) == "directive") {
+                workspace.write("owner.sv", "`define VALUE alpha\npackage owner;\n"
+                                            "`include \"item.svh\"\nendpackage\n");
+                original.replace(original.find("alpha + bravo"), 13, "`VALUE + bravo");
+                workspace.write("item.svh", original);
+            }
+            ServerHarness server(workspace.params());
+            auto doc = server.openFile("item.svh", original);
+            doc.doc->getAnalysis();
+            auto text = original;
+            text.replace(text.find("local_1 + charl"), 15, "local_0 + (charl * 123)");
+            if (std::string_view(mode) == "dependency")
+                workspace.write("prelude.sv", "package prelude; int changed; endpackage\n");
+            else if (std::string_view(mode) == "signature")
+                text.replace(text.find("input int alpha"), 15, "input int changed");
+            else if (std::string_view(mode) == "local")
+                text.insert(text.find("    return"), "    int added = 0;\n");
+            change(server, doc.m_uri, 2, text);
+            CHECK_FALSE(state(server).active);
+            CHECK(doc.doc->getText() == text + '\0');
+        }
+    }
+}
+
+TEST_CASE("Body queries discard candidates on cancellation without replaying text",
+          "[method-body]") {
+    for (const auto* boundary : {"before method mini parse", "before method publication",
+                                 "after method text synchronization"}) {
+        DYNAMIC_SECTION(boundary) {
+            Workspace workspace;
+            bodyConfig(workspace);
+            ServerHarness server(workspace.params());
+            auto doc = server.openFile("item.svh", header);
+            doc.doc->getAnalysis();
+            auto text = header;
+            text.replace(text.find("local_1 + charl"), 15, "local_0 +\n      (charl * 123)");
+            lsp::RequestContext ctx("textDocument/didChange", 123);
+            bool reached = false;
+            ctx.setCheckpointObserverForTesting([&](std::string_view phase) {
+                if (phase == boundary) {
+                    reached = true;
+                    ctx.cancel();
+                }
+            });
+            REQUIRE_THROWS_AS(change(server, doc.m_uri, 2, text, ctx), lsp::RequestCancelled);
+            REQUIRE(reached);
+            CHECK_FALSE(state(server).active);
+            CHECK(doc.doc->getText() == text + '\0');
+            CHECK(doc.doc->getVersion() == 2);
+        }
+    }
+}
+
+TEST_CASE("Body queries parse only the mini source after a warm native query", "[method-body]") {
+    Workspace workspace;
+    bodyConfig(workspace);
+    ServerHarness server(workspace.params());
+    auto doc = server.openFile("item.svh", header);
+    doc.doc->getAnalysis();
+    auto text = header;
+    text.replace(text.find("local_1 + charl"), 15, "local_0 +\n      (charl * 123)");
+    size_t miniParses = 0, fullParses = 0;
+    lsp::RequestContext ctx("textDocument/didChange", 124);
+    ctx.setCheckpointObserverForTesting([&](std::string_view phase) {
+        miniParses += phase == "before method mini parse";
+        fullParses += phase == "before syntax parsing";
+    });
+    change(server, doc.m_uri, 2, text, ctx);
+    doc.m_text = text;
+    REQUIRE(state(server).active);
+    CHECK(miniParses == 1);
+    CHECK(fullParses == 0);
+    const auto offset = text.find("return (local_") + 10;
+    server.getDocCompletion(
+        {.textDocument = {.uri = doc.m_uri}, .position = doc.getPosition(offset)}, ctx);
+    server.getDocDefinition(
+        {.textDocument = {.uri = doc.m_uri}, .position = doc.getPosition(offset)}, ctx);
+    CHECK(fullParses == 0);
+    CHECK(state(server).active);
+}
+
+TEST_CASE("Body query handles expire across edits and certificate replacement", "[method-body]") {
+    Workspace workspace;
+    bodyConfig(workspace);
+    ServerHarness server(workspace.params());
+    auto doc = server.openFile("item.svh", header);
+    doc.doc->getAnalysis();
+    auto text = header;
+    text.replace(text.find("local_1 + charl"), 15, "local_0 + (charl * 123)");
+    change(server, doc.m_uri, 2, text);
+    doc.m_text = text;
+    REQUIRE(state(server).active);
+    auto response = server.getDocCompletion(
+        {.textDocument = {.uri = doc.m_uri},
+         .position = doc.getPosition(text.find("return (local_") + 10)});
+    const auto& items = rfl::get<std::vector<lsp::CompletionItem>>(response);
+    auto found = std::find_if(items.begin(), items.end(),
+                              [](const auto& item) { return item.label == "local_0"; });
+    REQUIRE(found != items.end());
+    auto old = *found;
+    REQUIRE(old.data);
+    REQUIRE_FALSE(old.documentation);
+    change(server, doc.m_uri, 3, header);
+    REQUIRE(state(server).active);
+    auto expired = server.getCompletionItemResolve(old);
+    CHECK_FALSE(expired.data);
+    CHECK_FALSE(expired.documentation);
+    // Configuration reload replaces the driver and can reuse numeric buffer IDs.
+    auto rebuilt = server.executeCommand(
+        {.command = "slang.rebuildScopeLibrary", .arguments = std::vector<lsp::LSPAny>{}});
+    REQUIRE(rebuilt);
+    auto reopened = server.openFile("item.svh", header);
+    reopened.doc->getAnalysis();
+    change(server, reopened.m_uri, 2, text);
+    REQUIRE(state(server).active);
+    expired = server.getCompletionItemResolve(old);
+    CHECK_FALSE(expired.data);
+    CHECK_FALSE(expired.documentation);
+}
+
+TEST_CASE("Body query certificates have bounded edit lifetime and can prepare again",
+          "[method-body]") {
+    Workspace workspace;
+    bodyConfig(workspace);
+    ServerHarness server(workspace.params());
+    auto doc = server.openFile("item.svh", header);
+    doc.doc->getAnalysis();
+    auto edited = header;
+    edited.replace(edited.find("local_1 + charl"), 15, "local_0 + (charl * 123)");
+    for (int version = 2; version <= 65; ++version) {
+        change(server, doc.m_uri, version, version % 2 ? header : edited);
+        REQUIRE(state(server).active);
+        CHECK(state(server).accepted == uint64_t(version - 1));
+    }
+    change(server, doc.m_uri, 66, edited);
+    CHECK_FALSE(state(server).active);
+    doc.doc->getAnalysis();
+    change(server, doc.m_uri, 67, header);
+    CHECK(state(server).active);
+    CHECK(state(server).accepted == 1);
+}

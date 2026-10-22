@@ -147,3 +147,64 @@ It measures a modest further first-certificate reduction and tests the sparse
 replacement implementation against the same large synthetic fixture. The actual
 SPI UVM laboratory still takes full native fallback; it establishes no UVM
 local-edit speedup. Both experiments remain default off.
+
+## Body-only queries with semantic libraries
+
+`experimentalMethodBodyQueries` is a separate, default-off first step toward
+local semantic updates. Do not enable the legacy `experimentalMethodScopeOverlay`
+flag with UVM semantic caching. The new flag can accompany
+`experimentalUvmSemanticCache`, `experimentalScopeSemanticCache` and diagnostic
+delta publishing; it does not change their defaults.
+
+This slice supports a uniquely occurring, inline, ordinary instance function in
+a non-parameterized package class. The containing class may inherit from a UVM
+class and use imports and registration macros outside the selected function.
+The function itself must be macro-free, return plain scalar `int`, and have
+explicit `input int` arguments, flat initialized `int` locals and a final return.
+Expressions use arguments, locals, integer literals, parentheses and unary
+`+`/`-` or binary `+`/`-`/`*`. Method signatures and all local declaration tokens
+remain unchanged; initializer expressions may change. The current slice requires
+ASCII source. Calls, member-dependent expressions, control flow, out-of-block
+methods, parameterized classes and declaration edits use native analysis.
+
+Unlike the legacy experiment, body edits may grow, shrink and insert or remove
+lines. Each accepted edit builds an independent method-sized compilation.
+Completion values for the enclosing environment remain immutable, while local
+bindings and source positions are regenerated. Unchanged declarations after the
+method receive projected current offsets. Old local completion handles cannot
+resolve to a later generation. No base semantic graph or symbol pointer is kept.
+The source snapshot used for certification is released after creating witnesses
+and query values, leaving no additional retained copy of the complete project.
+
+Preparation requires an existing current query analysis; an edit never forces
+analysis of the previous generation solely to prepare this optimization. A
+certificate accepts at most 64 edits, after which the next edit takes the native
+path. Context retirement, configuration changes, library generation replacement,
+other document edits, dependency changes and unsupported queries also cause
+native fallback. The implementation validates mutable source bytes, successful
+and failed lookups, and watched directory membership. Explicit immutable library
+files keep their existing fixed-dependency / manual-rebuild contract; they are
+not read again for every local query.
+
+Only lexical completion at verified local/argument reference sites, definition
+at those sites and matching deferred completion resolution use this path. Hover
+and other queries retain their native implementation. Diagnostics always use the
+complete current source and the current semantic library owners; the new mode
+never replays an old diagnostic result or substitutes local diagnostics for a
+full pass. A hit therefore does not imply a local-only diagnostic update.
+
+Run `tests/method_scope/body_queries.py --binary <server> --output <report.json>`
+for a paired oracle and timing check with large synthetic packages, both with and
+without the bundled UVM semantic library. It covers variable lengths, line
+changes, twelve edits, completion ordering, selected resolves, definition ranges
+and diagnostic values. These are closed-helper fixtures, not proof of coverage or
+performance on arbitrary UVM project methods. C++ `[method-body]` tests additionally
+cover rejected declaration / dependency / macro edits and cancellation.
+
+For actual parser scope, run `body_counts.py` with the separate
+`slang_server_counted` executable. It observes counters in the same queued
+foreground batch and records later diagnostic parsing separately. Never use the
+counted binary for latency measurements. See the
+[Mac evaluation](../development/method-body-query-evaluation.md) for measured
+first-edit cost, continuous-query gains, diagnostic and memory tradeoffs, and
+real CVA6 fallback coverage.
