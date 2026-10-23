@@ -987,7 +987,8 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
         ctx.checkpoint("method source witness read");
         auto bytes = read(path, optimizedCertification(config));
         auto [it, inserted] = disk.try_emplace(path, bytes);
-        need(inserted || it->second == bytes, "input changed during certification");
+        if (!inserted && it->second != bytes)
+            throw InputsChanged("input changed during certification");
         return it->second;
     };
     for (auto& file : frozen.input->sources.files) {
@@ -998,11 +999,13 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
         need(!file.generated, "generated input");
         const auto& bytes = witness(file.fullPath);
         if (URI::fromFile(file.fullPath) != uri) {
-            need(bool(bytes), "missing source witness");
+            if (!bytes)
+                throw InputsChanged("missing source witness");
             auto source = *bytes;
             if (source.empty() || source.back() != '\0')
                 source.push_back('\0');
-            need(source == file.bytes, "source changed before certification");
+            if (source != file.bytes)
+                throw InputsChanged("source changed before certification");
         }
     }
     ctx.checkpoint("method certificate sources ready");
@@ -1011,10 +1014,28 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
             continue;
         need(lookup.fileId || lookup.errorValue == int(std::errc::no_such_file_or_directory),
              "unsupported lookup failure");
-        need(bool(witness(lookup.path)) == bool(lookup.fileId), "lookup changed");
+        if (bool(witness(lookup.path)) != bool(lookup.fileId))
+            throw InputsChanged("lookup changed");
     }
-    for (auto& [path, _] : d.driver.getCommandFileMetadata())
-        witness(path.string());
+    for (auto& [path, _] : d.driver.getCommandFileMetadata()) {
+        const auto& bytes = witness(path.string());
+        // Real -f/-F files were read through the same SourceManager. Compare
+        // its retained input to disk before admitting the first certificate.
+        // Config flag attribution can name a file that was never a source.
+        if (d.sm.isCached(path)) {
+            auto loaded = d.sm.readSource(path);
+            if (!loaded || !bytes)
+                throw InputsChanged("command file changed before certification");
+            auto parsed = loaded->data;
+            if (!parsed.empty() && parsed.back() == '\0')
+                parsed.remove_suffix(1);
+            if (parsed != *bytes)
+                throw InputsChanged("command file changed before certification");
+        }
+    }
+    for (const auto& input : d.m_config.inputSources.value())
+        if (witness(input.path) != input.bytes)
+            throw InputsChanged("configuration changed before certification");
     for (auto& path : d.getContextWatchPaths()) {
         if (immutableFiles.contains(path.string()))
             continue;
@@ -1119,14 +1140,18 @@ bool MethodScopeOverlay::valid(const Config& config, const lsp::RequestContext& 
     UvmPhaseTrace phases;
     for (const auto& [path, entries] : directories) {
         ctx.checkpoint("method directory validation");
-        if (directoryEntries(path) != entries)
+        if (directoryEntries(path) != entries) {
+            inputChanged = true;
             return false;
+        }
     }
     phases.mark("body-validate-directories");
     for (auto& [path, bytes] : disk) {
         ctx.checkpoint("method input validation");
-        if (read(path, optimizedCertification(config)) != bytes)
+        if (read(path, optimizedCertification(config)) != bytes) {
+            inputChanged = true;
             return false;
+        }
     }
     phases.mark("body-validate-files");
     ctx.checkpoint("method inputs certified");
@@ -1136,6 +1161,7 @@ catch (const lsp::RequestCancelled&) {
     throw;
 }
 catch (const std::exception&) {
+    inputChanged = true;
     return false;
 }
 

@@ -120,7 +120,7 @@ TEST_CASE("Method overlay cancellation preserves text before and after publicati
                               lsp::RequestCancelled);
             REQUIRE(reached);
             CHECK(document.doc->getVersion() == 2);
-            CHECK(document.doc->getText() == edited() + '\0');
+            CHECK(server.m_driver->getDocument(document.m_uri)->getText() == edited() + '\0');
             CHECK_FALSE(state(server).active);
             // Fresh native analysis must remain usable after the rejected overlay.
             CHECK(document.doc->getAnalysis()->getCompilation()->getAllDiagnostics().empty());
@@ -153,7 +153,7 @@ TEST_CASE("Method overlay never replays an incremental edit after sync throws",
     REQUIRE(reached);
     auto expected = header;
     expected[offset] = '-';
-    CHECK(document.doc->getText() == expected + '\0');
+    CHECK(server.m_driver->getDocument(document.m_uri)->getText() == expected + '\0');
     CHECK(document.doc->getVersion() == 2);
     CHECK_FALSE(state(server).active);
 }
@@ -170,7 +170,7 @@ TEST_CASE("Method overlay declines unsupported body and interface changes", "[me
             text.replace(text.find("local_1 +"), 7, replacement);
             change(server, document.m_uri, 2, text);
             CHECK_FALSE(state(server).active);
-            CHECK(document.doc->getText() == text + '\0');
+            CHECK(server.m_driver->getDocument(document.m_uri)->getText() == text + '\0');
             CHECK(document.doc->getVersion() == 2);
         }
     }
@@ -241,7 +241,7 @@ TEST_CASE("Method overlay rejects changed lengths line layout and signatures", "
                              "                            ;");
             change(server, document.m_uri, 2, text);
             CHECK_FALSE(state(server).active);
-            CHECK(document.doc->getText() == text + '\0');
+            CHECK(server.m_driver->getDocument(document.m_uri)->getText() == text + '\0');
             CHECK(document.doc->getVersion() == 2);
         }
     }
@@ -279,7 +279,7 @@ TEST_CASE("Method overlay refuses shadowing macro and repeated include environme
             text.replace(text.find("local_1 +"), 7, "local_0");
             change(server, document.m_uri, 2, text);
             CHECK_FALSE(state(server).active);
-            CHECK(document.doc->getText() == text + '\0');
+            CHECK(server.m_driver->getDocument(document.m_uri)->getText() == text + '\0');
         }
     }
 }
@@ -302,7 +302,7 @@ TEST_CASE("Method overlay certifies sibling nested and repeated unrelated includ
     change(server, document.m_uri, 3, header);
     CHECK_FALSE(state(server).active);
     CHECK(document.doc->getVersion() == 3);
-    CHECK(document.doc->getText() == header + '\0');
+    CHECK(server.m_driver->getDocument(document.m_uri)->getText() == header + '\0');
 }
 
 TEST_CASE("Method overlay certifies same length local declaration renames", "[method-overlay]") {
@@ -316,7 +316,7 @@ TEST_CASE("Method overlay certifies same length local declaration renames", "[me
     change(server, document.m_uri, 2, text);
     REQUIRE(state(server).active);
     CHECK(state(server).accepted == 1);
-    CHECK(document.doc->getText() == text + '\0');
+    CHECK(server.m_driver->getDocument(document.m_uri)->getText() == text + '\0');
 }
 
 TEST_CASE("Method overlay refuses dependency changes before certification", "[method-overlay]") {
@@ -332,7 +332,7 @@ TEST_CASE("Method overlay refuses dependency changes before certification", "[me
     auto status = state(server);
     CHECK_FALSE(status.active);
     CHECK(status.decline == "source changed before certification");
-    CHECK(document.doc->getText() == edited() + '\0');
+    CHECK(server.m_driver->getDocument(document.m_uri)->getText() == edited() + '\0');
 }
 
 TEST_CASE("Method certificate refuses a dependency change between source and lookup witnesses",
@@ -358,7 +358,7 @@ TEST_CASE("Method certificate refuses a dependency change between source and loo
     CHECK_FALSE(state(server).active);
     CHECK(state(server).decline == "input changed during certification");
     CHECK(document.doc->getVersion() == 2);
-    CHECK(document.doc->getText() == edited() + '\0');
+    CHECK(server.m_driver->getDocument(document.m_uri)->getText() == edited() + '\0');
 }
 
 // Mechanism attribution only. Run explicitly and retain stdout; use the ordinary
@@ -529,7 +529,7 @@ TEST_CASE("Body queries support calls declaration edits and incomplete expressio
             change(server, doc.m_uri, 2, text);
             doc.m_text = text;
             CHECK(state(server).active);
-            CHECK(doc.doc->getText() == text + '\0');
+            CHECK(server.m_driver->getDocument(doc.m_uri)->getText() == text + '\0');
             const auto at = text.rfind("charl") + 2;
             auto actual = bodyCompletions(server, doc, at);
             server.runBackgroundWork({});
@@ -552,7 +552,7 @@ TEST_CASE("Body queries support calls declaration edits and incomplete expressio
         text.replace(at, 7, "value_0");
     change(server, doc.m_uri, 2, text);
     CHECK(state(server).active);
-    CHECK(doc.doc->getText() == text + '\0');
+    CHECK(server.m_driver->getDocument(doc.m_uri)->getText() == text + '\0');
 }
 
 TEST_CASE("Body queries accept a closed helper inside an inherited UVM class", "[method-body]") {
@@ -609,7 +609,7 @@ TEST_CASE("Body queries invalidate on dependencies and method boundary changes",
             change(server, doc.m_uri, 2, text);
             CHECK(state(server).active ==
                   (std::string_view(mode) == "local" || std::string_view(mode) == "directive"));
-            CHECK(doc.doc->getText() == text + '\0');
+            CHECK(server.m_driver->getDocument(doc.m_uri)->getText() == text + '\0');
         }
     }
 }
@@ -638,7 +638,7 @@ TEST_CASE("Body queries retain text certificates on cancellation without replayi
             REQUIRE(reached);
             CHECK(state(server).active ==
                   (std::string_view(boundary) != "after method text synchronization"));
-            CHECK(doc.doc->getText() == text + '\0');
+            CHECK(server.m_driver->getDocument(doc.m_uri)->getText() == text + '\0');
             CHECK(doc.doc->getVersion() == 2);
             doc.m_text = text;
             const auto at = text.rfind("charl") + 2;
@@ -890,7 +890,7 @@ TEST_CASE("General body queries invalidate constant-function dependencies",
             doc.m_text = text;
             CHECK_FALSE(state(server).active);
             CHECK(state(server).decline == "method has external constant dependencies");
-            CHECK(doc.doc->getText() == text + '\0');
+            CHECK(server.m_driver->getDocument(doc.m_uri)->getText() == text + '\0');
             auto actual = server.getDocHover({.textDocument = {.uri = doc.m_uri},
                                               .position = doc.getPosition(text.find("data;") + 2)});
             bodyConfig(workspace, false);
@@ -931,7 +931,7 @@ TEST_CASE("General body queries accept batched edits and inherited macro state",
     const auto expected = std::string(
         "class C;\ntask run();\n  // 中文\n  int value = `ENTRY_VALUE;\n  if (value > 0) value += "
         "123;\nendtask\nendclass\n");
-    REQUIRE(doc.doc->getText() == expected + '\0');
+    REQUIRE(server.m_driver->getDocument(doc.m_uri)->getText() == expected + '\0');
     doc.m_text = expected;
     REQUIRE(state(server).active);
     auto at = expected.find("value +=") + 3;
@@ -1043,7 +1043,7 @@ TEST_CASE("Body line changes invalidate macro-dependent declarations and lazy si
             change(server, doc.m_uri, 2, text);
             doc.m_text = text;
             CHECK_FALSE(state(server).active);
-            CHECK(doc.doc->getText() == text + '\0');
+            CHECK(server.m_driver->getDocument(doc.m_uri)->getText() == text + '\0');
             if (!sibling)
                 CHECK(state(server).decline == "body shifts line-dependent enclosing declarations");
             auto at = text.find("return value") + 10;
@@ -1176,7 +1176,7 @@ TEST_CASE("Superseded body edits keep one lexical owner and bind only the latest
                                 lsp::RequestCancelled);
             }
             doc.m_text = latest;
-            CHECK(doc.doc->getText() == latest + '\0');
+            CHECK(server.m_driver->getDocument(doc.m_uri)->getText() == latest + '\0');
             CHECK(doc.doc->getVersion() == version);
             REQUIRE(state(server).active);
         }
@@ -1280,9 +1280,10 @@ auto diagnosticMap(ServerHarness& server) {
 }
 void checkNativeDiagnostics(Workspace& workspace, ServerHarness& server, const std::string& text) {
     auto actual = diagnosticMap(server);
+    std::ifstream input(workspace.root / ".slang/server.json");
+    const std::string saved{std::istreambuf_iterator<char>(input), {}};
     bodyConfig(workspace, false);
-    auto restore = slang::ScopeGuard(
-        [&] { workspace.write(".slang/server.json", localDiagnosticConfig); });
+    auto restore = slang::ScopeGuard([&] { workspace.write(".slang/server.json", saved); });
     BodyTestServer native(workspace.params());
     native.setBuildFile((workspace.root / "design.f").string());
     auto oracle = native.openFile("item.svh", text);
@@ -1936,7 +1937,7 @@ TEST_CASE("Superseded first inputs retain one original native diagnostic baselin
         REQUIRE(state(server).active);
         CHECK(state(server).accepted == uint64_t(version - 1));
         CHECK(doc.doc->getVersion() == version);
-        CHECK(doc.doc->getText() == text + '\0');
+        CHECK(server.m_driver->getDocument(doc.m_uri)->getText() == text + '\0');
         CHECK(diagnosticMap(server) == initial);
     }
     doc.m_text = text;
@@ -2224,7 +2225,7 @@ TEST_CASE("Initial source witnesses read duplicate paths once with final content
         });
         change(server, doc.m_uri, 2, edited(), ctx);
         CHECK(state(server).active == !mutate);
-        CHECK(doc.doc->getText() == edited() + '\0');
+        CHECK(server.m_driver->getDocument(doc.m_uri)->getText() == edited() + '\0');
         CHECK(doc.doc->getVersion() == 2);
         CHECK(reads[enabled] > 0);
         if (mutate)
@@ -2356,5 +2357,202 @@ TEST_CASE("Complete input proof rejects changed path identity and nonregular sou
     REQUIRE(reached);
     CHECK_FALSE(state(server).active);
     CHECK(doc.doc->getVersion() == 2);
-    CHECK(doc.doc->getText() == edited() + '\0');
+    CHECK(server.m_driver->getDocument(doc.m_uri)->getText() == edited() + '\0');
+}
+
+TEST_CASE("Observed dependency changes refresh public native fallback before watch events",
+          "[body-certification][method-dependency-reload]") {
+    Workspace workspace;
+    workspace.write(".slang/server.json", certificationConfig());
+    const std::string before = "package prelude; typedef logic [7:0] word_t; endpackage\n";
+    const std::string after = "package prelude; typedef logic [9:0] word_t; endpackage\n";
+    workspace.write("prelude.sv", before);
+    auto original = header;
+    original.insert(original.find("    int local_0"), "    prelude::word_t local_word = '0;\n");
+    workspace.write("item.svh", original);
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    auto text = original;
+    text.replace(text.find("local_1 +"), 7, "local_0");
+    change(server, doc.m_uri, 2, text);
+    REQUIRE(state(server).active);
+    doc.m_text = text;
+    const lsp::HoverParams params{.textDocument = {.uri = doc.m_uri},
+                                  .position = doc.getPosition(text.find("word_t") + 3)};
+    const auto previous = server.getDocHover(params);
+    REQUIRE(previous);
+    auto stamp = std::filesystem::last_write_time(workspace.root / "prelude.sv");
+    workspace.write("prelude.sv", after);
+    std::filesystem::last_write_time(workspace.root / "prelude.sv", stamp);
+    const auto actual = server.getDocHover(params);
+    bodyConfig(workspace, false);
+    BodyTestServer native(workspace.params());
+    native.setBuildFile((workspace.root / "design.f").string());
+    native.openFile("item.svh", text);
+    const auto expected = native.getDocHover(params);
+    REQUIRE(expected);
+    REQUIRE(rfl::json::write(previous) != rfl::json::write(expected));
+    CHECK(rfl::json::write(actual) == rfl::json::write(expected));
+}
+
+TEST_CASE("Method dependency recovery is transactional and keeps later incremental input",
+          "[body-certification][method-dependency-reload]") {
+    const auto boundary = GENERATE("before method input reload", "before retirement inputs",
+                                   "after retirement inputs", "before retirement commit");
+    Workspace workspace;
+    workspace.write(".slang/server.json", certificationConfig());
+    workspace.write("prelude.sv", "package prelude; typedef logic [7:0] word_t; endpackage\n");
+    auto original = header;
+    original.insert(original.find("    int local_0"), "    prelude::word_t local_word = '0;\n");
+    workspace.write("item.svh", original);
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    auto text = original;
+    text.replace(text.find("local_1 +"), 7, "local_0");
+    change(server, doc.m_uri, 2, text);
+    REQUIRE(state(server).active);
+    doc.m_text = text;
+    const lsp::HoverParams params{.textDocument = {.uri = doc.m_uri},
+                                  .position = doc.getPosition(text.find("word_t") + 3)};
+    const auto oldMap = diagnosticMap(server);
+    auto* oldDriver = server.m_driver.get();
+    workspace.write("prelude.sv", "package prelude; typedef logic [9:0] word_t; endpackage\n");
+    lsp::RequestContext ctx("textDocument/hover", 61);
+    bool reached = false;
+    ctx.setCheckpointObserverForTesting([&](std::string_view where) {
+        if (where == boundary) {
+            reached = true;
+            ctx.cancel();
+        }
+    });
+    CHECK_THROWS_AS(server.getDocHover(params, ctx), lsp::RequestCancelled);
+    REQUIRE(reached);
+    CHECK(server.m_driver.get() == oldDriver);
+    CHECK(diagnosticMap(server) == oldMap);
+    // A superseded notification still has to apply its range exactly once.
+    const auto at = text.find("local_0 + charl");
+    REQUIRE(at != std::string::npos);
+    lsp::DidChangeTextDocumentParams notification{
+        .textDocument = {.version = 3, .uri = doc.m_uri},
+        .contentChanges = {lsp::TextDocumentContentChangePartial{
+            .range = {.start = doc.getPosition(at), .end = doc.getPosition(at + 7)},
+            .text = "local_1"}}};
+    lsp::RequestContext superseded("textDocument/didChange", 62);
+    superseded.cancel();
+    CHECK_THROWS_AS(server.SlangServer::onDocDidChange(notification, superseded),
+                    lsp::RequestCancelled);
+    text.replace(at, 7, "local_1");
+    CHECK(server.m_driver->getDocument(doc.m_uri)->getText() == text + '\0');
+    CHECK(server.m_driver->getDocument(doc.m_uri)->getVersion() == 3);
+    CHECK(diagnosticMap(server) == oldMap);
+    const auto actual = server.getDocHover(params);
+    server.runBackgroundWork({});
+    const auto actualMap = diagnosticMap(server);
+    CHECK(server.m_driver.get() != oldDriver);
+    CHECK(server.m_driver->getDocument(doc.m_uri)->getText() == text + '\0');
+    bodyConfig(workspace, false);
+    BodyTestServer native(workspace.params());
+    native.setBuildFile((workspace.root / "design.f").string());
+    native.openFile("item.svh", text);
+    CHECK(rfl::json::write(actual) == rfl::json::write(native.getDocHover(params)));
+    CHECK(actualMap == diagnosticMap(native));
+}
+
+TEST_CASE("Invalid config after dependency rejection cannot return the old native result",
+          "[body-certification][method-dependency-reload]") {
+    Workspace workspace;
+    const auto config = certificationConfig();
+    workspace.write(".slang/server.json", config);
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", header);
+    doc.doc->getAnalysis();
+    change(server, doc.m_uri, 2, edited());
+    REQUIRE(state(server).active);
+    const auto before = diagnosticMap(server);
+    auto* driver = server.m_driver.get();
+    workspace.write(".slang/server.json", "{invalid");
+    doc.m_text = edited();
+    lsp::HoverParams params{.textDocument = {.uri = doc.m_uri},
+                            .position = doc.getPosition(edited().find("local_0 +") + 3)};
+    CHECK_THROWS_AS(server.getDocHover(params), lsp::RequestFailed);
+    CHECK_THROWS_AS(server.getDocHover(params), lsp::RequestFailed);
+    CHECK_THROWS_AS(server.runBackgroundWork({}), lsp::RequestFailed);
+    CHECK_THROWS_AS(server.executeCommand({.command = "slang.getScope",
+                                           .arguments = std::vector<lsp::LSPAny>{rfl::to_generic(
+                                               std::string("tail"))}}),
+                    lsp::RequestFailed);
+    REQUIRE(server.executeCommand(
+        {.command = "slang.methodScopeStatus",
+         .arguments = std::vector<lsp::LSPAny>{rfl::to_generic(std::string("state"))}}));
+    CHECK(server.m_driver.get() == driver);
+    CHECK(diagnosticMap(server) == before);
+    workspace.write(".slang/server.json", config);
+    REQUIRE(server.getDocHover(params));
+    server.runBackgroundWork({});
+    checkNativeDiagnostics(workspace, server, edited());
+}
+
+TEST_CASE("First method certificate compares options with the bytes originally loaded",
+          "[body-certification][method-dependency-reload]") {
+    const auto kind = GENERATE("source", "filelist", "config", "new-local-config");
+    INFO(kind);
+    Workspace workspace;
+    auto config = certificationConfig();
+    if (std::string_view(kind) != "filelist")
+        config.replace(config.find("--threads 1"), 11, "--threads 1 -D WIDTH=8");
+    workspace.write(".slang/server.json", config);
+    if (std::string_view(kind) == "filelist")
+        workspace.write("design.f", "+incdir+.\n+define+WIDTH=8\nprelude.sv\nowner.sv\ntail.sv\n");
+    workspace.write("prelude.sv", "package prelude;\n`ifdef ALT_WIDTH\n"
+                                  "typedef logic [`ALT_WIDTH-1:0] word_t;\n`else\n"
+                                  "typedef logic [`WIDTH-1:0] word_t;\n`endif\nendpackage\n");
+    auto original = header;
+    original.insert(original.find("    int local_0"), "    prelude::word_t local_word = '0;\n");
+    workspace.write("item.svh", original);
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    doc.m_text = original;
+    const lsp::HoverParams params{.textDocument = {.uri = doc.m_uri},
+                                  .position = doc.getPosition(original.find("word_t") + 3)};
+    const auto old = server.getDocHover(params);
+    if (std::string_view(kind) == "source")
+        workspace.write("prelude.sv", "package prelude; typedef logic [9:0] word_t; endpackage\n");
+    else if (std::string_view(kind) == "filelist")
+        workspace.write("design.f", "+incdir+.\n+define+WIDTH=6\nprelude.sv\nowner.sv\ntail.sv\n");
+    else if (std::string_view(kind) == "config") {
+        config.replace(config.find("WIDTH=8"), 7, "WIDTH=6");
+        workspace.write(".slang/server.json", config);
+    }
+    else {
+        std::filesystem::create_directories(workspace.root / ".slang/local");
+        workspace.write(".slang/local/server.json", "{\"flags\":\"-D ALT_WIDTH=6\"}");
+    }
+    auto text = original;
+    text.replace(text.find("local_1 +"), 7, "local_0");
+    change(server, doc.m_uri, 2, text);
+    CHECK_FALSE(state(server).active);
+    const auto actual = server.getDocHover(params);
+    server.runBackgroundWork({});
+    const auto actualMap = diagnosticMap(server);
+    // Keep all newly loaded options in the oracle; only disable local experiments.
+    auto nativeConfig = server.m_config;
+    nativeConfig.experimentalMethodBodyQueries = false;
+    nativeConfig.experimentalMethodBodyDiagnostics = false;
+    nativeConfig.experimentalMethodBodyCertification = false;
+    BodyTestServer native(workspace.params());
+    REQUIRE(native.loadConfig(nativeConfig, true));
+    native.setBuildFile((workspace.root / "design.f").string());
+    native.openFile("item.svh", text);
+    const auto expected = native.getDocHover(params);
+    REQUIRE(expected);
+    REQUIRE(rfl::json::write(old) != rfl::json::write(expected));
+    CHECK(rfl::json::write(actual) == rfl::json::write(expected));
+    CHECK(actualMap == diagnosticMap(native));
 }

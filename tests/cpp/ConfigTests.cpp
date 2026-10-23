@@ -89,6 +89,34 @@ TEST_CASE("Config incdirs append across workspace user and local files") {
     CHECK(config.flags.value() == "-DSHARED -DLOCAL");
 }
 
+TEST_CASE("Loaded config input witnesses retain absent layers without publication") {
+    ConfigWorkspace workspace;
+    const std::string bytes = "// runtime_witness_canary\n{\"flags\":\"-D WORKSPACE\"}\n";
+    workspace.write("workspace.json", bytes);
+    workspace.write("user.json", "{\"flags\":\"-D USER\"}");
+    auto loaded = Config::fromFiles((workspace.root / "workspace.json").string(),
+                                    (workspace.root / "user.json").string(),
+                                    (workspace.root / "local.json").string());
+    REQUIRE(loaded);
+    const auto& inputs = loaded->inputSources.value();
+    REQUIRE(inputs.size() == 3);
+    CHECK(inputs[0].path == (workspace.root / "workspace.json").string());
+    CHECK(inputs[0].bytes == bytes);
+    CHECK(inputs[1].bytes == workspace.read("user.json"));
+    CHECK_FALSE(inputs[2].bytes);
+    CHECK(loaded->flags.value() == "-D WORKSPACE");
+    workspace.write("workspace.json", "{}");
+    workspace.write("local.json", "{}");
+    CHECK(inputs[0].bytes == bytes);
+    CHECK_FALSE(inputs[2].bytes);
+    auto json = rfl::json::write(*loaded);
+    CHECK(json.find("runtime_witness_canary") == std::string::npos);
+    CHECK(json.find("inputSources") == std::string::npos);
+    auto restored = rfl::json::read<Config>(json);
+    REQUIRE(restored);
+    CHECK(restored->inputSources.value().empty());
+}
+
 TEST_CASE("Config incdirs resolve against the workspace and follow flag directories") {
     ConfigWorkspace workspace;
     workspace.write("headers with spaces/nested.svh", "typedef int value_t;\n");

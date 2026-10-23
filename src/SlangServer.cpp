@@ -197,7 +197,7 @@ lsp::InitializeResult SlangServer::getInitialize(const lsp::InitializeParams& pa
         if (m_diagnosticProcess)
             m_diagnosticProcess->cancel();
         m_activeDiagnosticSnapshot.reset();
-        m_methodScope.reset();
+        discardMethodScope();
         return true;
     });
     registerCommand<std::monostate, rfl::Generic>("slang.scopeLibraryStatus",
@@ -286,6 +286,24 @@ lsp::InitializeResult SlangServer::getInitialize(const lsp::InitializeParams& pa
     registerCommand<std::string, std::monostate, &SlangServer::addDefine>("slang.addDefine");
     registerCommand<std::nullopt_t, bool>("slang.autoConfigure",
                                           [this](std::monostate) { return autoConfigure({}); });
+
+    // Maintenance commands must remain usable while a changed configuration is
+    // invalid. Semantic commands, including hierarchy queries, must not bypass a
+    // dependency reload merely because they use workspace/executeCommand.
+    for (auto& [name, command] : m_commands) {
+        if (name == "slang.methodScopeStatus" || name == "slang.frozenSourcesStatus" ||
+            name == "slang.scopeLibraryStatus" || name == "slang.uvmLibraryStatus" ||
+            name == "slang.refreshFrozenSources" || name == "slang.rebuildScopeLibrary" ||
+            name == "slang.rebuildUvmLibrary" || name == "slang.setTopLevel" ||
+            name == "slang.setBuildFile" || name == "slang.addDefine" ||
+            name == "slang.autoConfigure")
+            continue;
+        command = [this, original = std::move(command)](rfl::Generic args,
+                                                        const lsp::RequestContext& ctx) {
+            recoverMethodInputs(ctx);
+            return original(std::move(args), ctx);
+        };
+    }
 
     if (params.workspaceFolders.has_value() && !params.workspaceFolders->empty()) {
         auto folders = params.workspaceFolders.value();
@@ -1023,7 +1041,7 @@ bool SlangServer::loadConfig(const Config& config, bool forceIndexing, bool requ
         // released query caches. Cancellation before this boundary is transactional.
         retirementContext->checkpoint("before retirement commit");
         newDriver->diagClient->completePublicationHandoff(*m_driver->diagClient);
-        m_methodScope.reset();
+        discardMethodScope();
         if (m_diagnosticProcess)
             m_diagnosticProcess->cancel();
         m_activeDiagnosticSnapshot.reset();
@@ -1098,7 +1116,8 @@ bool SlangServer::loadConfig(const Config& config, bool forceIndexing, bool requ
     return true;
 }
 
-bool SlangServer::loadConfig(bool requireValidConfig, bool preserveDesign) {
+bool SlangServer::loadConfig(bool requireValidConfig, bool preserveDesign,
+                             const lsp::RequestContext* context) {
     std::optional<std::string> workspaceConf, userConf, localConf;
 
     if (m_workspaceFolder) {
@@ -1123,7 +1142,11 @@ bool SlangServer::loadConfig(bool requireValidConfig, bool preserveDesign) {
         m_client.showError(config.error().what());
         return m_driver ? false : loadConfig(Config{}, true);
     }
-    return loadConfig(*config, true, requireValidConfig, false, preserveDesign);
+    const bool loaded = loadConfig(*config, true, requireValidConfig, context != nullptr,
+                                   preserveDesign, context);
+    if (loaded)
+        m_methodInputReloadPending = false;
+    return loaded;
 }
 
 std::monostate SlangServer::addDefine(const std::string& macroName) {
@@ -1471,6 +1494,7 @@ bool SlangServer::autoConfigure(const std::monostate&) {
 
 rfl::Variant<lsp::Definition, std::vector<lsp::DefinitionLink>, std::monostate> SlangServer::
     getDocDefinition(const lsp::DefinitionParams& params, lsp::RequestContext ctx) {
+    recoverMethodInputs(ctx);
     ensureMethodScopeDriver();
     if (m_methodScope) {
         if (auto links = m_methodScope->define(params, m_config, ctx)) {
@@ -1481,7 +1505,8 @@ rfl::Variant<lsp::Definition, std::vector<lsp::DefinitionLink>, std::monostate> 
                 out.push_back({link.targetUri, link.targetRange});
             return lsp::Definition(out);
         }
-        m_methodScope.reset();
+        recoverMethodInputs(ctx);
+        discardMethodScope();
     }
     if (auto instance = m_driver->getDesignInstancePathAt(params.textDocument.uri, params.position,
                                                           ctx)) {
@@ -1503,12 +1528,14 @@ rfl::Variant<lsp::Definition, std::vector<lsp::DefinitionLink>, std::monostate> 
 
 std::optional<lsp::Hover> SlangServer::getDocHover(const lsp::HoverParams& params,
                                                    lsp::RequestContext ctx) {
+    recoverMethodInputs(ctx);
     ensureMethodScopeDriver();
     if (m_methodScope) {
         if (auto hover = m_methodScope->hover(params.textDocument.uri, params.position, m_config,
                                               ctx))
             return std::move(*hover);
-        m_methodScope.reset();
+        recoverMethodInputs(ctx);
+        discardMethodScope();
     }
     return m_driver->getDocHover(params.textDocument.uri, params.position, ctx);
 }
@@ -1525,12 +1552,14 @@ std::optional<lsp::Hover> SlangServer::previewHover(const PreviewHoverArgs& args
         view = View::both;
     else
         throw lsp::RequestFailed("macroView must be source, expanded or both");
+    recoverMethodInputs(ctx);
     ensureMethodScopeDriver();
     if (m_methodScope) {
         if (auto hover = m_methodScope->hover(args.textDocument.uri, args.position, m_config, ctx,
                                               view))
             return std::move(*hover);
-        m_methodScope.reset();
+        recoverMethodInputs(ctx);
+        discardMethodScope();
     }
     return m_driver->getDocHover(args.textDocument.uri, args.position, ctx, view);
 }
@@ -1581,6 +1610,22 @@ void SlangServer::onProtocolStopped() {
     m_activeDiagnosticSnapshot.reset();
 }
 
+void SlangServer::recoverMethodInputs(const lsp::RequestContext& ctx) {
+    if (m_methodScope && m_driver && m_methodScope->belongsTo(*m_driver) &&
+        m_methodScope->observedInputChange())
+        m_methodInputReloadPending = true;
+    if (!m_methodInputReloadPending)
+        return;
+    ctx.checkpoint("before method input reload");
+    // Build privately, preserving the old map and every unsaved document on
+    // cancellation / invalid configuration. Pending inputs must not fall through
+    // to the old driver's filesystem-derived results.
+    if (!loadConfig(true, true, &ctx))
+        throw lsp::RequestFailed(
+            "Changed method inputs could not be reloaded; retry after fixing inputs");
+    ctx.checkpoint("after method input reload");
+}
+
 void SlangServer::onBeforeMessage(const lsp::RequestContext& ctx) {
     // Notifications must synchronize every incremental edit, including superseded
     // ones. Certification can rebuild or fail, so it belongs before requests and
@@ -1591,6 +1636,8 @@ void SlangServer::onBeforeMessage(const lsp::RequestContext& ctx) {
         ctx.method().starts_with("$/") || ctx.method() == "workspace/didChangeWatchedFiles" ||
         ctx.method() == "workspace/didChangeConfiguration")
         return;
+    if (ctx.method() != "workspace/executeCommand")
+        recoverMethodInputs(ctx);
     certifyFrozenInputs(&ctx);
 }
 
@@ -1609,7 +1656,7 @@ void SlangServer::certifyFrozenInputs(const lsp::RequestContext* ctx) {
         return; // Discard composed views too before returning to native parsing.
     }
     m_frozenContextReason = *reason;
-    m_methodScope.reset();
+    discardMethodScope();
     if (m_diagnosticProcess)
         m_diagnosticProcess->cancel();
     m_activeDiagnosticSnapshot.reset();
@@ -1687,6 +1734,7 @@ void SlangServer::onMessageException(const std::exception& error) {
 void SlangServer::runBackgroundWork(const lsp::RequestContext& ctx) {
     if (m_shutdownRequested || !m_driver)
         return;
+    recoverMethodInputs(ctx);
     ctx.throwIfCancelled("before frozen input certification");
     certifyFrozenInputs(&ctx);
     ctx.throwIfCancelled("after frozen input certification");
@@ -1763,6 +1811,7 @@ void SlangServer::runBackgroundWork(const lsp::RequestContext& ctx) {
     ensureMethodScopeDriver();
     if (m_methodScope && m_methodScope->publishLocalDiagnostics(m_config, ctx))
         return;
+    recoverMethodInputs(ctx);
     if (!m_diagnosticExecutable.empty()) {
         try {
             if (!m_diagnosticProcess) {
@@ -1779,7 +1828,7 @@ void SlangServer::runBackgroundWork(const lsp::RequestContext& ctx) {
                                           : std::optional<ServerDriver::DiagnosticSnapshot>{};
             if (!snapshot) {
                 if (m_methodScope && !m_methodScope->isBodyQuery())
-                    m_methodScope.reset();
+                    discardMethodScope();
                 snapshot = m_driver->captureDiagnosticSnapshot(ctx);
             }
             if (snapshot) {
@@ -1821,7 +1870,7 @@ void SlangServer::runBackgroundWork(const lsp::RequestContext& ctx) {
 }
 
 void SlangServer::onDocDidOpen(const lsp::DidOpenTextDocumentParams& params) {
-    m_methodScope.reset();
+    discardMethodScope();
     if (m_config.experimentalMethodBodyQueries.value())
         m_driver->completions.requireCompletionEpoch();
     m_driver->openDocument(params.textDocument.uri, params.textDocument.text,
@@ -1879,7 +1928,7 @@ void SlangServer::maybeRetireParsedContext(const lsp::RequestContext* retirement
     // Foreground and background model access is serialized by serverStateMutex.
     // Diagnostic children own copied snapshots; cancel and discard their old owner before swapping.
     if (!retirementContext) {
-        m_methodScope.reset();
+        discardMethodScope();
         if (m_diagnosticProcess)
             m_diagnosticProcess->cancel();
         m_activeDiagnosticSnapshot.reset();
@@ -1935,8 +1984,9 @@ void SlangServer::maybeRetireParsedContext(const lsp::RequestContext* retirement
 
 void SlangServer::onDocDidChange(const lsp::DidChangeTextDocumentParams& params,
                                  lsp::RequestContext ctx) {
-    if (m_config.experimentalMethodBodyQueries.value() ||
-        (m_config.experimentalMethodScopeOverlay.value() && !m_driver->comp)) {
+    if (!m_methodInputReloadPending &&
+        (m_config.experimentalMethodBodyQueries.value() ||
+         (m_config.experimentalMethodScopeOverlay.value() && !m_driver->comp))) {
         bool synced = false;
         try {
             ensureMethodScopeDriver();
@@ -1985,7 +2035,7 @@ void SlangServer::onDocDidChange(const lsp::DidChangeTextDocumentParams& params,
                 }
             }
             if (!retained)
-                m_methodScope.reset();
+                discardMethodScope();
             if (!synced)
                 m_driver->onDocDidChange(params,
                                          {}); // Cancellation never drops text synchronization.
@@ -1995,19 +2045,22 @@ void SlangServer::onDocDidChange(const lsp::DidChangeTextDocumentParams& params,
         }
         catch (const std::exception& error) {
             m_methodScopeDecline = error.what();
-            m_methodScope.reset();
+            if (dynamic_cast<const MethodScopeOverlay::InputsChanged*>(&error))
+                m_methodInputReloadPending = true;
+            discardMethodScope();
             if (synced)
                 throw; // Text may already be committed: never replay an incremental range.
         }
     }
     m_driver->onDocDidChange(params, ctx);
+    recoverMethodInputs(ctx);
     // Seed a replacement with the latest unsaved text. Rebuilding before this
     // notification would parse the previous version and immediately invalidate it.
     maybeRetireParsedContext();
 }
 
 void SlangServer::onDocDidSave(const lsp::DidSaveTextDocumentParams& params) {
-    m_methodScope.reset();
+    discardMethodScope();
     // Only process documents that have been explicitly opened by the client
     if (!m_driver->isDocumentOpen(params.textDocument.uri)) {
         return;
@@ -2035,7 +2088,7 @@ void SlangServer::onDocDidSave(const lsp::DidSaveTextDocumentParams& params) {
 }
 
 void SlangServer::onDocDidClose(const lsp::DidCloseTextDocumentParams& params) {
-    m_methodScope.reset();
+    discardMethodScope();
     // TODO: Add method in ServerDriver to check that the rc of the document is 1 before
     // removing (non-compilation mode)
     bool restorePreinclude = !m_driver->comp && !m_buildfile && !m_topFile &&
@@ -2054,7 +2107,7 @@ void SlangServer::onDocDidClose(const lsp::DidCloseTextDocumentParams& params) {
 }
 
 void SlangServer::onWorkspaceDidChangeWatchedFiles(const lsp::DidChangeWatchedFilesParams& params) {
-    m_methodScope.reset();
+    discardMethodScope();
     auto openOverlay = [&](const URI& uri, const fs::path& path) {
         if (m_driver->isDocumentOpen(uri))
             return true;
@@ -2191,11 +2244,13 @@ SlangServer::getWorkspaceSymbol(const lsp::WorkspaceSymbolParams& params) {
 
 rfl::Variant<std::vector<lsp::CompletionItem>, lsp::CompletionList, std::monostate> SlangServer::
     getDocCompletion(const lsp::CompletionParams& params, lsp::RequestContext requestCtx) {
+    recoverMethodInputs(requestCtx);
     ensureMethodScopeDriver();
     if (m_methodScope) {
         if (auto result = m_methodScope->complete(params, m_config, requestCtx))
             return *result;
-        m_methodScope.reset();
+        recoverMethodInputs(requestCtx);
+        discardMethodScope();
     }
     std::vector<lsp::CompletionItem> results;
 
@@ -2246,6 +2301,7 @@ lsp::CompletionItem SlangServer::getCompletionItemResolve(const lsp::CompletionI
         return item;
     }
 
+    recoverMethodInputs(ctx);
     ensureMethodScopeDriver();
     if (m_methodScope) {
         if (auto result = m_methodScope->resolve(item, m_config, ctx))
@@ -2253,8 +2309,10 @@ lsp::CompletionItem SlangServer::getCompletionItemResolve(const lsp::CompletionI
         // Native resolution of an enclosing declaration can need current full
         // syntax. Retain the value certificate while its inputs remain valid so
         // other items from this same completion response still resolve safely.
-        if (!m_methodScope->valid(m_config, ctx))
-            m_methodScope.reset();
+        if (!m_methodScope->valid(m_config, ctx)) {
+            recoverMethodInputs(ctx);
+            discardMethodScope();
+        }
     }
     // A method query's values belong to one certificate and document version.
     // Never reinterpret an expired handle in a replacement SourceManager, even

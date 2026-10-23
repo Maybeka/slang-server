@@ -65,3 +65,21 @@ never admits reuse. Unsupported descriptor path queries and other platforms keep
 strict path/content reader. Directory, missing-lookup, configuration and final version checks
 remain in place. These are observed checkpoints, with the same filesystem snapshot limitation
 as the original reader.
+
+
+If complete input validation observes a changed dependency, directory or configuration, the
+server records a pending reload before releasing the local certificate. Native fallback builds
+a private current driver from disk configuration and all latest unsaved editor buffers; it
+cannot reuse the previous driver's cached source just because a watcher notification has not
+arrived. Cancellation before replacement commit preserves the old published diagnostic map and
+the reload obligation. Later incremental notifications still synchronize their text once before
+retrying. Invalid configuration fails semantic requests until a valid replacement can be built;
+status and explicit maintenance commands remain available. This recovery uses full native
+analysis and can take seconds in a large design. It adds no debounce.
+
+The first certificate also compares source and command-file bytes with the inputs actually read
+by the retained native context. Configuration loading keeps the exact workspace/user/local layer
+bytes, including absent layers, in runtime-only witnesses; these are excluded from configuration
+serialization and the public schema. This closes the window where an options file changes
+before the first local certificate. Explicitly trusted frozen libraries keep their existing
+fixed-dependency / manual-rebuild contract.

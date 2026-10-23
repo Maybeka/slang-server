@@ -7,6 +7,7 @@
 #include <array>
 #include <map>
 #include <optional>
+#include <stdexcept>
 #include <unordered_map>
 
 namespace server {
@@ -18,6 +19,10 @@ struct BodyDiagnosticBaseline;
 /// The legacy closed-int overlay keeps its independent value-only implementation.
 class MethodScopeOverlay {
 public:
+    struct InputsChanged : std::runtime_error {
+        using std::runtime_error::runtime_error;
+    };
+    bool observedInputChange() const { return inputChanged; }
     struct Statistics {
         bool active = false;
         uint64_t accepted = 0;
@@ -77,6 +82,7 @@ private:
         std::string text;
     };
     ServerDriver* driver;
+    mutable bool inputChanged = false;
     std::unique_ptr<BodyDiagnosticCache> bodyDiagnostics;
     std::shared_ptr<const BodyDiagnosticBaseline> diagnosticBaseline;
     bool optimizedCertification(const Config&) const;

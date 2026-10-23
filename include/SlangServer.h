@@ -77,9 +77,17 @@ protected:
     std::unique_ptr<ServerDriver> m_driver;
     std::unique_ptr<MethodScopeOverlay> m_methodScope;
     std::string m_methodScopeDecline;
+    bool m_methodInputReloadPending = false;
+    void recoverMethodInputs(const lsp::RequestContext&);
+    void discardMethodScope() {
+        if (m_methodScope && m_driver && m_methodScope->belongsTo(*m_driver) &&
+            m_methodScope->observedInputChange())
+            m_methodInputReloadPending = true;
+        m_methodScope.reset();
+    }
     void ensureMethodScopeDriver() {
         if (m_methodScope && (!m_driver || !m_methodScope->belongsTo(*m_driver)))
-            m_methodScope.reset();
+            discardMethodScope();
     }
 
     // Context watches are separate from the broad workspace watches. Recompute
@@ -147,7 +155,8 @@ public:
     /// ./slang/server.json
     /// ./slang/local/server.json
     /// Automatic reloads require valid files and retain the current driver on failure.
-    bool loadConfig(bool requireValidConfig = false, bool preserveDesign = false);
+    bool loadConfig(bool requireValidConfig = false, bool preserveDesign = false,
+                    const lsp::RequestContext* context = nullptr);
 
     /// Load the configuration from a given config object, reindex if needed or forced
     /// Returns false when an automatic reload cannot construct a valid replacement.

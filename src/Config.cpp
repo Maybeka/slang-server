@@ -25,10 +25,12 @@ rfl::Result<Config> Config::fromFiles(const std::optional<std::string>& workspac
                                       const std::optional<std::string>& localConf) {
     rfl::Generic::Object config = *rfl::to_generic(Config()).to_object();
     std::optional<std::string> readError;
+    std::vector<Config::InputSource> inputs;
 
     // Layer a single config file onto the merged config object
     auto layerFile = [&](const std::string& confPath) -> std::optional<rfl::Generic::Object> {
         if (!fs::exists(confPath)) {
+            inputs.push_back({confPath, std::nullopt});
             WARN("Config file {} does not exist, skipping", confPath);
             return std::nullopt;
         }
@@ -37,6 +39,7 @@ rfl::Result<Config> Config::fromFiles(const std::optional<std::string>& workspac
         auto file = std::ifstream(confPath);
         auto jsonstr = std::string(std::istreambuf_iterator<char>(file),
                                    std::istreambuf_iterator<char>());
+        inputs.push_back({confPath, jsonstr});
 
         // Validate against Config schema first
         auto fileConfig = rfl::json::read<Config, rfl::DefaultIfMissing>(jsonstr,
@@ -127,6 +130,7 @@ rfl::Result<Config> Config::fromFiles(const std::optional<std::string>& workspac
         flagsByFile.push_back({*localConf, lcFlags});
 
     finalConfig->flagsByFile = std::move(flagsByFile);
+    finalConfig->inputSources = std::move(inputs);
 
     // Reconstruct merged flags for client config
     std::string merged;

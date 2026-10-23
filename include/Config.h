@@ -320,6 +320,14 @@ struct Config {
 
     /// Per-file flags with correct precedence. Skipped during serialization.
     rfl::Skip<std::vector<FlagSource>> flagsByFile;
+
+    struct InputSource {
+        std::string path;
+        std::optional<std::string> bytes;
+    };
+    /// Exact bytes consumed by fromFiles, including absent layers. Runtime only:
+    /// method certificates must compare against loaded inputs, not a later read.
+    rfl::Skip<std::vector<InputSource>> inputSources;
 };
 
 template<>
