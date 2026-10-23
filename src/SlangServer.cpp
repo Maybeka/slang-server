@@ -279,8 +279,9 @@ lsp::InitializeResult SlangServer::getInitialize(const lsp::InitializeParams& pa
     }
 
     registerCommand<ServerDriver::IncludeContextSelection, bool>(
-        "slang.setIncludeContext", [this](const ServerDriver::IncludeContextSelection& selection) {
-            return m_driver->setIncludeContext(selection);
+        "slang.setIncludeContext", [this](const ServerDriver::IncludeContextSelection& selection,
+                                          const lsp::RequestContext& ctx) {
+            return m_driver->setIncludeContext(selection, ctx);
         });
 
     // Config modification
@@ -2369,16 +2370,16 @@ std::optional<std::vector<lsp::InlayHint>> SlangServer::getDocInlayHint(
 }
 
 std::optional<std::vector<lsp::CodeLens>> SlangServer::getDocCodeLens(
-    const lsp::CodeLensParams& params) {
+    const lsp::CodeLensParams& params, lsp::RequestContext ctx) {
     auto doc = m_driver->getDocument(params.textDocument.uri);
     if (!doc) {
         return std::nullopt;
     }
 
     std::vector<lsp::CodeLens> lenses;
-    auto tree = doc->getSyntaxTree();
+    auto tree = doc->getSyntaxTree(ctx);
     auto path = m_driver->sm.getFullPath(doc->getBuffer());
-    auto contexts = m_driver->getIncludeContexts(path);
+    auto contexts = m_driver->getIncludeContexts(path, false, ctx);
     if (!contexts.empty()) {
         const auto& active = contexts.front();
         const auto& location = active.location;
@@ -2435,6 +2436,7 @@ std::optional<std::vector<lsp::CodeLens>> SlangServer::getDocCodeLens(
 
     auto& meta = tree->getMetadata();
     for (const auto& [decl, _] : meta.nodeMeta) {
+        ctx.throwIfCancelled("during code lens traversal");
         if (!decl || !decl->header) {
             continue;
         }

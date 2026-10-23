@@ -33,6 +33,7 @@
 #include <set>
 #include <string_view>
 #include <tuple>
+#include <type_traits>
 
 #include "slang/ast/Compilation.h"
 #include "slang/ast/Symbol.h"
@@ -1101,18 +1102,24 @@ bool ServerDriver::setActiveInstance(std::string_view hierPath) {
 }
 
 std::optional<ServerDriver::PackageIncludeContext> ServerDriver::getIncludeContext(
-    const URI& uri, const syntax::SyntaxTree* previous) {
+    const URI& uri, const syntax::SyntaxTree* previous, const lsp::RequestContext& ctx) {
+    ctx.checkpoint("before include owner resolution");
     auto target = docs.find(uri);
     if (target == docs.end())
         return std::nullopt;
     const auto targetDoc = target->second;
     const auto targetPath = sm.getFullPath(targetDoc->getBuffer());
     bool explicitContext = false;
-    auto explicitSelection = getExplicitIncludeContext(uri, explicitContext);
+    auto explicitSelection = getExplicitIncludeContext(uri, explicitContext, ctx);
     if (explicitContext)
         return explicitSelection;
     auto findBuffer = [&](const syntax::SyntaxTree& tree) {
         return findPackageInclude(tree, targetPath);
+    };
+
+    auto ownerSyntax = [&](const std::shared_ptr<SlangDoc>& owner) {
+        ctx.checkpoint("before owner syntax");
+        return owner->getSyntaxTree(ctx);
     };
 
     struct Candidate {
@@ -1121,6 +1128,7 @@ std::optional<ServerDriver::PackageIncludeContext> ServerDriver::getIncludeConte
     };
     std::vector<Candidate> candidates;
     for (const auto& [candidateUri, doc] : docs) {
+        ctx.throwIfCancelled("during owner candidate selection");
         if (m_automaticOwnerRoots.contains(candidateUri))
             continue;
         if (sm.getFullPath(doc->getBuffer()) == targetPath)
@@ -1138,8 +1146,9 @@ std::optional<ServerDriver::PackageIncludeContext> ServerDriver::getIncludeConte
         return lhs.doc->getPath() < rhs.doc->getPath();
     });
     for (const auto& candidate : candidates) {
+        ctx.checkpoint("before known owner syntax");
         // Only reparse a known owner. Its cached includes may have become stale after an edit.
-        auto tree = candidate.doc->getSyntaxTree();
+        auto tree = ownerSyntax(candidate.doc);
         if (auto buffer = findBuffer(*tree)) {
             m_ownerDiscovery.insert_or_assign(
                 uri, OwnerDiscoveryCache{.indexRevision = m_indexer.getRevision(),
@@ -1156,9 +1165,15 @@ std::optional<ServerDriver::PackageIncludeContext> ServerDriver::getIncludeConte
 
     auto hasStandaloneUnit = [&] {
         auto localTree = targetDoc->getCachedSyntaxTree();
-        if (!localTree || !hasValidBuffers(sm, localTree))
+        if (!localTree || !hasValidBuffers(sm, localTree)) {
+            auto parseOptions = options;
+            DisposableParseRequest request(ctx, isCooperativeAnalysisEnabled());
+            request.apply(parseOptions);
+            ctx.checkpoint("before standalone owner probe");
             localTree = syntax::SyntaxTree::fromBuffer(
-                {.data = targetDoc->getText(), .id = targetDoc->getBuffer()}, sm, options);
+                {.data = targetDoc->getText(), .id = targetDoc->getBuffer()}, sm, parseOptions);
+            ctx.checkpoint("after standalone owner probe");
+        }
         // Inspect only physical declarations in this buffer. Calling the shared
         // include resolver here would parse owners before checking the budget.
         for (auto* member : localTree->root().as<syntax::CompilationUnitSyntax>().members)
@@ -1181,7 +1196,7 @@ std::optional<ServerDriver::PackageIncludeContext> ServerDriver::getIncludeConte
         // without walking the reverse graph again on every keystroke.
         auto root = docs.find(*cached->second.root);
         if (root != docs.end()) {
-            auto tree = root->second->getSyntaxTree();
+            auto tree = ownerSyntax(root->second);
             if (auto buffer = findBuffer(*tree)) {
                 cached->second.ownerEpoch = m_ownerEpoch;
                 return PackageIncludeContext{std::move(tree), *buffer};
@@ -1193,7 +1208,7 @@ std::optional<ServerDriver::PackageIncludeContext> ServerDriver::getIncludeConte
         if (cached->second.root) {
             auto root = docs.find(*cached->second.root);
             if (root != docs.end()) {
-                auto tree = root->second->getSyntaxTree();
+                auto tree = ownerSyntax(root->second);
                 if (auto buffer = findBuffer(*tree))
                     return PackageIncludeContext{std::move(tree), *buffer};
             }
@@ -1210,7 +1225,9 @@ std::optional<ServerDriver::PackageIncludeContext> ServerDriver::getIncludeConte
     }
 
     ++m_ownerDiscoveryAttempts;
+    ctx.throwIfCancelled("before indexed owner discovery");
     auto indexed = m_indexer.getPackageOwnerCandidates(targetPath);
+    ctx.throwIfCancelled("after indexed owner discovery");
     discovery.indexRevision = indexed.revision;
     if (indexed.limitExceeded) {
         discovery.state = OwnerDiscoveryState::LimitExceeded;
@@ -1227,6 +1244,7 @@ std::optional<ServerDriver::PackageIncludeContext> ServerDriver::getIncludeConte
     std::optional<URI> selectedUri;
     std::set<std::filesystem::path> validatedRoots;
     for (const auto& path : indexed.paths) {
+        ctx.checkpoint("before indexed owner syntax");
         auto rootUri = URI::fromFile(path);
         auto found = docs.find(rootUri);
         bool wasKnown = found != docs.end() && !m_automaticOwnerRoots.contains(rootUri);
@@ -1245,7 +1263,7 @@ std::optional<ServerDriver::PackageIncludeContext> ServerDriver::getIncludeConte
             continue;
         if (!wasKnown && !m_openDocs.contains(rootUri) && !m_buildSourceUris.contains(rootUri))
             m_automaticOwnerRoots.insert(rootUri);
-        auto tree = root->getSyntaxTree();
+        auto tree = ownerSyntax(root);
         if (auto buffer = findBuffer(*tree)) {
             if (wasKnown) {
                 m_ownerDiscovery.insert_or_assign(
@@ -1303,7 +1321,7 @@ void ServerDriver::refreshOpenIncludeContexts() {
 }
 
 std::vector<ServerDriver::IncludeContext> ServerDriver::getIncludeContexts(
-    const std::filesystem::path& path, bool selectedOnly) {
+    const std::filesystem::path& path, bool selectedOnly, const lsp::RequestContext& ctx) {
     const auto canonical = std::filesystem::weakly_canonical(path);
     if (!m_indexer.hasPotentialIncluders(canonical))
         return {};
@@ -1316,6 +1334,7 @@ std::vector<ServerDriver::IncludeContext> ServerDriver::getIncludeContexts(
     std::vector<std::filesystem::path> sources;
     std::optional<IncludeContextSelection> preferred;
     for (size_t i = 0; i < pending.size(); ++i) {
+        ctx.checkpoint("during include owner graph traversal");
         const auto current = pending[i];
         if (!visited.insert(current).second)
             continue;
@@ -1350,13 +1369,14 @@ std::vector<ServerDriver::IncludeContext> ServerDriver::getIncludeContexts(
 
     std::vector<IncludeContext> contexts;
     for (const auto& source : sources) {
+        ctx.checkpoint("before include context syntax");
         std::error_code ec;
         if (!sm.isCached(source) && !std::filesystem::is_regular_file(source, ec))
             continue;
         auto doc = getDocument(URI::fromFile(source));
         if (!doc)
             continue;
-        auto tree = doc->getSyntaxTree();
+        auto tree = doc->getSyntaxTree(ctx);
         size_t occurrence = 0;
         for (const auto& include : tree->getIncludeDirectives()) {
             if (!include.buffer || sm.getFullPath(include.buffer.id) != canonical)
@@ -1382,14 +1402,16 @@ std::vector<ServerDriver::IncludeContext> ServerDriver::getIncludeContexts(
     return contexts;
 }
 
-bool ServerDriver::setIncludeContext(const IncludeContextSelection& selection) {
+bool ServerDriver::setIncludeContext(const IncludeContextSelection& selection,
+                                     const lsp::RequestContext& ctx) {
     auto canonical = std::filesystem::weakly_canonical(selection.uri.getPath());
     auto source = URI::fromFile(std::filesystem::weakly_canonical(selection.source.getPath()));
-    auto contexts = getIncludeContexts(canonical);
+    auto contexts = getIncludeContexts(canonical, false, ctx);
     if (std::ranges::none_of(contexts, [&](const auto& context) {
             return context.source->getURI() == source && context.occurrence == selection.occurrence;
         }))
         return false;
+    ctx.checkpoint("before include selection commit");
     m_includeSelections.insert_or_assign(
         canonical, IncludeContextSelection{.uri = URI::fromFile(canonical),
                                            .source = source,
@@ -1401,11 +1423,15 @@ bool ServerDriver::setIncludeContext(const IncludeContextSelection& selection) {
 }
 
 std::shared_ptr<syntax::SyntaxTree> ServerDriver::parseShallowTree(SourceBuffer buffer,
-                                                                   Bag& documentOptions) {
+                                                                   Bag& documentOptions,
+                                                                   const lsp::RequestContext& ctx) {
+    auto checkpoint = documentOptions.getOrDefault<parsing::PreprocessorOptions>().parseCheckpoint;
     documentOptions = options;
+    if (checkpoint)
+        documentOptions.insertOrGet<parsing::PreprocessorOptions>().parseCheckpoint = checkpoint;
     auto tree = syntax::SyntaxTree::fromBuffer(buffer, sm, documentOptions);
     if (!m_buildSourceUris.contains(URI::fromFile(sm.getFullPath(buffer.id)))) {
-        const auto configured = options.getOrDefault<parsing::PreprocessorOptions>();
+        const auto configured = documentOptions.getOrDefault<parsing::PreprocessorOptions>();
         auto findTarget = [&](const parsing::IncludeMetadata& include) {
             auto location = sm.getFullyExpandedLoc(include.syntax->sourceRange().start());
             auto normal = sm.readHeader(include.path, location, sm.getLibraryFor(location.buffer()),
@@ -1417,10 +1443,12 @@ std::shared_ptr<syntax::SyntaxTree> ServerDriver::parseShallowTree(SourceBuffer 
         };
         std::vector<std::filesystem::path> inferred;
         while (true) {
+            ctx.checkpoint("during inferred include search");
             auto ppOptions = configured;
             auto& paths = ppOptions.additionalIncludePaths;
             auto proposed = inferred;
             for (const auto& include : tree->getIncludeDirectives()) {
+                ctx.throwIfCancelled("during inferred include selection");
                 if (include.isSystem)
                     continue;
                 auto [target, normal] = findTarget(include);
@@ -1448,7 +1476,7 @@ std::shared_ptr<syntax::SyntaxTree> ServerDriver::parseShallowTree(SourceBuffer 
                 if (std::ranges::find(paths, directory) == paths.end())
                     paths.push_back(directory);
             }
-            auto proposedOptions = options;
+            auto proposedOptions = documentOptions;
             proposedOptions.set(std::move(ppOptions));
             auto candidate = syntax::SyntaxTree::fromBuffer(buffer, sm, proposedOptions);
             bool compatible = true;
@@ -1470,21 +1498,22 @@ std::shared_ptr<syntax::SyntaxTree> ServerDriver::parseShallowTree(SourceBuffer 
             tree = std::move(candidate);
         }
     }
+    ctx.checkpoint("before include index commit");
     m_indexer.updateIncludes(*tree);
     return tree;
 }
 
 std::vector<std::shared_ptr<syntax::SyntaxTree>> ServerDriver::getDependentTrees(
-    std::shared_ptr<syntax::SyntaxTree> tree, const URI* target) {
+    std::shared_ptr<syntax::SyntaxTree> tree, const URI* target, const lsp::RequestContext& ctx) {
     const bool hasPhysicalHints = std::ranges::any_of(tree->getSourceBufferIds(), [&](auto id) {
         return sm.getSourceText(id).find("slang-server:") != std::string_view::npos;
     });
     if (!hasConfiguredCompilationInputs() && !hasSourceContextHints() && !hasPhysicalHints &&
         getExplorePreincludeBuffers(tree->getSourceBufferIds().front()).empty())
-        return getDependentTrees(std::move(tree), false);
+        return getDependentTrees(std::move(tree), false, ctx);
     if (target) {
         bool handled = false;
-        auto configured = getExplicitDependencies(tree, *target, handled);
+        auto configured = getExplicitDependencies(tree, *target, handled, ctx);
         if (handled)
             return configured;
     }
@@ -1499,6 +1528,7 @@ std::vector<std::shared_ptr<syntax::SyntaxTree>> ServerDriver::getDependentTrees
     treesToProcess.push(tree);
 
     while (!treesToProcess.empty()) {
+        ctx.checkpoint("during dependency traversal");
         auto currentTree = treesToProcess.front();
         treesToProcess.pop();
 
@@ -1511,10 +1541,11 @@ std::vector<std::shared_ptr<syntax::SyntaxTree>> ServerDriver::getDependentTrees
         });
 
         auto loadDependency = [&](std::string_view name) {
+            ctx.checkpoint("before named dependency syntax");
             std::shared_ptr<syntax::SyntaxTree> dependencyTree;
             bool hinted = false;
             if (target)
-                dependencyTree = getHintedPackageTree(currentTree, name, *target, hinted);
+                dependencyTree = getHintedPackageTree(currentTree, name, *target, hinted, ctx);
             if (hinted && !dependencyTree)
                 return;
             if (knownNames.contains(name)) {
@@ -1544,7 +1575,7 @@ std::vector<std::shared_ptr<syntax::SyntaxTree>> ServerDriver::getDependentTrees
             auto newdoc = dependencyTree ? nullptr : getDocument(URI::fromFile(filePath));
             if (newdoc || dependencyTree) {
                 if (!dependencyTree)
-                    dependencyTree = newdoc->getSyntaxTree();
+                    dependencyTree = newdoc->getSyntaxTree(ctx);
                 knownProviders.try_emplace(std::string(name), dependencyTree);
                 result.push_back(dependencyTree);
 
@@ -1567,17 +1598,27 @@ std::vector<std::shared_ptr<syntax::SyntaxTree>> ServerDriver::getDependentTrees
         // Parser metadata records interface ports but not virtual interface types
         // used by classes or typedefs. Those interfaces are required dependencies
         // of verification packages even when no RTL module instantiates them.
-        auto [references, inserted] = m_virtualInterfaceReferences.try_emplace(currentTree);
-        if (inserted) {
+        auto references = m_virtualInterfaceReferences.find(currentTree);
+        if (references == m_virtualInterfaceReferences.end()) {
+            std::vector<std::string> names;
             flat_hash_set<std::string_view> seen;
+            size_t visited = 0;
             auto virtualInterfaces = syntax::makeSyntaxVisitor(
-                [&](auto& visitor, const syntax::VirtualInterfaceTypeSyntax& type) {
-                    auto name = type.name.valueText();
-                    if (!name.empty() && seen.insert(name).second)
-                        references->second.emplace_back(name);
-                    visitor.visitDefault(type);
+                [&](auto& visitor, const auto& node) {
+                    if ((visited++ & 1023) == 0)
+                        ctx.checkpoint("during dependency syntax walk");
+                    if constexpr (std::is_same_v<std::remove_cvref_t<decltype(node)>,
+                                                 syntax::VirtualInterfaceTypeSyntax>) {
+                        ctx.checkpoint("during virtual interface collection");
+                        auto name = node.name.valueText();
+                        if (!name.empty() && seen.insert(name).second)
+                            names.emplace_back(name);
+                    }
+                    visitor.visitDefault(node);
                 });
             currentTree->root().visit(virtualInterfaces);
+            ctx.checkpoint("before virtual interface cache commit");
+            references = m_virtualInterfaceReferences.emplace(currentTree, std::move(names)).first;
         }
         for (const auto& name : references->second)
             loadDependency(name);
@@ -1587,7 +1628,7 @@ std::vector<std::shared_ptr<syntax::SyntaxTree>> ServerDriver::getDependentTrees
 }
 
 std::vector<std::shared_ptr<syntax::SyntaxTree>> ServerDriver::getDependentTrees(
-    std::shared_ptr<syntax::SyntaxTree> tree, bool fullHierarchy) {
+    std::shared_ptr<syntax::SyntaxTree> tree, bool fullHierarchy, const lsp::RequestContext& ctx) {
 
     std::vector<std::shared_ptr<syntax::SyntaxTree>> result;
     std::queue<std::shared_ptr<syntax::SyntaxTree>> treesToProcess;
@@ -1602,12 +1643,14 @@ std::vector<std::shared_ptr<syntax::SyntaxTree>> ServerDriver::getDependentTrees
         [&](std::string_view name) { knownNames.emplace(name); });
 
     while (!treesToProcess.empty()) {
+        ctx.checkpoint("during dependency traversal");
         auto currentTree = treesToProcess.front();
         treesToProcess.pop();
 
         auto& meta = currentTree->getMetadata();
 
         auto loadDependency = [&](parsing::Token token) {
+            ctx.checkpoint("before indexed dependency syntax");
             auto name = token.valueText();
             if (name.empty() || knownNames.contains(name))
                 return;
@@ -1623,7 +1666,7 @@ std::vector<std::shared_ptr<syntax::SyntaxTree>> ServerDriver::getDependentTrees
                 return;
             auto newdoc = getDocument(URI::fromFile(*symbolLoc->uri));
             if (newdoc) {
-                auto dependencyTree = newdoc->getSyntaxTree();
+                auto dependencyTree = newdoc->getSyntaxTree(ctx);
                 if (!processedTrees.insert(dependencyTree.get()).second)
                     return;
                 for (auto buffer : dependencyTree->getSourceBufferIds())
@@ -1707,7 +1750,8 @@ std::unique_ptr<ServerDriver> ServerDriver::createFromTop(
         return newDriver;
     }
 
-    auto topTree = doc->getSyntaxTree();
+    const auto ctx = retirementContext ? *retirementContext : lsp::RequestContext{};
+    auto topTree = doc->getSyntaxTree(ctx);
     std::string topName;
     const auto& metadata = topTree->getMetadata().nodeMeta;
     if (metadata.size() == 1 &&
@@ -1732,7 +1776,7 @@ std::unique_ptr<ServerDriver> ServerDriver::createFromTop(
         topName = topInstances[0]->name;
     }
 
-    auto syntaxTrees = newDriver->getDependentTrees(topTree, /* fullHierarchy */ true);
+    auto syntaxTrees = newDriver->getDependentTrees(topTree, /* fullHierarchy */ true, ctx);
     for (auto& dependency : syntaxTrees)
         dependency->isLibraryUnit = true;
     syntaxTrees.insert(syntaxTrees.begin(), topTree);
@@ -2339,14 +2383,14 @@ void ServerDriver::addMemberReferences(std::vector<lsp::Location>& references,
 
         // The workspace index can include files outside a complete compilation
         // filelist. They are search candidates, not additional semantic inputs.
-        getIncludeContext(fileUri);
+        getIncludeContext(fileUri, nullptr, ctx);
         if (hasExplicitContextError(fileUri))
             continue;
 
         // if a package, check if we can just use the package ref syntaxes to save on
         // making analysis
         if (!isTypeMember && parentSymbol.kind == ast::SymbolKind::Package) {
-            auto& meta = fileDoc->getSyntaxTree()->getMetadata();
+            auto& meta = fileDoc->getSyntaxTree(ctx)->getMetadata();
             bool hasWildcard = [&] {
                 for (auto ref : meta.packageImports) {
                     for (auto item : ref->items) {
@@ -2535,10 +2579,10 @@ std::optional<std::vector<lsp::Location>> ServerDriver::getDocReferences(
                 URI fileUri = URI::fromFile(filePath.string());
                 auto fileDoc = getDocument(fileUri);
                 if (fileDoc) {
-                    getIncludeContext(fileUri);
+                    getIncludeContext(fileUri, nullptr, ctx);
                     if (hasExplicitContextError(fileUri))
                         continue;
-                    finder(fileDoc->getSyntaxTree()->getMetadata(), fileUri);
+                    finder(fileDoc->getSyntaxTree(ctx)->getMetadata(), fileUri);
                 }
                 else {
                     ctx.error("No doc found for {}", filePath.string());

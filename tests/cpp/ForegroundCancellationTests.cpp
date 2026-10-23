@@ -170,7 +170,11 @@ TEST_CASE("Foreground parse cancellation retains only a complete reusable syntax
             ctx.cancel();
     });
     REQUIRE_THROWS_AS(document.doc->getSyntaxTree(ctx), lsp::RequestCancelled);
-    CHECK(phases == std::vector<std::string>{"before syntax parsing", "after syntax parsing"});
+    REQUIRE_FALSE(phases.empty());
+    CHECK(phases.front() == "before syntax parsing");
+    CHECK(phases.back() == "after syntax parsing");
+    CHECK(std::ranges::count(phases, "after syntax parsing") == 1);
+    CHECK(std::ranges::find(phases, "before compilation construction") == phases.end());
     auto parsed = document.doc->getCachedSyntaxTree();
     REQUIRE(parsed);
     CHECK_FALSE(document.doc->hasAnalysis());

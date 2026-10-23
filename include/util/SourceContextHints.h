@@ -5,6 +5,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <optional>
 #include <string>
 #include <vector>
@@ -71,7 +72,8 @@ struct SourceContextImportHints {
 // The buffer must be NUL-terminated, as are SourceManager's source buffers.
 // No paths are resolved, files loaded, macros expanded, or diagnostics published.
 SourceContextHints parseSourceContextHints(slang::SourceBuffer buffer,
-                                           slang::SourceManager& sourceManager);
+                                           slang::SourceManager& sourceManager,
+                                           const std::function<void()>& checkpoint = {});
 
 // Accepts a source comment only immediately after an active, complete, ordinary
 // import declaration in the same physical buffer and on the same line. One
@@ -79,6 +81,7 @@ SourceContextHints parseSourceContextHints(slang::SourceBuffer buffer,
 // The supplied tree must contain the same immutable buffer used by the scan.
 // The caller validates declarations, canonical paths, and cross-file conflicts.
 SourceContextImportHints bindSourceImportHints(const slang::syntax::SyntaxTree& tree,
-                                               const SourceContextHints& hints);
+                                               const SourceContextHints& hints,
+                                               const std::function<void()>& checkpoint = {});
 
 } // namespace server

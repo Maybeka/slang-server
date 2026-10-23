@@ -178,10 +178,12 @@ public:
     /// Load nearest indexed dependencies, recursing through packages and interfaces.
     /// When fullHierarchy is set, also recurse through instantiated modules.
     std::vector<std::shared_ptr<syntax::SyntaxTree>> getDependentTrees(
-        std::shared_ptr<syntax::SyntaxTree> tree, bool fullHierarchy = false);
+        std::shared_ptr<syntax::SyntaxTree> tree, bool fullHierarchy = false,
+        const lsp::RequestContext& ctx = {});
 
     /// Infer include paths for this syntax tree only, then refresh its include relationships.
-    std::shared_ptr<syntax::SyntaxTree> parseShallowTree(SourceBuffer buffer, Bag& documentOptions);
+    std::shared_ptr<syntax::SyntaxTree> parseShallowTree(SourceBuffer buffer, Bag& documentOptions,
+                                                         const lsp::RequestContext& ctx = {});
 
     /// Identifies a file's selected enclosing source and occurrence within that source.
     struct IncludeContextSelection {
@@ -208,10 +210,12 @@ public:
     /// Find active include occurrences, with the selected context first.
     /// selectedOnly stops after finding a usable context for document analysis.
     std::vector<IncludeContext> getIncludeContexts(const std::filesystem::path& path,
-                                                   bool selectedOnly = false);
+                                                   bool selectedOnly = false,
+                                                   const lsp::RequestContext& ctx = {});
 
     /// Select a validated include occurrence and refresh open documents and annotations.
-    bool setIncludeContext(const IncludeContextSelection& selection);
+    bool setIncludeContext(const IncludeContextSelection& selection,
+                           const lsp::RequestContext& ctx = {});
 
     struct PackageIncludeContext {
         std::shared_ptr<syntax::SyntaxTree> tree;
@@ -223,7 +227,8 @@ public:
 
     /// Find an already-known including root without parsing the rest of the workspace.
     std::optional<PackageIncludeContext> getIncludeContext(
-        const URI& uri, const syntax::SyntaxTree* previous = nullptr);
+        const URI& uri, const syntax::SyntaxTree* previous = nullptr,
+        const lsp::RequestContext& ctx = {});
 
     bool isPackageContextDeferred(const URI& uri) const;
     bool hasExplicitContextError(const URI& uri) const;
@@ -254,7 +259,8 @@ public:
     void issueExplorePreincludeDiagnostics(BufferID target);
 
     std::vector<std::shared_ptr<syntax::SyntaxTree>> getDependentTrees(
-        std::shared_ptr<syntax::SyntaxTree> tree, const URI* target);
+        std::shared_ptr<syntax::SyntaxTree> tree, const URI* target,
+        const lsp::RequestContext& ctx = {});
 
     std::vector<std::string> getModulesInFile(const std::string& path);
 
@@ -452,6 +458,7 @@ private:
     uint64_t m_configuredUnitRevision = UINT64_MAX;
     std::vector<std::shared_ptr<syntax::SyntaxTree>> m_currentConfiguredTrees;
     struct CachedSourceHints {
+        std::weak_ptr<void> owner;
         const char* data = nullptr;
         size_t size = 0;
         SourceContextHints hints;
@@ -466,18 +473,21 @@ private:
     flat_hash_set<URI> m_packageOnlyContexts;
     void refreshConfiguredUnits(const lsp::RequestContext& ctx = {});
     void installConfiguredUnits(std::vector<std::shared_ptr<syntax::SyntaxTree>> trees);
-    SourceContextHints getSourceHints(BufferID buffer);
-    const SourceContextImportHints& getImportHints(const std::shared_ptr<syntax::SyntaxTree>& tree);
-    std::optional<PackageIncludeContext> getExplicitIncludeContext(const URI& uri, bool& handled);
+    SourceContextHints getSourceHints(BufferID buffer, const lsp::RequestContext& ctx = {});
+    const SourceContextImportHints& getImportHints(const std::shared_ptr<syntax::SyntaxTree>& tree,
+                                                   const lsp::RequestContext& ctx = {});
+    std::optional<PackageIncludeContext> getExplicitIncludeContext(const URI& uri, bool& handled,
+                                                                   const lsp::RequestContext& ctx);
     std::optional<BufferID> findPackageInclude(const syntax::SyntaxTree& tree,
                                                const std::filesystem::path& target) const;
     void addExplicitContextError(const URI& target, std::string message,
                                  std::optional<SourceContextHintRange> hint = {});
     std::vector<std::shared_ptr<syntax::SyntaxTree>> getExplicitDependencies(
-        const std::shared_ptr<syntax::SyntaxTree>& tree, const URI& target, bool& handled);
+        const std::shared_ptr<syntax::SyntaxTree>& tree, const URI& target, bool& handled,
+        const lsp::RequestContext& ctx);
     std::shared_ptr<syntax::SyntaxTree> getHintedPackageTree(
         const std::shared_ptr<syntax::SyntaxTree>& tree, std::string_view name, const URI& target,
-        bool& handled);
+        bool& handled, const lsp::RequestContext& ctx);
 
     /// Explicit include selections by canonical header path, preserved across driver reloads.
     std::unordered_map<std::filesystem::path, IncludeContextSelection> m_includeSelections;

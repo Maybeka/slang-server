@@ -29,9 +29,9 @@ std::optional<ServerDriver::DiagnosticSnapshot> ServerDriver::captureDiagnosticS
         auto found = docs.find(uri);
         if (found != docs.end()) {
             bool explicitContext = false;
-            getExplicitIncludeContext(uri, explicitContext);
+            getExplicitIncludeContext(uri, explicitContext, ctx);
             if (!explicitContext)
-                found->second->getSyntaxTree();
+                found->second->getSyntaxTree(ctx);
         }
     }
     const auto indexAtStart = m_indexer.getRevision();

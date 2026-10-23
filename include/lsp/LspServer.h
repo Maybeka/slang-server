@@ -812,7 +812,8 @@ protected:
             "textDocument/colorPresentation");
     };
     /// A request to provide code lens for the given text document.
-    virtual std::optional<std::vector<CodeLens>> getDocCodeLens(const CodeLensParams&) {
+    virtual std::optional<std::vector<CodeLens>> getDocCodeLens(const CodeLensParams&,
+                                                                RequestContext = {}) {
         return std::optional<std::vector<CodeLens>>{};
     }
 

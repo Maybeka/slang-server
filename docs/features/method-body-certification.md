@@ -143,3 +143,13 @@ hard source highwater still forces retirement, and idle retry runs without anoth
 user message. Already-started full model/semantic work can still contain atomic
 segments. This adds no fixed input or diagnostic debounce. See the
 [maintenance retry evaluation](../development/maintenance-retry-evaluation.md).
+
+
+Current requests also reach disposable owner, configured/hinted package and dependency
+syntax parsing, inferred include reparsing, snapshot discovery, references and CodeLens.
+Shallow option refresh preserves the parser checkpoint; hinted-package cancellation
+propagates instead of becoming a persistent context error. Hint/interface metadata
+caches publish only complete collections and weak hint ownership does not pin old text.
+Completed syntax can remain reusable when its caller is canceled. Full model refresh,
+semantic binding and already-committed selection updates still have separate cancellation
+boundaries. See the [owner cancellation evaluation](../development/owner-cancellation-evaluation.md).

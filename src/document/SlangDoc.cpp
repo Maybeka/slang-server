@@ -332,9 +332,9 @@ std::shared_ptr<syntax::SyntaxTree> SlangDoc::getSyntaxTree(const lsp::RequestCo
         !m_driver.hasConfiguredCompilationInputs() && !m_driver.hasSourceContextHints() &&
         m_driver.getExplorePreincludeBuffers(m_buffer.id).empty()) {
         const auto& path = m_sourceManager.getFullPath(m_buffer.id);
-        if (auto contexts = m_driver.getIncludeContexts(path, true); !contexts.empty()) {
+        if (auto contexts = m_driver.getIncludeContexts(path, true, ctx); !contexts.empty()) {
             const auto& context = contexts.front();
-            auto compilation = context.source->getAnalysis()->getShallowCompilation();
+            auto compilation = context.source->getAnalysis(ctx)->getShallowCompilation();
             auto tree = compilation->getSyntaxTree();
             if (m_includeCompilation != compilation || m_tree != tree ||
                 m_buffer.id != context.buffer) {
@@ -423,7 +423,7 @@ std::shared_ptr<syntax::SyntaxTree> SlangDoc::getSyntaxTree(const lsp::RequestCo
             parseRequest.apply(parseOptions);
             auto buffers = m_driver.getExplorePreincludeBuffers(m_buffer.id);
             if (buffers.empty()) {
-                m_tree = m_driver.parseShallowTree(m_buffer, parseOptions);
+                m_tree = m_driver.parseShallowTree(m_buffer, parseOptions, ctx);
             }
             else {
                 buffers.push_back(m_buffer);
@@ -453,7 +453,7 @@ SlangDoc::AnalysisInputs SlangDoc::getAnalysisInputs(const lsp::RequestContext& 
         // A prior rejected namespace can have left an explicit context error.
         // Re-resolve it against this edit before taking the owner shortcut.
         if (m_driver.hasExplicitContextError(m_uri)) {
-            (void)m_driver.getIncludeContext(m_uri);
+            (void)m_driver.getIncludeContext(m_uri, nullptr, ctx);
             m_driver.requireExplicitContext(m_uri);
         }
         cwdPhase.finish();
@@ -461,9 +461,8 @@ SlangDoc::AnalysisInputs SlangDoc::getAnalysisInputs(const lsp::RequestContext& 
     }
     ctx.checkpoint("before owner resolution");
     auto previousAnalysis = m_analysis;
-    auto context = m_driver.getIncludeContext(m_uri, previousAnalysis
-                                                         ? previousAnalysis->getSyntaxTree().get()
-                                                         : nullptr);
+    auto context = m_driver.getIncludeContext(
+        m_uri, previousAnalysis ? previousAnalysis->getSyntaxTree().get() : nullptr, ctx);
     ctx.checkpoint("after owner resolution");
     m_driver.requireExplicitContext(m_uri);
     const bool legacy = !m_driver.hasConfiguredCompilationInputs() &&
@@ -478,19 +477,19 @@ SlangDoc::AnalysisInputs SlangDoc::getAnalysisInputs(const lsp::RequestContext& 
     auto tree = context ? context->tree : getSyntaxTree(ctx);
     auto buffer = context ? context->buffer : m_buffer.id;
     ctx.checkpoint("before dependency resolution");
-    auto trees = m_driver.getDependentTrees(tree, &m_uri);
+    auto trees = m_driver.getDependentTrees(tree, &m_uri, ctx);
     ctx.checkpoint("after dependency resolution");
     // Resolving an explicit package reference can discover the owner for the first time.
     // Do not retain a standalone copy of the header alongside that package's include.
     if (!context) {
         ctx.checkpoint("before owner recheck");
-        context = m_driver.getIncludeContext(m_uri);
+        context = m_driver.getIncludeContext(m_uri, nullptr, ctx);
         ctx.checkpoint("after owner recheck");
         if (context) {
             tree = context->tree;
             buffer = context->buffer;
             ctx.checkpoint("before dependency resolution");
-            trees = m_driver.getDependentTrees(tree, &m_uri);
+            trees = m_driver.getDependentTrees(tree, &m_uri, ctx);
             ctx.checkpoint("after dependency resolution");
         }
     }
@@ -546,7 +545,8 @@ std::shared_ptr<ShallowAnalysis> SlangDoc::getAnalysis(const lsp::RequestContext
     else {
         ctx.checkpoint("before cached owner resolution");
         auto previousAnalysis = m_analysis;
-        auto context = m_driver.getIncludeContext(m_uri, previousAnalysis->getSyntaxTree().get());
+        auto context = m_driver.getIncludeContext(m_uri, previousAnalysis->getSyntaxTree().get(),
+                                                  ctx);
         ctx.checkpoint("after cached owner resolution");
         auto expectedTree = context ? context->tree : getSyntaxTree(ctx);
         if (!m_driver.hasConfiguredCompilationInputs() && !m_driver.hasSourceContextHints() &&
@@ -720,7 +720,7 @@ void SlangDoc::issueDiagnosticsTo(DiagnosticEngine& diagEngine, const lsp::Reque
         // Invalid explicit context never constructs or binds a Compilation.
         // Preserve the syntax/preprocessor evidence available in the selected
         // owner, or in the document alone when no owner can be selected.
-        auto context = m_driver.getIncludeContext(m_uri);
+        auto context = m_driver.getIncludeContext(m_uri, nullptr, ctx);
         auto tree = context ? context->tree : getSyntaxTree(ctx);
         auto buffer = context ? context->buffer : m_buffer.id;
         m_driver.issueExplorePreincludeDiagnostics(buffer);

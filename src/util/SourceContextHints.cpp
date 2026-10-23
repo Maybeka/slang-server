@@ -85,7 +85,8 @@ bool isOrdinaryImport(const slang::syntax::SyntaxNode& node, uint32_t bufferId) 
 } // namespace
 
 SourceContextHints parseSourceContextHints(slang::SourceBuffer buffer,
-                                           slang::SourceManager& sourceManager) {
+                                           slang::SourceManager& sourceManager,
+                                           const std::function<void()>& checkpoint) {
     SourceContextHints result;
     result.bufferId = buffer.id.getId();
     slang::BumpAllocator allocator;
@@ -96,7 +97,10 @@ SourceContextHints parseSourceContextHints(slang::SourceBuffer buffer,
     options.maxErrors = std::numeric_limits<uint32_t>::max();
     slang::parsing::Lexer lexer(buffer, allocator, diagnostics, sourceManager, options);
     bool leading = true;
+    size_t tokens = 0;
     for (;;) {
+        if ((tokens++ & 1023) == 0 && checkpoint)
+            checkpoint();
         auto token = lexer.lex();
         for (const auto& trivia : token.trivia()) {
             if (trivia.kind != slang::parsing::TriviaKind::LineComment)
@@ -138,10 +142,13 @@ SourceContextHints parseSourceContextHints(slang::SourceBuffer buffer,
 }
 
 SourceContextImportHints bindSourceImportHints(const slang::syntax::SyntaxTree& tree,
-                                               const SourceContextHints& hints) {
+                                               const SourceContextHints& hints,
+                                               const std::function<void()>& checkpoint) {
     SourceContextImportHints result;
     const auto& sourceManager = tree.sourceManager();
     for (const auto* declaration : tree.getMetadata().packageImports) {
+        if (checkpoint)
+            checkpoint();
         if (!isOrdinaryImport(*declaration, hints.bufferId))
             continue;
         const auto end = declaration->semi.range().end();
@@ -149,6 +156,8 @@ SourceContextImportHints bindSourceImportHints(const slang::syntax::SyntaxTree& 
             continue;
         auto source = sourceManager.getSourceText(end.buffer());
         for (const auto& comment : hints.sourceComments) {
+            if (checkpoint)
+                checkpoint();
             if (comment.range.bufferId != hints.bufferId || comment.range.begin < end.offset() ||
                 comment.range.end > source.size())
                 continue;

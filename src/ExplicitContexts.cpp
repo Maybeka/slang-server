@@ -125,17 +125,27 @@ void ServerDriver::refreshConfiguredUnits(const lsp::RequestContext& ctx) {
     }
 }
 
-SourceContextHints ServerDriver::getSourceHints(BufferID buffer) {
+SourceContextHints ServerDriver::getSourceHints(BufferID buffer, const lsp::RequestContext& ctx) {
+    ctx.throwIfCancelled("before source hint lookup");
     auto text = sm.getSourceText(buffer);
-    auto& cached = m_sourceHints[sm.getFullPath(buffer).string()];
-    if (cached.data != text.data() || cached.size != text.size()) {
-        cached.data = text.data();
-        cached.size = text.size();
-        cached.hints = {};
+    auto path = sm.getFullPath(buffer).string();
+    auto found = m_sourceHints.find(path);
+    if (found == m_sourceHints.end() || found->second.owner.expired() ||
+        found->second.data != text.data() || found->second.size != text.size()) {
+        auto pins = sm.retainBuffers({&buffer, 1});
+        CachedSourceHints candidate;
+        if (!pins.empty())
+            candidate.owner = pins.front();
+        candidate.data = text.data();
+        candidate.size = text.size();
         if (text.find("slang-server:") != std::string_view::npos)
-            cached.hints = parseSourceContextHints({.data = text, .id = buffer}, sm);
+            candidate.hints = parseSourceContextHints({.data = text, .id = buffer}, sm, [&] {
+                ctx.checkpoint("during source hint lexing");
+            });
+        ctx.checkpoint("before source hint cache commit");
+        found = m_sourceHints.insert_or_assign(std::move(path), std::move(candidate)).first;
     }
-    auto result = cached.hints;
+    auto result = found->second.hints;
     result.bufferId = buffer.getId();
     if (result.owner)
         result.owner->range.bufferId = buffer.getId();
@@ -147,25 +157,31 @@ SourceContextHints ServerDriver::getSourceHints(BufferID buffer) {
 }
 
 const SourceContextImportHints& ServerDriver::getImportHints(
-    const std::shared_ptr<syntax::SyntaxTree>& tree) {
+    const std::shared_ptr<syntax::SyntaxTree>& tree, const lsp::RequestContext& ctx) {
+    ctx.throwIfCancelled("before bound source hint lookup");
     if (m_boundHintsRevision != m_snapshotRevision) {
         std::erase_if(m_boundSourceHints, [](const auto& item) { return item.first.expired(); });
         m_boundHintsRevision = m_snapshotRevision;
     }
-    auto [it, inserted] = m_boundSourceHints.try_emplace(tree);
-    if (inserted) {
+    auto found = m_boundSourceHints.find(tree);
+    if (found == m_boundSourceHints.end()) {
+        SourceContextImportHints candidate;
         for (auto id : tree->getSourceBufferIds()) {
-            auto hints = getSourceHints(id);
+            auto hints = getSourceHints(id, ctx);
             if (hints.sourceComments.empty())
                 continue;
-            auto bound = bindSourceImportHints(*tree, hints);
-            it->second.imports.insert(it->second.imports.end(), bound.imports.begin(),
-                                      bound.imports.end());
-            it->second.issues.insert(it->second.issues.end(), bound.issues.begin(),
-                                     bound.issues.end());
+            auto bound = bindSourceImportHints(*tree, hints, [&] {
+                ctx.checkpoint("during source import binding");
+            });
+            candidate.imports.insert(candidate.imports.end(), bound.imports.begin(),
+                                     bound.imports.end());
+            candidate.issues.insert(candidate.issues.end(), bound.issues.begin(),
+                                    bound.issues.end());
         }
+        ctx.checkpoint("before import hint cache commit");
+        found = m_boundSourceHints.emplace(tree, std::move(candidate)).first;
     }
-    return it->second;
+    return found->second;
 }
 
 void ServerDriver::addExplicitContextError(const URI& target, std::string message,
@@ -305,10 +321,10 @@ std::vector<std::filesystem::path> ServerDriver::getContextWatchPaths() const {
 }
 
 std::optional<ServerDriver::PackageIncludeContext> ServerDriver::getExplicitIncludeContext(
-    const URI& uri, bool& handled) {
+    const URI& uri, bool& handled, const lsp::RequestContext& ctx) {
     handled = false;
     if (comp) {
-        refreshConfiguredUnits();
+        refreshConfiguredUnits(ctx);
         // A configured package inclusion is authoritative. Cached standalone documents can
         // otherwise select a different, nearer package with the same name after an edit.
         if (m_designUsesConfiguredUnits) {
@@ -339,14 +355,14 @@ std::optional<ServerDriver::PackageIncludeContext> ServerDriver::getExplicitIncl
         m_explicitResolutionRevision[uri] = m_snapshotRevision;
     }
     auto targetPath = sm.getFullPath(document->second->getBuffer());
-    auto hints = getSourceHints(document->second->getBuffer());
+    auto hints = getSourceHints(document->second->getBuffer(), ctx);
     for (const auto& issue : hints.issues)
         addExplicitContextError(uri, issue.message, issue.range);
     if (hints.invalidOwner) {
         handled = true;
         return {};
     }
-    refreshConfiguredUnits();
+    refreshConfiguredUnits(ctx);
     if (m_nativeInputsFailed && (hasConfiguredCompilationInputs() || hints.owner)) {
         handled = true;
         addExplicitContextError(uri, "Configured compilation inputs could not be loaded");
@@ -360,6 +376,7 @@ std::optional<ServerDriver::PackageIncludeContext> ServerDriver::getExplicitIncl
     std::set<std::filesystem::path> seen{targetPath};
     std::shared_ptr<SlangDoc> hintedRoot;
     while (hint) {
+        ctx.checkpoint("during explicit owner chain");
         handled = true;
         m_explicitContexts.insert(uri);
         auto base = sm.getFullPath(BufferID{hint->range.bufferId, ""}).parent_path();
@@ -377,7 +394,7 @@ std::optional<ServerDriver::PackageIncludeContext> ServerDriver::getExplicitIncl
                                     hint->range);
             return {};
         }
-        auto next = getSourceHints(hintedRoot->getBuffer());
+        auto next = getSourceHints(hintedRoot->getBuffer(), ctx);
         for (const auto& issue : next.issues)
             addExplicitContextError(uri, issue.message, issue.range);
         if (next.invalidOwner)
@@ -386,7 +403,7 @@ std::optional<ServerDriver::PackageIncludeContext> ServerDriver::getExplicitIncl
     }
     std::vector<std::shared_ptr<syntax::SyntaxTree>> candidates = m_currentConfiguredTrees;
     if (candidates.empty() && hintedRoot && !hasConfiguredCompilationInputs())
-        candidates.push_back(hintedRoot->getSyntaxTree());
+        candidates.push_back(hintedRoot->getSyntaxTree(ctx));
     if (candidates.empty()) {
         if (hasConfiguredCompilationInputs()) {
             handled = true;
@@ -396,6 +413,7 @@ std::optional<ServerDriver::PackageIncludeContext> ServerDriver::getExplicitIncl
     }
     std::vector<PackageIncludeContext> matches;
     for (const auto& tree : candidates) {
+        ctx.throwIfCancelled("during explicit owner selection");
         if (!ownerChain.empty() && !containsPath(sm, *tree, ownerChain.back()))
             continue;
         for (auto buffer : packageIncludes(sm, *tree, targetPath)) {
@@ -458,11 +476,12 @@ std::optional<ServerDriver::PackageIncludeContext> ServerDriver::getExplicitIncl
 }
 
 std::vector<std::shared_ptr<syntax::SyntaxTree>> ServerDriver::getExplicitDependencies(
-    const std::shared_ptr<syntax::SyntaxTree>&, const URI& target, bool& handled) {
+    const std::shared_ptr<syntax::SyntaxTree>&, const URI& target, bool& handled,
+    const lsp::RequestContext& ctx) {
     handled = !comp && hasConfiguredCompilationInputs();
     if (!handled)
         return {};
-    refreshConfiguredUnits();
+    refreshConfiguredUnits(ctx);
     std::map<std::string, size_t> packageCounts;
     std::map<std::string, std::filesystem::path> packageHints;
     for (const auto& unit : m_currentConfiguredTrees)
@@ -470,13 +489,14 @@ std::vector<std::shared_ptr<syntax::SyntaxTree>> ServerDriver::getExplicitDepend
             if (node->kind == syntax::SyntaxKind::PackageDeclaration)
                 ++packageCounts[std::string(node->header->name.valueText())];
     for (const auto& tree : m_currentConfiguredTrees) {
+        ctx.checkpoint("during configured dependency traversal");
         tree->getMetadata().visitReferencedSymbols([&](std::string_view name) {
             if (packageCounts[std::string(name)] > 1)
                 addExplicitContextError(target,
                                         "Configured compilation declares multiple packages named " +
                                             std::string(name));
         });
-        const auto& imports = getImportHints(tree);
+        const auto& imports = getImportHints(tree, ctx);
         for (const auto& issue : imports.issues)
             addExplicitContextError(target, issue.message, issue.range);
         for (const auto& item : imports.imports) {
@@ -503,11 +523,11 @@ std::vector<std::shared_ptr<syntax::SyntaxTree>> ServerDriver::getExplicitDepend
 
 std::shared_ptr<syntax::SyntaxTree> ServerDriver::getHintedPackageTree(
     const std::shared_ptr<syntax::SyntaxTree>& tree, std::string_view name, const URI& target,
-    bool& handled) {
+    bool& handled, const lsp::RequestContext& ctx) {
     handled = false;
     std::optional<std::filesystem::path> selected;
     std::optional<SourceContextHintRange> range;
-    const auto& imports = getImportHints(tree);
+    const auto& imports = getImportHints(tree, ctx);
     for (const auto& issue : imports.issues)
         addExplicitContextError(target, issue.message, issue.range);
     for (const auto& item : imports.imports) {
@@ -536,9 +556,13 @@ std::shared_ptr<syntax::SyntaxTree> ServerDriver::getHintedPackageTree(
     if (declaresPackageFrom(sm, *tree, name, *selected))
         return tree;
     try {
-        auto result = getDocument(URI::fromFile(*selected))->getSyntaxTree();
+        ctx.checkpoint("before hinted package syntax");
+        auto result = getDocument(URI::fromFile(*selected))->getSyntaxTree(ctx);
         if (declaresPackageFrom(sm, *result, name, *selected))
             return result;
+    }
+    catch (const lsp::RequestCancelled&) {
+        throw;
     }
     catch (const std::exception&) {
     }

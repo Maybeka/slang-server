@@ -1470,3 +1470,60 @@ TEST_CASE("Closing an edited package preserves pending discovery for open header
     CHECK(item.getDiagnostics().empty());
     CHECK(server.client.getDiagnostics(owner.doc->getURI()).empty());
 }
+
+TEST_CASE("Known owner reparsing preserves current edits across cancellation",
+          "[owner-cancellation]") {
+    OwnerWorkspace workspace;
+    workspace.write(".slang/server.json", "{\"experimentalCooperativeAnalysis\":true}\n");
+    workspace.write("item.svh", itemText);
+    auto owner = ownerText();
+    const auto end = owner.find("endpackage");
+    std::string padding;
+    for (int i = 0; i < 5000; ++i)
+        padding += "int padding_" + std::to_string(i) + ";\n";
+    owner.insert(end, padding);
+    workspace.write("owner.sv", owner);
+    ServerHarness server(workspace.params());
+    server.m_driver->openDocument(workspace.uri("item.svh"), itemText, 1, true);
+    auto header = server.m_driver->getDocument(workspace.uri("item.svh"));
+    auto ownerDoc = server.m_driver->getDocument(workspace.uri("owner.sv"));
+    auto originalTree = ownerDoc->getSyntaxTree();
+    auto current = itemText;
+    current.replace(current.find("return value;"), 13, "return missing_value;");
+    server.SlangServer::onDocDidChange(
+        {.textDocument = {.version = 2, .uri = workspace.uri("item.svh")},
+         .contentChanges = {lsp::TextDocumentContentChangeWholeDocument{.text = current}}});
+    const auto publications = server.client.diagnosticPublications.size();
+    bool ownerEntered = false, interrupted = false;
+    lsp::RequestContext ctx("known owner", lsp::ID_t{901});
+    ctx.setCheckpointObserverForTesting([&](std::string_view where) {
+        if (where == "before owner syntax")
+            ownerEntered = true;
+        if (ownerEntered && where == "during disposable syntax parsing") {
+            interrupted = true;
+            ctx.cancel();
+        }
+    });
+    CHECK_THROWS_AS(header->getAnalysis(ctx), lsp::RequestCancelled);
+    REQUIRE(interrupted);
+    CHECK(header->textMatches(current));
+    CHECK(ownerDoc->getCachedSyntaxTree() == originalTree);
+    CHECK(server.client.diagnosticPublications.size() == publications);
+    server.m_driver->runPendingDiagnostics({});
+    auto hasMissing = [&] {
+        return std::ranges::any_of(server.client.getDiagnostics(workspace.uri("item.svh")),
+                                   [](const auto& diagnostic) {
+                                       return diagnostic.message.find("missing_value") !=
+                                              std::string::npos;
+                                   });
+    };
+    CHECK(hasMissing());
+    CHECK(server.m_driver->sm.getFullPath(
+              header->getAnalysis()->getSyntaxTree()->getSourceBufferIds().front()) ==
+          workspace.path("owner.sv"));
+    server.SlangServer::onDocDidChange(
+        {.textDocument = {.version = 3, .uri = workspace.uri("item.svh")},
+         .contentChanges = {lsp::TextDocumentContentChangeWholeDocument{.text = itemText}}});
+    server.m_driver->runPendingDiagnostics({});
+    CHECK_FALSE(hasMissing());
+}

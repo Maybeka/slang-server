@@ -6,6 +6,7 @@
 #include "utils/ServerHarness.h"
 #include <algorithm>
 #include <atomic>
+#include <catch2/generators/catch_generators.hpp>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
@@ -514,4 +515,140 @@ TEST_CASE("Native inherited contexts reject private capture and replay unsaved p
     CHECK(header.getDiagnostics().empty());
     CHECK(aliasWidth(header, "p", "owner_t") == 8);
     checkDefinition(header, "owner_t value", workspace.uri("owner.sv"));
+}
+
+TEST_CASE("Hinted package cancellation is not cached as a context error", "[owner-cancellation]") {
+    const auto boundary = GENERATE("during source hint lexing", "during source import binding",
+                                   "before import hint cache commit",
+                                   "during disposable syntax parsing");
+    CAPTURE(boundary);
+    ExplicitWorkspace workspace;
+    workspace.write(".slang/server.json", "{\"experimentalCooperativeAnalysis\":true}\n");
+    workspace.write("p.sv", "package p; typedef bit [7:0] data_t; endpackage\n");
+    std::string provider = "package p; typedef logic [63:0] data_t;\n";
+    for (int i = 0; i < 5000; ++i)
+        provider += "int padding_" + std::to_string(i) + ";\n";
+    provider += "endpackage\n";
+    workspace.write("wanted/p.sv", provider);
+    workspace.write("consumer.sv",
+                    "package consumer;\nimport p::*; // slang-server: source \"wanted/p.sv\"\n"
+                    "typedef data_t selected_t; endpackage\n");
+    ServerHarness server(workspace.params());
+    auto doc = server.m_driver->getDocument(workspace.uri("consumer.sv"));
+    (void)doc->getSyntaxTree();
+    bool hinted = false, interrupted = false;
+    lsp::RequestContext ctx("hinted package", lsp::ID_t{902});
+    ctx.setCheckpointObserverForTesting([&](std::string_view where) {
+        if (where == "before hinted package syntax")
+            hinted = true;
+        if (where == boundary && (where != "during disposable syntax parsing" || hinted)) {
+            interrupted = true;
+            ctx.cancel();
+        }
+    });
+    CHECK_THROWS_AS(doc->getAnalysis(ctx), lsp::RequestCancelled);
+    REQUIRE(interrupted);
+    CHECK_FALSE(server.m_driver->hasExplicitContextError(workspace.uri("consumer.sv")));
+    auto analysis = doc->getAnalysis();
+    auto compilation = analysis->getCompilation();
+    auto package = compilation->getPackage("consumer");
+    REQUIRE(package);
+    auto selected = package->find("selected_t");
+    REQUIRE(selected);
+    CHECK(selected->as<slang::ast::TypeAliasType>().getCanonicalType().getBitWidth() == 64);
+    (void)compilation->getSemanticDiagnostics();
+    CHECK_FALSE(compilation->hasIssuedErrors());
+}
+
+TEST_CASE("Cancelled virtual interface collection retries the complete dependency set",
+          "[owner-cancellation]") {
+    ExplicitWorkspace workspace;
+    workspace.write(".slang/server.json", "{\"experimentalCooperativeAnalysis\":true,"
+                                          "\"explorePreincludeFiles\":[\"pre.svh\"]}\n");
+    workspace.write("pre.svh", "`define ENVIRONMENT 1\n");
+    workspace.write("a.sv", "interface if_a; logic a; endinterface\n");
+    workspace.write("b.sv", "interface if_b; logic b; endinterface\n");
+    workspace.write("consumer.sv", "package consumer; class agent; virtual if_a a; virtual if_b b; "
+                                   "endclass endpackage\n");
+    ServerHarness server(workspace.params());
+    const auto uri = workspace.uri("consumer.sv");
+    auto doc = server.m_driver->getDocument(uri);
+    auto tree = doc->getSyntaxTree();
+    int seen = 0;
+    lsp::RequestContext ctx("interfaces", lsp::ID_t{903});
+    ctx.setCheckpointObserverForTesting([&](std::string_view where) {
+        if (where == "during virtual interface collection" && ++seen == 2)
+            ctx.cancel();
+    });
+    CHECK_THROWS_AS(server.m_driver->getDependentTrees(tree, &uri, ctx), lsp::RequestCancelled);
+    REQUIRE(seen == 2);
+    const auto dependencies = server.m_driver->getDependentTrees(tree, &uri);
+    CHECK(dependencies.size() == 2);
+    for (auto name : {"a.sv", "b.sv"})
+        CHECK(std::ranges::any_of(dependencies, [&](const auto& dependency) {
+            return server.m_driver->sm.getFullPath(dependency->getSourceBufferIds().front()) ==
+                   workspace.path(name);
+        }));
+    auto compilation = doc->getAnalysis()->getCompilation();
+    (void)compilation->getSemanticDiagnostics();
+    CHECK_FALSE(compilation->hasIssuedErrors());
+}
+
+TEST_CASE("Inferred include reparsing keeps the disposable parser checkpoint",
+          "[owner-cancellation]") {
+    ExplicitWorkspace workspace;
+    workspace.write(".slang/server.json", "{\"experimentalCooperativeAnalysis\":true}\n");
+    workspace.write("inc/defs.svh", "typedef logic [31:0] word_t;\n");
+    workspace.write("top.sv", "`include \"defs.svh\"\nmodule top; word_t value; endmodule\n");
+    ServerHarness server(workspace.params());
+    auto doc = server.m_driver->getDocument(workspace.uri("top.sv"));
+    bool inference = false, interrupted = false;
+    lsp::RequestContext ctx("inferred include", lsp::ID_t{904});
+    ctx.setCheckpointObserverForTesting([&](std::string_view where) {
+        if (where == "during inferred include search")
+            inference = true;
+        if (inference && where == "during disposable syntax parsing") {
+            interrupted = true;
+            ctx.cancel();
+        }
+    });
+    CHECK_THROWS_AS(doc->getSyntaxTree(ctx), lsp::RequestCancelled);
+    REQUIRE(interrupted);
+    auto tree = doc->getSyntaxTree();
+    CHECK(tree->diagnostics().empty());
+    REQUIRE(tree->getIncludeDirectives().size() == 1);
+    CHECK(tree->getIncludeDirectives().front().buffer.id.valid());
+    auto compilation = doc->getAnalysis()->getCompilation();
+    (void)compilation->getSemanticDiagnostics();
+    CHECK_FALSE(compilation->hasIssuedErrors());
+}
+
+TEST_CASE("Standalone owner probing cancels without committing discovery", "[owner-cancellation]") {
+    ExplicitWorkspace workspace;
+    workspace.write(".slang/server.json", "{\"experimentalCooperativeAnalysis\":true}\n");
+    std::string text = "module top;\n";
+    for (int i = 0; i < 5000; ++i)
+        text += "int padding_" + std::to_string(i) + ";\n";
+    text += "endmodule\n";
+    workspace.write("top.sv", text);
+    ServerHarness server(workspace.params());
+    const auto uri = workspace.uri("top.sv");
+    auto doc = server.m_driver->getDocument(uri);
+    bool probing = false, interrupted = false;
+    lsp::RequestContext ctx("standalone owner", lsp::ID_t{905});
+    ctx.setCheckpointObserverForTesting([&](std::string_view where) {
+        if (where == "before standalone owner probe")
+            probing = true;
+        if (probing && where == "during disposable syntax parsing") {
+            interrupted = true;
+            ctx.cancel();
+        }
+    });
+    CHECK_THROWS_AS(server.m_driver->getIncludeContext(uri, nullptr, ctx), lsp::RequestCancelled);
+    REQUIRE(interrupted);
+    CHECK_FALSE(doc->getCachedSyntaxTree());
+    CHECK(server.m_driver->getOwnerDiscoveryAttemptCount() == 0);
+    CHECK_FALSE(server.m_driver->getIncludeContext(uri));
+    CHECK(server.m_driver->getOwnerDiscoveryAttemptCount() == 0);
+    CHECK(doc->getSyntaxTree()->diagnostics().empty());
 }

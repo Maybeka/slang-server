@@ -315,7 +315,8 @@ public:
     getDocCompletion(const lsp::CompletionParams&, lsp::RequestContext ctx = {}) override;
 
     // Used to show the selected instance and associated buttons when a design is set
-    std::optional<std::vector<lsp::CodeLens>> getDocCodeLens(const lsp::CodeLensParams&) override;
+    std::optional<std::vector<lsp::CodeLens>> getDocCodeLens(const lsp::CodeLensParams&,
+                                                             lsp::RequestContext ctx = {}) override;
 
     std::optional<std::vector<lsp::InlayHint>> getDocInlayHint(
         const lsp::InlayHintParams&) override;
