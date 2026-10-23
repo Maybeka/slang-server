@@ -1275,7 +1275,7 @@ index a8d51f7746b0d8d0b2d5baf9c3dd9ef6477b4154..1b486f2ac1db7ad6c074412fd8f9b302
 +};
  } // namespace slang::syntax
 diff --git a/include/slang/text/SourceManager.h b/include/slang/text/SourceManager.h
-index de1d1c27195b364570eab007408f2aac14f86a17..ea2798b865b69e3dd1a7ad8b69239d7ebce762eb 100644
+index de1d1c27195b364570eab007408f2aac14f86a17..f5e0b5166659e4e8e6ef08df78c8b255f995f930 100644
 --- a/include/slang/text/SourceManager.h
 +++ b/include/slang/text/SourceManager.h
 @@ -16,15 +16,22 @@
@@ -1434,17 +1434,26 @@ index de1d1c27195b364570eab007408f2aac14f86a17..ea2798b865b69e3dd1a7ad8b69239d7e
      /// Gets the source line number for a given source location.
      size_t getLineNumber(SourceLocation location) const;
  
-@@ -229,6 +348,9 @@ public:
+@@ -229,6 +348,18 @@ public:
                                        std::string_view macroName);
  
      /// Instead of loading source from a file, copy it from text already in memory.
 +    /// Private query source with a physical identity, without changing editor / disk lookups.
 +    SourceBuffer assignQueryText(std::string_view path, std::string_view text);
 +
++    /// Release private query bytes after every syntax / semantic consumer has
++    /// been destroyed. Rejects ordinary, pinned and immutable-prefix buffers.
++    /// The BufferID is never reused; its source names remain owned by this manager.
++    bool releaseQueryText(BufferID buffer);
++
++    /// Keep private query storage until all tree / buffer-pin consumers release
++    /// this lease. Acquiring a lease does not change disk or editor lookup data.
++    std::shared_ptr<void> retainQueryText(BufferID buffer);
++
      SourceBuffer assignText(std::string_view text, SourceLocation includedFrom = SourceLocation(),
                              const SourceLibrary* library = nullptr);
  
-@@ -256,28 +378,57 @@ public:
+@@ -256,28 +387,57 @@ public:
      /// Returns true if the given file path is already loaded and cached in the source manager.
      bool isCached(const std::filesystem::path& path) const;
  
@@ -1507,7 +1516,7 @@ index de1d1c27195b364570eab007408f2aac14f86a17..ea2798b865b69e3dd1a7ad8b69239d7e
  
      /// Stores information specified in a pragma diagnostic directive, which alters the
      /// currently active set of diagnostic mappings.
-@@ -339,6 +490,14 @@ public:
+@@ -339,6 +499,25 @@ public:
  
      /// Returns the total bytes consumed by all loaded source files:
      /// raw file content plus any cached line-offset tables.
@@ -1519,10 +1528,29 @@ index de1d1c27195b364570eab007408f2aac14f86a17..ea2798b865b69e3dd1a7ad8b69239d7e
 +        std::shared_lock lock(mutex);
 +        return bufferEntries.size();
 +    }
++    struct MemoryUsage {
++        size_t dataBytes = 0;
++        size_t queryBytes = 0;
++        size_t queryBuffers = 0;
++        size_t retainedNameBytes = 0;
++        size_t indexBytes = 0;
++        size_t total() const { return dataBytes + retainedNameBytes + indexBytes; }
++    };
++    /// Capacity-based source storage, deduplicated across aliases. Includes
++    /// still-pinned replaced bytes. Source-location table storage is separate.
++    MemoryUsage getMemoryUsageDetails() const;
      size_t getMemoryUsage() const;
  
      /// Appends raw line-start offsets for @a text to @a offsets, using the same
-@@ -370,6 +529,7 @@ private:
+@@ -353,6 +532,7 @@ private:
+         std::vector<size_t> lineOffsets;              // cache of compute line offsets
+         const std::filesystem::path* const directory; // directory in which the file exists
+         const std::filesystem::path fullPath;         // full path to the file
++        bool queryText = false;
+         bool isStale = false; // Is pointing at stale data (path has newer contents elsewhere)
+ 
+         FileData(const std::filesystem::path* directory, std::string name, SmallVector<char>&& data,
+@@ -370,6 +550,7 @@ private:
          uint64_t sortKey = 0;
          BufferKind bufferKind = BufferKind::DesignFile;
          std::vector<LineDirectiveInfo> lineDirectives;
@@ -1530,17 +1558,25 @@ index de1d1c27195b364570eab007408f2aac14f86a17..ea2798b865b69e3dd1a7ad8b69239d7e
  
          FileInfo() = default;
  
-@@ -441,6 +601,9 @@ private:
+@@ -441,6 +622,17 @@ private:
  
      // index from BufferID to buffer metadata
      std::vector<std::variant<FileInfo, ExpansionInfo>> bufferEntries;
 +    std::shared_ptr<const ImmutablePrefix> immutablePrefix;
++    // Weak accounting does not extend any source lifetime. Entries are pruned
++    // during measurement; pinned old data stays visible after editor replacement.
++    mutable flat_hash_map<const FileData*, std::weak_ptr<FileData>> sourceData;
++    flat_hash_map<BufferID, std::weak_ptr<void>> queryLeases;
++    struct QueryLease;
++    struct QueryPin;
++    bool releaseLeasedQueryText(BufferID buffer);
++    void trackSourceData(const std::shared_ptr<FileData>& data) const;
 +    bool retainingSourceNames = false;
 +    std::set<std::string> retainedSourceNames;
  
      // cache for file lookups; this holds on to the actual file data
      flat_hash_map<std::string, std::pair<std::shared_ptr<FileData>, std::error_code>> lookupCache;
-@@ -448,6 +611,14 @@ private:
+@@ -448,6 +640,14 @@ private:
      // directories for system and user includes
      std::vector<std::filesystem::path> systemDirectories;
      std::vector<std::filesystem::path> userDirectories;
@@ -1555,7 +1591,7 @@ index de1d1c27195b364570eab007408f2aac14f86a17..ea2798b865b69e3dd1a7ad8b69239d7e
  
      // uniquified backing memory for directories
      std::set<std::filesystem::path> directories;
-@@ -455,6 +626,32 @@ private:
+@@ -455,6 +655,32 @@ private:
      // map from buffer to diagnostic directive lists
      flat_hash_map<BufferID, std::vector<DiagnosticDirectiveInfo>> diagDirectives;
  
@@ -1588,6 +1624,15 @@ index de1d1c27195b364570eab007408f2aac14f86a17..ea2798b865b69e3dd1a7ad8b69239d7e
      std::atomic<uint32_t> unnamedBufferCount = 0;
      bool disableProximatePaths = false;
      bool disableLocalIncludes = false;
+@@ -472,6 +698,8 @@ private:
+     template<IsLock TLock>
+     const FileInfo* getFileInfo(BufferID buffer, TLock& lock) const;
+ 
++    std::shared_ptr<void> queryLifetime;
++
+     SourceBuffer createBufferEntry(std::shared_ptr<FileData> fd, SourceLocation includedFrom,
+                                    const SourceLibrary* library, uint64_t sortKey,
+                                    std::unique_lock<std::shared_mutex>& lock);
 diff --git a/include/slang/util/Bag.h b/include/slang/util/Bag.h
 index 989512211f988a20c626534386bcf9c817c380ff..9998e942d0f4886b556712d85db657a6e87d6ba9 100644
 --- a/include/slang/util/Bag.h
@@ -7607,7 +7652,7 @@ index ac681a4db5f9b15af26152781d4260c8db59d68f..771e3e20152a01fd39b367cfbdd92bd4
 +}
 +} // namespace slang::syntax
 diff --git a/source/text/SourceManager.cpp b/source/text/SourceManager.cpp
-index 386684b5adada5a55d10eb0152211b4ce63be7e4..7d0cc3b9fe10691a122155c3a1b6840492006e34 100644
+index 386684b5adada5a55d10eb0152211b4ce63be7e4..c6e6c475e762ef2d7be0a45e979934dc89ba29d1 100644
 --- a/source/text/SourceManager.cpp
 +++ b/source/text/SourceManager.cpp
 @@ -7,14 +7,32 @@
@@ -7643,7 +7688,7 @@ index 386684b5adada5a55d10eb0152211b4ce63be7e4..7d0cc3b9fe10691a122155c3a1b68404
  
  namespace fs = std::filesystem;
  
-@@ -22,6 +40,770 @@ namespace slang {
+@@ -22,6 +40,772 @@ namespace slang {
  
  static const fs::path emptyPath;
  
@@ -8257,6 +8302,7 @@ index 386684b5adada5a55d10eb0152211b4ce63be7e4..7d0cc3b9fe10691a122155c3a1b68404
 +        auto directory = &*directories.insert(fs::path(file.directory)).first;
 +        auto fd = std::make_shared<FileData>(directory, file.displayName, std::move(bytes),
 +                                             fs::path(file.fullPath));
++        trackSourceData(fd);
 +        snapshotFiles.push_back(fd);
 +        if (file.generated)
 +            snapshotGeneratedPaths.insert(file.fullPath);
@@ -8356,6 +8402,7 @@ index 386684b5adada5a55d10eb0152211b4ce63be7e4..7d0cc3b9fe10691a122155c3a1b68404
 +            replacement = std::make_shared<FileData>(directory, data->name, std::move(bytes),
 +                                                     data->fullPath);
 +        }
++        trackSourceData(replacement);
 +        replacements.emplace(original, replacement);
 +        data = std::move(replacement);
 +    }
@@ -8414,7 +8461,7 @@ index 386684b5adada5a55d10eb0152211b4ce63be7e4..7d0cc3b9fe10691a122155c3a1b68404
  static size_t getTextEnd(const SmallVector<char>& mem) {
      size_t result = mem.size();
      if (result && mem[result - 1] == '\0')
-@@ -29,34 +811,198 @@ static size_t getTextEnd(const SmallVector<char>& mem) {
+@@ -29,34 +813,201 @@ static size_t getTextEnd(const SmallVector<char>& mem) {
      return result;
  }
  
@@ -8503,6 +8550,9 @@ index 386684b5adada5a55d10eb0152211b4ce63be7e4..7d0cc3b9fe10691a122155c3a1b68404
 +    if (!prefix || bufferEntries.size() != 1 || !lookupCache.empty() || snapshotRecording ||
 +        snapshotReplay || immutablePrefix)
 +        SLANG_THROW(std::logic_error("immutable prefix requires a fresh source manager"));
++    for (const auto& entry : prefix->entries)
++        if (auto file = std::get_if<FileInfo>(&entry))
++            trackSourceData(file->data);
 +    bufferEntries = prefix->entries;
 +    lookupCache = prefix->files;
 +    unnamedBufferCount.store(prefix->unnamedCount);
@@ -8613,7 +8663,7 @@ index 386684b5adada5a55d10eb0152211b4ce63be7e4..7d0cc3b9fe10691a122155c3a1b68404
  size_t SourceManager::getRawLineNumber(SourceLocation location) const {
      std::shared_lock<std::shared_mutex> lock(mutex);
      return getRawLineNumber(location, lock);
-@@ -486,6 +1432,8 @@ SourceLocation SourceManager::createExpansionLoc(SourceLocation originalLoc,
+@@ -486,6 +1437,8 @@ SourceLocation SourceManager::createExpansionLoc(SourceLocation originalLoc,
                                                   std::string_view macroName) {
      std::unique_lock<std::shared_mutex> lock(mutex);
  
@@ -8622,11 +8672,14 @@ index 386684b5adada5a55d10eb0152211b4ce63be7e4..7d0cc3b9fe10691a122155c3a1b68404
      bufferEntries.emplace_back(ExpansionInfo(originalLoc, expansionRange, macroName));
      return SourceLocation(BufferID((uint32_t)(bufferEntries.size() - 1), macroName), 0);
  }
-@@ -495,10 +1443,25 @@ SourceBuffer SourceManager::assignText(std::string_view text, SourceLocation inc
+@@ -495,10 +1448,89 @@ SourceBuffer SourceManager::assignText(std::string_view text, SourceLocation inc
      return assignText("", text, includedFrom, library);
  }
  
 +SourceBuffer SourceManager::assignQueryText(std::string_view bufferPath, std::string_view text) {
++    // Macro names and debug BufferID names must not refer to query text that
++    // can be released before the manager's source-location table is retired.
++    retainSourceNames();
 +    fs::path path(bufferPath);
 +    SmallVector<char> bytes;
 +    bytes.insert(bytes.end(), text.begin(), text.end());
@@ -8637,7 +8690,68 @@ index 386684b5adada5a55d10eb0152211b4ce63be7e4..7d0cc3b9fe10691a122155c3a1b68404
 +    auto directory = &*directories.insert(path.parent_path()).first;
 +    auto data = std::make_shared<FileData>(directory, std::move(name), std::move(bytes),
 +                                           std::move(path));
++    if (!queryLifetime)
++        queryLifetime = std::make_shared<char>();
++    data->queryText = true;
 +    return createBufferEntry(std::move(data), {}, nullptr, UINT64_MAX, lock);
++}
++
++bool SourceManager::releaseQueryText(BufferID id) {
++    std::unique_lock lock(mutex);
++    if (immutablePrefix && id.getId() < immutablePrefix->entries.size())
++        return false;
++    auto info = getFileInfo(id, lock);
++    if (!info || !info->data || !info->data->queryText || info->data.use_count() != 1)
++        return false;
++    auto lease = queryLeases.find(id);
++    if (lease != queryLeases.end() && !lease->second.expired())
++        return false;
++    info->data.reset();
++    queryLeases.erase(id);
++    std::vector<LineDirectiveInfo>().swap(info->lineDirectives);
++    diagDirectives.erase(id);
++    return true;
++}
++
++struct SourceManager::QueryLease {
++    SourceManager* manager;
++    BufferID id;
++    std::weak_ptr<void> lifetime;
++    QueryLease(SourceManager& manager, BufferID id, const std::shared_ptr<void>& lifetime) :
++        manager(&manager), id(id), lifetime(lifetime) {}
++    ~QueryLease() {
++        if (auto alive = lifetime.lock())
++            manager->releaseQueryText(id);
++    }
++};
++
++std::shared_ptr<void> SourceManager::retainQueryText(BufferID id) {
++    std::unique_lock lock(mutex);
++    auto info = getFileInfo(id, lock);
++    if (!info || !info->data || !info->data->queryText ||
++        (immutablePrefix && id.getId() < immutablePrefix->entries.size()))
++        SLANG_THROW(std::invalid_argument("query lease requires a live private source buffer"));
++    if (auto found = queryLeases.find(id); found != queryLeases.end())
++        if (auto lease = found->second.lock())
++            return lease;
++    auto lease = std::make_shared<QueryLease>(*this, id, queryLifetime);
++    try {
++        queryLeases.insert_or_assign(id, lease);
++    }
++    catch (...) {
++        lock.unlock(); // A last lease can call back into this manager.
++        throw;
++    }
++    return lease;
++}
++
++bool SourceManager::releaseLeasedQueryText(BufferID id) {
++    {
++        std::shared_lock lock(mutex);
++        if (!queryLeases.contains(id))
++            return false;
++    }
++    return releaseQueryText(id);
 +}
 +
  SourceBuffer SourceManager::assignText(std::string_view path, std::string_view text,
@@ -8649,7 +8763,7 @@ index 386684b5adada5a55d10eb0152211b4ce63be7e4..7d0cc3b9fe10691a122155c3a1b68404
          using namespace std::literals;
          temp = "<unnamed_buffer"s + std::to_string(unnamedBufferCount++) + ">"s;
          path = temp;
-@@ -509,26 +1472,70 @@ SourceBuffer SourceManager::assignText(std::string_view path, std::string_view t
+@@ -509,26 +1541,70 @@ SourceBuffer SourceManager::assignText(std::string_view path, std::string_view t
      if (buffer.empty() || buffer.back() != '\0')
          buffer.push_back('\0');
  
@@ -8730,7 +8844,7 @@ index 386684b5adada5a55d10eb0152211b4ce63be7e4..7d0cc3b9fe10691a122155c3a1b68404
  }
  
  SourceManager::BufferOrError SourceManager::readSource(const fs::path& path,
-@@ -541,6 +1548,29 @@ SourceManager::BufferOrError SourceManager::readHeader(
+@@ -541,6 +1617,29 @@ SourceManager::BufferOrError SourceManager::readHeader(
      std::string_view path, SourceLocation includedFrom, const SourceLibrary* library,
      bool isSystemPath, std::span<std::filesystem::path const> additionalIncludePaths) {
  
@@ -8760,7 +8874,7 @@ index 386684b5adada5a55d10eb0152211b4ce63be7e4..7d0cc3b9fe10691a122155c3a1b68404
      // if the header is specified as an absolute path, just do a straight lookup
      SLANG_ASSERT(!path.empty());
      fs::path p = path;
-@@ -614,18 +1644,25 @@ SourceManager::BufferOrError SourceManager::readHeader(
+@@ -614,18 +1713,25 @@ SourceManager::BufferOrError SourceManager::readHeader(
  }
  
  void SourceManager::addLineDirective(SourceLocation location, size_t lineNum, std::string_view name,
@@ -8788,7 +8902,7 @@ index 386684b5adada5a55d10eb0152211b4ce63be7e4..7d0cc3b9fe10691a122155c3a1b68404
      else
          full = fs::path(info->data->name).replace_filename(linePath);
  
-@@ -634,9 +1671,15 @@ void SourceManager::addLineDirective(SourceLocation location, size_t lineNum, st
+@@ -634,9 +1740,15 @@ void SourceManager::addLineDirective(SourceLocation location, size_t lineNum, st
  }
  
  void SourceManager::addDiagnosticDirective(SourceLocation location, std::string_view name,
@@ -8805,21 +8919,120 @@ index 386684b5adada5a55d10eb0152211b4ce63be7e4..7d0cc3b9fe10691a122155c3a1b68404
  
      size_t offset = fileLocation.offset();
      auto& vec = diagDirectives[fileLocation.buffer()];
-@@ -675,6 +1718,13 @@ std::vector<BufferID> SourceManager::getAllBuffers() const {
- size_t SourceManager::getMemoryUsage() const {
-     std::shared_lock<std::shared_mutex> lock(mutex);
-     size_t total = 0;
+@@ -672,33 +1784,107 @@ std::vector<BufferID> SourceManager::getAllBuffers() const {
+     return result;
+ }
+ 
+-size_t SourceManager::getMemoryUsage() const {
+-    std::shared_lock<std::shared_mutex> lock(mutex);
+-    size_t total = 0;
+-    for (auto& [path, entry] : lookupCache) {
+-        if (entry.first) {
+-            total += entry.first->mem.capacity();
+-            total += entry.first->lineOffsets.capacity() * sizeof(size_t);
++void SourceManager::trackSourceData(const std::shared_ptr<FileData>& data) const {
++    if (data)
++        sourceData.insert_or_assign(data.get(), data);
++}
++
++SourceManager::MemoryUsage SourceManager::getMemoryUsageDetails() const {
++    std::unique_lock lock(mutex);
++    MemoryUsage result;
 +    auto addNames = [&](const auto& names) {
 +        for (const auto& name : names)
-+            total += sizeof(std::string) + 4 * sizeof(void*) + name.capacity() + 1;
++            result.retainedNameBytes += sizeof(std::string) + 4 * sizeof(void*) + name.capacity() +
++                                        1;
 +    };
 +    addNames(retainedSourceNames);
 +    if (immutablePrefix)
 +        addNames(immutablePrefix->names);
-     for (auto& [path, entry] : lookupCache) {
-         if (entry.first) {
-             total += entry.first->mem.capacity();
-@@ -699,6 +1749,8 @@ std::vector<std::shared_ptr<void>> SourceManager::retainBuffers(
++    for (auto it = sourceData.begin(); it != sourceData.end();) {
++        auto data = it->second.lock();
++        if (!data) {
++            it = sourceData.erase(it);
++            continue;
+         }
++        const auto bytes = sizeof(FileData) + data->mem.capacity() +
++                           data->lineOffsets.capacity() * sizeof(size_t) + data->name.capacity() +
++                           1 +
++                           (data->fullPath.native().capacity() + 1) * sizeof(fs::path::value_type);
++        result.dataBytes += bytes;
++        if (data->queryText) {
++            result.queryBytes += bytes;
++            ++result.queryBuffers;
++        }
++        ++it;
+     }
+-    return total;
++    result.indexBytes = sourceData.bucket_count() * (sizeof(decltype(sourceData)::value_type) + 1) +
++                        queryLeases.bucket_count() *
++                            (sizeof(decltype(queryLeases)::value_type) + 1);
++    return result;
+ }
+ 
++size_t SourceManager::getMemoryUsage() const {
++    return getMemoryUsageDetails().total();
++}
++
++struct SourceManager::QueryPin {
++    SourceManager* manager;
++    BufferID id;
++    std::weak_ptr<void> lifetime;
++    std::shared_ptr<void> lease;
++    std::shared_ptr<FileData> data;
++    QueryPin(SourceManager& manager, BufferID id, std::weak_ptr<void> lifetime,
++             std::shared_ptr<void> lease, std::shared_ptr<FileData> data) noexcept :
++        manager(&manager), id(id), lifetime(std::move(lifetime)), lease(std::move(lease)),
++        data(std::move(data)) {}
++    QueryPin(QueryPin&&) noexcept = default;
++    ~QueryPin() {
++        // Last-lease release must see the pin gone. A pin acquired while an old
++        // lease was expiring can finish a previously deferred release too.
++        data.reset();
++        lease.reset();
++        if (auto alive = lifetime.lock())
++            manager->releaseLeasedQueryText(id);
++    }
++};
++
+ std::vector<std::shared_ptr<void>> SourceManager::retainBuffers(
+     std::span<const BufferID> ids) const {
+-    std::shared_lock<std::shared_mutex> lock(mutex);
++    std::vector<QueryPin> pins;
++    pins.reserve(ids.size());
++    {
++        std::shared_lock lock(mutex);
++        for (auto id : ids) {
++            auto info = getFileInfo(id, lock);
++            if (!info || !info->data)
++                continue;
++            auto found = queryLeases.find(id);
++            std::shared_ptr<void> lease;
++            if (found != queryLeases.end())
++                lease = found->second.lock();
++            pins.emplace_back(const_cast<SourceManager&>(*this), id,
++                              info->data->queryText ? queryLifetime : std::weak_ptr<void>{},
++                              std::move(lease), info->data);
++        }
++    }
++    // Construct / destroy callbacks outside the source mutex, including errors.
+     std::vector<std::shared_ptr<void>> result;
+-    result.reserve(ids.size());
+-    for (auto id : ids) {
+-        auto info = getFileInfo(id, lock);
+-        if (info && info->data)
+-            result.push_back(info->data);
++    result.reserve(pins.size());
++    for (auto& pin : pins) {
++        if (pin.lifetime.expired())
++            result.push_back(std::move(pin.data));
++        else {
++            auto owned = std::make_shared<QueryPin>(std::move(pin));
++            result.emplace_back(owned, owned->data.get());
++        }
+     }
+     return result;
+ }
  
  SourceBuffer SourceManager::replaceBufferImpl(FileInfo* oldInfo, SmallVector<char>&& buffer,
                                                std::unique_lock<std::shared_mutex>& lock) {
@@ -8828,7 +9041,7 @@ index 386684b5adada5a55d10eb0152211b4ce63be7e4..7d0cc3b9fe10691a122155c3a1b68404
      auto oldData = oldInfo->data;
  
      // Mark old data as stale, remove reference
-@@ -713,6 +1765,12 @@ SourceBuffer SourceManager::replaceBufferImpl(FileInfo* oldInfo, SmallVector<cha
+@@ -713,6 +1899,12 @@ SourceBuffer SourceManager::replaceBufferImpl(FileInfo* oldInfo, SmallVector<cha
      lookupCache.insert_or_assign(getU8Str(newData->fullPath),
                                   std::pair{newData, std::error_code{}});
  
@@ -8841,7 +9054,7 @@ index 386684b5adada5a55d10eb0152211b4ce63be7e4..7d0cc3b9fe10691a122155c3a1b68404
      // Create a new FileInfo entry with new data (don't modify old entry!)
      // Old data should be freed if nothing more points to it.
      return createBufferEntry(newData, oldInfo->includedFrom, oldInfo->library, oldInfo->sortKey,
-@@ -727,6 +1785,8 @@ SourceBuffer SourceManager::replaceBuffer(BufferID id, SmallVector<char>&& buffe
+@@ -727,6 +1919,8 @@ SourceBuffer SourceManager::replaceBuffer(BufferID id, SmallVector<char>&& buffe
  }
  
  SourceManager::BufferOrError SourceManager::reloadBuffer(BufferID id) {
@@ -8850,7 +9063,19 @@ index 386684b5adada5a55d10eb0152211b4ce63be7e4..7d0cc3b9fe10691a122155c3a1b68404
      std::unique_lock<std::shared_mutex> lock(mutex);
  
      auto oldInfo = getFileInfo(id, lock);
-@@ -783,6 +1843,9 @@ SourceBuffer SourceManager::createBufferEntry(std::shared_ptr<FileData> fd,
+@@ -776,13 +1970,20 @@ SourceBuffer SourceManager::createBufferEntry(std::shared_ptr<FileData> fd,
+     if (sortKey == UINT64_MAX)
+         sortKey = (uint64_t)bufferEntries.size() << 32;
+ 
++    trackSourceData(fd);
++    auto name = retainingSourceNames
++                    ? std::string_view(*retainedSourceNames.emplace(fd->name).first)
++                    : std::string_view(fd->name);
+     bufferEntries.emplace_back(FileInfo(fd, library, includedFrom, sortKey));
+-    BufferID newBufferId((uint32_t)(bufferEntries.size() - 1), fd->name);
++    BufferID newBufferId((uint32_t)(bufferEntries.size() - 1), name);
+ 
+     return SourceBuffer{std::string_view(fd->mem.data(), fd->mem.size()), library, newBufferId};
  }
  
  bool SourceManager::isCached(const fs::path& path) const {
@@ -8860,7 +9085,7 @@ index 386684b5adada5a55d10eb0152211b4ce63be7e4..7d0cc3b9fe10691a122155c3a1b68404
      fs::path absPath;
      if (!disableProximatePaths) {
          std::error_code ec;
-@@ -803,6 +1866,51 @@ SourceManager::BufferOrError SourceManager::openCached(const fs::path& fullPath,
+@@ -803,6 +2004,51 @@ SourceManager::BufferOrError SourceManager::openCached(const fs::path& fullPath,
                                                         SourceLocation includedFrom,
                                                         const SourceLibrary* library,
                                                         uint64_t sortKey) {
@@ -8912,7 +9137,7 @@ index 386684b5adada5a55d10eb0152211b4ce63be7e4..7d0cc3b9fe10691a122155c3a1b68404
      fs::path absPath;
      if (!disableProximatePaths) {
          std::error_code ec;
-@@ -816,6 +1924,8 @@ SourceManager::BufferOrError SourceManager::openCached(const fs::path& fullPath,
+@@ -816,6 +2062,8 @@ SourceManager::BufferOrError SourceManager::openCached(const fs::path& fullPath,
  
      // first see if we have this file cached
      std::string pathStr = getU8Str(absPath);
@@ -8921,7 +9146,7 @@ index 386684b5adada5a55d10eb0152211b4ce63be7e4..7d0cc3b9fe10691a122155c3a1b68404
      {
          std::unique_lock<std::shared_mutex> lock(mutex);
          auto it = lookupCache.find(pathStr);
-@@ -844,31 +1954,23 @@ SourceManager::BufferOrError SourceManager::openCached(const fs::path& fullPath,
+@@ -844,31 +2092,23 @@ SourceManager::BufferOrError SourceManager::openCached(const fs::path& fullPath,
  SourceBuffer SourceManager::cacheBuffer(fs::path&& path, std::string&& pathStr,
                                          SourceLocation includedFrom, const SourceLibrary* library,
                                          uint64_t sortKey, SmallVector<char>&& buffer) {
@@ -8963,7 +9188,7 @@ index 386684b5adada5a55d10eb0152211b4ce63be7e4..7d0cc3b9fe10691a122155c3a1b68404
  }
  
  template<IsLock TLock>
-@@ -1039,4 +2141,127 @@ const SourceManager::LineDirectiveInfo* SourceManager::FileInfo::getPreviousLine
+@@ -1039,4 +2279,130 @@ const SourceManager::LineDirectiveInfo* SourceManager::FileInfo::getPreviousLine
      }
  }
  
@@ -8977,6 +9202,8 @@ index 386684b5adada5a55d10eb0152211b4ce63be7e4..7d0cc3b9fe10691a122155c3a1b68404
 +        const auto& entry = bufferEntries[i];
 +        out.number(entry.index());
 +        if (auto file = std::get_if<FileInfo>(&entry)) {
++            if (!file->data || file->data->queryText)
++                throw std::runtime_error("released or private query buffers cannot be archived");
 +            if (file->library)
 +                throw std::runtime_error(
 +                    "library and line directives are unsupported in parse archives");
@@ -9051,6 +9278,7 @@ index 386684b5adada5a55d10eb0152211b4ce63be7e4..7d0cc3b9fe10691a122155c3a1b68404
 +                mem.append(bytes.begin(), bytes.end());
 +                auto data = std::make_shared<FileData>(directory, std::move(name), std::move(mem),
 +                                                       path);
++                trackSourceData(data);
 +                files.push_back(data);
 +                if (!path.empty())
 +                    lookupCache.insert_or_assign(getU8Str(path),
@@ -9595,18 +9823,24 @@ index b4f6b728ec76e88401c81479159b7cc702b4e74a..494c1a27eb4ff7883bd1bdaf97037017
 +    }
 +}
 diff --git a/tests/unittests/FileTests.cpp b/tests/unittests/FileTests.cpp
-index d3e9fbb31e44cdb6bac0817c03e01b3f83e52fe4..1668b07cdfbe4e7e1f93b50c06692c6fd18a5e5d 100644
+index d3e9fbb31e44cdb6bac0817c03e01b3f83e52fe4..b4d53127a736f9b7a1dc9e7d764717449c1db4fa 100644
 --- a/tests/unittests/FileTests.cpp
 +++ b/tests/unittests/FileTests.cpp
-@@ -3,6 +3,7 @@
+@@ -2,8 +2,13 @@
+ // SPDX-License-Identifier: MIT
  
  #include "Test.h"
++#include <catch2/generators/catch_generators.hpp>
  #include <fstream>
++#include <sstream>
 +#include <stdexcept>
  
++#include "slang/syntax/ParseArchive.h"
++#include "slang/syntax/SyntaxTree.h"
  #include "slang/text/Glob.h"
  #include "slang/text/SourceManager.h"
-@@ -358,6 +359,97 @@ static SmallVector<char> makeBuffer(std::string_view text) {
+ #include "slang/util/String.h"
+@@ -358,6 +363,97 @@ static SmallVector<char> makeBuffer(std::string_view text) {
      return buffer;
  }
  
@@ -9704,6 +9938,160 @@ index d3e9fbb31e44cdb6bac0817c03e01b3f83e52fe4..1668b07cdfbe4e7e1f93b50c06692c6f
  TEST_CASE("Replace assigned source buffer") {
      SourceManager manager;
  
+@@ -375,3 +471,153 @@ TEST_CASE("Replace assigned source buffer") {
+     CHECK(text.back() == '\0');
+     CHECK(manager.getRawFileName(second.id) == "replace_test.sv");
+ }
++
++TEST_CASE("Source memory accounts unique query and pinned replaced bytes", "[query-storage]") {
++    const std::string large(1024 * 1024, 'x');
++    TempFile file(large);
++    SECTION("aliases share one allocation") {
++        SourceManager manager;
++        auto one = manager.readSource(file.path);
++        REQUIRE(one);
++        auto before = manager.getMemoryUsageDetails();
++        auto two = manager.readSource(file.path);
++        REQUIRE(two);
++        CHECK(one->data.data() == two->data.data());
++        CHECK(manager.getMemoryUsageDetails().dataBytes == before.dataBytes);
++    }
++    SECTION("editor pins stay charged until their consumer is gone") {
++        SourceManager manager;
++        auto source = manager.readSource(file.path);
++        REQUIRE(source);
++        auto pins = manager.retainBuffers(std::span(&source->id, 1));
++        const auto before = manager.getMemoryUsageDetails().dataBytes;
++        auto next = manager.replaceBuffer(source->id,
++                                          makeBuffer(std::string(2 * large.size(), 'y')));
++        CHECK(manager.getSourceText(next.id).front() == 'y');
++        const auto both = manager.getMemoryUsageDetails().dataBytes;
++        CHECK(both >= before + 2 * large.size());
++        pins.clear();
++        CHECK(manager.getMemoryUsageDetails().dataBytes + large.size() <= both);
++    }
++    SECTION("private bytes count outside disk lookups") {
++        SourceManager manager;
++        auto native = manager.readSource(file.path);
++        REQUIRE(native);
++        auto query = manager.assignQueryText(file.path.string(), large);
++        const auto memory = manager.getMemoryUsageDetails();
++        CHECK(memory.queryBuffers == 1);
++        CHECK(memory.queryBytes >= large.size());
++        CHECK(memory.dataBytes >= 2 * large.size());
++        auto disk = manager.readSource(file.path);
++        REQUIRE(disk);
++        CHECK(disk->data.data() == native->data.data());
++        CHECK(manager.releaseQueryText(query.id));
++        CHECK(manager.getMemoryUsageDetails().queryBuffers == 0);
++        CHECK(manager.getMemoryUsageDetails().queryBytes == 0);
++        CHECK_FALSE(manager.releaseQueryText(native->id));
++    }
++}
++
++TEST_CASE("Query leases and pins release in either ownership order", "[query-storage]") {
++    const bool pinFirst = GENERATE(false, true);
++    SourceManager manager;
++    auto query = manager.assignQueryText("lease.sv", "module m; endmodule\n");
++    std::vector<std::shared_ptr<void>> pins;
++    if (pinFirst)
++        pins = manager.retainBuffers(std::span(&query.id, 1));
++    auto lease = manager.retainQueryText(query.id);
++    if (!pinFirst)
++        pins = manager.retainBuffers(std::span(&query.id, 1));
++    CHECK_FALSE(manager.releaseQueryText(query.id));
++    lease.reset();
++    CHECK(manager.getMemoryUsageDetails().queryBuffers == 1);
++    CHECK(manager.getSourceText(query.id).starts_with("module m;"));
++    pins.clear();
++    CHECK(manager.getMemoryUsageDetails().queryBuffers == 0);
++    CHECK(manager.getSourceText(query.id).empty());
++    CHECK_FALSE(manager.releaseQueryText(query.id));
++    CHECK_THROWS(manager.retainQueryText(query.id));
++    auto next = manager.assignQueryText("lease.sv", "module n; endmodule\n");
++    CHECK(next.id.getId() > query.id.getId());
++    CHECK(manager.releaseQueryText(next.id));
++}
++
++TEST_CASE("Released query macros keep source names and native snapshots safe", "[query-storage]") {
++    TempFile file("module native; endmodule\n");
++    SourceManager manager;
++    manager.enableSnapshotRecording();
++    auto native = manager.readSource(file.path);
++    REQUIRE(native);
++    const auto before = manager.getMemoryUsageDetails().dataBytes;
++    auto query = manager.assignQueryText(
++        file.path.string(), std::string("//") + std::string(1024 * 1024, 'x') +
++                                "\n`define DECL marker\nmodule m; int `DECL; endmodule\n");
++    auto lease = manager.retainQueryText(query.id);
++    auto tree = syntax::SyntaxTree::fromBuffer(query, manager);
++    REQUIRE(tree->diagnostics().empty());
++    SourceLocation location;
++    auto visit = [&](auto&& self, const syntax::SyntaxNode& node) -> void {
++        for (uint32_t i = 0; i < node.getChildCount(); ++i)
++            if (auto child = node.childNode(i))
++                self(self, *child);
++            else if (auto token = node.childToken(i);
++                     token && token.rawText() == "marker" && manager.isMacroLoc(token.location()))
++                location = token.location();
++    };
++    visit(visit, tree->root());
++    REQUIRE(location);
++    CHECK(manager.getMacroName(location) == "DECL");
++    auto pins = manager.retainBuffers(std::span(&query.id, 1));
++    manager.addLineDirective(SourceLocation(query.id, 0), 1, "logical.sv", 0, true);
++    manager.addDiagnosticDirective(SourceLocation(query.id, 0), "unused-variable",
++                                   DiagnosticSeverity::Ignored, true);
++    tree.reset();
++    lease.reset();
++    CHECK(manager.getMemoryUsageDetails().queryBuffers == 1);
++    pins.clear();
++    CHECK(manager.getMemoryUsageDetails().queryBytes == 0);
++    CHECK(manager.getMemoryUsageDetails().dataBytes <= before + 1024);
++    CHECK(manager.getLineDirectives(query.id).empty());
++    CHECK(manager.getDiagnosticDirectives(query.id).empty());
++    CHECK(manager.getMacroName(location) == "DECL");
++    const auto snapshot = manager.captureSnapshot(std::span(&native->id, 1));
++    SourceManager replay;
++    replay.loadSnapshot(snapshot);
++    CHECK(replay.getMemoryUsageDetails().dataBytes > 0);
++    auto root = replay.createRootBuffer(snapshot.graphFileIds.front());
++    CHECK(replay.getSourceText(root.id) == native->data);
++    CHECK_THROWS(manager.captureSnapshot(std::span(&query.id, 1)));
++    std::stringstream stream;
++    syntax::ArchiveWriter archive(stream, &manager);
++    archive.allowExternalPaths = true;
++    CHECK_THROWS_WITH(manager.writeParseArchive(archive, file.path.parent_path()),
++                      "released or private query buffers cannot be archived");
++}
++
++TEST_CASE("Query storage cannot release an immutable prefix and can outlive its manager",
++          "[query-storage]") {
++    SECTION("prefix data stays owned") {
++        SourceManager manager;
++        auto query = manager.assignQueryText("prefix.sv", "module m; endmodule\n");
++        auto lease = manager.retainQueryText(query.id);
++        auto prefix = manager.captureImmutablePrefix(std::span(&query.id, 1));
++        lease.reset();
++        CHECK_FALSE(manager.releaseQueryText(query.id));
++        CHECK(manager.getMemoryUsageDetails().queryBuffers == 1);
++        SourceManager child;
++        child.inheritImmutablePrefix(prefix);
++        CHECK(child.getMemoryUsageDetails().queryBuffers == 1);
++        CHECK_FALSE(child.releaseQueryText(query.id));
++        CHECK_THROWS(child.retainQueryText(query.id));
++    }
++    SECTION("late pins do not call a destroyed manager") {
++        auto manager = std::make_unique<SourceManager>();
++        auto query = manager->assignQueryText("late.sv", "module m; endmodule\n");
++        auto lease = manager->retainQueryText(query.id);
++        auto pins = manager->retainBuffers(std::span(&query.id, 1));
++        manager.reset();
++        CHECK(query.data.starts_with("module m;"));
++        lease.reset();
++        pins.clear();
++    }
++}
 diff --git a/tests/unittests/ast/ClassTests.cpp b/tests/unittests/ast/ClassTests.cpp
 index 2353d21435f167a21bb448971b690d482d541bf5..72709888ec652c537fcd6ed9d2314d9092a147a9 100644
 --- a/tests/unittests/ast/ClassTests.cpp

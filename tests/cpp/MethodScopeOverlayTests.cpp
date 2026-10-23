@@ -2869,3 +2869,98 @@ TEST_CASE("Nested edited-body macros cannot alter the retained following environ
     CHECK(diagnosticState(server).localDiagnosticUpdates == 0);
     checkNativeDiagnostics(workspace, server, text);
 }
+
+TEST_CASE("Large private query text stays bounded until its last syntax owner closes",
+          "[method-body-diagnostics][query-storage]") {
+    const bool certify = GENERATE(false, true);
+    Workspace workspace;
+    auto original = std::string("`define LINE `__LINE__\n") + std::string(1024 * 1024, ' ') + "\n" +
+                    header;
+    original.insert(original.find("  function int combine"),
+                    "function void report(input int line_number); endfunction\n");
+    original.replace(original.rfind("return value;"), 13, "report(`LINE); return value;");
+    workspace.write("item.svh", original);
+    auto cfg = localDiagnosticConfig;
+    cfg.insert(cfg.size() - 1,
+               ",\"experimentalUvmPrefixCache\":false,\"experimentalUvmSemanticCache\":false,"
+               "\"experimentalScopeSemanticCache\":false,\"experimentalFrozenSources\":false,"
+               "\"experimentalMethodBodyCertificateRenewal\":false");
+    if (certify)
+        cfg.insert(cfg.size() - 1, ",\"experimentalMethodBodyCertification\":true");
+    workspace.write(".slang/server.json", cfg);
+    BodyTestServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    const auto epoch = server.m_driver->completions.getCompletionEpoch();
+    size_t maximum = 0;
+    size_t stableBytes = 0;
+    std::string text;
+    for (int version = 2; version <= 25; ++version) {
+        text = original;
+        text.replace(text.find("local_1 + charl"), 15,
+                     "local_0 +\n charl + " + std::to_string(version));
+        change(server, doc.m_uri, version, text);
+        doc.m_text = text;
+        auto hover = server.getDocHover({.textDocument = {.uri = doc.m_uri},
+                                         .position = doc.getPosition(text.find("return (") + 10)});
+        REQUIRE(hover);
+        server.runBackgroundWork({});
+        REQUIRE(state(server).active);
+        const auto memory = server.m_driver->sm.getMemoryUsageDetails();
+        maximum = std::max(maximum, memory.queryBytes);
+        CHECK(memory.queryBuffers <= 3);
+        if (version == 2) {
+            stableBytes = memory.queryBytes;
+            CHECK(stableBytes < 6 * 1024 * 1024 + 8192);
+        }
+        CHECK(memory.queryBytes <= stableBytes + 4096);
+        CHECK(server.m_driver->completions.getCompletionEpoch() == epoch);
+    }
+    CHECK(maximum > 1024 * 1024);
+    INFO(diagnosticState(server).localDiagnosticDecline);
+    CHECK(diagnosticState(server).localDiagnosticUpdates == 24);
+    checkNativeDiagnostics(workspace, server, text);
+    text = "`define NONLOCAL 1\n" + text;
+    change(server, doc.m_uri, 26, text);
+    server.runBackgroundWork({});
+    CHECK_FALSE(state(server).active);
+    CHECK(server.m_driver->sm.getMemoryUsageDetails().queryBuffers == 0);
+}
+
+TEST_CASE("Cancelled query proof releases temporary roots without losing its baseline",
+          "[method-body-diagnostics][query-storage]") {
+    Workspace workspace;
+    auto original = std::string("`define LINE `__LINE__\n") + header;
+    original.insert(original.find("  function int combine"),
+                    "function void report(input int line_number); endfunction\n");
+    original.replace(original.rfind("return value;"), 13, "report(`LINE); return value;");
+    workspace.write("item.svh", original);
+    auto cfg = localDiagnosticConfig;
+    cfg.insert(cfg.size() - 1, ",\"experimentalMethodBodyCertification\":true");
+    workspace.write(".slang/server.json", cfg);
+    BodyTestServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    auto text = original;
+    text.replace(text.find("local_1 + charl"), 15, "local_0 +\n charl");
+    change(server, doc.m_uri, 2, text);
+    lsp::RequestContext ctx("cancel parse", 177);
+    bool reached = false;
+    ctx.setCheckpointObserverForTesting([&](std::string_view where) {
+        if (where == "during disposable syntax parsing") {
+            reached = true;
+            ctx.cancel();
+        }
+    });
+    const auto before = diagnosticMap(server);
+    CHECK_THROWS_AS(server.runBackgroundWork(ctx), lsp::RequestCancelled);
+    REQUIRE(reached);
+    CHECK(before == diagnosticMap(server));
+    CHECK(server.m_driver->sm.getMemoryUsageDetails().queryBuffers <= 2);
+    server.runBackgroundWork({});
+    CHECK(diagnosticState(server).localDiagnosticUpdates == 1);
+    CHECK(server.m_driver->sm.getMemoryUsageDetails().queryBuffers <= 2);
+    checkNativeDiagnostics(workspace, server, text);
+}

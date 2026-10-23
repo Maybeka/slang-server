@@ -2,6 +2,7 @@
 #include "document/BodyLineProof.h"
 
 #include "util/DisposableParseRequest.h"
+#include "util/QueryText.h"
 #include <algorithm>
 #include <limits>
 #include <map>
@@ -310,7 +311,8 @@ void BodyLineProof::validate(std::string_view current, size_t newEnd,
             if (padded[i] != '\n' && padded[i] != '\r')
                 padded[i] = ' ';
         padded += '\n';
-        auto buffer = sources.assignQueryText(path, padded);
+        QueryText query(sources, path, padded);
+        const auto& buffer = query.buffer;
         auto move = [&](size_t offset) {
             return offset >= editedEnd ? size_t(int64_t(offset) + delta) : offset;
         };
@@ -325,7 +327,7 @@ void BodyLineProof::validate(std::string_view current, size_t newEnd,
         auto options = n.options;
         DisposableParseRequest parse(ctx, true);
         parse.apply(options);
-        auto tree = syntax::SyntaxTree::fromBuffer(buffer, sources, options, n.macros);
+        auto tree = query.parse(options, n.macros);
         for (const auto& diagnostic : tree->diagnostics())
             need(diagnostic.code == diag::NewlineEOF, "current later macro has syntax diagnostics");
         const auto& metadata = tree->getPreprocessorMetadata();

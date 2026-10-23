@@ -4062,11 +4062,29 @@ TEST_CASE("Oversized body admission remembers failures without retaining editing
               limit);
     }
     CHECK(cache->status().admissionHits > 0);
+    const auto beforeChanged = cache->status().ownerBuilds;
     auto changed = make(cache, 1, 4);
     changed->offerInstanceBodies(changed);
     CHECK(cache->status().publications > 0);
-    auto repeated = make(cache, 1, 5);
+    // Admission advice must allow a distinct smaller variant to be built.
+    // Complete source accounting can still reject publication at this tight
+    // budget when the changed consumer pins previously imported descendants.
+    CHECK(cache->status().ownerBuilds > beforeChanged);
+    changed.reset();
+    // After the consumer releases those pins, the same registry must admit and
+    // reuse the smaller variant without increasing its budget or clearing advice.
+    auto retry = make(cache, 1, 5);
+    retry->offerInstanceBodies(retry);
+    retry.reset();
+    auto repeated = make(cache, 1, 6);
     CHECK(repeated->hasImportedInstanceBodies());
+    auto repeatedNative = make(cache, 1, 6, true);
+    CHECK(DiagnosticEngine::reportAll(driver->sm, repeated->getSemanticDiagnostics()) ==
+          DiagnosticEngine::reportAll(driver->sm, repeatedNative->getSemanticDiagnostics()));
+    const auto finalStatus = cache->status();
+    CHECK(finalStatus.baseBytes + finalStatus.ownerBytes + finalStatus.pinnedBytes +
+              finalStatus.admissionBytes <=
+          limit);
     if (!children) {
         // A new registry (budget change / explicit rebuild) does not inherit
         // admission advice from the previous one.

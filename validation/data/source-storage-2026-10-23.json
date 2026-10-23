@@ -1,0 +1,1018 @@
+{
+  "baseCommit": "643328d198708e9acca67b19fe3488b7bcb28e4b",
+  "binarySha256": "e8ecca84a5416985838957f0572282e65ba277a2f51c06fa817c8700cc13bf26",
+  "totalGoalStatus": "active",
+  "stage": "Private query source ownership and complete live source accounting",
+  "experimentsDefaultOff": true,
+  "debounceAdded": false,
+  "first-multiline": {
+    "baseline": {
+      "runs": 3,
+      "lastHoverMs": 42.96175,
+      "lastDiagnosticMs": 70.969834,
+      "p50": 42.96175,
+      "p95": 42.96175,
+      "cancelled": 0,
+      "localDiagnosticUpdates": [
+        1,
+        1,
+        1
+      ]
+    },
+    "candidate": {
+      "runs": 3,
+      "lastHoverMs": 43.804333,
+      "lastDiagnosticMs": 72.830625,
+      "p50": 43.804333,
+      "p95": 43.804333,
+      "cancelled": 0,
+      "localDiagnosticUpdates": [
+        1,
+        1,
+        1
+      ]
+    }
+  },
+  "burst-multiline": {
+    "baseline": {
+      "runs": 3,
+      "lastHoverMs": 27.00525,
+      "lastDiagnosticMs": 40.18525,
+      "p50": 27.449521,
+      "p95": 28.935875,
+      "cancelled": 0,
+      "localDiagnosticUpdates": [
+        12,
+        12,
+        12
+      ]
+    },
+    "candidate": {
+      "runs": 3,
+      "lastHoverMs": 22.180416,
+      "lastDiagnosticMs": 34.912333,
+      "p50": 25.711542,
+      "p95": 28.439208,
+      "cancelled": 0,
+      "localDiagnosticUpdates": [
+        12,
+        12,
+        12
+      ]
+    }
+  },
+  "warm-multiline": {
+    "baseline": {
+      "runs": 3,
+      "lastHoverMs": 25.920791,
+      "lastDiagnosticMs": 38.624375,
+      "p50": 25.616646000000003,
+      "p95": 28.2365,
+      "cancelled": 0,
+      "localDiagnosticUpdates": [
+        14,
+        14,
+        14
+      ]
+    },
+    "candidate": {
+      "runs": 3,
+      "lastHoverMs": 26.319042,
+      "lastDiagnosticMs": 39.726,
+      "p50": 26.239083,
+      "p95": 27.065875,
+      "cancelled": 0,
+      "localDiagnosticUpdates": [
+        14,
+        14,
+        14
+      ]
+    }
+  },
+  "compact-control": {
+    "baseline": {
+      "p50": 28.6641255,
+      "p95": 29.31975,
+      "maximum": 42.811791,
+      "lastDiagnosticMs": 42.719084,
+      "cancelled": 0,
+      "status": {
+        "active": true,
+        "accepted": 12,
+        "decline": "",
+        "version": 13,
+        "localDiagnosticUpdates": 12,
+        "localDiagnosticDecline": "",
+        "certificateRenewals": 0,
+        "retainedHandles": 0,
+        "sourceMemory": null,
+        "sources": []
+      },
+      "postIdlePublications": 0,
+      "finalDiagnostics": "d09496b188e2d2174cc4a6b872304e232beec604a78f07dc053e243ca80cf19c",
+      "lastHoverMs": 28.793334,
+      "postIdleSourceMemory": null
+    },
+    "candidate": {
+      "p50": 26.114521,
+      "p95": 27.873,
+      "maximum": 40.176125,
+      "lastDiagnosticMs": 30.953834,
+      "cancelled": 0,
+      "status": {
+        "active": true,
+        "accepted": 12,
+        "decline": "",
+        "version": 13,
+        "localDiagnosticUpdates": 12,
+        "localDiagnosticDecline": "",
+        "certificateRenewals": 0,
+        "retainedHandles": 0,
+        "sourceMemory": {
+          "dataBytes": 10031973,
+          "queryBytes": 29700,
+          "queryBuffers": 2,
+          "retainedNameBytes": 43267,
+          "indexBytes": 24700
+        },
+        "sources": []
+      },
+      "postIdlePublications": 0,
+      "finalDiagnostics": "d09496b188e2d2174cc4a6b872304e232beec604a78f07dc053e243ca80cf19c",
+      "lastHoverMs": 20.419417,
+      "postIdleSourceMemory": {
+        "dataBytes": 10031973,
+        "queryBytes": 29700,
+        "queryBuffers": 2,
+        "retainedNameBytes": 43267,
+        "indexBytes": 24700
+      },
+      "sourceMemorySamples": {
+        "samples": 12,
+        "first": {
+          "dataBytes": 10017295,
+          "queryBytes": 15022,
+          "queryBuffers": 1,
+          "retainedNameBytes": 43267,
+          "indexBytes": 24700
+        },
+        "last": {
+          "dataBytes": 10031973,
+          "queryBytes": 29700,
+          "queryBuffers": 2,
+          "retainedNameBytes": 43267,
+          "indexBytes": 24700
+        },
+        "maximum": {
+          "dataBytes": 10032045,
+          "queryBytes": 29736,
+          "queryBuffers": 2,
+          "retainedNameBytes": 43267,
+          "indexBytes": 24700
+        }
+      }
+    }
+  },
+  "macro": {
+    "baseline": {
+      "p50": 25.61425,
+      "p95": 849.551417,
+      "maximum": 849.551417,
+      "lastDiagnosticMs": 1170.8595,
+      "cancelled": 6,
+      "status": {
+        "active": false,
+        "accepted": 0,
+        "decline": "current query context required",
+        "version": 0,
+        "localDiagnosticUpdates": 0,
+        "localDiagnosticDecline": "",
+        "certificateRenewals": 0,
+        "retainedHandles": 0,
+        "sourceMemory": null,
+        "sources": []
+      },
+      "postIdlePublications": 612,
+      "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+      "lastHoverMs": 849.551417,
+      "postIdleSourceMemory": null
+    },
+    "candidate": {
+      "p50": 27.001125000000002,
+      "p95": 938.078459,
+      "maximum": 938.078459,
+      "lastDiagnosticMs": 1263.164417,
+      "cancelled": 6,
+      "status": {
+        "active": false,
+        "accepted": 0,
+        "decline": "current query context required",
+        "version": 0,
+        "localDiagnosticUpdates": 0,
+        "localDiagnosticDecline": "",
+        "certificateRenewals": 0,
+        "retainedHandles": 0,
+        "sourceMemory": {
+          "dataBytes": 10072589,
+          "queryBytes": 0,
+          "queryBuffers": 0,
+          "retainedNameBytes": 101398,
+          "indexBytes": 24700
+        },
+        "sources": []
+      },
+      "postIdlePublications": 612,
+      "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+      "lastHoverMs": 938.078459,
+      "postIdleSourceMemory": {
+        "dataBytes": 12436989,
+        "queryBytes": 0,
+        "queryBuffers": 0,
+        "retainedNameBytes": 41325,
+        "indexBytes": 47975
+      },
+      "sourceMemorySamples": {
+        "samples": 12,
+        "first": {
+          "dataBytes": 10017379,
+          "queryBytes": 15064,
+          "queryBuffers": 1,
+          "retainedNameBytes": 43267,
+          "indexBytes": 24700
+        },
+        "last": {
+          "dataBytes": 10072589,
+          "queryBytes": 0,
+          "queryBuffers": 0,
+          "retainedNameBytes": 101398,
+          "indexBytes": 24700
+        },
+        "maximum": {
+          "dataBytes": 10072589,
+          "queryBytes": 29758,
+          "queryBuffers": 2,
+          "retainedNameBytes": 101398,
+          "indexBytes": 24700
+        }
+      }
+    }
+  },
+  "long-1008": {
+    "candidate": {
+      "p50": 24.6655835,
+      "p95": 28.244,
+      "maximum": 35.208375,
+      "lastDiagnosticMs": 27.7855,
+      "cancelled": 0,
+      "status": {
+        "active": true,
+        "accepted": 1010,
+        "decline": "",
+        "version": 1011,
+        "localDiagnosticUpdates": 1010,
+        "localDiagnosticDecline": "",
+        "certificateRenewals": 15,
+        "retainedHandles": 0,
+        "sourceMemory": {
+          "dataBytes": 10032057,
+          "queryBytes": 29742,
+          "queryBuffers": 2,
+          "retainedNameBytes": 43267,
+          "indexBytes": 24700
+        },
+        "sources": []
+      },
+      "postIdlePublications": 612,
+      "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+      "lastHoverMs": 17.462541,
+      "postIdleSourceMemory": {
+        "dataBytes": 12436989,
+        "queryBytes": 0,
+        "queryBuffers": 0,
+        "retainedNameBytes": 41325,
+        "indexBytes": 47975
+      },
+      "sourceMemorySamples": {
+        "samples": 1008,
+        "first": {
+          "dataBytes": 10032057,
+          "queryBytes": 29742,
+          "queryBuffers": 2,
+          "retainedNameBytes": 43267,
+          "indexBytes": 24700
+        },
+        "last": {
+          "dataBytes": 10032057,
+          "queryBytes": 29742,
+          "queryBuffers": 2,
+          "retainedNameBytes": 43267,
+          "indexBytes": 24700
+        },
+        "maximum": {
+          "dataBytes": 10032129,
+          "queryBytes": 29778,
+          "queryBuffers": 2,
+          "retainedNameBytes": 43267,
+          "indexBytes": 24700
+        }
+      }
+    },
+    "baseline": {
+      "p50": 24.699958000000002,
+      "p95": 27.8665,
+      "maximum": 38.216542,
+      "lastDiagnosticMs": 30.380875,
+      "cancelled": 0,
+      "status": {
+        "active": true,
+        "accepted": 1010,
+        "decline": "",
+        "version": 1011,
+        "localDiagnosticUpdates": 1010,
+        "localDiagnosticDecline": "",
+        "certificateRenewals": 15,
+        "retainedHandles": 0,
+        "sourceMemory": null,
+        "sources": []
+      },
+      "postIdlePublications": 612,
+      "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+      "lastHoverMs": 19.063417,
+      "postIdleSourceMemory": null
+    }
+  },
+  "memory-1008": {
+    "baseline": {
+      "p50": 26.3478955,
+      "p95": 30.178375,
+      "maximum": 87.568625,
+      "lastDiagnosticMs": 30.882417,
+      "cancelled": 0,
+      "status": {
+        "active": true,
+        "accepted": 1010,
+        "decline": "",
+        "version": 1011,
+        "localDiagnosticUpdates": 1009,
+        "localDiagnosticDecline": "",
+        "certificateRenewals": 15,
+        "retainedHandles": 0,
+        "sourceMemory": null,
+        "sources": []
+      },
+      "postIdlePublications": 0,
+      "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+      "lastHoverMs": 19.349,
+      "postIdleSourceMemory": null,
+      "memory": {
+        "peakRss": 1342652416,
+        "peakFootprint": 1242678712,
+        "samples": 3651
+      }
+    },
+    "candidate": {
+      "p50": 26.050917,
+      "p95": 33.541,
+      "maximum": 75.08975,
+      "lastDiagnosticMs": 58.528875,
+      "cancelled": 0,
+      "status": {
+        "active": true,
+        "accepted": 1010,
+        "decline": "",
+        "version": 1011,
+        "localDiagnosticUpdates": 1009,
+        "localDiagnosticDecline": "",
+        "certificateRenewals": 15,
+        "retainedHandles": 0,
+        "sourceMemory": {
+          "dataBytes": 10032057,
+          "queryBytes": 29742,
+          "queryBuffers": 2,
+          "retainedNameBytes": 43267,
+          "indexBytes": 24700
+        },
+        "sources": []
+      },
+      "postIdlePublications": 0,
+      "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+      "lastHoverMs": 46.465292,
+      "postIdleSourceMemory": {
+        "dataBytes": 12436989,
+        "queryBytes": 0,
+        "queryBuffers": 0,
+        "retainedNameBytes": 41325,
+        "indexBytes": 47975
+      },
+      "memory": {
+        "peakRss": 1259044864,
+        "peakFootprint": 1183008136,
+        "samples": 3659
+      },
+      "sourceMemorySamples": {
+        "samples": 1008,
+        "first": {
+          "dataBytes": 10032057,
+          "queryBytes": 29742,
+          "queryBuffers": 2,
+          "retainedNameBytes": 43267,
+          "indexBytes": 24700
+        },
+        "last": {
+          "dataBytes": 10032057,
+          "queryBytes": 29742,
+          "queryBuffers": 2,
+          "retainedNameBytes": 43267,
+          "indexBytes": 24700
+        },
+        "maximum": {
+          "dataBytes": 10032129,
+          "queryBytes": 29778,
+          "queryBuffers": 2,
+          "retainedNameBytes": 43267,
+          "indexBytes": 24700
+        }
+      }
+    },
+    "generations": {
+      "native": {
+        "retired": 1
+      },
+      "baseline": {
+        "replacement-cancelled": 280,
+        "retired": 1
+      },
+      "candidate": {
+        "replacement-cancelled": 280,
+        "retired": 1
+      }
+    }
+  },
+  "memory-reverse": {
+    "candidate": {
+      "p50": 26.2303125,
+      "p95": 29.679,
+      "maximum": 85.242084,
+      "lastDiagnosticMs": 34.095916,
+      "cancelled": 0,
+      "status": {
+        "active": true,
+        "accepted": 1010,
+        "decline": "",
+        "version": 1011,
+        "localDiagnosticUpdates": 1010,
+        "localDiagnosticDecline": "",
+        "certificateRenewals": 15,
+        "retainedHandles": 0,
+        "sourceMemory": {
+          "dataBytes": 10032057,
+          "queryBytes": 29742,
+          "queryBuffers": 2,
+          "retainedNameBytes": 43267,
+          "indexBytes": 24700
+        },
+        "sources": []
+      },
+      "postIdlePublications": 0,
+      "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+      "lastHoverMs": 21.387333,
+      "postIdleSourceMemory": {
+        "dataBytes": 12436989,
+        "queryBytes": 0,
+        "queryBuffers": 0,
+        "retainedNameBytes": 41325,
+        "indexBytes": 47975
+      },
+      "memory": {
+        "peakRss": 1323778048,
+        "peakFootprint": 1101153624,
+        "samples": 3657
+      },
+      "sourceMemorySamples": {
+        "samples": 1008,
+        "first": {
+          "dataBytes": 10032057,
+          "queryBytes": 29742,
+          "queryBuffers": 2,
+          "retainedNameBytes": 43267,
+          "indexBytes": 24700
+        },
+        "last": {
+          "dataBytes": 10032057,
+          "queryBytes": 29742,
+          "queryBuffers": 2,
+          "retainedNameBytes": 43267,
+          "indexBytes": 24700
+        },
+        "maximum": {
+          "dataBytes": 10032129,
+          "queryBytes": 29778,
+          "queryBuffers": 2,
+          "retainedNameBytes": 43267,
+          "indexBytes": 24700
+        }
+      }
+    },
+    "baseline": {
+      "p50": 26.363062499999998,
+      "p95": 30.896916,
+      "maximum": 79.58075,
+      "lastDiagnosticMs": 31.188083,
+      "cancelled": 0,
+      "status": {
+        "active": true,
+        "accepted": 1010,
+        "decline": "",
+        "version": 1011,
+        "localDiagnosticUpdates": 1009,
+        "localDiagnosticDecline": "",
+        "certificateRenewals": 15,
+        "retainedHandles": 0,
+        "sourceMemory": null,
+        "sources": []
+      },
+      "postIdlePublications": 0,
+      "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+      "lastHoverMs": 19.550083,
+      "postIdleSourceMemory": null,
+      "memory": {
+        "peakRss": 1362706432,
+        "peakFootprint": 1216071096,
+        "samples": 3654
+      }
+    },
+    "generations": {
+      "candidate": {
+        "replacement-cancelled": 279,
+        "retired": 1
+      },
+      "baseline": {
+        "replacement-cancelled": 280,
+        "retired": 1
+      },
+      "native": {
+        "retired": 1
+      }
+    }
+  },
+  "forced-memory": {
+    "baseline": {
+      "p50": 19.883375,
+      "p95": 21.30575,
+      "maximum": 22.5645,
+      "lastDiagnosticMs": 33.553,
+      "cancelled": 0,
+      "status": {
+        "active": true,
+        "accepted": 14,
+        "decline": "",
+        "version": 15,
+        "localDiagnosticUpdates": 14,
+        "localDiagnosticDecline": "",
+        "certificateRenewals": 0,
+        "retainedHandles": 0,
+        "sourceMemory": null,
+        "sources": []
+      },
+      "postIdlePublications": 0,
+      "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+      "lastHoverMs": 21.30575,
+      "postIdleSourceMemory": null,
+      "memory": {
+        "peakRss": 1329201152,
+        "peakFootprint": 1103185240,
+        "samples": 212
+      }
+    },
+    "candidate": {
+      "p50": 20.853729,
+      "p95": 23.274209,
+      "maximum": 25.678625,
+      "lastDiagnosticMs": 39.06075,
+      "cancelled": 0,
+      "status": {
+        "active": true,
+        "accepted": 14,
+        "decline": "",
+        "version": 15,
+        "localDiagnosticUpdates": 14,
+        "localDiagnosticDecline": "",
+        "certificateRenewals": 0,
+        "retainedHandles": 0,
+        "sourceMemory": {
+          "dataBytes": 10032057,
+          "queryBytes": 29742,
+          "queryBuffers": 2,
+          "retainedNameBytes": 43267,
+          "indexBytes": 24700
+        },
+        "sources": []
+      },
+      "postIdlePublications": 0,
+      "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+      "lastHoverMs": 25.678625,
+      "postIdleSourceMemory": {
+        "dataBytes": 12436989,
+        "queryBytes": 0,
+        "queryBuffers": 0,
+        "retainedNameBytes": 41325,
+        "indexBytes": 47975
+      },
+      "memory": {
+        "peakRss": 1325416448,
+        "peakFootprint": 1100612952,
+        "samples": 216
+      },
+      "sourceMemorySamples": {
+        "samples": 12,
+        "first": {
+          "dataBytes": 10032057,
+          "queryBytes": 29742,
+          "queryBuffers": 2,
+          "retainedNameBytes": 43267,
+          "indexBytes": 24700
+        },
+        "last": {
+          "dataBytes": 10032057,
+          "queryBytes": 29742,
+          "queryBuffers": 2,
+          "retainedNameBytes": 43267,
+          "indexBytes": 24700
+        },
+        "maximum": {
+          "dataBytes": 10032129,
+          "queryBytes": 29778,
+          "queryBuffers": 2,
+          "retainedNameBytes": 43267,
+          "indexBytes": 24700
+        }
+      }
+    },
+    "generations": {
+      "native": {
+        "retired": 1
+      },
+      "baseline": {
+        "replacement-cancelled": 10,
+        "retired": 1
+      },
+      "candidate": {
+        "replacement-cancelled": 10,
+        "retired": 1
+      }
+    }
+  },
+  "macroRepeats": [
+    {
+      "sourceSha256": "6c2ecbefd33ef844ecbbe63d7282d37406714d9c18ef52711337e760141668cb",
+      "passed": true,
+      "rows": [
+        {
+          "label": "native",
+          "pid": 5388,
+          "binarySha256": "e8ecca84a5416985838957f0572282e65ba277a2f51c06fa817c8700cc13bf26",
+          "p50": 4301.680875,
+          "p95": 7214.749459,
+          "maximum": 9019.482333,
+          "lastDiagnosticMs": 8153.738083,
+          "cancelled": 0,
+          "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+          "passed": true
+        },
+        {
+          "label": "baseline",
+          "pid": 5393,
+          "binarySha256": "9d4c554518594189f6baae86c48364e53ab49a4aedde77092e71fb51eec1eac8",
+          "p50": 25.61425,
+          "p95": 849.551417,
+          "maximum": 849.551417,
+          "lastDiagnosticMs": 1170.8595,
+          "cancelled": 6,
+          "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+          "passed": true
+        },
+        {
+          "label": "candidate",
+          "pid": 5401,
+          "binarySha256": "e8ecca84a5416985838957f0572282e65ba277a2f51c06fa817c8700cc13bf26",
+          "p50": 27.001125000000002,
+          "p95": 938.078459,
+          "maximum": 938.078459,
+          "lastDiagnosticMs": 1263.164417,
+          "cancelled": 6,
+          "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "sourceSha256": "6c2ecbefd33ef844ecbbe63d7282d37406714d9c18ef52711337e760141668cb",
+      "passed": true,
+      "rows": [
+        {
+          "label": "candidate",
+          "pid": 5849,
+          "binarySha256": "e8ecca84a5416985838957f0572282e65ba277a2f51c06fa817c8700cc13bf26",
+          "p50": 25.576479,
+          "p95": 927.232917,
+          "maximum": 927.232917,
+          "lastDiagnosticMs": 1247.451917,
+          "cancelled": 6,
+          "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+          "passed": true
+        },
+        {
+          "label": "baseline",
+          "pid": 5851,
+          "binarySha256": "9d4c554518594189f6baae86c48364e53ab49a4aedde77092e71fb51eec1eac8",
+          "p50": 26.891375,
+          "p95": 910.654875,
+          "maximum": 910.654875,
+          "lastDiagnosticMs": 1228.729375,
+          "cancelled": 6,
+          "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+          "passed": true
+        },
+        {
+          "label": "native",
+          "pid": 5855,
+          "binarySha256": "e8ecca84a5416985838957f0572282e65ba277a2f51c06fa817c8700cc13bf26",
+          "p50": 4225.729104,
+          "p95": 7289.265709,
+          "maximum": 9019.526,
+          "lastDiagnosticMs": 8125.151542,
+          "cancelled": 0,
+          "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "sourceSha256": "6c2ecbefd33ef844ecbbe63d7282d37406714d9c18ef52711337e760141668cb",
+      "passed": true,
+      "rows": [
+        {
+          "label": "native",
+          "pid": 5878,
+          "binarySha256": "e8ecca84a5416985838957f0572282e65ba277a2f51c06fa817c8700cc13bf26",
+          "p50": 3992.0443330000003,
+          "p95": 6841.289917,
+          "maximum": 8517.351,
+          "lastDiagnosticMs": 7653.700708,
+          "cancelled": 0,
+          "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+          "passed": true
+        },
+        {
+          "label": "baseline",
+          "pid": 5885,
+          "binarySha256": "9d4c554518594189f6baae86c48364e53ab49a4aedde77092e71fb51eec1eac8",
+          "p50": 25.8940835,
+          "p95": 936.6575,
+          "maximum": 936.6575,
+          "lastDiagnosticMs": 1256.077875,
+          "cancelled": 6,
+          "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+          "passed": true
+        },
+        {
+          "label": "candidate",
+          "pid": 5892,
+          "binarySha256": "e8ecca84a5416985838957f0572282e65ba277a2f51c06fa817c8700cc13bf26",
+          "p50": 25.001917,
+          "p95": 858.281,
+          "maximum": 858.281,
+          "lastDiagnosticMs": 1183.04325,
+          "cancelled": 6,
+          "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+          "passed": true
+        }
+      ]
+    }
+  ],
+  "macroMedian": {
+    "baseline": {
+      "p50": 25.8940835,
+      "p95": 910.654875,
+      "lastDiagnosticMs": 1228.729375,
+      "cancelled": 6
+    },
+    "candidate": {
+      "p50": 25.576479,
+      "p95": 927.232917,
+      "lastDiagnosticMs": 1247.451917,
+      "cancelled": 6
+    }
+  },
+  "publicStates": 56,
+  "fullyUnfrozenNativeStates": 14,
+  "previousNeighbourDifferenceStates": 0,
+  "sdkReplay": {
+    "base": "151a801ceaf6faf23d79a42d210ff67e50eb4660",
+    "patchSha256": "2d2329a17ce66a5a0629e016cfdb522ddf5fabc7814ba115f3aa03d2719c511f",
+    "filesVerified": 709,
+    "archiveExportSubstRestoredFromGit": [
+      ".git_archival.txt"
+    ],
+    "passed": true
+  },
+  "install-smoke": {
+    "uvm": {
+      "enabled": true,
+      "prepared": true,
+      "generation": 2,
+      "consumers": 4,
+      "namespaceDeclines": 0,
+      "chargedBytes": 128513900,
+      "astBytes": 29039968,
+      "fixedSourceFiles": 374,
+      "diagnosticsShareOwner": true,
+      "shippedPreparse": true,
+      "shippedProfile": "default",
+      "projectCacheHit": false,
+      "projectCachePath": "",
+      "syntaxParseMs": 0.0,
+      "archiveWriteMs": 0.0,
+      "archiveLoadMs": 33.790459,
+      "reason": "UVM shares the fixed scope semantic owner; charges cover its full closure"
+    },
+    "scope": {
+      "prepared": true,
+      "chargedBytes": 256543303,
+      "instanceBodiesShared": true,
+      "bodies": {
+        "budgetBytes": 268435456,
+        "baseBytes": 128513900,
+        "ownerBytes": 128029403,
+        "pinnedBytes": 0,
+        "owners": 1,
+        "hits": 1,
+        "misses": 404,
+        "publications": 1,
+        "compactPublications": 1,
+        "evictions": 0,
+        "declines": 0,
+        "ownerBuilds": 1,
+        "admissionHits": 0,
+        "capacitySkips": 0,
+        "admissionBytes": 0,
+        "admissionRecords": 0,
+        "retainedRoots": [
+          "uvmt_cva6_tb.cva6_dut_wrap.cva6_tb_wrapper_i.i_cva6"
+        ]
+      }
+    }
+  },
+  "external-smoke": {
+    "uvm": {
+      "enabled": true,
+      "prepared": true,
+      "generation": 2,
+      "consumers": 4,
+      "namespaceDeclines": 0,
+      "chargedBytes": 128514524,
+      "astBytes": 29039968,
+      "fixedSourceFiles": 374,
+      "diagnosticsShareOwner": true,
+      "shippedPreparse": false,
+      "shippedProfile": "",
+      "projectCacheHit": true,
+      "projectCachePath": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/cva6-uvm-2026-10-21/project/.slang/cache/uvm/6779662595379227671.cst",
+      "syntaxParseMs": 0.0,
+      "archiveWriteMs": 0.0,
+      "archiveLoadMs": 38.4775,
+      "reason": "UVM shares the fixed scope semantic owner; charges cover its full closure"
+    },
+    "scope": {
+      "prepared": true,
+      "chargedBytes": 256544551,
+      "instanceBodiesShared": true,
+      "bodies": {
+        "budgetBytes": 268435456,
+        "baseBytes": 128514524,
+        "ownerBytes": 128030027,
+        "pinnedBytes": 0,
+        "owners": 1,
+        "hits": 1,
+        "misses": 404,
+        "publications": 1,
+        "compactPublications": 1,
+        "evictions": 0,
+        "declines": 0,
+        "ownerBuilds": 1,
+        "admissionHits": 0,
+        "capacitySkips": 0,
+        "admissionBytes": 0,
+        "admissionRecords": 0,
+        "retainedRoots": [
+          "uvmt_cva6_tb.cva6_dut_wrap.cva6_tb_wrapper_i.i_cva6"
+        ]
+      }
+    }
+  },
+  "external-cold-external-smoke": {
+    "uvm": {
+      "enabled": true,
+      "prepared": true,
+      "generation": 2,
+      "consumers": 4,
+      "namespaceDeclines": 0,
+      "chargedBytes": 128514524,
+      "astBytes": 29039968,
+      "fixedSourceFiles": 374,
+      "diagnosticsShareOwner": true,
+      "shippedPreparse": false,
+      "shippedProfile": "",
+      "projectCacheHit": false,
+      "projectCachePath": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/cva6-uvm-2026-10-21/project/.slang/cache/uvm/6779662595379227671.cst",
+      "syntaxParseMs": 425.106542,
+      "archiveWriteMs": 43.543583,
+      "archiveLoadMs": 28.90225,
+      "reason": "UVM shares the fixed scope semantic owner; charges cover its full closure"
+    },
+    "scope": {
+      "prepared": true,
+      "chargedBytes": 256544551,
+      "instanceBodiesShared": true,
+      "bodies": {
+        "budgetBytes": 268435456,
+        "baseBytes": 128514524,
+        "ownerBytes": 128030027,
+        "pinnedBytes": 0,
+        "owners": 1,
+        "hits": 1,
+        "misses": 404,
+        "publications": 1,
+        "compactPublications": 1,
+        "evictions": 0,
+        "declines": 0,
+        "ownerBuilds": 1,
+        "admissionHits": 0,
+        "capacitySkips": 0,
+        "admissionBytes": 0,
+        "admissionRecords": 0,
+        "retainedRoots": [
+          "uvmt_cva6_tb.cva6_dut_wrap.cva6_tb_wrapper_i.i_cva6"
+        ]
+      }
+    }
+  },
+  "tests": {
+    "ctest": 811,
+    "sdkCases": 2594,
+    "sdkAssertions": 26130,
+    "python": 17,
+    "transport": 43,
+    "rootStorageCases": 2,
+    "rootStorageAssertions": 339,
+    "sdkStorageCases": 4,
+    "sdkStorageAssertions": 56,
+    "focusedAsanCases": 6,
+    "focusedAsanAssertions": 64,
+    "asanScope": "SourceManager and lifetime consumers instrumented; remaining SDK/Catch2 release, Mac detect_leaks=0"
+  },
+  "sourceSha256": "6c2ecbefd33ef844ecbbe63d7282d37406714d9c18ef52711337e760141668cb",
+  "notes": [
+    "Original CVA6+complete verification environment, same physical UVM path and whole404-instance DUT frozen. Comparison predecessor main643328d binary9d4c5545.",
+    "Capacity-based live source accounting includes private query and still-pinned replaced data once across aliases; source-location table remains a separate charge. This estimate is not process RSS.",
+    "Private query buffers follow syntax/compilation leases and explicit buffer pins; cancellation and exceptional parsing release disposable bytes. Ordinary files, immutable prefixes and names/BufferIDs retain their established lifetime.",
+    "More complete accounting can legitimately cause cache refusal under a small budget. The admission test still requires new smaller variants to be built, matches Native diagnostics and verifies the same bound; after old consumers close the same registry must actually reuse the smaller variant; no budget was raised.",
+    "Timing and20ms memory/phase probes separated, both orders retained. All candidate public results and612URI maps match Native;14 fully unfrozen states.",
+    "No source/dependency downloads. Source-location history, canceled retirement retry waste, candidate overlap and configurable source growth budgets remain separate unfinished work.",
+    "Default shipped preparse syntaxParseMs0. External new-version cache cold build recorded separately; subsequent project cache restore parses0.",
+    "Initial SDK full-suite TMPDIR used a /var symlink; canonical /private/tmp rerun passes all2594 cases without changing those tests."
+  ],
+  "codeReceipt": {
+    "base": "643328d198708e9acca67b19fe3488b7bcb28e4b",
+    "binarySha256": "e8ecca84a5416985838957f0572282e65ba277a2f51c06fa817c8700cc13bf26",
+    "sourceFiles": {
+      "include/util/QueryText.h": "d8edcac4f06ac726a7151d7366d3c69c1496629857a0750659693181d38007b8",
+      "restoration/main-sdk.json": "2c4c5a4f8b33678b2811f739291a57350f3170153166fe6a7e0df798948fce54",
+      "restoration/slang.patch": "2d2329a17ce66a5a0629e016cfdb522ddf5fabc7814ba115f3aa03d2719c511f",
+      "src/SlangServer.cpp": "f7fb692f4d18f7ec5baa88d5bce1727b7d1ecc38b3a9cf1d59a3df6bf1580e18",
+      "src/document/BodyLineProof.cpp": "0bd300d69070f42862d9400d452c858a95912e56f94121e0b7316ea4aae36290",
+      "src/document/MethodScopeOverlay.cpp": "4d89889603c55ca780c8032196745fbc607b85b6b8d5afc5c1ed89d685496e07",
+      "tests/cpp/MethodScopeOverlayTests.cpp": "0e964aebcfe13c764282eff0453925f2bf08854f3957d4168dd786c064b433f1",
+      "tests/cpp/UvmLibraryTests.cpp": "d26ea1db106852855ca85ce45762e78c7522986f0c5dfdf387afb186b58025dd"
+    },
+    "testsOnlyAmendmentAfterTiming": "Strengthened tight-budget test closes old consumer and requires actual smaller-variant reuse in the same registry/budget. Server build and installed binary SHA unchanged;811CTest rerun."
+  },
+  "cleanup": {
+    "serverPidsChecked": 59,
+    "sampledIdentitiesChecked": 9,
+    "alive": [],
+    "reusedPids": [],
+    "removed": [
+      {
+        "path": "untracked/source-storage-2026-10-23/asan",
+        "bytes": 38909163
+      },
+      {
+        "path": "source/tests/transport/build",
+        "bytes": 2200032
+      }
+    ],
+    "bytesRemoved": 41109195,
+    "historicalAudit": "Previous B2 cleanup.json already confirms54 old serverPIDs/9 lifetimes gone and31,644,371bytes across three passes; comparison installs, reusable caches and sources remain in use."
+  }
+}

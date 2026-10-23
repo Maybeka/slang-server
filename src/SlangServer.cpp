@@ -262,6 +262,7 @@ lsp::InitializeResult SlangServer::getInitialize(const lsp::InitializeParams& pa
                     std::optional<uint64_t> parserUnits;
                     std::vector<DocumentState> documents;
                     std::vector<SourceState> sources;
+                    slang::SourceManager::MemoryUsage sourceMemory;
                 };
                 std::optional<uint64_t> count;
 #if defined(__GNUC__)
@@ -273,7 +274,7 @@ lsp::InitializeResult SlangServer::getInitialize(const lsp::InitializeParams& pa
                           state.renewals, state.retainedHandles,
                           m_methodScope ? m_methodScope->localDiagnosticUpdates() : 0,
                           m_methodScope ? m_methodScope->localDiagnosticDecline() : "", count,
-                          documents, sources});
+                          documents, sources, m_driver->sm.getMemoryUsageDetails()});
             });
     }
 

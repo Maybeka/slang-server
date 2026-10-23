@@ -6,6 +6,7 @@
 #include "completions/MemberCompletions.h"
 #include "document/BodyDiagnosticCache.h"
 #include "util/Converters.h"
+#include "util/QueryText.h"
 #include "util/UvmPhaseTrace.h"
 #include <atomic>
 #include <cctype>
@@ -1422,8 +1423,9 @@ bool MethodScopeOverlay::generalApply(const lsp::DidChangeTextDocumentParams& p,
         if (c != '\n' && c != '\r')
             c = ' ';
     padded += methodText;
-    auto source = driver->sm.assignQueryText(
-        driver->sm.getFullPath(driver->getDocument(uri)->getBuffer()).string(), padded);
+    QueryText query(driver->sm,
+                    driver->sm.getFullPath(driver->getDocument(uri)->getBuffer()).string(), padded);
+    const auto& source = query.buffer;
     for (const auto& line :
          driver->sm.getLineDirectives(BufferID(originalBuffer, "body logical lines"))) {
         auto originalLine = driver->sm.getSourceLocation(
@@ -1456,7 +1458,7 @@ bool MethodScopeOverlay::generalApply(const lsp::DidChangeTextDocumentParams& p,
     phases.mark("body-apply-text");
     ast::BodyQueryEvaluationGuard guard(blocked);
     ctx.checkpoint("before method mini parse");
-    auto tree = syntax::SyntaxTree::fromBuffer(source, driver->sm, treeOptions->bag(), bodyMacros);
+    auto tree = query.parse(treeOptions->bag(), bodyMacros);
     for (const auto& reference : tree->getPreprocessorMetadata().macroRefs)
         validateMacroPreprocessing(reference, bodyMacros, ctx);
     phases.mark("body-apply-parse");
@@ -2026,8 +2028,10 @@ void MethodScopeOverlay::prepareLocalDiagnostics(const Config& config,
             if (c != '\n' && c != '\r')
                 c = ' ';
         padded += baselineText.substr(functionBegin, baselineEnd - functionBegin);
-        auto source = driver->sm.assignQueryText(
-            driver->sm.getFullPath(driver->getDocument(uri)->getBuffer()).string(), padded);
+        QueryText query(driver->sm,
+                        driver->sm.getFullPath(driver->getDocument(uri)->getBuffer()).string(),
+                        padded);
+        const auto& source = query.buffer;
         for (const auto& line :
              driver->sm.getLineDirectives(BufferID(originalBuffer, "body lines"))) {
             auto at = driver->sm.getSourceLocation(BufferID(originalBuffer, "body lines"),
@@ -2044,8 +2048,7 @@ void MethodScopeOverlay::prepareLocalDiagnostics(const Config& config,
             if (directive.offset < functionBegin)
                 driver->sm.addDiagnosticDirective(SourceLocation(source.id, directive.offset),
                                                   directive.name, directive.severity, true);
-        auto tree = syntax::SyntaxTree::fromBuffer(source, driver->sm, treeOptions->bag(),
-                                                   bodyMacros);
+        auto tree = query.parse(treeOptions->bag(), bodyMacros);
         for (const auto& reference : tree->getPreprocessorMetadata().macroRefs)
             validateMacroPreprocessing(reference, bodyMacros, ctx);
         bodyDiagnostics = std::make_unique<BodyDiagnosticCache>(

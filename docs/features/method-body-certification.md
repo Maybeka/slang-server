@@ -122,3 +122,14 @@ lazy and belongs to one original diagnostic owner, without a chain of edited sem
 
 See the [later-macro evaluation](../development/later-macro-line-evaluation.md) for the
 original multiline CVA6 measurements, current Native documentation checks and remaining limits.
+
+
+Private query parse text now follows its syntax/compilation consumers and explicit
+buffer pins. Disposable neighbor proofs release their bytes on success, cancellation
+or error; retained baselines and current mini ASTs keep their leases until unused.
+`slang.methodScopeStatus` includes capacity-based `sourceMemory` with live query
+bytes/buffer counts and still-pinned replaced bytes; source-location table storage
+is separate. Names and BufferIDs remain valid within the source manager, and ordinary
+files / immutable prefixes are never released by this private-query path. Source-location
+history and repeated canceled retirement still require further work. See the
+[source storage evaluation](../development/source-storage-evaluation.md).
