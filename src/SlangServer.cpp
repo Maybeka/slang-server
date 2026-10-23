@@ -1057,6 +1057,7 @@ bool SlangServer::loadConfig(const Config& config, bool forceIndexing, bool requ
                                           std::memory_order_relaxed);
     m_driver = std::move(newDriver);
     m_contextRetirementPending = false;
+    m_contextRetry.reset();
     m_buildfile = std::move(buildfile);
     if (!preserveDesign)
         m_topFile.reset();
@@ -1694,12 +1695,20 @@ void SlangServer::onForegroundComplete() {
         m_activeDiagnosticSnapshot.reset();
         return;
     }
+    if (m_contextRetirementPending)
+        m_contextRetry.noteActivity();
     refreshContextFileWatches();
     if (m_activeDiagnosticSnapshot &&
         (!m_driver || !m_driver->isDiagnosticSnapshotCurrent(*m_activeDiagnosticSnapshot))) {
         m_diagnosticProcess->cancel();
         m_activeDiagnosticSnapshot.reset();
     }
+}
+
+bool SlangServer::retirementIsOnlyBackgroundWork() const {
+    return m_contextRetirementPending && m_driver && !m_methodInputReloadPending &&
+           !m_configReloadPending && !m_activeDiagnosticSnapshot &&
+           !m_diagnosticWake->ready.load() && !m_driver->hasPendingDiagnostics();
 }
 
 bool SlangServer::hasBackgroundWork() const {
@@ -1713,7 +1722,10 @@ bool SlangServer::hasBackgroundWork() const {
 std::chrono::milliseconds SlangServer::backgroundGracePeriod() const {
     // Full-design diagnostics bind on the state worker. Exploration snapshots
     // use their existing isolated-worker scheduling without a settling delay.
-    return std::chrono::milliseconds(m_driver && m_driver->comp ? 2 : 0);
+    auto grace = std::chrono::milliseconds(m_driver && m_driver->comp ? 2 : 0);
+    // The protocol queue wakes this timed wait immediately on new input. Only
+    // maintenance waits for its retry deadline; current diagnostics bypass it.
+    return retirementIsOnlyBackgroundWork() ? std::max(grace, m_contextRetry.remaining()) : grace;
 }
 
 void SlangServer::reportFastCwdFailure(const slang::SourceManager::FastCwdContextError& error) {
@@ -1735,14 +1747,15 @@ void SlangServer::onMessageException(const std::exception& error) {
 void SlangServer::runBackgroundWork(const lsp::RequestContext& ctx) {
     if (m_shutdownRequested || !m_driver)
         return;
+    if (retirementIsOnlyBackgroundWork() && m_contextRetry.remaining().count())
+        return;
     recoverMethodInputs(ctx);
     ctx.throwIfCancelled("before frozen input certification");
     certifyFrozenInputs(&ctx);
     ctx.throwIfCancelled("after frozen input certification");
     // Publish the current diagnostic generation first. Retirement is opportunistic
     // and must not replace a useful local query owner while foreground work is queued.
-    if (m_contextRetirementPending && !m_activeDiagnosticSnapshot &&
-        !m_driver->hasPendingDiagnostics()) {
+    if (retirementIsOnlyBackgroundWork()) {
         maybeRetireParsedContext(&ctx);
         return;
     }
@@ -1887,6 +1900,7 @@ void SlangServer::maybeRetireParsedContext(const lsp::RequestContext* retirement
            m_config.experimentalMethodBodyCertificateRenewal.value())) ||
         std::getenv("SLANG_UVM_GENERATION_DISABLE") || !m_driver) {
         m_contextRetirementPending = false;
+        m_contextRetry.reset();
         return;
     }
     auto epoch = m_driver->completions.getCompletionEpoch();
@@ -1897,6 +1911,7 @@ void SlangServer::maybeRetireParsedContext(const lsp::RequestContext* retirement
         m_contextBudget = std::max<size_t>(16 * 1024 * 1024, bytes * 2);
         m_contextEdits = 0;
         m_contextRetirementPending = false;
+        m_contextRetry.reset();
     }
     uint64_t forced = 0;
     if (auto* value = std::getenv("SLANG_UVM_GENERATION_EDIT_LIMIT"))
@@ -1904,6 +1919,7 @@ void SlangServer::maybeRetireParsedContext(const lsp::RequestContext* retirement
     if (bytes <= m_contextBudget && (!forced || m_contextEdits < forced)) {
         ++m_contextEdits;
         m_contextRetirementPending = false;
+        m_contextRetry.reset();
         return;
     }
     if (!retirementContext && m_config.experimentalCooperativeAnalysis.value() &&
@@ -1941,11 +1957,13 @@ void SlangServer::maybeRetireParsedContext(const lsp::RequestContext* retirement
             m_driver->preserveTrustedUvmForRetirement(false);
     });
     phases.mark("retirement-release");
+    const auto attemptStarted = MaintenanceRetry::Clock::now();
     try {
         if (!loadConfig(m_config, false, true, true, true, retirementContext)) {
             ++m_contextEdits;
             // Invalid configuration is retried after another edit, without an idle spin.
             m_contextRetirementPending = false;
+            m_contextRetry.reset();
             trace("replacement-failed", epoch, bytes);
             return;
         }
@@ -1956,15 +1974,18 @@ void SlangServer::maybeRetireParsedContext(const lsp::RequestContext* retirement
         auto fresh = m_driver->sm.getSourceLocationTableBytes() + m_driver->sm.getMemoryUsage();
         m_contextBudget = std::max<size_t>(16 * 1024 * 1024, fresh * 2);
         m_contextEdits = 0;
+        m_contextRetry.reset();
         trace("retired", m_contextEpoch, fresh);
     }
     catch (const lsp::RequestCancelled&) {
         m_contextRetirementPending = true;
+        m_contextRetry.defer(MaintenanceRetry::Clock::now() - attemptStarted);
         trace("replacement-cancelled", epoch, bytes);
         throw;
     }
     catch (const std::exception&) {
         m_contextRetirementPending = false;
+        m_contextRetry.reset();
         // A failed construction keeps the old owner. If a later publication step threw after
         // the swap, fence that new owner too; the incoming text change is still applied once.
         auto actual = m_driver->completions.getCompletionEpoch();

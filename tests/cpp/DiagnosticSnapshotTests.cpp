@@ -34,6 +34,39 @@ void changeWithoutDiagnostics(ServerHarness& server, const URI& uri, int version
 }
 } // namespace
 
+TEST_CASE("Maintenance retry follows discarded work cost and stays bounded",
+          "[cooperative-retirement][maintenance-retry]") {
+    using namespace std::chrono;
+    server::MaintenanceRetry retry;
+    const auto now = server::MaintenanceRetry::Clock::time_point(seconds(10));
+    CHECK(retry.remaining(now) == milliseconds(0));
+    retry.defer(milliseconds(20), now);
+    CHECK(retry.remaining(now) == milliseconds(40));
+    CHECK(retry.remaining(now + microseconds(39500)) == milliseconds(1));
+    CHECK(retry.remaining(now + milliseconds(40)) == milliseconds(0));
+    retry.noteActivity(now + milliseconds(35));
+    CHECK(retry.remaining(now + milliseconds(40)) == milliseconds(35));
+    retry.noteActivity(now + milliseconds(50));
+    CHECK(retry.remaining(now + milliseconds(50)) == milliseconds(40));
+    retry.defer(milliseconds(20), now);
+    CHECK(retry.remaining(now) == milliseconds(80));
+    for (int i = 0; i < 32; ++i) {
+        retry.defer(milliseconds(20), now);
+        CHECK(retry.remaining(now) <= milliseconds(1000));
+    }
+    CHECK(retry.remaining(now) == milliseconds(1000));
+    retry.reset();
+    retry.noteActivity(now);
+    CHECK(retry.remaining(now) == milliseconds(0));
+    retry.defer(nanoseconds(1), now);
+    CHECK(retry.remaining(now) == milliseconds(2));
+    retry.reset();
+    retry.defer(hours(1), now);
+    CHECK(retry.remaining(now) == milliseconds(1000));
+    retry.reset();
+    CHECK(retry.remaining(now) == milliseconds(0));
+}
+
 TEST_CASE("UVM diagnostic-only parses do not capture edit checkpoints", "[uvm-followup]") {
     namespace fs = std::filesystem;
     auto root = fs::temp_directory_path() /
@@ -1514,6 +1547,8 @@ TEST_CASE(
         using SlangServer::hasBackgroundWork;
         using SlangServer::m_contextBudget;
         using SlangServer::m_contextRetirementPending;
+        using SlangServer::m_contextRetry;
+        using SlangServer::backgroundGracePeriod;
         using SlangServer::runBackgroundWork;
     };
     Harness server(lsp::InitializeParams{.workspaceFolders = {{lsp::WorkspaceFolder{
@@ -1550,9 +1585,22 @@ TEST_CASE(
     CHECK(server.client.diagnosticPublications.size() == publications);
     CHECK(diagnosticObjects(server.client.getDiagnostics(uri)) == diagnostics);
     CHECK(server.m_driver->getDocument(uri)->textMatches(invalid));
+    // Use a synthetic future clock to make this direct-call test independent
+    // of machine scheduling. The wire tests exercise the actual timed queue.
+    server.m_contextRetry.defer(std::chrono::milliseconds(500),
+                                 server::MaintenanceRetry::Clock::now() + std::chrono::hours(1));
+    CHECK(server.backgroundGracePeriod() > std::chrono::seconds(1));
+    lsp::RequestContext waiting("maintenance wait", std::nullopt);
+    bool workStarted = false;
+    waiting.setCheckpointObserverForTesting([&](std::string_view) { workStarted = true; });
+    server.runBackgroundWork(waiting);
+    CHECK_FALSE(workStarted);
+    CHECK(server.m_driver.get() == owner);
+    CHECK(server.client.diagnosticPublications.size() == publications);
     auto hover = server.getDocHover({.textDocument = {.uri = uri}, .position = {0, 16}});
     REQUIRE(hover);
     std::ofstream(root / "files.f") << "missing.sv\n";
+    server.m_contextRetry.reset(); // Explicitly dispatch the next maintenance attempt.
     server.runBackgroundWork({});
     CHECK(server.m_driver.get() == owner);
     CHECK_FALSE(server.m_contextRetirementPending);
@@ -1560,10 +1608,17 @@ TEST_CASE(
     CHECK(diagnosticObjects(server.client.getDiagnostics(uri)) == diagnostics);
     std::ofstream(root / "files.f") << "uvm_pkg.sv\ntop.sv\n";
     // A later edit must survive the retry. Neither draft may clear editor diagnostics.
+    server.m_contextRetry.defer(std::chrono::milliseconds(500),
+                                 server::MaintenanceRetry::Clock::now() + std::chrono::hours(1));
     changeWithoutDiagnostics(server, uri, 4, original);
+    CHECK(server.backgroundGracePeriod() <= std::chrono::milliseconds(2));
     server.runBackgroundWork({});
     CHECK(server.client.diagnosticVersions.at(uri) == 4);
     CHECK(diagnosticObjects(server.client.getDiagnostics(uri)) == baselineDiagnostics);
+    server.runBackgroundWork({});
+    CHECK(server.m_contextRetirementPending);
+    CHECK(server.m_driver.get() == owner);
+    server.m_contextRetry.reset();
     server.runBackgroundWork({});
     CHECK_FALSE(server.m_contextRetirementPending);
     CHECK(server.m_driver->completions.getCompletionEpoch() != epoch);
@@ -1578,6 +1633,8 @@ TEST_CASE(
     CHECK(server.client.diagnosticVersions.at(uri) == 5);
     // Even an endless stream of cancelled candidates cannot bypass the hard limit.
     const auto beforeHardLimit = server.m_driver->completions.getCompletionEpoch();
+    server.m_contextRetry.defer(std::chrono::milliseconds(500),
+                                 server::MaintenanceRetry::Clock::now() + std::chrono::hours(1));
     server.m_contextBudget = 1;
     changeWithoutDiagnostics(server, uri, 6, original);
     CHECK_FALSE(server.m_contextRetirementPending);

@@ -689,7 +689,8 @@ struct IdleCancelParams {
 
 class IdleQueueTestServer : public lsp::JsonRpcServer<IdleQueueTestServer> {
 public:
-    explicit IdleQueueTestServer(bool gateBackground) : gateBackground(gateBackground) {
+    explicit IdleQueueTestServer(bool gateBackground, std::chrono::milliseconds delay = 2ms) :
+        gateBackground(gateBackground), delay(delay) {
         registerMethod<std::nullopt_t, std::monostate, &IdleQueueTestServer::initialize>(
             "initialize");
         registerMethod<std::nullopt_t, std::monostate, &IdleQueueTestServer::hold>("test/hold");
@@ -734,7 +735,9 @@ public:
 
 protected:
     std::chrono::milliseconds backgroundGracePeriod() const override {
-        return std::chrono::milliseconds(2);
+        if (delay > 2ms)
+            record("idle:waiting");
+        return delay;
     }
 
     bool hasBackgroundWork() const override {
@@ -859,6 +862,7 @@ private:
     }
 
     const bool gateBackground;
+    const std::chrono::milliseconds delay;
     bool pending = false;
     bool shuttingDown = false;
     size_t backgroundAttempts = 0;
@@ -902,7 +906,8 @@ std::string idleSnapshotFrame(std::string uri, int id) {
 // Gates are released and input is closed even when REQUIRE aborts a test section.
 class IdleWireHarness {
 public:
-    explicit IdleWireHarness(bool gateBackground) : server(gateBackground) {
+    explicit IdleWireHarness(bool gateBackground, std::chrono::milliseconds delay = 2ms) :
+        server(gateBackground, delay) {
         originalInputState = std::cin.rdstate();
         originalInput = std::cin.rdbuf(&input);
         originalOutput = std::cout.rdbuf(&output);
@@ -982,6 +987,51 @@ TEST_CASE("JSON-RPC queued edit and query snapshots precede idle diagnostics", "
     CHECK(wire.server.trace() == expected);
     CHECK(wire.wireOutput().find("\"result\":\"idle-a.sv@1:x\"") != std::string::npos);
     CHECK(wire.wireOutput().find("\"result\":\"idle-a.sv@2:xy\"") != std::string::npos);
+}
+
+TEST_CASE("New input wakes a maintenance retry wait before its deadline",
+          "[json-rpc][idle][maintenance-retry]") {
+    IdleWireHarness wire(false, 1h);
+    REQUIRE(wire.server.waitForEvent("initialize"));
+    wire.send(idleEditFrame(idleA, 1, 0, "x"));
+    REQUIRE(wire.server.waitForEvent("idle:waiting"));
+    wire.send(idleEditFrame(idleA, 2, 1, "y") + idleSnapshotFrame(idleA, 3));
+    REQUIRE(wire.server.waitForEvent("query:idle-a.sv@2:xy"));
+    wire.finish();
+    REQUIRE(wire.readerSucceeded());
+    CHECK(wire.server.backgroundContexts().empty());
+    CHECK(wire.wireOutput().find("\"result\":\"idle-a.sv@2:xy\"") != std::string::npos);
+}
+
+TEST_CASE("A maintenance retry deadline runs without another input or wake",
+          "[json-rpc][idle][maintenance-retry]") {
+    IdleWireHarness wire(false, 20ms);
+    REQUIRE(wire.server.waitForEvent("initialize"));
+    wire.send(idleEditFrame(idleA, 1, 0, "x"));
+    REQUIRE(wire.server.waitForEvent("idle:waiting"));
+    REQUIRE(wire.server.waitForEvent("idle:finish:1"));
+    wire.finish();
+    REQUIRE(wire.readerSucceeded());
+    CHECK(wire.server.backgroundContexts().size() == 1);
+    const auto events = wire.server.trace();
+    CHECK(std::ranges::count(events, "publish:idle-a.sv@1:x") == 1);
+}
+
+TEST_CASE("An asynchronous result interrupts a maintenance retry wait",
+          "[json-rpc][idle][maintenance-retry]") {
+    IdleWireHarness wire(false, 1h);
+    REQUIRE(wire.server.waitForEvent("initialize"));
+    wire.send(idleMethodFrame("test/captureWake", lsp::ID_t{2}));
+    REQUIRE(wire.server.waitForEvent("wake:captured"));
+    auto wake = wire.server.copiedWake();
+    REQUIRE(bool(wake));
+    wire.send(idleEditFrame(idleA, 1, 0, "x"));
+    REQUIRE(wire.server.waitForEvent("idle:waiting"));
+    wake();
+    REQUIRE(wire.server.waitForEvent("idle:finish:1"));
+    wire.finish();
+    REQUIRE(wire.readerSucceeded());
+    CHECK(wire.server.backgroundContexts().size() == 1);
 }
 
 TEST_CASE("JSON-RPC new query interrupts idle diagnostics before a fresh retry",

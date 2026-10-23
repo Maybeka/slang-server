@@ -133,3 +133,13 @@ is separate. Names and BufferIDs remain valid within the source manager, and ord
 files / immutable prefixes are never released by this private-query path. Source-location
 history and repeated canceled retirement still require further work. See the
 [source storage evaluation](../development/source-storage-evaluation.md).
+
+
+Cooperative retirement retries use the actual cost of a canceled candidate with an
+exponential wait capped at one second per retry. After cancellation, foreground
+activity moves that maintenance deadline; normal input, queries, current diagnostics,
+input/configuration recovery and asynchronous result wakes bypass it. The existing
+hard source highwater still forces retirement, and idle retry runs without another
+user message. Already-started full model/semantic work can still contain atomic
+segments. This adds no fixed input or diagnostic debounce. See the
+[maintenance retry evaluation](../development/maintenance-retry-evaluation.md).

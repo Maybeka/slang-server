@@ -526,7 +526,7 @@ public:
                         lock.lock();
                         if (delay.count() > 0 && queue.empty() && !inputFinished) {
                             queueCondition.wait_for(lock, delay, [&] {
-                                return inputFinished || !queue.empty();
+                                return inputFinished || !queue.empty() || wakeState->requested;
                             });
                         }
                     }

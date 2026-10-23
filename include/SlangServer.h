@@ -19,6 +19,7 @@
 #include "document/SlangDoc.h"
 #include "lsp/LspServer.h"
 #include "lsp/LspTypes.h"
+#include "util/MaintenanceRetry.h"
 #include <atomic>
 #include <functional>
 #include <memory>
@@ -66,6 +67,8 @@ protected:
     uint64_t m_contextEdits = 0;
     bool m_contextRetired = false;
     bool m_contextRetirementPending = false;
+    MaintenanceRetry m_contextRetry;
+    bool retirementIsOnlyBackgroundWork() const;
     void maybeRetireParsedContext(const lsp::RequestContext* retirementContext = nullptr);
     std::string m_diagnosticExecutable;
     std::string m_diagnosticFallbackReason;
