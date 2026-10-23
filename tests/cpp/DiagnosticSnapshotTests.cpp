@@ -1473,3 +1473,179 @@ TEST_CASE("Cancelled full-design dataflow leaves a queryable owner and retries n
     CHECK(diagnosticObjects(server.client.getDiagnostics(uri)) ==
           diagnosticObjects(native.client.getDiagnostics(uri)));
 }
+
+#if defined(__linux__) || defined(__APPLE__)
+TEST_CASE(
+    "Cooperative retirement cancels transactionally and keeps current queries and diagnostics",
+    "[cooperative-retirement]") {
+    const bool delta = GENERATE(false, true);
+    const auto cancelAt = GENERATE("after retirement inputs", "after retirement model",
+                                   "before retirement commit");
+    CAPTURE(delta, cancelAt);
+    namespace fs = std::filesystem;
+    auto root = fs::canonical(fs::temp_directory_path()) /
+                ("slang-cooperative-retire-" +
+                 std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    fs::create_directories(root / ".slang");
+    std::optional<std::string> previous;
+    if (auto* value = std::getenv("SLANG_UVM_GENERATION_EDIT_LIMIT"))
+        previous = value;
+    setenv("SLANG_UVM_GENERATION_EDIT_LIMIT", "1", 1);
+    auto cleanup = slang::ScopeGuard([&] {
+        if (previous)
+            setenv("SLANG_UVM_GENERATION_EDIT_LIMIT", previous->c_str(), 1);
+        else
+            unsetenv("SLANG_UVM_GENERATION_EDIT_LIMIT");
+        fs::remove_all(root);
+    });
+    Config config;
+    config.build = "files.f";
+    config.flags = "--single-unit --threads 1";
+    config.experimentalUvmPrefixCache = true;
+    config.experimentalCooperativeAnalysis = true;
+    config.experimentalDiagnosticDeltaPublishing = delta;
+    std::ofstream(root / ".slang/server.json") << rfl::json::write(config);
+    std::ofstream(root / "files.f") << "uvm_pkg.sv\ntop.sv\n";
+    std::ofstream(root / "uvm_pkg.sv") << "package uvm_pkg; class base; endclass endpackage\n";
+    const std::string original = "module top; int value; initial value=1; endmodule\n";
+    std::ofstream(root / "top.sv") << original;
+    struct Harness : ServerHarness {
+        using ServerHarness::ServerHarness;
+        using SlangServer::hasBackgroundWork;
+        using SlangServer::m_contextBudget;
+        using SlangServer::m_contextRetirementPending;
+        using SlangServer::runBackgroundWork;
+    };
+    Harness server(lsp::InitializeParams{.workspaceFolders = {{lsp::WorkspaceFolder{
+                                             .uri = URI::fromFile(root), .name = "retire"}}}});
+    const auto uri = URI::fromFile(root / "top.sv");
+    server.m_driver->openDocument(uri, original, 1, true);
+    server.m_driver->runPendingDiagnostics({});
+    const auto baselineDiagnostics = diagnosticObjects(server.client.getDiagnostics(uri));
+    auto* owner = server.m_driver.get();
+    const auto epoch = owner->completions.getCompletionEpoch();
+    changeWithoutDiagnostics(server, uri, 2, original + "\n");
+    const std::string invalid = "module top; int value; initial value=missing_value; endmodule\n";
+    changeWithoutDiagnostics(server, uri, 3, invalid);
+    CHECK(server.m_contextRetirementPending);
+    CHECK(server.m_driver.get() == owner);
+    server.runBackgroundWork({}); // Current diagnostics precede opportunistic retirement.
+    CHECK(server.client.diagnosticVersions.at(uri) == 3);
+    REQUIRE_FALSE(server.client.getDiagnostics(uri).empty());
+    const auto diagnostics = diagnosticObjects(server.client.getDiagnostics(uri));
+    const auto publications = server.client.diagnosticPublications.size();
+    lsp::RequestContext cancellation("retirement", std::nullopt);
+    bool reached = false;
+    cancellation.setCheckpointObserverForTesting([&](std::string_view where) {
+        if (where == cancelAt) {
+            reached = true;
+            cancellation.cancel();
+        }
+    });
+    CHECK_THROWS_AS(server.runBackgroundWork(cancellation), lsp::RequestCancelled);
+    REQUIRE(reached);
+    CHECK(server.m_driver.get() == owner);
+    CHECK(server.m_driver->completions.getCompletionEpoch() == epoch);
+    CHECK(server.m_contextRetirementPending);
+    CHECK(server.client.diagnosticPublications.size() == publications);
+    CHECK(diagnosticObjects(server.client.getDiagnostics(uri)) == diagnostics);
+    CHECK(server.m_driver->getDocument(uri)->textMatches(invalid));
+    auto hover = server.getDocHover({.textDocument = {.uri = uri}, .position = {0, 16}});
+    REQUIRE(hover);
+    std::ofstream(root / "files.f") << "missing.sv\n";
+    server.runBackgroundWork({});
+    CHECK(server.m_driver.get() == owner);
+    CHECK_FALSE(server.m_contextRetirementPending);
+    CHECK(server.client.diagnosticPublications.size() == publications);
+    CHECK(diagnosticObjects(server.client.getDiagnostics(uri)) == diagnostics);
+    std::ofstream(root / "files.f") << "uvm_pkg.sv\ntop.sv\n";
+    // A later edit must survive the retry. Neither draft may clear editor diagnostics.
+    changeWithoutDiagnostics(server, uri, 4, original);
+    server.runBackgroundWork({});
+    CHECK(server.client.diagnosticVersions.at(uri) == 4);
+    CHECK(diagnosticObjects(server.client.getDiagnostics(uri)) == baselineDiagnostics);
+    server.runBackgroundWork({});
+    CHECK_FALSE(server.m_contextRetirementPending);
+    CHECK(server.m_driver->completions.getCompletionEpoch() != epoch);
+    CHECK(server.m_driver->getDocument(uri)->textMatches(original));
+    server.runBackgroundWork({});
+    CHECK(server.client.diagnosticVersions.at(uri) == 4);
+    CHECK(diagnosticObjects(server.client.getDiagnostics(uri)) == baselineDiagnostics);
+    // A cancelled parse callback copied into an option bag must not poison future parses.
+    changeWithoutDiagnostics(server, uri, 5, invalid);
+    server.runBackgroundWork({});
+    CHECK_FALSE(server.client.getDiagnostics(uri).empty());
+    CHECK(server.client.diagnosticVersions.at(uri) == 5);
+    // Even an endless stream of cancelled candidates cannot bypass the hard limit.
+    const auto beforeHardLimit = server.m_driver->completions.getCompletionEpoch();
+    server.m_contextBudget = 1;
+    changeWithoutDiagnostics(server, uri, 6, original);
+    CHECK_FALSE(server.m_contextRetirementPending);
+    CHECK(server.m_driver->completions.getCompletionEpoch() != beforeHardLimit);
+    CHECK(server.m_driver->getDocument(uri)->textMatches(original));
+}
+#endif
+
+TEST_CASE("Cancelled configured syntax candidates retain edits and retry complete diagnostics",
+          "[cooperative-parsing][diagnostic-cancellation]") {
+    const bool inherited = GENERATE(false, true);
+    namespace fs = std::filesystem;
+    auto root = fs::canonical(fs::temp_directory_path()) /
+                ("slang-syntax-cancel-" +
+                 std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    fs::create_directories(root / ".slang");
+    auto cleanup = slang::ScopeGuard([&] { fs::remove_all(root); });
+    Config config;
+    config.build = "files.f";
+    config.flags = "--single-unit --threads 1";
+    if (inherited)
+        config.flags = "--single-unit --threads 1 --libraries-inherit-macros";
+    config.experimentalCooperativeAnalysis = true;
+    config.experimentalDiagnosticDeltaPublishing = true;
+    std::ofstream(root / ".slang/server.json") << rfl::json::write(config);
+    std::ofstream(root / "files.f") << (inherited ? "top.sv\n-v library.sv\n" : "top.sv\n");
+    std::ofstream(root / "library.sv") << "module library_cell; endmodule\n";
+    std::string original = "module top; int value; initial begin value=1;\n";
+    for (int i = 0; i < 600; ++i)
+        original += "value=value+1;\n";
+    original += "end endmodule\n";
+    std::ofstream(root / "top.sv") << original;
+    auto params = lsp::InitializeParams{
+        .workspaceFolders = {{lsp::WorkspaceFolder{.uri = URI::fromFile(root), .name = "parse"}}}};
+    ServerHarness server(params);
+    const auto uri = URI::fromFile(root / "top.sv");
+    server.m_driver->openDocument(uri, original, 1, true);
+    server.m_driver->runPendingDiagnostics({});
+    CHECK(server.m_driver->getDocument(uri)->requiresNativeReplay() == inherited);
+    auto latest = original;
+    latest.replace(latest.find("value=1"), 7, "value=missing_user_value");
+    changeWithoutDiagnostics(server, uri, 2, latest);
+    const auto publications = server.client.diagnosticPublications.size();
+    lsp::RequestContext cancellation("background parsing", std::nullopt);
+    unsigned tokenChecks = 0;
+    cancellation.setCheckpointObserverForTesting([&](std::string_view where) {
+        if (where == "during disposable syntax parsing" && ++tokenChecks == 2)
+            cancellation.cancel();
+    });
+    CHECK_THROWS_AS(server.m_driver->runPendingDiagnostics(cancellation), lsp::RequestCancelled);
+    CHECK(tokenChecks >= 2);
+    CHECK(server.client.diagnosticPublications.size() == publications);
+    REQUIRE(server.m_driver->hasPendingDiagnostics());
+    CHECK(server.m_driver->getDocument(uri)->textMatches(latest));
+    server.m_driver->runPendingDiagnostics({});
+    CHECK(server.client.diagnosticVersions.at(uri) == 2);
+    const auto diagnostics = diagnosticObjects(server.client.getDiagnostics(uri));
+    REQUIRE_FALSE(diagnostics.empty());
+    std::ofstream(root / "top.sv") << latest;
+    config.experimentalCooperativeAnalysis = false;
+    std::ofstream(root / ".slang/server.json") << rfl::json::write(config);
+    ServerHarness native(params);
+    native.m_driver->openDocument(uri, latest, 2, true);
+    native.m_driver->runPendingDiagnostics({});
+    CHECK(diagnostics == diagnosticObjects(native.client.getDiagnostics(uri)));
+    changeWithoutDiagnostics(server, uri, 3, original);
+    server.m_driver->runPendingDiagnostics({});
+    CHECK(server.client.diagnosticVersions.at(uri) == 3);
+    for (const auto& diagnostic : server.client.getDiagnostics(uri))
+        CHECK(diagnostic.message.find("missing_user_value") == std::string::npos);
+}

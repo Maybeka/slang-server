@@ -19,6 +19,7 @@
 #include "lsp/RequestContext.h"
 #include "lsp/URI.h"
 #include "util/Converters.h"
+#include "util/DisposableParseRequest.h"
 #include "util/Formatting.h"
 #include "util/Logging.h"
 #include "util/Markdown.h"
@@ -66,13 +67,33 @@ bool ServerDriver::s_debugHoversEnabled =
 ServerDriver::ServerDriver(Indexer& indexer, SlangLspClient& client, const Config& config,
                            std::vector<std::string> buildfiles,
                            std::optional<std::string_view> workspaceFolder, bool requireValidConfig,
-                           const ServerDriver* overlays) :
+                           const ServerDriver* overlays,
+                           const lsp::RequestContext* retirementContext) :
     m_driverOwner(std::make_shared<driver::Driver>()), sm(m_driverOwner->sourceManager),
     diagEngine(m_driverOwner->diagEngine), client(client), driver(*m_driverOwner),
     diagClient(std::make_shared<ServerDiagClient>(
         sm, client, config.experimentalDiagnosticDeltaPublishing.value())),
     completions(*this, indexer, sm, options), codeActions(*this, sm, indexer), m_indexer(indexer),
     m_config(config), m_workspacePathPrefix(workspaceFolder.value_or("")) {
+    m_stagedRetirement = retirementContext != nullptr;
+    if (m_stagedRetirement)
+        diagClient->disableDestructorPublication();
+    // Syntax option bags can outlive this construction. Clear the shared request
+    // on every exit so later native parsing cannot inherit a cancelled request.
+    DisposableParseRequest parseRequest(retirementContext ? *retirementContext
+                                                          : lsp::RequestContext{},
+                                        retirementContext != nullptr);
+    auto clearParseRequest = ScopeGuard([&] {
+        if (retirementContext) {
+            driver.options.parseCheckpoint = {};
+            if (options.get<parsing::PreprocessorOptions>())
+                options.insertOrGet<parsing::PreprocessorOptions>().parseCheckpoint = {};
+        }
+    });
+    if (retirementContext) {
+        retirementContext->checkpoint("before retirement inputs");
+        driver.options.parseCheckpoint = parseRequest.callback();
+    }
     if (overlays && overlays->m_preserveTrustedUvm && overlays->m_trustedScopes &&
         config.experimentalScopeSemanticCache.value()) {
         m_trustedScopes = overlays->m_trustedScopes;
@@ -129,6 +150,8 @@ ServerDriver::ServerDriver(Indexer& indexer, SlangLspClient& client, const Confi
     }
 
     m_configLoaded = parseAndLoadSources(buildfiles, requireValidConfig);
+    if (retirementContext)
+        retirementContext->checkpoint("after retirement inputs");
 }
 
 bool ServerDriver::parseAndLoadSources(const std::vector<std::string>& buildfiles,
@@ -409,7 +432,7 @@ void ServerDriver::analyzeDocument(SlangDoc& doc, const lsp::RequestContext& ctx
 
     if (comp) {
         auto previousUnits = m_configuredUnits;
-        refreshConfiguredUnits();
+        refreshConfiguredUnits(ctx);
         if (m_designUsesConfiguredUnits && previousUnits != m_configuredUnits)
             comp->refreshDocuments(m_configuredUnits);
         auto design = comp->createActiveDesignContext({});
@@ -552,10 +575,13 @@ void ServerDriver::copyOpenDocumentsFrom(const ServerDriver* oldDriver,
         return;
 
     m_includeSelections = oldDriver->m_includeSelections;
+    if (m_stagedRetirement)
+        m_buildSourceUris = oldDriver->m_buildSourceUris;
     completions.resolveEdits = oldDriver->completions.resolveEdits;
-    const bool handoff = oldDriver->m_preserveTrustedUvm &&
-                         diagClient->inheritPublications(*oldDriver->diagClient);
-    if (!handoff)
+    const bool handoff = (m_stagedRetirement || oldDriver->m_preserveTrustedUvm) &&
+                         diagClient->inheritPublications(*oldDriver->diagClient,
+                                                         m_stagedRetirement);
+    if (!handoff && !m_stagedRetirement)
         oldDriver->diagClient->clearAndPush();
     for (const auto& uri : oldDriver->m_openDocs) {
         auto docIt = oldDriver->docs.find(uri);
@@ -569,18 +595,20 @@ void ServerDriver::copyOpenDocumentsFrom(const ServerDriver* oldDriver,
         text.remove_suffix(1);
         openDocument(uri, text, docIt->second->getVersion(), deferConfiguredDiagnostics);
     }
-    if (handoff)
+    if (handoff && !m_stagedRetirement)
         diagClient->completePublicationHandoff(*oldDriver->diagClient);
 }
 
 std::unique_ptr<ServerDriver> ServerDriver::createForExplore(
     Indexer& indexer, SlangLspClient& client, const Config& config,
     std::optional<std::string_view> workspaceFolder, const ServerDriver* oldDriver,
-    bool requireValidConfig, bool deferOpenDiagnostics) {
+    bool requireValidConfig, bool deferOpenDiagnostics,
+    const lsp::RequestContext* retirementContext) {
     UvmPhaseTrace phases(deferOpenDiagnostics && config.experimentalUvmPrefixCache.value());
     auto newDriver = std::make_unique<ServerDriver>(indexer, client, config,
                                                     std::vector<std::string>{}, workspaceFolder,
-                                                    requireValidConfig, oldDriver);
+                                                    requireValidConfig, oldDriver,
+                                                    retirementContext);
     phases.mark("retirement-construct");
     if (requireValidConfig && !newDriver->m_configLoaded)
         return nullptr;
@@ -592,10 +620,12 @@ std::unique_ptr<ServerDriver> ServerDriver::createForExplore(
 std::unique_ptr<ServerDriver> ServerDriver::createFromFileLists(
     Indexer& indexer, SlangLspClient& client, const Config& config,
     std::vector<std::string> buildfiles, std::optional<std::string_view> workspaceFolder,
-    const ServerDriver* oldDriver, bool requireValidConfig, bool deferOpenDiagnostics) {
+    const ServerDriver* oldDriver, bool requireValidConfig, bool deferOpenDiagnostics,
+    const lsp::RequestContext* retirementContext) {
     UvmPhaseTrace phases;
     auto newDriver = std::make_unique<ServerDriver>(indexer, client, config, std::move(buildfiles),
-                                                    workspaceFolder, requireValidConfig, oldDriver);
+                                                    workspaceFolder, requireValidConfig, oldDriver,
+                                                    retirementContext);
     if (requireValidConfig && !newDriver->m_configLoaded)
         return nullptr;
 
@@ -628,6 +658,8 @@ std::unique_ptr<ServerDriver> ServerDriver::createFromFileLists(
             : nullptr);
 
     newDriver->configureFrozenInstances();
+    if (retirementContext)
+        retirementContext->checkpoint("after retirement model");
     phases.mark("retirement-build-model");
     if (!deferOpenDiagnostics) {
         newDriver->diagClient->clear();
@@ -1622,9 +1654,10 @@ std::vector<std::string> ServerDriver::getModulesInFile(const std::string& path)
 std::unique_ptr<ServerDriver> ServerDriver::createFromTop(
     Indexer& indexer, SlangLspClient& client, const Config& config, const URI& topUri,
     std::optional<std::string_view> workspaceFolder, const ServerDriver* oldDriver,
-    bool requireValidConfig, bool deferOpenDiagnostics) {
+    bool requireValidConfig, bool deferOpenDiagnostics,
+    const lsp::RequestContext* retirementContext) {
     auto newDriver = createForExplore(indexer, client, config, workspaceFolder, oldDriver,
-                                      requireValidConfig, deferOpenDiagnostics);
+                                      requireValidConfig, deferOpenDiagnostics, retirementContext);
     if (!newDriver)
         return nullptr;
     auto doc = newDriver->getDocument(topUri);
@@ -1684,6 +1717,8 @@ std::unique_ptr<ServerDriver> ServerDriver::createFromTop(
             : nullptr);
 
     newDriver->configureFrozenInstances();
+    if (retirementContext)
+        retirementContext->checkpoint("after retirement model");
     if (!deferOpenDiagnostics)
         newDriver->publishCompilationDiagnostics();
     return newDriver;

@@ -3,6 +3,7 @@
 #include "ServerDriver.h"
 #include "document/SlangDoc.h"
 #include "util/Converters.h"
+#include "util/DisposableParseRequest.h"
 #include "util/SlangExtensions.h"
 #include <algorithm>
 #include <set>
@@ -92,7 +93,7 @@ void ServerDriver::installConfiguredUnits(std::vector<std::shared_ptr<syntax::Sy
     m_configuredUnitRevision = m_snapshotRevision;
 }
 
-void ServerDriver::refreshConfiguredUnits() {
+void ServerDriver::refreshConfiguredUnits(const lsp::RequestContext& ctx) {
     if (m_configuredUnits.empty() || m_configuredUnitRevision == m_snapshotRevision)
         return;
     bool stale = false;
@@ -102,14 +103,24 @@ void ServerDriver::refreshConfiguredUnits() {
         nativeReplay |= unit->requiresNativeReplay();
     }
     if (stale && nativeReplay) {
+        ctx.checkpoint("before configured syntax parsing");
+        DisposableParseRequest request(ctx, isCooperativeAnalysisEnabled());
+        auto previousCheckpoint = std::move(driver.options.parseCheckpoint);
+        auto restore = slang::ScopeGuard(
+            [&] { driver.options.parseCheckpoint = std::move(previousCheckpoint); });
+        driver.options.parseCheckpoint = request.callback();
         const bool parsed = driver.parseAllSources();
+        ctx.checkpoint("after configured syntax parsing");
+        request.finish(); // Installing complete units is an atomic state transition.
         m_nativeInputsFailed = m_configurationInputsFailed || !parsed;
         installConfiguredUnits(driver.syntaxTrees);
     }
     else {
-        m_currentConfiguredTrees.clear();
+        std::vector<std::shared_ptr<syntax::SyntaxTree>> trees;
         for (const auto& unit : m_configuredUnits)
-            m_currentConfiguredTrees.push_back(unit->getSyntaxTree());
+            trees.push_back(unit->getSyntaxTree(ctx));
+        ctx.checkpoint("after configured syntax parsing");
+        m_currentConfiguredTrees = std::move(trees);
         m_configuredUnitRevision = m_snapshotRevision;
     }
 }

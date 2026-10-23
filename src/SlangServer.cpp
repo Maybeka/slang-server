@@ -983,7 +983,8 @@ std::vector<std::string> SlangServer::getLoads(const std::string& path) {
 }
 
 bool SlangServer::loadConfig(const Config& config, bool forceIndexing, bool requireValidConfig,
-                             bool deferOpenDiagnostics, bool preserveDesign) {
+                             bool deferOpenDiagnostics, bool preserveDesign,
+                             const lsp::RequestContext* retirementContext) {
     const auto workspacePath = m_workspaceFolder ? std::optional<std::string_view>(
                                                        m_workspaceFolder->uri.getPath())
                                                  : std::nullopt;
@@ -991,25 +992,39 @@ bool SlangServer::loadConfig(const Config& config, bool forceIndexing, bool requ
                                                                            : config.build.value();
     std::unique_ptr<ServerDriver> newDriver;
     if (preserveDesign && m_topFile) {
-        newDriver = ServerDriver::createFromTop(m_indexer, m_client, config,
-                                                URI::fromFile(*m_topFile), workspacePath,
-                                                m_driver.get(), requireValidConfig,
-                                                deferOpenDiagnostics &&
-                                                    config.experimentalMethodBodyQueries.value());
+        newDriver = ServerDriver::createFromTop(
+            m_indexer, m_client, config, URI::fromFile(*m_topFile), workspacePath, m_driver.get(),
+            requireValidConfig,
+            deferOpenDiagnostics &&
+                (retirementContext || config.experimentalMethodBodyQueries.value()),
+            retirementContext);
     }
     else if (buildfile) {
         newDriver = ServerDriver::createFromFileLists(
             m_indexer, m_client, config, {*buildfile}, workspacePath, m_driver.get(),
             requireValidConfig,
-            deferOpenDiagnostics && config.experimentalMethodBodyQueries.value());
+            deferOpenDiagnostics &&
+                (retirementContext || config.experimentalMethodBodyQueries.value()),
+            retirementContext);
     }
     else {
         newDriver = ServerDriver::createForExplore(m_indexer, m_client, config, workspacePath,
                                                    m_driver.get(), requireValidConfig,
-                                                   deferOpenDiagnostics);
+                                                   deferOpenDiagnostics, retirementContext);
     }
     if (!newDriver)
         return false;
+
+    if (retirementContext) {
+        // The candidate has not published, cleared the previous diagnostics, or
+        // released query caches. Cancellation before this boundary is transactional.
+        retirementContext->checkpoint("before retirement commit");
+        newDriver->diagClient->completePublicationHandoff(*m_driver->diagClient);
+        m_methodScope.reset();
+        if (m_diagnosticProcess)
+            m_diagnosticProcess->cancel();
+        m_activeDiagnosticSnapshot.reset();
+    }
 
     const bool replacingDriver = bool(m_driver);
     const bool publicationHandoff =
@@ -1019,6 +1034,7 @@ bool SlangServer::loadConfig(const Config& config, bool forceIndexing, bool requ
     m_cancelObsoleteDocumentQueries.store(config.experimentalMethodBodyQueries.value(),
                                           std::memory_order_relaxed);
     m_driver = std::move(newDriver);
+    m_contextRetirementPending = false;
     m_buildfile = std::move(buildfile);
     if (!preserveDesign)
         m_topFile.reset();
@@ -1637,7 +1653,9 @@ void SlangServer::onForegroundComplete() {
 
 bool SlangServer::hasBackgroundWork() const {
     return !m_shutdownRequested && m_driver &&
-           (m_diagnosticWake->ready.load() ||
+           ((m_contextRetirementPending && !m_activeDiagnosticSnapshot &&
+             !m_driver->hasPendingDiagnostics()) ||
+            m_diagnosticWake->ready.load() ||
             (!m_activeDiagnosticSnapshot && m_driver->hasPendingDiagnostics()));
 }
 
@@ -1669,6 +1687,13 @@ void SlangServer::runBackgroundWork(const lsp::RequestContext& ctx) {
     ctx.throwIfCancelled("before frozen input certification");
     certifyFrozenInputs(&ctx);
     ctx.throwIfCancelled("after frozen input certification");
+    // Publish the current diagnostic generation first. Retirement is opportunistic
+    // and must not replace a useful local query owner while foreground work is queued.
+    if (m_contextRetirementPending && !m_activeDiagnosticSnapshot &&
+        !m_driver->hasPendingDiagnostics()) {
+        maybeRetireParsedContext(&ctx);
+        return;
+    }
     auto reportFallback = [&](std::string_view reason) {
         if (((!m_driver->comp && m_driver->hasConfiguredCompilationInputs()) ||
              m_driver->hasSourceContextHints()) &&
@@ -1800,13 +1825,15 @@ void SlangServer::onDocDidOpen(const lsp::DidOpenTextDocumentParams& params) {
                            params.textDocument.version, !m_diagnosticExecutable.empty());
 }
 
-void SlangServer::maybeRetireParsedContext() {
+void SlangServer::maybeRetireParsedContext(const lsp::RequestContext* retirementContext) {
     if ((!m_config.experimentalUvmPrefixCache.value() &&
          !m_config.experimentalFrozenSources.value() &&
          !m_config.experimentalUvmSemanticCache.value() &&
          !m_config.experimentalScopeSemanticCache.value()) ||
-        std::getenv("SLANG_UVM_GENERATION_DISABLE") || !m_driver)
+        std::getenv("SLANG_UVM_GENERATION_DISABLE") || !m_driver) {
+        m_contextRetirementPending = false;
         return;
+    }
     auto epoch = m_driver->completions.getCompletionEpoch();
     auto table = m_driver->sm.getSourceLocationTableBytes();
     auto bytes = table + m_driver->sm.getMemoryUsage();
@@ -1814,11 +1841,22 @@ void SlangServer::maybeRetireParsedContext() {
         m_contextEpoch = epoch;
         m_contextBudget = std::max<size_t>(16 * 1024 * 1024, bytes * 2);
         m_contextEdits = 0;
+        m_contextRetirementPending = false;
     }
     uint64_t forced = 0;
     if (auto* value = std::getenv("SLANG_UVM_GENERATION_EDIT_LIMIT"))
         forced = std::strtoull(value, nullptr, 10);
     if (bytes <= m_contextBudget && (!forced || m_contextEdits < forced)) {
+        ++m_contextEdits;
+        m_contextRetirementPending = false;
+        return;
+    }
+    if (!retirementContext && m_config.experimentalCooperativeAnalysis.value() &&
+        bytes / 2 <= m_contextBudget) {
+        // Keep a hard high-water mark: endlessly cancelled work must not retain
+        // unbounded source generations. At twice the ordinary trigger, use the
+        // existing synchronous fallback and include it in performance accounting.
+        m_contextRetirementPending = true;
         ++m_contextEdits;
         return;
     }
@@ -1835,11 +1873,13 @@ void SlangServer::maybeRetireParsedContext() {
     };
     // Foreground and background model access is serialized by serverStateMutex.
     // Diagnostic children own copied snapshots; cancel and discard their old owner before swapping.
-    m_methodScope.reset();
-    if (m_diagnosticProcess)
-        m_diagnosticProcess->cancel();
-    m_activeDiagnosticSnapshot.reset();
-    m_driver->prepareForContextRetirement();
+    if (!retirementContext) {
+        m_methodScope.reset();
+        if (m_diagnosticProcess)
+            m_diagnosticProcess->cancel();
+        m_activeDiagnosticSnapshot.reset();
+        m_driver->prepareForContextRetirement();
+    }
     m_driver->preserveTrustedUvmForRetirement();
     auto clearPreservation = slang::ScopeGuard([this] {
         if (m_driver)
@@ -1847,8 +1887,10 @@ void SlangServer::maybeRetireParsedContext() {
     });
     phases.mark("retirement-release");
     try {
-        if (!loadConfig(m_config, false, true, true, true)) {
+        if (!loadConfig(m_config, false, true, true, true, retirementContext)) {
             ++m_contextEdits;
+            // Invalid configuration is retried after another edit, without an idle spin.
+            m_contextRetirementPending = false;
             trace("replacement-failed", epoch, bytes);
             return;
         }
@@ -1861,7 +1903,13 @@ void SlangServer::maybeRetireParsedContext() {
         m_contextEdits = 0;
         trace("retired", m_contextEpoch, fresh);
     }
+    catch (const lsp::RequestCancelled&) {
+        m_contextRetirementPending = true;
+        trace("replacement-cancelled", epoch, bytes);
+        throw;
+    }
     catch (const std::exception&) {
+        m_contextRetirementPending = false;
         // A failed construction keeps the old owner. If a later publication step threw after
         // the swap, fence that new owner too; the incoming text change is still applied once.
         auto actual = m_driver->completions.getCompletionEpoch();
@@ -1936,6 +1984,8 @@ void SlangServer::onDocDidChange(const lsp::DidChangeTextDocumentParams& params,
             if (!synced)
                 m_driver->onDocDidChange(params,
                                          {}); // Cancellation never drops text synchronization.
+            if (m_config.experimentalCooperativeAnalysis.value())
+                maybeRetireParsedContext(); // Cancelled notifications still count toward the limit.
             throw;
         }
         catch (const std::exception& error) {

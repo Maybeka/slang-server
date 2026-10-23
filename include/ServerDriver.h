@@ -41,6 +41,7 @@ class ServerDriver {
     friend class MethodScopeOverlay;
     friend class BodyDiagnosticCache;
     std::shared_ptr<driver::Driver> m_driverOwner;
+    bool m_stagedRetirement = false;
 
 public:
     /// Create an explore driver; failed loads return null when requireValidConfig is set.
@@ -48,7 +49,7 @@ public:
         Indexer& indexer, SlangLspClient& client, const Config& config,
         std::optional<std::string_view> workspaceFolder = std::nullopt,
         const ServerDriver* oldDriver = nullptr, bool requireValidConfig = false,
-        bool deferOpenDiagnostics = false);
+        bool deferOpenDiagnostics = false, const lsp::RequestContext* retirementContext = nullptr);
 
     /// Create a build driver; failed loads return null when requireValidConfig is set.
     static std::unique_ptr<ServerDriver> createFromFileLists(
@@ -56,7 +57,7 @@ public:
         std::vector<std::string> buildfiles,
         std::optional<std::string_view> workspaceFolder = std::nullopt,
         const ServerDriver* oldDriver = nullptr, bool requireValidConfig = false,
-        bool deferOpenDiagnostics = false);
+        bool deferOpenDiagnostics = false, const lsp::RequestContext* retirementContext = nullptr);
     /// Mapping of URI to SlangDoc, which may hold a shallow analysis of the document
     std::unordered_map<URI, std::shared_ptr<SlangDoc>> docs;
 
@@ -96,6 +97,9 @@ public:
     bool isTrustedUvmSource(const std::filesystem::path& path) const;
     void preserveTrustedUvmForRetirement(bool enabled = true) { m_preserveTrustedUvm = enabled; }
     bool isFrozenSourcesEnabled() const { return m_config.experimentalFrozenSources.value(); }
+    bool isCooperativeAnalysisEnabled() const {
+        return m_config.experimentalCooperativeAnalysis.value();
+    }
     std::optional<std::string> frozenInputWitnessFailure(
         slang::function_ref<void()> checkCancelled = {}) const;
     /// Only call after the complete current-input witness succeeds in this dispatch.
@@ -305,7 +309,8 @@ public:
     static std::unique_ptr<ServerDriver> createFromTop(
         Indexer& indexer, SlangLspClient& client, const Config& config, const URI& topUri,
         std::optional<std::string_view> workspaceFolder, const ServerDriver* oldDriver,
-        bool requireValidConfig = false, bool deferOpenDiagnostics = false);
+        bool requireValidConfig = false, bool deferOpenDiagnostics = false,
+        const lsp::RequestContext* retirementContext = nullptr);
 
     /// @brief Constructs a new ServerDriver instance by creating and configuring a driver
     /// internally
@@ -317,7 +322,8 @@ public:
     ServerDriver(Indexer& indexer, SlangLspClient& client, const Config& config,
                  std::vector<std::string> buildfiles,
                  std::optional<std::string_view> workspaceFolder, bool requireValidConfig = false,
-                 const ServerDriver* overlays = nullptr);
+                 const ServerDriver* overlays = nullptr,
+                 const lsp::RequestContext* retirementContext = nullptr);
 
     size_t getWsRelativePathOffset(std::string_view path) const {
         return path.starts_with(m_workspacePathPrefix) ? m_workspacePathPrefix.size() : 0;
@@ -457,7 +463,7 @@ private:
     std::unordered_map<URI, std::vector<lsp::Diagnostic>> m_explicitContextErrors;
     flat_hash_set<URI> m_explicitContexts;
     flat_hash_set<URI> m_packageOnlyContexts;
-    void refreshConfiguredUnits();
+    void refreshConfiguredUnits(const lsp::RequestContext& ctx = {});
     void installConfiguredUnits(std::vector<std::shared_ptr<syntax::SyntaxTree>> trees);
     SourceContextHints getSourceHints(BufferID buffer);
     const SourceContextImportHints& getImportHints(const std::shared_ptr<syntax::SyntaxTree>& tree);

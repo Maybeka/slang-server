@@ -65,7 +65,8 @@ protected:
     size_t m_contextBudget = 0;
     uint64_t m_contextEdits = 0;
     bool m_contextRetired = false;
-    void maybeRetireParsedContext();
+    bool m_contextRetirementPending = false;
+    void maybeRetireParsedContext(const lsp::RequestContext* retirementContext = nullptr);
     std::string m_diagnosticExecutable;
     std::string m_diagnosticFallbackReason;
 
@@ -152,7 +153,8 @@ public:
     /// Returns false when an automatic reload cannot construct a valid replacement.
     bool loadConfig(const Config& config, bool forceIndexing = false,
                     bool requireValidConfig = false, bool deferOpenDiagnostics = false,
-                    bool preserveDesign = false);
+                    bool preserveDesign = false,
+                    const lsp::RequestContext* retirementContext = nullptr);
 
     const Config& getConfig() const { return m_config; }
 

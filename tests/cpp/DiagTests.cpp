@@ -3,6 +3,7 @@
 
 #include "utils/GoldenTest.h"
 #include "utils/ServerHarness.h"
+#include <catch2/generators/catch_generators.hpp>
 #include <cstdlib>
 #include <fstream>
 #include <iterator>
@@ -980,4 +981,32 @@ TEST_CASE("Diagnostic delta history survives compiler retirement without clearin
     replacement.clearAndPush();
     CHECK(client.getDiagnostics(uri).empty());
     CHECK(client.diagnosticPublications.size() == 3);
+}
+
+TEST_CASE("Staged retirement preserves closed diagnostics through cancellation and final teardown",
+          "[cooperative-retirement][diagnostic-delta]") {
+    const bool delta = GENERATE(false, true);
+    slang::SourceManager sources;
+    ClientHarness client;
+    const auto closed = URI::fromFile("/tmp/slang-cooperative-closed.sv");
+    lsp::Diagnostic error{.range = {{0, 0}, {0, 1}}, .message = "closed user error"};
+    auto previous = std::make_unique<server::ServerDiagClient>(sources, client, delta);
+    previous->replaceRendered(closed, {error});
+    previous->pushDiags();
+    const auto count = client.diagnosticPublications.size();
+    {
+        server::ServerDiagClient cancelled(sources, client, delta);
+        REQUIRE(cancelled.inheritPublications(*previous, true));
+        CHECK(cancelled.renderedDiagnostics().at(closed).size() == 1);
+    }
+    CHECK(client.diagnosticPublications.size() == count);
+    {
+        server::ServerDiagClient replacement(sources, client, delta);
+        REQUIRE(replacement.inheritPublications(*previous, true));
+        replacement.completePublicationHandoff(*previous);
+        previous.reset();
+        CHECK(client.diagnosticPublications.size() == count);
+        REQUIRE(client.getDiagnostics(closed).size() == 1);
+    }
+    CHECK(client.getDiagnostics(closed).empty());
 }

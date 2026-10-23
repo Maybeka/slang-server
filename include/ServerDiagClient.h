@@ -69,9 +69,15 @@ public:
     void disableDestructorPublication() { m_publishOnDestruction = false; }
     bool publishesOnDestruction() const { return m_publishOnDestruction; }
     // Retiring compiler state does not retire the editor's diagnostic snapshot.
-    bool inheritPublications(const ServerDiagClient& previous) {
-        if (!m_deltaPublishing || !previous.m_deltaPublishing)
+    bool inheritPublications(const ServerDiagClient& previous, bool staged = false) {
+        if (!staged && (!m_deltaPublishing || !previous.m_deltaPublishing))
             return false;
+        if (staged) {
+            // Retain closed-file results too, including when delta publishing is off.
+            // A candidate cancelled before commit must never clear these editor results.
+            m_diagnostics = previous.m_diagnostics;
+            m_versions = previous.m_versions;
+        }
         m_publications = previous.m_publications;
         m_publishOnDestruction = false;
         return true;
@@ -81,7 +87,7 @@ public:
         m_publishOnDestruction = true;
     }
     bool sharesPublicationsWith(const ServerDiagClient& previous) const {
-        return m_deltaPublishing && m_publications == previous.m_publications;
+        return m_publications == previous.m_publications;
     }
     const auto& renderedDiagnostics() const { return m_diagnostics; }
     // Import only after the owner has validated the complete snapshot generation.

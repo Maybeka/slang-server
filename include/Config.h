@@ -105,6 +105,15 @@ struct Config {
                      bool>
         experimentalMethodBodyDiagnostics = false;
 
+    rfl::Description<"Experimental cooperative syntax parsing and background context retirement. "
+                     "Default off. Cancelled syntax candidates are discarded; semantic model "
+                     "construction retains phase-boundary cancellation. "
+                     "Keeps the current query owner until a private replacement is ready; "
+                     "new input cancels replacement parsing. A hard source-storage limit "
+                     "still forces synchronous retirement to bound retained generations.",
+                     bool>
+        experimentalCooperativeAnalysis = false;
+
     rfl::Description<"Experimental immutable UVM prefix reuse. Default off. External macros "
                      "affecting UVM must come from command-line/configuration flags. Unsupported "
                      "source changes or preprocessing state use native parsing.",

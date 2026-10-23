@@ -223,6 +223,9 @@ std::shared_ptr<syntax::SyntaxTree> ServerDriver::resumeFrozenSources(
             m_frozenDeclinedUnits[plan->roots] = m_frozenSources->statistics().lastReason;
         return tree;
     }
+    catch (const lsp::RequestCancelled&) {
+        throw;
+    }
     catch (const FrozenInputsChanged& error) {
         throw lsp::RequestFailed("Frozen inputs changed during analysis; retry: " +
                                  std::string(error.what()));
@@ -392,6 +395,9 @@ std::shared_ptr<syntax::SyntaxTree> ServerDriver::getFrozenIndependentTree(std::
             return true;
         };
         return m_frozenSources->prepare(plan, std::span(&*buffer, 1), sm, options, witness);
+    }
+    catch (const lsp::RequestCancelled&) {
+        throw;
     }
     catch (const FrozenInputsChanged& error) {
         throw lsp::RequestFailed("Frozen inputs changed during lookup; retry: " +

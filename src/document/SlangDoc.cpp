@@ -14,6 +14,7 @@
 #include "lsp/RequestContext.h"
 #include "lsp/URI.h"
 #include "util/Converters.h"
+#include "util/DisposableParseRequest.h"
 #include "util/Logging.h"
 #include "util/SlangExtensions.h"
 #include <algorithm>
@@ -361,8 +362,11 @@ std::shared_ptr<syntax::SyntaxTree> SlangDoc::getSyntaxTree(const lsp::RequestCo
         if (!m_sourceManager.isLatestData(m_buffer.id))
             m_buffer = m_sourceManager.readSource(m_uri.getPath(), nullptr).value();
         ctx.checkpoint("before syntax parsing");
+        DisposableParseRequest parseRequest(ctx, m_driver.isCooperativeAnalysisEnabled());
         if (m_nativeCompilationUnit) {
             const auto& unit = *m_nativeCompilationUnit;
+            auto parseOptions = unit.options;
+            parseRequest.apply(parseOptions);
             std::vector<SourceBuffer> buffers;
             buffers.reserve(unit.rootPaths.size());
             for (size_t i = 0; i < unit.rootPaths.size(); ++i) {
@@ -378,15 +382,18 @@ std::shared_ptr<syntax::SyntaxTree> SlangDoc::getSyntaxTree(const lsp::RequestCo
                     m_buffer = *buffer;
             }
             std::shared_ptr<syntax::SyntaxTree> tree;
-            tree = m_driver.resumeScopeLibrary(unit.rootPaths, buffers, unit.options,
+            tree = m_driver.resumeScopeLibrary(unit.rootPaths, buffers, parseOptions,
                                                unit.requiresNativeReplay);
             if (!tree && m_driver.isFrozenSourcesEnabled())
-                tree = m_driver.resumeFrozenSources(unit.rootPaths, buffers, unit.options,
+                tree = m_driver.resumeFrozenSources(unit.rootPaths, buffers, parseOptions,
                                                     unit.requiresNativeReplay);
             if (!tree && m_driver.isUvmPrefixCacheEnabled() && !m_uvmPrefixDisabled) {
                 try {
-                    tree = cachedUvmTree(m_uvmPrefixTree, buffers, m_sourceManager, unit.options,
+                    tree = cachedUvmTree(m_uvmPrefixTree, buffers, m_sourceManager, parseOptions,
                                          bool(m_driver.options.get<TrustedUvmImport>()));
+                }
+                catch (const lsp::RequestCancelled&) {
+                    throw;
                 }
                 catch (const std::exception& error) {
                     m_uvmPrefixTree.reset();
@@ -398,30 +405,32 @@ std::shared_ptr<syntax::SyntaxTree> SlangDoc::getSyntaxTree(const lsp::RequestCo
                 // A declined prefix stays native for this document context. Do not keep
                 // capturing checkpoints that cannot be consumed by later edits.
                 if (unit.options.getOrDefault<parsing::PreprocessorOptions>().captureUvmPrefix) {
-                    auto nativeOptions = unit.options;
+                    auto nativeOptions = parseOptions;
                     auto pp = nativeOptions.getOrDefault<parsing::PreprocessorOptions>();
                     pp.captureUvmPrefix = false;
                     nativeOptions.set(pp);
                     tree = syntax::SyntaxTree::fromBuffers(buffers, m_sourceManager, nativeOptions);
                 }
                 else
-                    tree = syntax::SyntaxTree::fromBuffers(buffers, m_sourceManager, unit.options);
+                    tree = syntax::SyntaxTree::fromBuffers(buffers, m_sourceManager, parseOptions);
             }
             tree->isLibraryUnit = unit.isLibraryUnit;
             m_tree = std::move(tree);
             m_driver.updateFrozenSourcePlans(unit.rootPaths, m_tree);
         }
         else {
+            auto parseOptions = m_options;
+            parseRequest.apply(parseOptions);
             auto buffers = m_driver.getExplorePreincludeBuffers(m_buffer.id);
             if (buffers.empty()) {
-                m_tree = m_driver.parseShallowTree(m_buffer, m_options);
+                m_tree = m_driver.parseShallowTree(m_buffer, parseOptions);
             }
             else {
                 buffers.push_back(m_buffer);
                 // fromBuffers preprocesses in this order, while pushSource registers
                 // buffers in reverse. The document remains sourceBufferIds.front(),
                 // and every preinclude/nested include participates in normal validity checks.
-                m_tree = syntax::SyntaxTree::fromBuffers(buffers, m_sourceManager, m_options);
+                m_tree = syntax::SyntaxTree::fromBuffers(buffers, m_sourceManager, parseOptions);
             }
         }
         // A complete parse remains reusable even if its caller was cancelled.

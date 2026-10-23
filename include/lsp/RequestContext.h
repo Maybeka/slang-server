@@ -113,7 +113,8 @@ public:
             throw RequestCancelled(checkpoint);
     }
 
-    // Explicit safe boundaries only: never interrupt a parser, binder, or visitor in flight.
+    // Shared semantic state uses explicit safe boundaries. Disposable syntax candidates
+    // may check within parsing only when their complete partial result is discarded.
     void checkpoint(std::string_view name) const {
         throwIfCancelled(name);
         if (m_checkpointObserver)

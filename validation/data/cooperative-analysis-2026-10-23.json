@@ -1,0 +1,735 @@
+{
+  "scenario": "Mac original CVA6 + full verification, UVM and whole DUT frozen",
+  "candidate": {
+    "base": "49569ffecf2573d3ab6a5e3132fabe7878703b38",
+    "binarySha256": "5b74a4ed82499a2bf01c53e0ef95efb41b94319e1b71c2e0505b30c95678f2cf",
+    "sourcePatchSha256": "9959da9bc8b5e1eaba73dbc1e4c8992a809a965f2a17c7b32e39013f5ca20380",
+    "sdkPatchSha256": "4d983427554893b6a431859e296af43aa7e2e4a0f5194882cf0ce8445f39eb4c",
+    "sdkBase": "151a801ceaf6faf23d79a42d210ff67e50eb4660",
+    "defaultOff": true,
+    "feature": "experimentalCooperativeAnalysis",
+    "unitAssertions": 208,
+    "untrackedProductFiles": [
+      "include/util/DisposableParseRequest.h",
+      "docs/features/cooperative-context-retirement.md"
+    ]
+  },
+  "performanceDiagnosticDeltaPublishing": false,
+  "cases": {
+    "cold": {
+      "native": {
+        "sessions": 3,
+        "requests": 36,
+        "successes": 36,
+        "cancelled": 0,
+        "successMedianMs": 5486.297770499999,
+        "successMaxMs": 10445.611916,
+        "cancelledMaxMs": null,
+        "latestMs": [
+          10435.954416,
+          10445.611916,
+          10370.183042
+        ],
+        "latestMedianMs": 10435.954416,
+        "latestDiagnosticMs": [
+          10771.219958,
+          10770.811666,
+          10692.169958
+        ],
+        "latestDiagnosticMedianMs": 10770.811666,
+        "sequenceThroughFinalDiagnosticMedianMs": 11872.356125,
+        "postIdleMapsVerified": 0
+      },
+      "baseline": {
+        "sessions": 3,
+        "requests": 36,
+        "successes": 9,
+        "cancelled": 27,
+        "successMedianMs": 83.937084,
+        "successMaxMs": 1553.434084,
+        "cancelledMaxMs": 608.075417,
+        "latestMs": [
+          1081.502709,
+          1553.434084,
+          1481.872167
+        ],
+        "latestMedianMs": 1481.872167,
+        "latestDiagnosticMs": [
+          1409.257459,
+          1887.918209,
+          1820.048208
+        ],
+        "latestDiagnosticMedianMs": 1820.048208,
+        "sequenceThroughFinalDiagnosticMedianMs": 2930.039958,
+        "postIdleMapsVerified": 0
+      },
+      "candidate": {
+        "sessions": 3,
+        "requests": 36,
+        "successes": 35,
+        "cancelled": 1,
+        "successMedianMs": 53.684792,
+        "successMaxMs": 101.732125,
+        "cancelledMaxMs": 110.440625,
+        "latestMs": [
+          65.284541,
+          53.684792,
+          47.999542
+        ],
+        "latestMedianMs": 53.684792,
+        "latestDiagnosticMs": [
+          979.362166,
+          884.98325,
+          867.847042
+        ],
+        "latestDiagnosticMedianMs": 884.98325,
+        "sequenceThroughFinalDiagnosticMedianMs": 1992.6755,
+        "postIdleMapsVerified": 0
+      },
+      "latestImprovementPercent": 96.37723191004504,
+      "warmSuccessMedianChangePercent": -36.04162851308963
+    },
+    "warm": {
+      "native": {
+        "sessions": 3,
+        "requests": 36,
+        "successes": 36,
+        "cancelled": 0,
+        "successMedianMs": 6834.2151455,
+        "successMaxMs": 11924.580875,
+        "cancelledMaxMs": null,
+        "latestMs": [
+          11859.200584,
+          11924.580875,
+          11771.747375
+        ],
+        "latestMedianMs": 11859.200584,
+        "latestDiagnosticMs": [
+          12182.585042,
+          12250.999084,
+          12095.491084
+        ],
+        "latestDiagnosticMedianMs": 12182.585042,
+        "sequenceThroughFinalDiagnosticMedianMs": 13307.905417,
+        "postIdleMapsVerified": 0
+      },
+      "baseline": {
+        "sessions": 3,
+        "requests": 36,
+        "successes": 36,
+        "cancelled": 0,
+        "successMedianMs": 51.225938,
+        "successMaxMs": 54.247958,
+        "cancelledMaxMs": null,
+        "latestMs": [
+          51.370167,
+          52.706666,
+          48.663625
+        ],
+        "latestMedianMs": 51.370167,
+        "latestDiagnosticMs": [
+          86.651583,
+          87.03725,
+          82.01225
+        ],
+        "latestDiagnosticMedianMs": 86.651583,
+        "sequenceThroughFinalDiagnosticMedianMs": 1196.684458,
+        "postIdleMapsVerified": 0
+      },
+      "candidate": {
+        "sessions": 3,
+        "requests": 36,
+        "successes": 36,
+        "cancelled": 0,
+        "successMedianMs": 50.147271,
+        "successMaxMs": 56.8475,
+        "cancelledMaxMs": null,
+        "latestMs": [
+          54.096417,
+          54.370958,
+          49.569875
+        ],
+        "latestMedianMs": 54.096417,
+        "latestDiagnosticMs": [
+          92.541458,
+          92.772542,
+          84.320959
+        ],
+        "latestDiagnosticMedianMs": 92.541458,
+        "sequenceThroughFinalDiagnosticMedianMs": 1200.323417,
+        "postIdleMapsVerified": 0
+      },
+      "latestImprovementPercent": -5.307068594890874,
+      "warmSuccessMedianChangePercent": -2.10570473106807
+    },
+    "macro": {
+      "native": {
+        "sessions": 3,
+        "requests": 36,
+        "successes": 36,
+        "cancelled": 0,
+        "successMedianMs": 5402.239979,
+        "successMaxMs": 10369.105042,
+        "cancelledMaxMs": null,
+        "latestMs": [
+          10017.49225,
+          10345.52025,
+          10369.105042
+        ],
+        "latestMedianMs": 10345.52025,
+        "latestDiagnosticMs": [
+          10342.425042,
+          10678.776458,
+          10689.273667
+        ],
+        "latestDiagnosticMedianMs": 10678.776458,
+        "sequenceThroughFinalDiagnosticMedianMs": 11783.066791,
+        "postIdleMapsVerified": 1
+      },
+      "baseline": {
+        "sessions": 3,
+        "requests": 36,
+        "successes": 9,
+        "cancelled": 27,
+        "successMedianMs": 100.664333,
+        "successMaxMs": 1357.617041,
+        "cancelledMaxMs": 564.7805,
+        "latestMs": [
+          1144.897666,
+          1188.514875,
+          1357.617041
+        ],
+        "latestMedianMs": 1188.514875,
+        "latestDiagnosticMs": [
+          1486.984291,
+          1525.936833,
+          1688.803375
+        ],
+        "latestDiagnosticMedianMs": 1525.936833,
+        "sequenceThroughFinalDiagnosticMedianMs": 2630.801583,
+        "postIdleMapsVerified": 1
+      },
+      "candidate": {
+        "sessions": 3,
+        "requests": 36,
+        "successes": 16,
+        "cancelled": 20,
+        "successMedianMs": 54.517041500000005,
+        "successMaxMs": 962.687875,
+        "cancelledMaxMs": 446.322042,
+        "latestMs": [
+          875.561833,
+          962.687875,
+          865.822708
+        ],
+        "latestMedianMs": 875.561833,
+        "latestDiagnosticMs": [
+          1199.4385,
+          1286.364958,
+          1189.809958
+        ],
+        "latestDiagnosticMedianMs": 1199.4385,
+        "sequenceThroughFinalDiagnosticMedianMs": 2304.439417,
+        "postIdleMapsVerified": 1
+      },
+      "latestImprovementPercent": 26.33143670162311,
+      "warmSuccessMedianChangePercent": -45.84274302994685
+    },
+    "retirement": {
+      "native": {
+        "sessions": 3,
+        "requests": 36,
+        "successes": 36,
+        "cancelled": 0,
+        "successMedianMs": 6960.5294165,
+        "successMaxMs": 12095.955334,
+        "cancelledMaxMs": null,
+        "latestMs": [
+          11622.477291,
+          12095.955334,
+          11668.575083
+        ],
+        "latestMedianMs": 11668.575083,
+        "latestDiagnosticMs": [
+          11945.67575,
+          12419.001959,
+          11993.038125
+        ],
+        "latestDiagnosticMedianMs": 11993.038125,
+        "sequenceThroughFinalDiagnosticMedianMs": 13098.054875,
+        "postIdleMapsVerified": 3
+      },
+      "baseline": {
+        "sessions": 3,
+        "requests": 36,
+        "successes": 6,
+        "cancelled": 30,
+        "successMedianMs": 471.647687,
+        "successMaxMs": 1051.186375,
+        "cancelledMaxMs": 867.053416,
+        "latestMs": [
+          1019.515708,
+          879.583333,
+          1051.186375
+        ],
+        "latestMedianMs": 1019.515708,
+        "latestDiagnosticMs": [
+          1351.038041,
+          1215.624542,
+          1389.292625
+        ],
+        "latestDiagnosticMedianMs": 1351.038041,
+        "sequenceThroughFinalDiagnosticMedianMs": 2453.586166,
+        "postIdleMapsVerified": 3
+      },
+      "candidate": {
+        "sessions": 3,
+        "requests": 36,
+        "successes": 32,
+        "cancelled": 4,
+        "successMedianMs": 54.287458,
+        "successMaxMs": 91.679375,
+        "cancelledMaxMs": 105.173458,
+        "latestMs": [
+          49.833625,
+          55.280042,
+          73.244584
+        ],
+        "latestMedianMs": 55.280042,
+        "latestDiagnosticMs": [
+          81.874875,
+          92.230875,
+          105.181709
+        ],
+        "latestDiagnosticMedianMs": 92.230875,
+        "sequenceThroughFinalDiagnosticMedianMs": 1197.220708,
+        "postIdleMapsVerified": 3
+      },
+      "latestImprovementPercent": 94.57781360637946,
+      "warmSuccessMedianChangePercent": -88.48982842568249
+    }
+  },
+  "artifacts": {
+    "profile-input.py": "1f1a0c03e89133b7331c188e22d1161b6052fdcac3594b4db58bf19bdd6a159d",
+    "public-memory-0-previous-completion_then_hover-memory.json": "1253c487d67a69fd40fd7ec34d5fe9a9f39a6926a0eb9e9bbbd3c754d9911708",
+    "warm.phases.tsv": "7cc6d710c14fe383da23c1a87c143d19193ef13a8d5cd4d6921294983a064e94",
+    "warm.generations.tsv": "8becd382fc81a030a0323f6829602a5ba870a7963561e0889a84590923a349b0",
+    "warm.json": "67b2bbd4fab7f6f6cd3f928431f604b5e3702716164abc6ef2d9fa880ce08cb5",
+    "qualify-input.py": "d4d333553d4a7a04cdd30af0e4b7b78b83e184e7967fece24e66aaaba90528df",
+    "retirement.phases.tsv": "70dcb9b6afb1e9f53008acc9f7f9605d48f131cc95cbe72ad95b728b40dc1c0a",
+    "external-smoke.phases.tsv": "890f4478fe6838d339e9f92a6ecbe8907b670233ac2edf776616c21dd2d8a735",
+    "install-smoke.json": "d4f3a6cedf126e2ff14a3fac7d62aa85ec78041f0bf53282d15ae657188eb753",
+    "forced-memory.phases.tsv": "2e0f7a673d9f874b6dca41aea516cca4084f0e5df9c5d511f1af81fa9e18bad3",
+    "sdk-restore-check.py": "1d7fcb19342eea4b9e30f9861ccc9a351529ed6fea6a5aaebcaf591247638085",
+    "public-memory-0-local-hover_first-memory.json": "fbd2806c333f38c358674fe1b855e99dc779e6a2d519c4ab9c4052493e893ea0",
+    "natural-memory-candidate-memory.json": "36cd269b02facee233ed280c00c7220eca8444751f052578ce20be5435e20438",
+    "qualified-retirement-2.json": "5a22bb50c87b004509aaf274c60449320d7bf9622c7163fa4993c336734a1ca5",
+    "public-memory-0-local-completion_then_hover-memory.json": "e2ee74afdf3e2891663cfe70f25822aaa37ec8aeab3f07bd13ea399d8ad521dc",
+    "natural-memory-native-memory.json": "a2f7932506661cd2dd8f802e6d75fb754be149fb2ee2f3a4744e607a7423e7e9",
+    "public-memory-0-native-hover_first-memory.json": "a68a2509b532aaa480b849f6073c09ffbbbd106b3cf233948f0dee281a84488e",
+    "install-smoke.py": "e6cfce87d3978a6c94e6b4aced30cfb59bdd3ff95753c4b2f5cdf6f038df07e9",
+    "qualify-public.py": "e5873a27918ca59c48988614eb03462fe5971aed0e703e96bca3f2405b9727c5",
+    "natural-memory.json": "c8876439bc74a6eeabdbb51c47493ceac64538b764012b521b398e7e209c2811",
+    "qualified-macro-2.json": "dfecf6f027207f117951ee892fce3357b740b4b4afca30f1d8ccd37d262e7b01",
+    "qualified-macro-3.json": "9ba4277b1e546a49b51c0a216a96176675ccdb4f3b04cd9733cf8c8625605833",
+    "qualified-warm-1.json": "4d0e9ad9fb5dd117a54695bd21e36329be83c52c3b8154440766e59b6fb2b213",
+    "cold.phases.tsv": "a4ea2d4a8f6c774aa757c709345436c5f0609bbce54c190491f5d36a2483822b",
+    "qualified-cold-1.json": "05cd0ddc2a996a65faa5beffe37f9e86932f947210c3e89e0425d50c8a6e55b4",
+    "initial-findings.json": "8b95f07786a3b9fc7013f2265a3a8aee2c66e8d48e12328c1b5abd7ee448d0e9",
+    "external-first-smoke.json": "d66dc0ae873b62eef053fa5bbb397fae8d45084e6a7326abe8eb40637f80e86f",
+    "qualified-retirement-3.json": "f6f7452a62af073c0d15473af9cf027be328afc1e1f7e2dc83796c8d60e25619",
+    "summarize.py": "340371563b02a0f69d57064978355886b79095a63b16752e3bcbc0ae7aea9751",
+    "natural-memory-baseline-memory.json": "b9e1fd3adec6f280daee9ca535c44f3c77048ef8d6dc0f6f10a8f7f415d8cc28",
+    "cleanup.json": "2f7770cb1f45ed4c1510fec1c7fbeb80f3fd5aac134f5a7850a95b7d9c900249",
+    "install-smoke.phases.tsv": "8440f98e6223c45990c74c7d8d28de268491fc9b04999339aa08a0d892d110aa",
+    "retirement.generations.tsv": "8209ea36238c8bce8a7c765674f1e0479c3217eca568a19fa57fa3a1cdd3417e",
+    "qualified-warm-2.json": "e2ef0e98ea452a786563e4049fa70ec3a940f397da5f5cf52594cb4936d98de0",
+    "cold.generations.tsv": "da599e69fd187fd0d705eb92e6411632cffd94a4b2f9bf58d8e53af261d04b84",
+    "qualified-cold-2.json": "055460814b670d1710779f8a500e0b7440be5c267bcc663ed8df9373e6e55836",
+    "qualified-cold-3.json": "f52fe00935c216d20b81f341af2d6aba567b90b96c6cf10421f6d0d3365dfcbf",
+    "natural-memory.phases.tsv": "01b072d64b4d9b3bedce62107402faa864281865252a574e77b434d55bb81de6",
+    "forced-memory.generations.tsv": "0b29bc1205c2c495a22724236f393661e90fc55504e80f17fe7895b3f65f4147",
+    "public-memory-0-previous-hover_first-memory.json": "57e39a49b70004dc1e73e0041e727c2f03651872b1cfdeb7c46a833748e186a4",
+    "qualified-warm-3.json": "6dd3a2ca70db63fb059b65f4c53180abd7264435db951eaa2358f2f329722814",
+    "qualified-macro-1.json": "1621663a13cde5ad31880b9d8104aefc8887526c2d462530d8dc41b32744bac1",
+    "forced-memory-native-memory.json": "777029b18bb9ca31c8a3289532bd60d7c1d8ff2f6ffa9e4bdf2e4306ec6b4d79",
+    "qualified-retirement-1.json": "bbb3d9c90ab9181f25b81b62b9090d6a863fa0defa9f262e4121134112e916b2",
+    "cold.json": "1fada14463ac7100898348e0b64aa8eddb4fb22de84986ba801be30b1770ad33",
+    "forced-memory.json": "1892361eb37bef9fdc6dca23743799351b5feab4433012617b38f9c21dfff7be",
+    "sdk-replay.json": "e3a6d456d2f990346e813d1a1e9948aa563717661ba8687e0008f2fa6e41d3b4",
+    "retirement.json": "41dfba3b24c05bc99b35b05cfc72f87c1b67cf25ae616239f3ee3a580717a01f",
+    "public-memory.json": "d883a62307fa15f0e60c27e121741396494070a0b8a3b856d81caab7b85f0660",
+    "external-smoke.json": "eeaa83eea00dffa6a2cf3586e763debdecbe590a79296a4ff98bbb9dbde9cb59",
+    "natural-memory.generations.tsv": "953f51233fbc1c68f4ebeac583905b930af10697c6150c3effa9ccac0eadc2bd",
+    "public-memory-0-native-completion_then_hover-memory.json": "ff1498c8ad97227ed8c8026d38730498d79ab77f36187f904c27596710f2734a",
+    "public-memory.generations.tsv": "6b031e00401efd53aba8c4291b8c1a41f8074608177ca6cd93ecf6772a2c106a",
+    "forced-memory-baseline-memory.json": "f6fd333ac6f8baeb81e769583e9fd3be95b95b94f756896c84fb4ad6a3226b01",
+    "forced-memory-candidate-memory.json": "94543e5c53ddfa0ee2e725ab03af34d10b6c63d4cb8cf03fa59d4ef299c22819",
+    "candidate-receipt.json": "1aa0a9604bbb22d0ed536949d0f7da8610035b0f0aea93b9aa3d90f1e9026692"
+  },
+  "publicOracle": {
+    "states": 42,
+    "diagnosticUris": 612,
+    "bothQueryOrders": true,
+    "macroViews": [
+      "source",
+      "expanded",
+      "both"
+    ],
+    "diagnosticDeltaPublishing": true,
+    "passed": true
+  },
+  "memory": {
+    "intervalMs": 20,
+    "guardMiB": 3072,
+    "guardSeconds": 180,
+    "latencyQualification": false,
+    "publicSessions": [
+      {
+        "mode": "local",
+        "order": "hover_first",
+        "peakRss": 1359036416,
+        "peakFootprint": 1090504000,
+        "samples": 248
+      },
+      {
+        "mode": "native",
+        "order": "completion_then_hover",
+        "peakRss": 1490698240,
+        "peakFootprint": 1128973848,
+        "samples": 380
+      },
+      {
+        "mode": "previous",
+        "order": "hover_first",
+        "peakRss": 1352843264,
+        "peakFootprint": 1086981440,
+        "samples": 253
+      },
+      {
+        "mode": "native",
+        "order": "hover_first",
+        "peakRss": 1489977344,
+        "peakFootprint": 1128531456,
+        "samples": 383
+      },
+      {
+        "mode": "previous",
+        "order": "completion_then_hover",
+        "peakRss": 1354661888,
+        "peakFootprint": 1087669568,
+        "samples": 243
+      },
+      {
+        "mode": "local",
+        "order": "completion_then_hover",
+        "peakRss": 1357643776,
+        "peakFootprint": 1089701208,
+        "samples": 231
+      }
+    ],
+    "natural-memory": [
+      {
+        "label": "native",
+        "edits": 12,
+        "successes": 12,
+        "cancelled": 0,
+        "lastQueryMs": 8746.853458,
+        "postIdlePublications": 0,
+        "postIdleMapPreserved": true,
+        "generations": {
+          "retired": 3
+        },
+        "peakRss": 1493368832,
+        "peakFootprint": 1130841648,
+        "samples": 619
+      },
+      {
+        "label": "baseline",
+        "edits": 96,
+        "successes": 63,
+        "cancelled": 33,
+        "lastQueryMs": 1171.817875,
+        "postIdlePublications": 0,
+        "postIdleMapPreserved": true,
+        "generations": {
+          "retired": 2
+        },
+        "peakRss": 1519484928,
+        "peakFootprint": 1119962624,
+        "samples": 622
+      },
+      {
+        "label": "candidate",
+        "edits": 96,
+        "successes": 63,
+        "cancelled": 33,
+        "lastQueryMs": 1064.343959,
+        "postIdlePublications": 0,
+        "postIdleMapPreserved": true,
+        "generations": {
+          "retired": 1
+        },
+        "peakRss": 1505853440,
+        "peakFootprint": 1146586648,
+        "samples": 618
+      }
+    ],
+    "forced-memory": [
+      {
+        "label": "candidate",
+        "edits": 12,
+        "successes": 11,
+        "cancelled": 1,
+        "lastQueryMs": 49.250625,
+        "postIdlePublications": 0,
+        "postIdleMapPreserved": true,
+        "generations": {
+          "replacement-cancelled": 5,
+          "retired": 1
+        },
+        "peakRss": 1594490880,
+        "peakFootprint": 1232455264,
+        "samples": 265
+      },
+      {
+        "label": "baseline",
+        "edits": 12,
+        "successes": 2,
+        "cancelled": 10,
+        "lastQueryMs": 844.425667,
+        "postIdlePublications": 0,
+        "postIdleMapPreserved": true,
+        "generations": {
+          "retired": 1
+        },
+        "peakRss": 1369767936,
+        "peakFootprint": 1087276352,
+        "samples": 301
+      },
+      {
+        "label": "native",
+        "edits": 12,
+        "successes": 12,
+        "cancelled": 0,
+        "lastQueryMs": 9636.429166,
+        "postIdlePublications": 0,
+        "postIdleMapPreserved": true,
+        "generations": {
+          "retired": 3
+        },
+        "peakRss": 1470332928,
+        "peakFootprint": 1107576320,
+        "samples": 665
+      }
+    ]
+  },
+  "processCleanup": {
+    "measuredServerProcesses": 48,
+    "stillRunning": []
+  },
+  "validation": {
+    "ctestPassed": 782,
+    "sdkTestCases": 2590,
+    "pythonPassed": 17,
+    "transportPassed": 43,
+    "newServerCases": 3,
+    "newServerAssertions": 208,
+    "sdkDisposableParseAssertions": 18,
+    "sdkReplayFiles": 709,
+    "smokes": {
+      "install-smoke": {
+        "uvm": {
+          "enabled": true,
+          "prepared": true,
+          "generation": 2,
+          "consumers": 3,
+          "namespaceDeclines": 0,
+          "chargedBytes": 128247845,
+          "astBytes": 29039968,
+          "fixedSourceFiles": 374,
+          "diagnosticsShareOwner": true,
+          "shippedPreparse": true,
+          "shippedProfile": "default",
+          "projectCacheHit": false,
+          "projectCachePath": "",
+          "syntaxParseMs": 0.0,
+          "archiveWriteMs": 0.0,
+          "archiveLoadMs": 32.427125,
+          "reason": "UVM shares the fixed scope semantic owner; charges cover its full closure"
+        },
+        "scopeResolved": true,
+        "instanceBodyCacheHits": 1
+      },
+      "external-first-smoke": {
+        "uvm": {
+          "enabled": true,
+          "prepared": true,
+          "generation": 2,
+          "consumers": 3,
+          "namespaceDeclines": 0,
+          "chargedBytes": 128247845,
+          "astBytes": 29039968,
+          "fixedSourceFiles": 374,
+          "diagnosticsShareOwner": true,
+          "shippedPreparse": false,
+          "shippedProfile": "",
+          "projectCacheHit": false,
+          "projectCachePath": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/cva6-uvm-2026-10-21/project/.slang/cache/uvm/1751803364930719664.cst",
+          "syntaxParseMs": 364.382333,
+          "archiveWriteMs": 42.814125,
+          "archiveLoadMs": 26.205125,
+          "reason": "UVM shares the fixed scope semantic owner; charges cover its full closure"
+        },
+        "scopeResolved": true,
+        "instanceBodyCacheHits": 1
+      },
+      "external-smoke": {
+        "uvm": {
+          "enabled": true,
+          "prepared": true,
+          "generation": 2,
+          "consumers": 3,
+          "namespaceDeclines": 0,
+          "chargedBytes": 128247845,
+          "astBytes": 29039968,
+          "fixedSourceFiles": 374,
+          "diagnosticsShareOwner": true,
+          "shippedPreparse": false,
+          "shippedProfile": "",
+          "projectCacheHit": true,
+          "projectCachePath": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/cva6-uvm-2026-10-21/project/.slang/cache/uvm/1751803364930719664.cst",
+          "syntaxParseMs": 0.0,
+          "archiveWriteMs": 0.0,
+          "archiveLoadMs": 30.063833,
+          "reason": "UVM shares the fixed scope semantic owner; charges cover its full closure"
+        },
+        "scopeResolved": true,
+        "instanceBodyCacheHits": 1
+      }
+    },
+    "passed": true
+  },
+  "compiledSourceHashes": {
+    "include/Config.h": "acfaccb16e8bb19666bcb70582f72fd4f94dc25d7ca5f84d7da4371dfdf75f9c",
+    "include/ServerDiagClient.h": "3db20780ca352f821ecfbc487eb4a4ab9c445cc594fed1889d2f3c8ab476a51a",
+    "include/ServerDriver.h": "b064f30e2f5edd563f8b4eb5d4ee52b5febc80e22b7f88ce86218ab92a6fd4f5",
+    "include/SlangServer.h": "9867f00e38ab26911a5296cd65ebd6f2b56f7d085e0c964e8585b68b0242fe47",
+    "include/lsp/RequestContext.h": "9ea0a4e022a5e7d42109b462c35eefcb247aed512dc8bd79a81edbf0d82ecd16",
+    "src/ExplicitContexts.cpp": "43498860af48d140e5c453a89a54b3ecd7c687776f785c0cbfa1d8f9779cb56f",
+    "src/FrozenSources.cpp": "a67e09a828933ddd9e90c644fd37ae53c9ad335d8f69eb1bca9d9abc6b903260",
+    "src/ServerDriver.cpp": "b5cf494914a8333402a0fa8ba2d02ed1242b2d7d990bff52cbda309344cdb582",
+    "src/SlangServer.cpp": "832d4e2040a66b5585d25c186527cea6534123bb04ccc2e193fc3111e04f2f40",
+    "src/document/SlangDoc.cpp": "9318e2568a2aa21bc128575c429a713ef1635e44f48ec3a120dcdf36febf298a",
+    "tests/cpp/DiagTests.cpp": "dfa53af43792a48505aa6710ee4696d6a865ad2bc75d7e5ac1543f3447c8cf45",
+    "tests/cpp/DiagnosticSnapshotTests.cpp": "5e3f199ca13f9f2e0cd2fb1f26b19752dd4576f25a89aafd0b2d2061944671d7",
+    "include/util/DisposableParseRequest.h": "ccc1d28bd20e41329dbdd8ca46aa73b7c6c6cc6baae94fda06bac33214c69f38"
+  },
+  "remaining": [
+    "The 64-notification body certificate cliff remains; 96-edit instrumented candidate tail is about 1.06s.",
+    "Native macro fallback still takes about 0.88s for the final hover and about 1.20s for diagnostics.",
+    "Model construction, owner-resolution paths without a request context and semantic elaboration retain coarse cancellation.",
+    "Forced retirement temporarily increases peak RSS by about 214 MiB in the sampled pair."
+  ],
+  "passed": true,
+  "deliveredSdkRestoration": {
+    "base": "151a801ceaf6faf23d79a42d210ff67e50eb4660",
+    "patchSha256": "9487ae4cc68bf61eb5c98499a4b9297006fb3ef7fba473c251596e9f0e11fb21",
+    "verifiedFiles": 709,
+    "postQualificationChange": "SDK test chooses one parser thread when thread support is compiled out; runtime code and measured server binary are unchanged."
+  },
+  "cleanup": {
+    "removed": [
+      {
+        "path": "untracked/responsiveness-2026-10-23/build.log",
+        "bytes": 10620
+      },
+      {
+        "path": "untracked/responsiveness-2026-10-23/build-final.log",
+        "bytes": 1277
+      },
+      {
+        "path": "untracked/responsiveness-2026-10-23/build-publications.log",
+        "bytes": 7129
+      },
+      {
+        "path": "untracked/responsiveness-2026-10-23/build-cooperative.log",
+        "bytes": 13173
+      },
+      {
+        "path": "untracked/responsiveness-2026-10-23/unit-retirement.log",
+        "bytes": 34396
+      },
+      {
+        "path": "untracked/responsiveness-2026-10-23/cold-1.json",
+        "bytes": 13643
+      },
+      {
+        "path": "untracked/responsiveness-2026-10-23/cold-1-candidate.stderr",
+        "bytes": 112736
+      },
+      {
+        "path": "untracked/responsiveness-2026-10-23/cold-1-native.stderr",
+        "bytes": 243224
+      },
+      {
+        "path": "untracked/responsiveness-2026-10-23/cold-1-baseline.stderr",
+        "bytes": 104725
+      },
+      {
+        "path": "untracked/responsiveness-2026-10-23/cold-1.log",
+        "bytes": 132
+      },
+      {
+        "path": "source/tests/transport/build",
+        "bytes": 2200032
+      },
+      {
+        "path": "source/.pytest_cache",
+        "bytes": 2082
+      },
+      {
+        "path": "source/tests/system/__pycache__",
+        "bytes": 92647
+      },
+      {
+        "path": "source/tests/method_scope/__pycache__",
+        "bytes": 135508
+      },
+      {
+        "path": "source/scripts/__pycache__",
+        "bytes": 22713
+      },
+      {
+        "path": "untracked/cva6-uvm-2026-10-21/project/server.stderr",
+        "bytes": 82358
+      },
+      {
+        "path": "untracked/scope-variants-2026-10-21/__pycache__",
+        "bytes": 7517
+      },
+      {
+        "path": "untracked/full-performance-2026-10-19/__pycache__",
+        "bytes": 46230
+      },
+      {
+        "path": "untracked/frozen-registry-2026-10-20/__pycache__",
+        "bytes": 142304
+      },
+      {
+        "path": "untracked/real-workloads-2026-10-19/__pycache__",
+        "bytes": 47078
+      },
+      {
+        "path": "untracked/uvm-cache-optimized-2026-10-20/__pycache__",
+        "bytes": 44656
+      }
+    ],
+    "removedBytes": 3364180,
+    "retained": [
+      "Qualified current/baseline installations",
+      "Raw qualified performance/memory evidence and original baseline mechanism traces",
+      "Reusable real workload sources and active project UVM caches"
+    ]
+  }
+}
