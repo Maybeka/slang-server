@@ -138,7 +138,7 @@ std::shared_ptr<const BodyDiagnosticBaseline> BodyDiagnosticCache::capture(
                                                        d.getDocument(key)->getBuffer())),
                 "open document outside full-design diagnostic coverage");
     require(baseline->settings.errorLimit == 0, "bounded diagnostic streams require full analysis");
-    auto design = d.comp->createActiveDesignContext({});
+    auto design = d.comp->createActiveDesignContext({}, ctx);
     auto owner = design.retainCompilation();
     baseline->owner = owner;
     require(!owner->hasFatalErrors(), "fatal baseline diagnostics require native analysis");

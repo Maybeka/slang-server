@@ -10,6 +10,7 @@
 #include <fstream>
 #include <iostream>
 #include <rfl/json/write.hpp>
+#include <thread>
 
 #include "slang/ast/symbols/ClassSymbols.h"
 #include "slang/ast/symbols/SubroutineSymbols.h"
@@ -2964,3 +2965,478 @@ TEST_CASE("Cancelled query proof releases temporary roots without losing its bas
     CHECK(server.m_driver->sm.getMemoryUsageDetails().queryBuffers <= 2);
     checkNativeDiagnostics(workspace, server, text);
 }
+
+namespace {
+void addProofWitnessFiles(Workspace& workspace) {
+    std::string files = "+incdir+.\nprelude.sv\nowner.sv\ntail.sv\n";
+    for (int i = 0; i < 80; ++i) {
+        auto name = "proof_" + std::to_string(i) + ".sv";
+        workspace.write(name, "package proof_" + std::to_string(i) + "; int fixed; endpackage\n");
+        files += name + "\n";
+    }
+    workspace.write("design.f", files);
+}
+} // namespace
+
+TEST_CASE("Large content proofs observe equal-size dependency changes before watch events",
+          "[body-certification][batched-file-proof]") {
+    const bool changed = GENERATE(false, true);
+    Workspace workspace;
+    addProofWitnessFiles(workspace);
+    workspace.write(".slang/server.json", certificationConfig());
+    const std::string before = "package prelude; typedef logic [7:0] word_t; endpackage\n";
+    const std::string after = "package prelude; typedef logic [9:0] word_t; endpackage\n";
+    REQUIRE(before.size() == after.size());
+    workspace.write("prelude.sv", before);
+    auto original = header;
+    original.insert(original.find("    int local_0"), "    prelude::word_t local_word = '0;\n");
+    workspace.write("item.svh", original);
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    auto text = original;
+    text.replace(text.find("local_1 +"), 7, "local_0");
+    change(server, doc.m_uri, 2, text);
+    REQUIRE(state(server).active);
+    REQUIRE(server.m_methodScope);
+    const auto caller = std::this_thread::get_id();
+    size_t files = 0;
+    lsp::RequestContext ctx("large proof", 201);
+    ctx.setCheckpointObserverForTesting([&](std::string_view where) {
+        CHECK(std::this_thread::get_id() == caller);
+        files += where == "method input validation";
+    });
+    REQUIRE(server.m_methodScope->valid(server.m_config, ctx));
+    REQUIRE(files >= 80);
+    doc.m_text = text;
+    const lsp::HoverParams params{.textDocument = {.uri = doc.m_uri},
+                                  .position = doc.getPosition(text.find("word_t") + 3)};
+    auto previous = server.getDocHover(params);
+    REQUIRE(previous);
+    if (changed) {
+        auto stamp = std::filesystem::last_write_time(workspace.root / "prelude.sv");
+        workspace.write("prelude.sv", after);
+        std::filesystem::last_write_time(workspace.root / "prelude.sv", stamp);
+    }
+    const auto actual = server.getDocHover(params);
+    server.runBackgroundWork({});
+    const auto actualDiagnostics = diagnosticMap(server);
+    bodyConfig(workspace, false);
+    BodyTestServer native(workspace.params());
+    native.setBuildFile((workspace.root / "design.f").string());
+    native.openFile("item.svh", text);
+    const auto expected = native.getDocHover(params);
+    REQUIRE(expected);
+    CHECK((rfl::json::write(previous) != rfl::json::write(expected)) == changed);
+    CHECK(rfl::json::write(actual) == rfl::json::write(expected));
+    CHECK(actualDiagnostics == diagnosticMap(native));
+}
+
+TEST_CASE("Large content proof failure closes files before discarding its owner",
+          "[body-certification][batched-file-proof]") {
+    const auto failure = GENERATE("missing", "directory", "symlink");
+    Workspace workspace;
+    addProofWitnessFiles(workspace);
+    workspace.write(".slang/server.json", certificationConfig());
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", header);
+    doc.doc->getAnalysis();
+    auto text = edited();
+    change(server, doc.m_uri, 2, text);
+    REQUIRE(state(server).active);
+    REQUIRE(server.m_methodScope);
+    const auto file = workspace.root / "proof_40.sv";
+    REQUIRE(std::filesystem::remove(file));
+    if (std::string_view(failure) == "directory")
+        std::filesystem::create_directory(file);
+    else if (std::string_view(failure) == "symlink")
+        std::filesystem::create_symlink(workspace.root / "proof_41.sv", file);
+    CHECK_FALSE(server.m_methodScope->valid(server.m_config, {}));
+    CHECK(server.m_methodScope->observedInputChange());
+    // No file descriptor or borrowed witness may outlive the failed proof.
+    server.m_methodScope.reset();
+    std::filesystem::remove_all(file);
+    workspace.write("proof_40.sv", "package proof_40; int fixed; endpackage\n");
+    CHECK(doc.doc->getVersion() == 2);
+    CHECK(server.m_driver->getDocument(doc.m_uri)->getText() == text + '\0');
+    doc.m_text = text;
+    const lsp::HoverParams params{.textDocument = {.uri = doc.m_uri},
+                                  .position = doc.getPosition(text.rfind("charl") + 2)};
+    const auto actual = server.getDocHover(params);
+    bodyConfig(workspace, false);
+    BodyTestServer native(workspace.params());
+    native.setBuildFile((workspace.root / "design.f").string());
+    native.openFile("item.svh", text);
+    CHECK(rfl::json::write(actual) == rfl::json::write(native.getDocHover(params)));
+}
+
+TEST_CASE("Large content proof cancellation preserves publication and retries its latest input",
+          "[body-certification][batched-file-proof]") {
+#if defined(__APPLE__)
+    const auto boundary = GENERATE("method input validation",
+                                   "after batched method input validation");
+#else
+    const auto boundary = GENERATE("method input validation", "method inputs certified");
+#endif
+    Workspace workspace;
+    addProofWitnessFiles(workspace);
+    workspace.write(".slang/server.json", certificationConfig());
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", header);
+    doc.doc->getAnalysis();
+    auto text = edited();
+    change(server, doc.m_uri, 2, text);
+    REQUIRE(state(server).active);
+    REQUIRE(server.m_methodScope);
+    const auto previous = diagnosticMap(server);
+    const auto caller = std::this_thread::get_id();
+    bool reached = false;
+    lsp::RequestContext ctx("cancel large proof", 202);
+    ctx.setCheckpointObserverForTesting([&](std::string_view where) {
+        CHECK(std::this_thread::get_id() == caller);
+        if (where == boundary) {
+            reached = true;
+            ctx.cancel();
+        }
+    });
+    CHECK_THROWS_AS(server.m_methodScope->valid(server.m_config, ctx), lsp::RequestCancelled);
+    REQUIRE(reached);
+    CHECK(previous == diagnosticMap(server));
+    CHECK_FALSE(server.m_methodScope->observedInputChange());
+    REQUIRE(server.m_methodScope->valid(server.m_config, {}));
+    auto next = header;
+    next.replace(next.find("local_1 +"), 7, "local_0");
+    next.insert(next.find("return ("), "int latest_local = 3;\n    ");
+    change(server, doc.m_uri, 3, next);
+    CHECK(server.m_driver->getDocument(doc.m_uri)->getText() == next + '\0');
+    doc.m_text = next;
+    const lsp::HoverParams params{.textDocument = {.uri = doc.m_uri},
+                                  .position = doc.getPosition(next.find("latest_local") + 3)};
+    const auto actual = server.getDocHover(params);
+    REQUIRE(actual);
+    server.runBackgroundWork({});
+    auto actualDiagnostics = diagnosticMap(server);
+    bodyConfig(workspace, false);
+    BodyTestServer native(workspace.params());
+    native.setBuildFile((workspace.root / "design.f").string());
+    native.openFile("item.svh", next);
+    CHECK(rfl::json::write(actual) == rfl::json::write(native.getDocHover(params)));
+    CHECK(actualDiagnostics == diagnosticMap(native));
+}
+
+#if defined(__APPLE__)
+TEST_CASE("Cancelled initial witness capture preserves unsaved input for the latest retry",
+          "[body-certification][batched-file-proof]") {
+    const auto cancelAt = GENERATE("before method input proof",
+                                   "after batched method source witness read");
+    Workspace workspace;
+    addProofWitnessFiles(workspace);
+    workspace.write(".slang/server.json", certificationConfig());
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", header);
+    doc.doc->getAnalysis();
+    const auto previous = diagnosticMap(server);
+    auto text = edited();
+    bool reached = false;
+    lsp::RequestContext ctx("cancel initial witness batch", 203);
+    const auto caller = std::this_thread::get_id();
+    ctx.setCheckpointObserverForTesting([&](std::string_view where) {
+        CHECK(std::this_thread::get_id() == caller);
+        if (where == cancelAt) {
+            reached = true;
+            ctx.cancel();
+        }
+    });
+    CHECK_THROWS_AS(change(server, doc.m_uri, 2, text, ctx), lsp::RequestCancelled);
+    REQUIRE(reached);
+    CHECK(previous == diagnosticMap(server));
+    CHECK(doc.doc->getVersion() == 2);
+    CHECK(server.m_driver->getDocument(doc.m_uri)->getText() == text + '\0');
+    doc.m_text = text;
+    const lsp::HoverParams params{.textDocument = {.uri = doc.m_uri},
+                                  .position = doc.getPosition(text.rfind("charl") + 2)};
+    const auto actual = server.getDocHover(params);
+    REQUIRE(actual);
+    server.runBackgroundWork({});
+    auto actualDiagnostics = diagnosticMap(server);
+    bodyConfig(workspace, false);
+    BodyTestServer native(workspace.params());
+    native.setBuildFile((workspace.root / "design.f").string());
+    native.openFile("item.svh", text);
+    CHECK(rfl::json::write(actual) == rfl::json::write(native.getDocHover(params)));
+    CHECK(actualDiagnostics == diagnosticMap(native));
+}
+#endif
+
+TEST_CASE("Initial reader errors reload changed dependencies before public native fallback",
+          "[body-certification][batched-file-proof]") {
+    const auto failure = GENERATE("symlink", "directory");
+    Workspace workspace;
+    addProofWitnessFiles(workspace);
+    workspace.write(".slang/server.json", certificationConfig());
+    workspace.write("prelude.sv", "package prelude;\n`include \"prelude.svh\"\nendpackage\n");
+    workspace.write("prelude.svh", "typedef logic [7:0] word_t;\n");
+    auto original = header;
+    original.insert(original.find("    int local_0"), "    prelude::word_t local_word = '0;\n");
+    workspace.write("item.svh", original);
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    const lsp::HoverParams params{.textDocument = {.uri = doc.m_uri},
+                                  .position = doc.getPosition(original.find("word_t") + 3)};
+    const auto previous = server.getDocHover(params);
+    REQUIRE(previous);
+    bool reached = false;
+    lsp::RequestContext ctx("changed during initial witness read", 204);
+    ctx.setCheckpointObserverForTesting([&](std::string_view where) {
+        if (!reached && where == "method source witness read") {
+            reached = true;
+            workspace.write("replacement.svh", "typedef logic [9:0] word_t;\n");
+            std::filesystem::remove(workspace.root / "prelude.svh");
+            if (std::string_view(failure) == "directory")
+                std::filesystem::create_directory(workspace.root / "prelude.svh");
+            else
+                std::filesystem::create_symlink(workspace.root / "replacement.svh",
+                                                workspace.root / "prelude.svh");
+        }
+    });
+    auto text = original;
+    text.replace(text.find("local_1 +"), 7, "local_0");
+    change(server, doc.m_uri, 2, text, ctx);
+    REQUIRE(reached);
+    CHECK(server.m_driver->getDocument(doc.m_uri)->getText() == text + '\0');
+    const auto actual = server.getDocHover(params);
+    server.runBackgroundWork({});
+    const auto actualDiagnostics = diagnosticMap(server);
+    bodyConfig(workspace, false);
+    BodyTestServer native(workspace.params());
+    native.setBuildFile((workspace.root / "design.f").string());
+    native.openFile("item.svh", text);
+    const auto expected = native.getDocHover(params);
+    if (std::string_view(failure) == "symlink")
+        REQUIRE(expected);
+    REQUIRE(rfl::json::write(previous) != rfl::json::write(expected));
+    CHECK(rfl::json::write(actual) == rfl::json::write(expected));
+    CHECK(actualDiagnostics == diagnosticMap(native));
+}
+
+TEST_CASE("Strict file proofs reject replaced parents before serving a fresh native type",
+          "[body-certification][batched-file-proof]") {
+    Workspace workspace;
+    std::filesystem::create_directory(workspace.root / "inputs");
+    workspace.write(".slang/server.json", certificationConfig());
+    std::string prelude = "package prelude;\n";
+    auto writeInputs = [&](bool changed) {
+        for (int i = 0; i < 80; ++i) {
+            const auto name = "inputs/type_" + std::to_string(i) + ".svh";
+            if (i == 40)
+                workspace.write(name, changed ? "typedef logic [9:0] word_t;\n"
+                                              : "typedef logic [7:0] word_t;\n");
+            else
+                workspace.write(name, "typedef int type_" + std::to_string(i) + ";\n");
+        }
+    };
+    writeInputs(false);
+    for (int i = 0; i < 80; ++i)
+        prelude += "`include \"inputs/type_" + std::to_string(i) + ".svh\"\n";
+    workspace.write("prelude.sv", prelude + "endpackage\n");
+    auto original = header;
+    original.insert(original.find("    int local_0"), "    prelude::word_t local_word = '0;\n");
+    workspace.write("item.svh", original);
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    auto text = original;
+    text.replace(text.find("local_1 +"), 7, "local_0");
+    change(server, doc.m_uri, 2, text);
+    REQUIRE(server.m_methodScope);
+    doc.m_text = text;
+    const lsp::HoverParams params{.textDocument = {.uri = doc.m_uri},
+                                  .position = doc.getPosition(text.find("word_t") + 3)};
+    const auto old = server.getDocHover(params);
+    REQUIRE(old);
+    lsp::RequestContext ctx("replace proved parent", 205);
+    bool replaced = false;
+    const auto provedPath = (workspace.root / "inputs/type_0.svh").string();
+    ctx.setCheckpointObserverForTesting([&](std::string_view where) {
+        if (!replaced && where == provedPath) {
+            replaced = true;
+            std::filesystem::rename(workspace.root / "inputs", workspace.root / "old_inputs");
+            std::filesystem::create_directory(workspace.root / "inputs");
+            writeInputs(true);
+        }
+    });
+#if defined(__APPLE__)
+    CHECK_FALSE(server.m_methodScope->valid(server.m_config, ctx));
+    REQUIRE(replaced);
+#else
+    std::filesystem::rename(workspace.root / "inputs", workspace.root / "old_inputs");
+    std::filesystem::create_directory(workspace.root / "inputs");
+    writeInputs(true);
+#endif
+    const auto actual = server.getDocHover(params);
+    server.runBackgroundWork({});
+    const auto diagnostics = diagnosticMap(server);
+    bodyConfig(workspace, false);
+    BodyTestServer native(workspace.params());
+    native.setBuildFile((workspace.root / "design.f").string());
+    native.openFile("item.svh", text);
+    const auto expected = native.getDocHover(params);
+    REQUIRE(expected);
+    REQUIRE(rfl::json::write(old) != rfl::json::write(expected));
+    CHECK(rfl::json::write(actual) == rfl::json::write(expected));
+    CHECK(diagnostics == diagnosticMap(native));
+}
+
+TEST_CASE("Strict file proofs retain exact filename identity after a case-only rename",
+          "[body-certification][batched-file-proof]") {
+    Workspace workspace;
+    std::filesystem::create_directory(workspace.root / "inputs");
+    workspace.write(".slang/server.json", certificationConfig());
+    std::string prelude = "package prelude;\n";
+    for (int i = 0; i < 80; ++i) {
+        const auto name = i == 40 ? std::string("Types.svh") : "pad_" + std::to_string(i) + ".svh";
+        workspace.write("inputs/" + name, i == 40 ? "typedef logic [7:0] word_t;\n"
+                                                  : "typedef int pad_" + std::to_string(i) + ";\n");
+        prelude += "`include \"inputs/" + name + "\"\n";
+    }
+    workspace.write("prelude.sv", prelude + "endpackage\n");
+    auto original = header;
+    original.insert(original.find("    int local_0"), "    prelude::word_t local_word = '0;\n");
+    workspace.write("item.svh", original);
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    auto text = original;
+    text.replace(text.find("local_1 +"), 7, "local_0");
+    change(server, doc.m_uri, 2, text);
+    REQUIRE(server.m_methodScope);
+    auto oldName = workspace.root / "inputs/Types.svh";
+    auto newName = workspace.root / "inputs/tYPES.svh";
+    auto stamp = std::filesystem::last_write_time(oldName);
+    std::filesystem::rename(oldName, newName);
+    std::filesystem::last_write_time(newName, stamp);
+    CHECK_FALSE(server.m_methodScope->valid(server.m_config, {}));
+    CHECK(server.m_methodScope->observedInputChange());
+    doc.m_text = text;
+    const lsp::HoverParams params{.textDocument = {.uri = doc.m_uri},
+                                  .position = doc.getPosition(text.find("word_t") + 3)};
+    const auto actual = server.getDocHover(params);
+    server.runBackgroundWork({});
+    auto diagnostics = diagnosticMap(server);
+    bodyConfig(workspace, false);
+    BodyTestServer native(workspace.params());
+    native.setBuildFile((workspace.root / "design.f").string());
+    native.openFile("item.svh", text);
+    CHECK(rfl::json::write(actual) == rfl::json::write(native.getDocHover(params)));
+    CHECK(diagnostics == diagnosticMap(native));
+}
+
+TEST_CASE("Full file proofs check late bytes without scanning unrelated directory names",
+          "[body-certification][batched-file-proof]") {
+    const bool largeDirectory = GENERATE(false, true);
+    Workspace workspace;
+    addProofWitnessFiles(workspace);
+    workspace.write(".slang/server.json", certificationConfig());
+    auto content = std::string("package proof_40; int fixed; endpackage\n/*") +
+                   std::string(192 * 1024, 'x') + "*/\n";
+    workspace.write("proof_40.sv", content);
+    if (largeDirectory)
+        for (int i = 0; i < 8200; ++i)
+            workspace.write("unrelated_" + std::to_string(i) + ".tmp", "");
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", header);
+    doc.doc->getAnalysis();
+    change(server, doc.m_uri, 2, edited());
+    REQUIRE(server.m_methodScope);
+    REQUIRE(server.m_methodScope->valid(server.m_config, {}));
+    auto path = workspace.root / "proof_40.sv";
+    auto stamp = std::filesystem::last_write_time(path);
+    content[content.size() - 10] = 'y';
+    workspace.write("proof_40.sv", content);
+    std::filesystem::last_write_time(path, stamp);
+    CHECK_FALSE(server.m_methodScope->valid(server.m_config, {}));
+    CHECK(server.m_methodScope->observedInputChange());
+    server.runBackgroundWork({});
+    const auto actual = diagnosticMap(server);
+    bodyConfig(workspace, false);
+    BodyTestServer native(workspace.params());
+    native.setBuildFile((workspace.root / "design.f").string());
+    native.openFile("item.svh", edited());
+    CHECK(actual == diagnosticMap(native));
+}
+
+#if defined(__APPLE__)
+TEST_CASE("Final path metadata cannot certify bytes changed after descriptor validation",
+          "[body-certification][batched-file-proof][file-proof-final-metadata]") {
+    const auto mutation = GENERATE("none", "grow", "same-size");
+    Workspace workspace;
+    addProofWitnessFiles(workspace);
+    std::string recipe = "000_dep.sv\n+incdir+.\nprelude.sv\nowner.sv\ntail.sv\n";
+    for (int i = 0; i < 80; ++i)
+        recipe += "proof_" + std::to_string(i) + ".sv\n";
+    workspace.write("design.f", recipe);
+    workspace.write(".slang/server.json", certificationConfig());
+    workspace.write("prelude.sv", "");
+    const std::string before = "package prelude; typedef logic [7:0] word_t; endpackage\n";
+    std::string after = "package prelude; typedef logic [9:0] word_t; endpackage\n";
+    REQUIRE(before.size() == after.size());
+    if (std::string_view(mutation) == "grow")
+        after += "// changed after the descriptor metadata check\n";
+    workspace.write("000_dep.sv", before);
+    auto original = header;
+    original.insert(original.find("    int local_0"), "    prelude::word_t local_word = '0;\n");
+    workspace.write("item.svh", original);
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    auto text = original;
+    text.replace(text.find("local_1 +"), 7, "local_0");
+    change(server, doc.m_uri, 2, text);
+    REQUIRE(server.m_methodScope);
+    doc.m_text = text;
+    const lsp::HoverParams params{.textDocument = {.uri = doc.m_uri},
+                                  .position = doc.getPosition(text.find("word_t") + 3)};
+    const auto previous = server.getDocHover(params);
+    REQUIRE(previous);
+    const auto stamp = std::filesystem::last_write_time(workspace.root / "000_dep.sv");
+    bool reached = false;
+    lsp::RequestContext ctx("final path metadata", 280);
+    const auto provedPath = (workspace.root / "000_dep.sv").string();
+    ctx.setCheckpointObserverForTesting([&](std::string_view where) {
+        if (!reached && where == provedPath) {
+            reached = true;
+            if (std::string_view(mutation) != "none") {
+                workspace.write("000_dep.sv", after);
+                std::filesystem::last_write_time(workspace.root / "000_dep.sv", stamp);
+            }
+        }
+    });
+    CHECK(server.m_methodScope->valid(server.m_config, ctx) ==
+          (std::string_view(mutation) == "none"));
+    REQUIRE(reached);
+    CHECK(server.m_methodScope->observedInputChange() == (std::string_view(mutation) != "none"));
+    const auto actual = server.getDocHover(params);
+    server.runBackgroundWork({});
+    const auto diagnostics = diagnosticMap(server);
+    bodyConfig(workspace, false);
+    BodyTestServer native(workspace.params());
+    native.setBuildFile((workspace.root / "design.f").string());
+    native.openFile("item.svh", text);
+    const auto expected = native.getDocHover(params);
+    REQUIRE(expected);
+    CHECK((rfl::json::write(previous) != rfl::json::write(expected)) ==
+          (std::string_view(mutation) != "none"));
+    CHECK(rfl::json::write(actual) == rfl::json::write(expected));
+    CHECK(diagnostics == diagnosticMap(native));
+}
+#endif

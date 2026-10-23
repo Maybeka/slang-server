@@ -44,7 +44,13 @@ public:
                         Witness requestWitness = {});
     FrozenInstanceCache(const FrozenInstanceCache&) = delete;
     FrozenInstanceCache& operator=(const FrozenInstanceCache&) = delete;
-    void resolveSelections(slang::ast::Compilation& compilation);
+    void resolveSelections(slang::ast::Compilation& compilation,
+                           const lsp::RequestContext& ctx = {});
+    std::vector<Selection> prepareSelections(slang::ast::Compilation& compilation,
+                                             const lsp::RequestContext& ctx) const;
+    void commitSelections(std::vector<Selection> selections) noexcept {
+        m_selections.swap(selections);
+    }
     bool selected(std::string_view path) const;
     std::vector<std::string> modules() const;
     const std::vector<Selection>& selections() const { return m_selections; }

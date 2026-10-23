@@ -170,7 +170,16 @@ public:
         std::vector<std::shared_ptr<syntax::SyntaxTree>> trees;
         uint64_t indexRevision;
     };
+
+private:
+    std::shared_ptr<ShallowAnalysis> buildAnalysis(const AnalysisInputs&,
+                                                   const lsp::RequestContext&);
+
+public:
     AnalysisInputs getAnalysisInputs(const lsp::RequestContext& ctx = {});
+    /// Resolve the source graph once and return an analysis matching that graph.
+    std::pair<AnalysisInputs, std::shared_ptr<ShallowAnalysis>> getAnalysisAndInputs(
+        const lsp::RequestContext& ctx = {});
     const Bag& getOptions() const { return m_options; }
 
     /// @brief Get the analysis, creating it if necessary.

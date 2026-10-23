@@ -7,6 +7,7 @@
 #include <array>
 #include <map>
 #include <optional>
+#include <span>
 #include <stdexcept>
 #include <unordered_map>
 
@@ -136,6 +137,13 @@ private:
     std::vector<uint32_t> handles;
     std::vector<std::string> outerNames;
     std::map<std::string, std::optional<std::string>> disk;
+    struct FileProofInput {
+        const std::string* path;
+        const std::optional<std::string>* expected = nullptr;
+        std::optional<std::string>* captured = nullptr;
+    };
+    bool readProofInputs(std::span<const FileProofInput>, std::string_view checkpoint,
+                         const lsp::RequestContext&) const;
     std::map<std::string, std::vector<std::string>> directories;
     std::weak_ptr<TrustedUvmLibrary> immutableUvm, immutableScopes;
     std::unordered_map<URI, DocumentWitness> documents;
@@ -152,7 +160,8 @@ private:
     std::shared_ptr<slang::syntax::SyntaxTree> miniTree;
     std::shared_ptr<ShallowAnalysis> miniAnalysis;
 
-    static std::optional<std::string> read(const std::string&, bool fastPath = false);
+    static std::optional<std::string> read(const std::string&, bool fastPath = false,
+                                           const lsp::RequestContext& ctx = {});
     static std::string plain(const SlangDoc&);
     static void require(bool, const char*);
     const DTO& completion(size_t context, size_t index) const;

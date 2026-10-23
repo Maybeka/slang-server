@@ -29,6 +29,7 @@ ShallowCompilation::ShallowCompilation(
     BufferID sourceBuffer) :
     m_sourceManager(sourceManager), m_tree(std::move(tree)), m_allTrees{m_tree},
     m_analysisOptions(options.getOrDefault<analysis::AnalysisOptions>()) {
+    m_fullDesignView = design != nullptr;
     if (auto setting = options.get<TrustedUvmImport>())
         m_sourceOwnerLease = setting->sourceOwner;
     for (const auto& dependency : dependencies)
@@ -75,7 +76,7 @@ ShallowCompilation::ShallowCompilation(
             return;
         }
         if (design) {
-            auto active = design->createActiveDesignContext(names);
+            auto active = design->createActiveDesignContext(names, ctx);
             for (auto name : names) {
                 if (auto instance = active.getBoundInstance(name)) {
                     // Native shallow overrides omit invalid arguments. Keep
@@ -129,13 +130,18 @@ ShallowCompilation::ShallowCompilation(
         ctx.checkpoint("after adding syntax tree");
     }
 
-    if (design) {
+    // PackageAnalysis has no instantiated RTL. Declared virtual-interface parameters
+    // belong to its own types, not a selected unrelated instance in the full design.
+    // Fixed module source views above still bind their actual full-design instance.
+    const bool independentPackage = packageOnly &&
+                                    options.getOrDefault<PackageQueryViewOptions>().independent;
+    if (design && !independentPackage) {
         std::vector<std::string_view> definitionNames;
         for (auto* symbol : m_compilation->getDefinitions()) {
             if (auto* definition = symbol->as_if<ast::DefinitionSymbol>())
                 definitionNames.push_back(definition->name);
         }
-        m_activeDesign = design->createActiveDesignContext(definitionNames);
+        m_activeDesign = design->createActiveDesignContext(definitionNames, ctx);
         m_activeDesign->applyOverrides(*m_compilation);
     }
 }
@@ -198,7 +204,7 @@ const Diagnostics& ShallowCompilation::getSemanticDiagnostics() {
     // The full design owns cache admission. Private query views clear tops
     // and cap instance depth; publishing them can evict the active DUT graph
     // with a different parameter / option variant during read-only queries.
-    if (!m_activeDesign)
+    if (!m_fullDesignView)
         m_compilation->offerInstanceBodies(m_compilation);
     return diagnostics;
 }

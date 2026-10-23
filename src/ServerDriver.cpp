@@ -436,11 +436,11 @@ void ServerDriver::analyzeDocument(SlangDoc& doc, const lsp::RequestContext& ctx
         auto previousUnits = m_configuredUnits;
         refreshConfiguredUnits(ctx);
         if (m_designUsesConfiguredUnits && previousUnits != m_configuredUnits)
-            comp->refreshDocuments(m_configuredUnits);
-        auto design = comp->createActiveDesignContext({});
+            comp->invalidateDocuments(m_configuredUnits);
+        const auto trees = comp->getCurrentSyntaxTrees(ctx);
         auto path = sm.getFullPath(doc.getBuffer());
         bool covered = false;
-        for (const auto& tree : design.getAnalysis().compilation.getSyntaxTrees())
+        for (const auto& tree : trees)
             for (auto id : tree->getSourceBufferIds())
                 covered |= sm.getFullPath(id) == path;
         if (covered) {
@@ -521,7 +521,9 @@ void ServerDriver::publishCompilationDiagnostics(const URI* priorityUri,
                                                  const lsp::RequestContext* ctx) {
     auto cwdPhase = sm.beginFastCwdPhase();
     auto update = diagClient->beginUpdate();
-    auto design = comp->createActiveDesignContext({});
+    if (isCooperativeAnalysisEnabled())
+        comp->prepareDiagnostics(ctx ? *ctx : lsp::RequestContext{});
+    auto design = comp->createActiveDesignContext({}, ctx ? *ctx : lsp::RequestContext{});
     const auto trees = design.getAnalysis().compilation.getSyntaxTrees();
     flat_hash_set<URI> currentSources;
     for (const auto& tree : trees)
@@ -690,13 +692,18 @@ std::unique_ptr<ServerDriver> ServerDriver::createFromFileLists(
         std::nullopt,
         (newDriver->isFrozenSourcesEnabled() || newDriver->isUvmPrefixCacheEnabled()) && oldDriver
             ? oldDriver->comp.get()
-            : nullptr);
+            : nullptr,
+        retirementContext ? *retirementContext : lsp::RequestContext{});
 
-    newDriver->configureFrozenInstances();
+    newDriver->configureFrozenInstances(retirementContext ? *retirementContext
+                                                          : lsp::RequestContext{});
     if (retirementContext)
         retirementContext->checkpoint("after retirement model");
     phases.mark("retirement-build-model");
     if (!deferOpenDiagnostics) {
+        if (newDriver->isCooperativeAnalysisEnabled())
+            newDriver->comp->prepareUnpublishedDiagnostics(
+                retirementContext ? *retirementContext : lsp::RequestContext{});
         newDriver->diagClient->clear();
         newDriver->copyOpenDocumentsFrom(oldDriver);
         newDriver->publishCompilationDiagnostics();
@@ -1505,10 +1512,12 @@ std::shared_ptr<syntax::SyntaxTree> ServerDriver::parseShallowTree(SourceBuffer 
 
 std::vector<std::shared_ptr<syntax::SyntaxTree>> ServerDriver::getDependentTrees(
     std::shared_ptr<syntax::SyntaxTree> tree, const URI* target, const lsp::RequestContext& ctx) {
-    const bool hasPhysicalHints = std::ranges::any_of(tree->getSourceBufferIds(), [&](auto id) {
-        return sm.getSourceText(id).find("slang-server:") != std::string_view::npos;
-    });
-    if (!hasConfiguredCompilationInputs() && !hasSourceContextHints() && !hasPhysicalHints &&
+    if (!hasConfiguredCompilationInputs() && !hasSourceContextHints() &&
+        !std::ranges::any_of(tree->getSourceBufferIds(),
+                             [&](auto id) {
+                                 return sm.getSourceText(id).find("slang-server:") !=
+                                        std::string_view::npos;
+                             }) &&
         getExplorePreincludeBuffers(tree->getSourceBufferIds().front()).empty())
         return getDependentTrees(std::move(tree), false, ctx);
     if (target) {
@@ -1763,7 +1772,9 @@ std::unique_ptr<ServerDriver> ServerDriver::createFromTop(
     else {
         ast::Compilation shallowCompilation;
         shallowCompilation.addSyntaxTree(topTree);
+        ctx.checkpoint("before top inference root binding");
         auto& topInstances = shallowCompilation.getRoot().topInstances;
+        ctx.checkpoint("after top inference root binding");
         if (topInstances.empty()) {
             if (requireValidConfig)
                 return nullptr;
@@ -1797,13 +1808,18 @@ std::unique_ptr<ServerDriver> ServerDriver::createFromTop(
         documents, newDriver->options, newDriver->sm, newDriver->client, std::move(topName),
         (newDriver->isFrozenSourcesEnabled() || newDriver->isUvmPrefixCacheEnabled()) && oldDriver
             ? oldDriver->comp.get()
-            : nullptr);
+            : nullptr,
+        retirementContext ? *retirementContext : lsp::RequestContext{});
 
-    newDriver->configureFrozenInstances();
+    newDriver->configureFrozenInstances(retirementContext ? *retirementContext
+                                                          : lsp::RequestContext{});
     if (retirementContext)
         retirementContext->checkpoint("after retirement model");
-    if (!deferOpenDiagnostics)
+    if (!deferOpenDiagnostics) {
+        if (newDriver->isCooperativeAnalysisEnabled())
+            newDriver->comp->prepareUnpublishedDiagnostics(ctx);
         newDriver->publishCompilationDiagnostics();
+    }
     return newDriver;
 }
 

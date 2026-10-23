@@ -43,6 +43,16 @@ namespace server {
 using namespace slang;
 namespace fs = std::filesystem;
 namespace {
+#if defined(__APPLE__)
+bool sameFileVersion(const struct stat& before, const struct stat& after) {
+    return before.st_dev == after.st_dev && before.st_ino == after.st_ino &&
+           before.st_size == after.st_size &&
+           before.st_mtimespec.tv_sec == after.st_mtimespec.tv_sec &&
+           before.st_mtimespec.tv_nsec == after.st_mtimespec.tv_nsec &&
+           before.st_ctimespec.tv_sec == after.st_ctimespec.tv_sec &&
+           before.st_ctimespec.tv_nsec == after.st_ctimespec.tv_nsec;
+}
+#endif
 struct Formatting : completions::MemberCompletionQuery {
     using MemberCompletionQuery::addCompletions;
     using MemberCompletionQuery::updateCompletionEditText;
@@ -281,7 +291,8 @@ std::string MethodScopeOverlay::plain(const SlangDoc& document) {
     return std::string(bytes);
 }
 std::optional<std::string> MethodScopeOverlay::read(const std::string& path,
-                                                    [[maybe_unused]] bool fastPath) {
+                                                    [[maybe_unused]] bool fastPath,
+                                                    const lsp::RequestContext& ctx) {
 #if defined(__APPLE__)
     if (fastPath) {
         // The descriptor proves the resolved path of the bytes actually read,
@@ -306,7 +317,10 @@ std::optional<std::string> MethodScopeOverlay::read(const std::string& path,
             std::string bytes(size_t(before.st_size), '\0');
             size_t offset = 0;
             while (offset < bytes.size()) {
-                const auto count = ::read(fd, bytes.data() + offset, bytes.size() - offset);
+                ctx.checkpoint("during method file input read");
+                const auto count = ::read(fd, bytes.data() + offset,
+                                          std::min<size_t>(16 * 1024 * 1024,
+                                                           bytes.size() - offset));
                 if (count < 0 && errno == EINTR)
                     continue;
                 need(count > 0, "input changed or read failed");
@@ -318,14 +332,11 @@ std::optional<std::string> MethodScopeOverlay::read(const std::string& path,
                 count = ::read(fd, &extra, 1);
             } while (count < 0 && errno == EINTR);
             struct stat after, current;
-            need(count == 0 && ::fstat(fd, &after) == 0 && ::lstat(path.c_str(), &current) == 0 &&
-                     S_ISREG(current.st_mode) && after.st_dev == current.st_dev &&
-                     after.st_ino == current.st_ino && before.st_size == after.st_size &&
-                     after.st_size == current.st_size &&
-                     before.st_mtimespec.tv_sec == after.st_mtimespec.tv_sec &&
-                     before.st_mtimespec.tv_nsec == after.st_mtimespec.tv_nsec &&
-                     before.st_ctimespec.tv_sec == after.st_ctimespec.tv_sec &&
-                     before.st_ctimespec.tv_nsec == after.st_ctimespec.tv_nsec &&
+            need(count == 0 && ::fstat(fd, &after) == 0, "input changed or read failed");
+            ctx.checkpoint("after method file descriptor metadata");
+            ctx.checkpoint(path);
+            need(::lstat(path.c_str(), &current) == 0 && S_ISREG(current.st_mode) &&
+                     sameFileVersion(before, after) && sameFileVersion(after, current) &&
                      ::fcntl(fd, F_GETPATH, resolved) == 0 && fs::path(resolved) == fs::path(path),
                  "input changed or read failed");
             return bytes;
@@ -348,6 +359,7 @@ std::optional<std::string> MethodScopeOverlay::read(const std::string& path,
     need(size >= 0, "input size unavailable");
     std::string bytes(size_t(size), '\0');
     input.seekg(0);
+    ctx.checkpoint("during method file input read");
     input.read(bytes.data(), std::streamsize(bytes.size()));
     need(bool(input) && input.peek() == std::char_traits<char>::eof() && !input.bad(),
          "input changed or read failed");
@@ -358,9 +370,11 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
                                        size_t editOffset, const lsp::RequestContext& ctx) :
     driver(&d), uri(target) {
     UvmPhaseTrace phases;
+    UvmPhaseTrace contextPhases;
     ctx.checkpoint("method certificate begin");
     bodyQueries = config.experimentalMethodBodyQueries.value();
     std::shared_ptr<syntax::SyntaxTree> tree;
+    std::shared_ptr<ShallowAnalysis> analysis;
     BufferID occurrence;
     auto document = d.getDocument(uri);
     need(document && document->getVersion(), "open target required");
@@ -369,7 +383,8 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
         // about an edit. Preparation requires a previously queried live view.
         need(document->hasAnalysis(), "current query context required");
         need(!d.completions.resolveEdits, "deferred callable edits required");
-        auto graph = document->getAnalysisInputs(ctx);
+        auto [graph, resolvedAnalysis] = document->getAnalysisAndInputs(ctx);
+        analysis = std::move(resolvedAnalysis);
         tree = graph.tree;
         occurrence = graph.buffer;
         need(tree && occurrence.valid(), "source context unavailable");
@@ -532,11 +547,14 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
         need(graph.tree == tree && graph.buffer == occurrence && graph.trees.size() == 1,
              "nonunique owner graph");
     }
+    contextPhases.mark("body-context-graph");
     ctx.checkpoint("method certificate graph ready");
-    auto analysis = document->getAnalysis(ctx);
+    if (!analysis)
+        analysis = document->getAnalysis(ctx);
     auto& compilation = *analysis->getCompilation();
     if (!bodyQueries)
         need(compilation.getAllDiagnostics().empty(), "base semantic diagnostics");
+    contextPhases.mark("body-context-analysis");
     ctx.checkpoint("method certificate semantics ready");
     const syntax::FunctionDeclarationSyntax* selected = nullptr;
     auto find = [&](auto&& self, const syntax::SyntaxNode& node) -> void {
@@ -573,6 +591,7 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
              selected->getFirstToken().location().offset() <= editOffset &&
              editOffset < selected->getLastToken().range().end().offset(),
          "edit outside function");
+    contextPhases.mark("body-context-target");
     if (bodyQueries) {
         auto contexts = analysis->getSubroutines(*selected);
         need(!contexts.empty(), "unbound function / task context");
@@ -596,18 +615,31 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
             currentBuffer = document->getBuffer().getId();
             version = *document->getVersion();
             text = plain(*document);
+            contextPhases.mark("body-context-methods");
             // Removing an existing directive or state-changing macro is just as
             // unsafe as introducing one: the borrowed suffix used its old state.
             validateBodyPreprocessing(text.substr(functionBegin, functionEnd - functionBegin));
+            // Buffer identities and their paths are immutable during this
+            // serialized construction. Resolve each physical source once even
+            // when a large library contributes many macro expansion references.
+            const auto occurrencePath = d.sm.getFullPath(occurrence);
+            std::unordered_map<uint32_t, bool> occurrenceBuffers;
+            auto inOccurrence = [&](BufferID buffer) {
+                auto [entry, inserted] = occurrenceBuffers.try_emplace(buffer.getId(), false);
+                if (inserted)
+                    entry->second = d.sm.getFullPath(buffer) == occurrencePath;
+                return entry->second;
+            };
             size_t checkedMacros = 0;
             for (const auto& reference : tree->getPreprocessorMetadata().macroRefs) {
                 if ((checkedMacros++ & 1023) == 0)
                     ctx.checkpoint("original method preprocessing witness");
                 auto at = d.sm.getFullyExpandedLoc(reference.syntax->getFirstToken().location());
                 if (at && functionBegin <= at.offset() && at.offset() < functionEnd &&
-                    d.sm.getFullPath(at.buffer()) == d.sm.getFullPath(occurrence))
+                    inOccurrence(at.buffer()))
                     validateMacroPreprocessing(reference);
             }
+            contextPhases.mark("body-context-macro-witnesses");
             functionName = bodyOriginals.front()->name;
             functionPath = bodyOriginals.front()->getHierarchicalPath();
             bodyBlocked = bodyOriginals;
@@ -618,8 +650,7 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
             // update whenever the method's line count changes.
             for (const auto& [usage, expansion] : analysis->syntaxes.macroExpansions) {
                 auto location = d.sm.getFullyExpandedLoc(usage->getFirstToken().location());
-                if (d.sm.getFullPath(location.buffer()) != d.sm.getFullPath(occurrence) ||
-                    location.offset() < originalBodyEnd)
+                if (!inOccurrence(location.buffer()) || location.offset() < originalBodyEnd)
                     continue;
                 const syntax::FunctionDeclarationSyntax* enclosing = nullptr;
                 for (auto node = usage; node; node = node->parent)
@@ -644,6 +675,7 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
                 else
                     bodyLineSensitiveDeclaration = true;
             }
+            contextPhases.mark("body-context-later-macros");
             phases.mark("body-prepare-context");
             const auto& history = tree->getPreprocessorMetadata();
             const auto header = selected->prototype->keyword.location();
@@ -1010,6 +1042,45 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
         need(!immutableFiles.contains(d.sm.getFullPath(occurrence).string()),
              "edited method belongs to an immutable library");
     }
+    const bool fastWitnesses = optimizedCertification(config);
+    auto readWitness = [fastWitnesses, &ctx](const std::string& path) {
+        try {
+            return read(path, fastWitnesses, ctx);
+        }
+        catch (const lsp::RequestCancelled&) {
+            throw;
+        }
+        catch (const std::exception& error) {
+            // A rejected physical input must not fall through to an older
+            // SourceManager lookup. Rebuild dependencies before serving native.
+            throw InputsChanged(error.what());
+        }
+    };
+    if (fastWitnesses) {
+        // Collect unique physical paths before verifying parsed bytes.
+        // Capturing is independent of the final witness map.
+        std::map<std::string, std::optional<std::string>> pending;
+        for (const auto& file : frozen.input->sources.files)
+            if (!file.generated && !immutableFiles.contains(file.fullPath) &&
+                !disk.contains(file.fullPath))
+                pending.try_emplace(file.fullPath);
+        if (pending.size() >= 64) {
+            std::vector<FileProofInput> inputs;
+            inputs.reserve(pending.size());
+            for (auto& [path, bytes] : pending)
+                inputs.push_back({&path, nullptr, &bytes});
+            try {
+                (void)readProofInputs(inputs, "method source witness read", ctx);
+            }
+            catch (const lsp::RequestCancelled&) {
+                throw;
+            }
+            catch (const std::exception& error) {
+                throw InputsChanged(error.what());
+            }
+            disk.merge(pending);
+        }
+    }
     // A path can appear as a source, lookup and context watch input. Never let
     // a later read replace a witness already checked against the parsed bytes.
     auto witness = [&](const std::string& path) -> const std::optional<std::string>& {
@@ -1017,7 +1088,7 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
             if (auto found = disk.find(path); found != disk.end())
                 return found->second;
         ctx.checkpoint("method source witness read");
-        auto bytes = read(path, optimizedCertification(config));
+        auto bytes = readWitness(path);
         auto [it, inserted] = disk.try_emplace(path, bytes);
         if (!inserted && it->second != bytes)
             throw InputsChanged("input changed during certification");
@@ -1163,6 +1234,21 @@ catch (const std::exception&) {
 bool MethodScopeOverlay::optimizedCertification(const Config& config) const {
     return generalBody && config.experimentalMethodBodyCertification.value();
 }
+bool MethodScopeOverlay::readProofInputs(std::span<const FileProofInput> inputs,
+                                         std::string_view checkpoint,
+                                         const lsp::RequestContext& ctx) const {
+    ctx.checkpoint("before method input proof");
+    for (const auto& input : inputs) {
+        ctx.checkpoint(checkpoint);
+        auto bytes = read(*input.path, true, ctx);
+        if (input.expected && bytes != *input.expected)
+            return false;
+        if (input.captured)
+            *input.captured = std::move(bytes);
+    }
+    ctx.checkpoint("after batched " + std::string(checkpoint));
+    return true;
+}
 bool MethodScopeOverlay::validForWork(const Config& config, const lsp::RequestContext& ctx) const {
     return optimizedCertification(config) ? validContext(config, ctx) : valid(config, ctx);
 }
@@ -1178,11 +1264,23 @@ bool MethodScopeOverlay::valid(const Config& config, const lsp::RequestContext& 
         }
     }
     phases.mark("body-validate-directories");
-    for (auto& [path, bytes] : disk) {
-        ctx.checkpoint("method input validation");
-        if (read(path, optimizedCertification(config)) != bytes) {
+    if (optimizedCertification(config) && disk.size() >= 64) {
+        std::vector<FileProofInput> inputs;
+        inputs.reserve(disk.size());
+        for (const auto& [path, bytes] : disk)
+            inputs.push_back({&path, &bytes, nullptr});
+        if (!readProofInputs(inputs, "method input validation", ctx)) {
             inputChanged = true;
             return false;
+        }
+    }
+    else {
+        for (auto& [path, bytes] : disk) {
+            ctx.checkpoint("method input validation");
+            if (read(path, optimizedCertification(config), ctx) != bytes) {
+                inputChanged = true;
+                return false;
+            }
         }
     }
     phases.mark("body-validate-files");

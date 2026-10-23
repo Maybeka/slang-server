@@ -652,3 +652,258 @@ TEST_CASE("Standalone owner probing cancels without committing discovery", "[own
     CHECK(server.m_driver->getOwnerDiscoveryAttemptCount() == 0);
     CHECK(doc->getSyntaxTree()->diagnostics().empty());
 }
+
+TEST_CASE("Cooperative package queries avoid design rebuild and retain declared interface types",
+          "[package-query-context][semantic-cancellation]") {
+    for (bool enabled : {false, true}) {
+        ExplicitWorkspace workspace;
+        workspace.write(".slang/server.json",
+                        "{\"flags\":\"--single-unit --top top\",\"indexingThreads\":1,"
+                        "\"experimentalCooperativeAnalysis\":" +
+                            std::string(enabled ? "true" : "false") + "}\n");
+        workspace.write("bus.sv",
+                        "interface bus_if #(parameter N=7); logic [N-1:0] data; endinterface\n");
+        const std::string original =
+            "class C;\nvirtual bus_if #(9) vif;\nint scalar;\n"
+            "function new(); scalar=0; endfunction\n"
+            "extern function logic[8:0] read();\nendclass\n"
+            "function logic[8:0] C::read();\nreturn vif.data;\nendfunction\n";
+        workspace.write("item.svh", original);
+        workspace.write("p_pkg.sv", "package p;\n`include \"item.svh\"\nendpackage\n");
+        workspace.write("top.sv", "module top; bus_if #(16) chosen(); endmodule\n");
+        workspace.write("design.f", "bus.sv\np_pkg.sv\ntop.sv\n");
+        ServerHarness server(workspace.params());
+        server.setBuildFile(workspace.path("design.f").string());
+        REQUIRE(server.m_driver->comp);
+        auto native = server.m_driver->comp->createActiveDesignContext({}).retainCompilation();
+        auto package = native->getPackage("p");
+        REQUIRE(package);
+        auto cls = package->find("C");
+        REQUIRE(cls);
+        auto member = cls->as<slang::ast::ClassType>().find("vif");
+        REQUIRE(member);
+        auto& vif = member->as<slang::ast::ValueSymbol>()
+                        .getType()
+                        .getCanonicalType()
+                        .as<slang::ast::VirtualInterfaceType>();
+        auto data = vif.iface.body.find("data");
+        REQUIRE(data);
+        CHECK(data->as<slang::ast::ValueSymbol>().getType().getBitWidth() == 9);
+        auto header = server.openFile("item.svh");
+        auto latest = original;
+        latest.replace(latest.find("scalar"), std::string("scalar").size(), "latest_scalar");
+        server.SlangServer::onDocDidChange(
+            {.textDocument = {.version = 2, .uri = header.m_uri},
+             .contentChanges = {lsp::TextDocumentContentChangeWholeDocument{.text = latest}}});
+        lsp::RequestContext ctx("textDocument/hover", 112);
+        size_t rebuilds = 0;
+        ctx.setCheckpointObserverForTesting([&](std::string_view phase) {
+            if (phase == "before full-model root binding")
+                ++rebuilds;
+        });
+        auto current = server.m_driver->getDocument(header.m_uri);
+        auto analysis = current->getAnalysis(ctx);
+        CHECK(server.m_driver->isPackageQueryContext(header.m_uri) == enabled);
+        CHECK(rebuilds == (enabled ? 0 : 1));
+        auto position = header.before("data").getPosition();
+        auto hover = rfl::json::write(
+            server.getDocHover({.textDocument = {.uri = header.m_uri}, .position = position}, ctx));
+        CAPTURE(enabled, hover);
+        CHECK(hover.find("data") != std::string::npos);
+        if (enabled)
+            CHECK(hover.find("[8:0]") != std::string::npos);
+        CHECK(rebuilds == (enabled ? 0 : 1));
+        server.m_driver->runPendingDiagnostics();
+        // A real RTL source still uses its selected instantiated parameters.
+        REQUIRE(server.m_driver->comp->setActiveInstance("top.chosen"));
+        auto bus = server.openFile("bus.sv");
+        auto rtl = rfl::json::write(server.getDocHover(
+            {.textDocument = {.uri = bus.m_uri}, .position = bus.before("data").getPosition()}));
+        CHECK_FALSE(server.m_driver->isPackageQueryContext(bus.m_uri));
+        CHECK(rtl.find("[15:0]") != std::string::npos);
+    }
+}
+
+TEST_CASE("Package query eligibility follows the latest configured include owner",
+          "[package-query-context][semantic-cancellation]") {
+    ExplicitWorkspace workspace;
+    workspace.write(".slang/server.json",
+                    "{\"flags\":\"--single-unit --top top\",\"indexingThreads\":1,"
+                    "\"experimentalCooperativeAnalysis\":true}\n");
+    workspace.write("item.svh", "class C; int scalar; endclass\n");
+    workspace.write("owner.sv", "package p;\n`include \"item.svh\"\nendpackage\n");
+    workspace.write("top.sv", "module top; endmodule\n");
+    workspace.write("design.f", "owner.sv\ntop.sv\n");
+    ServerHarness server(workspace.params());
+    server.setBuildFile(workspace.path("design.f").string());
+    auto header = server.openFile("item.svh");
+    auto current = server.m_driver->getDocument(header.m_uri);
+    auto [beforeInputs, before] = current->getAnalysisAndInputs();
+    CHECK(beforeInputs.tree == before->getSyntaxTree());
+    CHECK(beforeInputs.buffer == before->getBuffer());
+    CHECK(server.m_driver->isPackageQueryContext(header.m_uri));
+    auto owner = server.openFile("owner.sv");
+    server.SlangServer::onDocDidChange(
+        {.textDocument = {.version = 2, .uri = owner.m_uri},
+         .contentChanges = {lsp::TextDocumentContentChangeWholeDocument{
+             .text = "module bridge;\n`include \"item.svh\"\nendmodule\n"}}});
+    auto [afterInputs, after] = current->getAnalysisAndInputs();
+    CHECK(after != before);
+    CHECK(afterInputs.tree == after->getSyntaxTree());
+    CHECK(afterInputs.buffer == after->getBuffer());
+    CHECK_FALSE(server.m_driver->isPackageQueryContext(header.m_uri));
+}
+
+TEST_CASE("Resolved source graphs reuse their analysis once and cancel before publication",
+          "[package-query-context][resolved-analysis-inputs]") {
+    const auto cancelAt = GENERATE("before analysis publication", "after resolved analysis reuse");
+    ExplicitWorkspace workspace;
+    workspace.write(".slang/server.json",
+                    "{\"flags\":\"--single-unit --top top\",\"indexingThreads\":1,"
+                    "\"experimentalCooperativeAnalysis\":true}\n");
+    workspace.write("item.svh", "class C; int scalar; endclass\n");
+    workspace.write("owner.sv", "package p;\n`include \"item.svh\"\nendpackage\n");
+    workspace.write("top.sv", "module top; endmodule\n");
+    workspace.write("design.f", "owner.sv\ntop.sv\n");
+    ServerHarness server(workspace.params());
+    server.setBuildFile(workspace.path("design.f").string());
+    auto header = server.openFile("item.svh");
+    auto current = server.m_driver->getDocument(header.m_uri);
+    auto previous = current->getAnalysis();
+    const auto query = lsp::HoverParams{.textDocument = {.uri = header.m_uri},
+                                        .position = header.before("scalar").getPosition()};
+    const auto expected = rfl::json::write(server.getDocHover(query));
+    size_t resolutions = 0, repeated = 0;
+    lsp::RequestContext count("resolved graph reuse", 270);
+    count.setCheckpointObserverForTesting([&](std::string_view phase) {
+        resolutions += phase == "before owner resolution";
+        repeated += phase == "before cached owner resolution";
+    });
+    auto [inputs, reused] = current->getAnalysisAndInputs(count);
+    CHECK(reused == previous);
+    CHECK(inputs.buffer == reused->getBuffer());
+    CHECK(inputs.tree == reused->getSyntaxTree());
+    CHECK(resolutions == 1);
+    CHECK(repeated == 0);
+    current->invalidateAnalysis();
+    bool reached = false;
+    lsp::RequestContext cancel("cancel resolved graph", 271);
+    cancel.setCheckpointObserverForTesting([&](std::string_view phase) {
+        if (phase == cancelAt) {
+            reached = true;
+            cancel.cancel();
+        }
+    });
+    CHECK_THROWS_AS(current->getAnalysisAndInputs(cancel), lsp::RequestCancelled);
+    REQUIRE(reached);
+    CHECK_FALSE(current->hasAnalysis());
+    CHECK(previous->hasValidBuffers());
+    auto [latestInputs, latest] = current->getAnalysisAndInputs();
+    CHECK(latest != previous);
+    CHECK(latestInputs.buffer == latest->getBuffer());
+    CHECK(latestInputs.tree == latest->getSyntaxTree());
+    CHECK(expected == rfl::json::write(server.getDocHover(query)));
+}
+
+TEST_CASE("Package queries retain full context for generic and out-of-block methods",
+          "[package-query-context][semantic-cancellation]") {
+    struct Scenario {
+        std::string header, owner, instance;
+    };
+    const Scenario cases[] = {
+        {"class C #(type T=byte); T field; function T read(); return field; endfunction endclass\n",
+         "package p;\n`include \"item.svh\"\nendpackage\n", "p::C#(logic[15:0]) item;"},
+        {"class Inner; T field; function T read(); return field; endfunction endclass\n",
+         "package p; class Outer #(type T=byte);\n`include \"item.svh\"\nendclass endpackage\n",
+         "p::Outer#(logic[15:0]) item;"},
+        {"function int C::read(); return field; endfunction\n",
+         "package p; class C #(type T=byte); T field; extern function int read(); endclass\n"
+         "`include \"item.svh\"\nendpackage\n",
+         "p::C#(logic[15:0]) item;"}};
+    for (const auto& scenario : cases) {
+        std::optional<std::string> reference;
+        for (bool enabled : {false, true}) {
+            ExplicitWorkspace workspace;
+            workspace.write(".slang/server.json",
+                            "{\"flags\":\"--single-unit --top top\",\"indexingThreads\":1,"
+                            "\"experimentalCooperativeAnalysis\":" +
+                                std::string(enabled ? "true" : "false") + "}\n");
+            workspace.write("item.svh", scenario.header);
+            workspace.write("owner.sv", scenario.owner);
+            workspace.write("top.sv", "module top; " + scenario.instance + " endmodule\n");
+            workspace.write("design.f", "owner.sv\ntop.sv\n");
+            ServerHarness server(workspace.params());
+            server.setBuildFile(workspace.path("design.f").string());
+            auto header = server.openFile("item.svh");
+            auto latest = scenario.header;
+            latest.insert(latest.find("return"), "/* changed */ ");
+            server.SlangServer::onDocDidChange(
+                {.textDocument = {.version = 2, .uri = header.m_uri},
+                 .contentChanges = {lsp::TextDocumentContentChangeWholeDocument{.text = latest}}});
+            auto doc = server.m_driver->getDocument(header.m_uri);
+            lsp::RequestContext ctx("textDocument/hover", 114);
+            size_t rebuilds = 0;
+            ctx.setCheckpointObserverForTesting([&](std::string_view phase) {
+                if (phase == "before full-model root binding")
+                    ++rebuilds;
+            });
+            auto analysis = doc->getAnalysis(ctx);
+            CHECK(rebuilds == 1);
+            CHECK_FALSE(
+                analysis->getCompilation()->hasFlag(slang::ast::CompilationFlags::PackageAnalysis));
+            CHECK_FALSE(server.m_driver->isPackageQueryContext(header.m_uri));
+            auto hover = rfl::json::write(
+                server.getDocHover({.textDocument = {.uri = header.m_uri},
+                                    .position = header.before("field").getPosition()}));
+            CAPTURE(enabled, scenario.header, hover);
+            // Match the existing full-context result, including unresolved generic positions.
+            if (reference)
+                CHECK(hover == *reference);
+            else
+                reference = hover;
+            server.m_driver->runPendingDiagnostics();
+        }
+    }
+}
+
+TEST_CASE("Package queries retain explicit root hierarchy context through macros and helpers",
+          "[package-query-context][semantic-cancellation]") {
+    const auto kind = GENERATE("direct", "macro", "helper");
+    std::optional<std::string> reference;
+    for (bool enabled : {false, true}) {
+        ExplicitWorkspace workspace;
+        workspace.write(".slang/server.json",
+                        "{\"flags\":\"--single-unit --top top\",\"indexingThreads\":1,"
+                        "\"experimentalCooperativeAnalysis\":" +
+                            std::string(enabled ? "true" : "false") + "}\n");
+        const bool helper = std::string_view(kind) == "helper";
+        const std::string expression = std::string_view(kind) == "macro" ? "`DUT.value"
+                                                                         : "$root.top.value";
+        const std::string header = "class C; int field; function int read(); return " +
+                                   (helper ? std::string("Helper::read()") : expression) +
+                                   "; endfunction endclass\n";
+        workspace.write("item.svh", header);
+        workspace.write("owner.sv",
+                        "`define DUT $root.top\npackage p;\n" +
+                            std::string(helper ? "class Helper; static function int read(); return "
+                                                 "$root.top.value; endfunction endclass\n"
+                                               : "") +
+                            "`include \"item.svh\"\nendpackage\n");
+        workspace.write("top.sv", "module top; int value; endmodule\n");
+        workspace.write("design.f", "owner.sv\ntop.sv\n");
+        ServerHarness server(workspace.params());
+        server.setBuildFile(workspace.path("design.f").string());
+        auto doc = server.openFile("item.svh");
+        auto analysis = server.m_driver->getDocument(doc.m_uri)->getAnalysis();
+        CHECK_FALSE(server.m_driver->isPackageQueryContext(doc.m_uri));
+        CHECK_FALSE(
+            analysis->getCompilation()->hasFlag(slang::ast::CompilationFlags::PackageAnalysis));
+        const auto hover = rfl::json::write(server.getDocHover(
+            {.textDocument = {.uri = doc.m_uri}, .position = doc.before("read").getPosition()}));
+        if (reference)
+            CHECK(hover == *reference);
+        else
+            reference = hover;
+        server.m_driver->runPendingDiagnostics();
+    }
+}

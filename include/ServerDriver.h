@@ -235,6 +235,8 @@ public:
     void requireExplicitContext(const URI& uri) const;
     void issueExplicitContextDiagnostics(const URI& uri);
     bool isPackageOnlyContext(const URI& uri) const;
+    /// Query-only package views; full diagnostic snapshot mode remains unchanged.
+    bool isPackageQueryContext(const URI& uri) const;
     void updatePackageContextKind(const URI& uri, const syntax::SyntaxTree& tree);
     uint64_t getExplicitContextRevision(const URI& uri) const;
     bool hasConfiguredCompilationInputs() const {
@@ -375,7 +377,7 @@ private:
     };
     std::vector<FrozenCommandInput> m_frozenCommandInputs;
     void configureFrozenSources(std::span<const std::shared_ptr<syntax::SyntaxTree>> trees);
-    void configureFrozenInstances();
+    void configureFrozenInstances(const lsp::RequestContext& ctx = {});
 
     /// Whether config flags, command files, and source files loaded successfully.
     bool m_configLoaded = false;

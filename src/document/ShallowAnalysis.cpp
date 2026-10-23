@@ -38,6 +38,7 @@
 #include "slang/syntax/SyntaxTree.h"
 #include "slang/text/SourceLocation.h"
 #include "slang/text/SourceManager.h"
+#include "slang/util/ScopeGuard.h"
 #include "slang/util/Util.h"
 namespace server {
 using namespace slang;
@@ -95,6 +96,9 @@ ShallowAnalysis::ShallowAnalysis(BufferID buffer, std::shared_ptr<ShallowCompila
     m_sourceManager(compilation->getSourceManager()), m_buffer(buffer),
     m_shallowCompilation(std::move(compilation)), m_symbolTreeVisitor(m_sourceManager, buffer),
     m_symbolIndexer(buffer) {
+    if (ctx)
+        m_symbolIndexer.setCheckpoint([&] { ctx.checkpoint("during symbol indexing"); });
+    auto releaseCheckpoint = ScopeGuard([&] { m_symbolIndexer.setCheckpoint({}); });
     ctx.checkpoint("after syntax indexing");
     if (syntaxes.collected.empty())
         ERROR("No syntaxes found in document {}", m_sourceManager.getFullPath(m_buffer).string());
@@ -141,7 +145,10 @@ ShallowAnalysis::ShallowAnalysis(BufferID buffer, std::shared_ptr<ShallowCompila
     }
     // Module declarations can be reached through instances in sibling includes and arrays.
     if (!unindexedDefinitions.empty()) {
+        size_t visited = 0;
         auto visitor = ast::makeVisitor([&](auto& visitor, const auto& symbol) {
+            if ((visited++ & 1023u) == 0)
+                ctx.checkpoint("during unindexed definition traversal");
             using T = std::decay_t<decltype(symbol)>;
             if constexpr (std::is_same_v<T, ast::InstanceSymbol>) {
                 const auto& body = symbol.getCanonicalBody() ? *symbol.getCanonicalBody()

@@ -2502,7 +2502,8 @@ std::optional<std::vector<lsp::CodeLens>> SlangServer::getDocCodeLens(
 
         auto generateVisitor = syntax::makeSyntaxVisitor(
             [&](auto& visitor, const syntax::LoopGenerateSyntax& loop) {
-                if (auto activeLoop = m_driver->comp->getActiveGenerateLoop(moduleName, loop)) {
+                if (auto activeLoop = m_driver->comp->getActiveGenerateLoop(moduleName, loop,
+                                                                            ctx)) {
                     auto range = toRange(loop.keyword.location(), m_driver->sm,
                                          loop.keyword.rawText().size());
                     lenses.push_back(lsp::CodeLens{

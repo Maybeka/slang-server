@@ -49,18 +49,27 @@ public:
     ServerCompilation(std::vector<std::shared_ptr<SlangDoc>> documents, Bag options,
                       SourceManager& sourceManager, lsp::LspClient& client,
                       std::optional<std::string> top = std::nullopt,
-                      const ServerCompilation* previous = nullptr);
+                      const ServerCompilation* previous = nullptr,
+                      const lsp::RequestContext& ctx = {});
 
     ~ServerCompilation() = default;
 
     /// Update the compilation based by requesting all syntax trees from the documents
-    void refresh();
-    void refreshDocuments(const std::vector<std::shared_ptr<SlangDoc>>& documents);
+    void refresh(const lsp::RequestContext& ctx = {});
+    /// Prepare complete semantics/dataflow privately before publishing a current model.
+    void prepareDiagnostics(const lsp::RequestContext& ctx);
+    /// Current syntax only, without committing a root model for diagnostic discovery.
+    std::vector<std::shared_ptr<syntax::SyntaxTree>> getCurrentSyntaxTrees(
+        const lsp::RequestContext& ctx);
+    void invalidateDocuments(const std::vector<std::shared_ptr<SlangDoc>>& documents);
+    void refreshDocuments(const std::vector<std::shared_ptr<SlangDoc>>& documents,
+                          const lsp::RequestContext& ctx = {});
 
     void configureFrozenInstances(std::vector<std::string> paths, size_t budgetBytes,
                                   FrozenInstanceCache::Witness witness,
                                   std::function<void(const std::vector<std::string>&)> changed,
-                                  FrozenInstanceCache::Witness requestWitness = {});
+                                  FrozenInstanceCache::Witness requestWitness = {},
+                                  const lsp::RequestContext& ctx = {});
     const FrozenInstanceCache* frozenInstances() const { return m_frozenInstances.get(); }
     void clearFrozenInstances(std::string reason);
 
@@ -83,7 +92,8 @@ public:
         const std::string& moduleName) const;
 
     /// Return the file path that the active compilation resolved for a symbol name, if any.
-    std::optional<std::string> getPreferredSymbolPath(std::string_view name) const;
+    std::optional<std::string> getPreferredSymbolPath(std::string_view name,
+                                                      const lsp::RequestContext& ctx = {}) const;
 
     /// Set the active instance and generate scope reached by `hierPath`. The path may be
     /// canonical (`top.bus8`) or an alias that resolves through an interface port
@@ -95,15 +105,17 @@ public:
     std::optional<hier::QualifiedInstance> getActiveInstance(const std::string& moduleName);
 
     /// Return the elaborated active instance symbol for a module, if any.
-    const slang::ast::InstanceSymbol* getActiveInstanceSymbol(std::string_view moduleName) const;
+    const slang::ast::InstanceSymbol* getActiveInstanceSymbol(
+        std::string_view moduleName, const lsp::RequestContext& ctx = {}) const;
 
     /// Capture the selected full-design instances needed by a shallow compilation.
-    ActiveDesignContext createActiveDesignContext(
-        std::span<const std::string_view> definitionNames) const;
+    ActiveDesignContext createActiveDesignContext(std::span<const std::string_view> definitionNames,
+                                                  const lsp::RequestContext& ctx = {}) const;
 
     /// Return the active iteration and available choices for a generate loop in a module.
     std::optional<ActiveGenerateLoop> getActiveGenerateLoop(
-        std::string_view moduleName, const slang::syntax::LoopGenerateSyntax& loop) const;
+        std::string_view moduleName, const slang::syntax::LoopGenerateSyntax& loop,
+        const lsp::RequestContext& ctx = {}) const;
 
     /// Retrun the children of the scope at the given hierarchical path
     std::vector<hier::HierItem_t> getScope(const std::string& hierPath,
@@ -145,8 +157,12 @@ public:
     ConeResult getLoadCone(const std::string& path);
 
 private:
+    friend class ServerDriver;
+    /// Only a new, unpublished ServerDriver may prepare its initial model in place.
+    void prepareUnpublishedDiagnostics(const lsp::RequestContext& ctx);
+    void refreshImpl(const lsp::RequestContext& ctx, bool completeDiagnostics);
     /// Lazy semantic state is shared by hierarchy and per-document consumers.
-    void ensureCurrent() const;
+    void ensureCurrent(const lsp::RequestContext& ctx = {}) const;
     bool m_dirty = false;
     bool m_refreshing = false;
     std::unique_ptr<FrozenInstanceCache> m_frozenInstances;
@@ -163,7 +179,8 @@ private:
     const slang::ast::Symbol* toShallowSymbol(const slang::ast::Symbol& symbol) const;
 
     /// Build m_moduleToDoc from the declared symbols of each document's syntax tree.
-    void indexModuleDocs();
+    std::unordered_map<std::string, std::shared_ptr<SlangDoc>> indexModuleDocs(
+        const lsp::RequestContext& ctx);
 
     /// The Slang documents this compilation is based on, keyed by their absolute source path so
     /// path-driven lookups (LSP URIs, symbol source locations) avoid scanning every doc.
@@ -204,7 +221,8 @@ private:
     bool m_hierarchySearchIndexed = false;
 
     /// Retain only still-valid active instances after a refresh and seed unique modules.
-    void syncActiveInstances();
+    std::unordered_map<std::string, hier::QualifiedInstance> syncActiveInstances(
+        const ServerCompilationAnalysis& analysis, const lsp::RequestContext& ctx) const;
 };
 
 } // namespace server

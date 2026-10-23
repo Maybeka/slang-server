@@ -503,9 +503,22 @@ SlangDoc::AnalysisInputs SlangDoc::getAnalysisInputs(const lsp::RequestContext& 
 
 std::shared_ptr<ShallowAnalysis> SlangDoc::refreshAnalysis(const lsp::RequestContext& ctx) {
     auto cwdPhase = m_sourceManager.beginFastCwdPhase();
-    auto [buffer, tree, trees, indexRevision] = getAnalysisInputs(ctx);
+    auto inputs = getAnalysisInputs(ctx);
+    auto analysis = buildAnalysis(inputs, ctx);
+    cwdPhase.finish();
+    m_analysis = analysis;
+    m_analysisIndexRevision = inputs.indexRevision;
+    m_analysisContextRevision = m_driver.getExplicitContextRevision(m_uri);
+    return analysis;
+}
+
+std::shared_ptr<ShallowAnalysis> SlangDoc::buildAnalysis(const AnalysisInputs& inputs,
+                                                         const lsp::RequestContext& ctx) {
+    const auto& [buffer, tree, trees, indexRevision] = inputs;
+    (void)indexRevision;
     ctx.checkpoint("before analysis construction");
     auto analysisOptions = m_options;
+    analysisOptions.set(PackageQueryViewOptions{m_driver.isCooperativeAnalysisEnabled()});
     if (auto trusted = m_driver.options.get<TrustedUvmImport>()) {
         auto import = *trusted;
         import.enabled = m_driver.hasCompatibleTrustedNamespace();
@@ -518,17 +531,33 @@ std::shared_ptr<ShallowAnalysis> SlangDoc::refreshAnalysis(const lsp::RequestCon
                         : std::make_shared<ShallowAnalysis>(m_sourceManager, buffer, tree,
                                                             analysisOptions, trees,
                                                             m_driver.comp.get(), ctx,
-                                                            m_driver.isPackageOnlyContext(m_uri));
+                                                            m_driver.isPackageQueryContext(m_uri));
     auto topNames = analysis->getCompilation()->getRoot().topInstances |
                     std::views::transform([](const auto& top) { return top->name; });
     ctx.info("Analyzed {} with tops: {}", getWsRelativePath(), fmt::join(topNames, ", "));
     // Never publish a partially constructed or explicitly cancelled analysis.
     ctx.checkpoint("before analysis publication");
+    return analysis;
+}
+
+std::pair<SlangDoc::AnalysisInputs, std::shared_ptr<ShallowAnalysis>> SlangDoc::
+    getAnalysisAndInputs(const lsp::RequestContext& ctx) {
+    auto cwdPhase = m_sourceManager.beginFastCwdPhase();
+    auto inputs = getAnalysisInputs(ctx);
+    ctx.checkpoint("before resolved analysis reuse");
+    auto analysis = m_analysis;
+    if (!hasAnalysis() || m_analysisIndexRevision != inputs.indexRevision ||
+        m_analysisIndexRevision != m_driver.getDependencyIndexRevision() ||
+        m_analysisContextRevision != m_driver.getExplicitContextRevision(m_uri) ||
+        m_analysis->getBuffer() != inputs.buffer || m_analysis->getSyntaxTree() != inputs.tree)
+        analysis = buildAnalysis(inputs, ctx);
+    m_driver.requireExplicitContext(m_uri);
+    ctx.checkpoint("after resolved analysis reuse");
     cwdPhase.finish();
     m_analysis = analysis;
-    m_analysisIndexRevision = indexRevision;
+    m_analysisIndexRevision = inputs.indexRevision;
     m_analysisContextRevision = m_driver.getExplicitContextRevision(m_uri);
-    return analysis;
+    return {std::move(inputs), std::move(analysis)};
 }
 
 bool SlangDoc::hasAnalysis() const {

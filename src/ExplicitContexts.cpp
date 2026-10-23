@@ -11,6 +11,7 @@
 #include "slang/driver/SourceLoader.h"
 #include "slang/parsing/Preprocessor.h"
 #include "slang/syntax/AllSyntax.h"
+#include "slang/syntax/SyntaxVisitor.h"
 
 namespace server {
 namespace {
@@ -45,6 +46,72 @@ std::vector<BufferID> packageIncludes(const SourceManager& sm, const syntax::Syn
             result.push_back(include.buffer.id);
     }
     return result;
+}
+// A package view must not replace the actual specializations supplied by the design.
+// Generic headers and out-of-block methods without a proven ordinary owner keep it.
+bool needsPackageDesignContext(const SourceManager& sm, const syntax::SyntaxTree& tree,
+                               const std::filesystem::path& path) {
+    auto target = [&](SourceLocation location) {
+        location = sm.getFullyExpandedLoc(location);
+        return location.valid() && sm.getFullPath(location.buffer()) == path;
+    };
+    std::vector<SourceLocation> includeSites;
+    for (const auto& include : tree.getIncludeDirectives()) {
+        if (!include.buffer.id.valid() || sm.getFullPath(include.buffer.id) != path)
+            continue;
+        for (auto loc = sm.getIncludedFrom(include.buffer.id); loc.valid();
+             loc = sm.getIncludedFrom(loc.buffer()))
+            includeSites.push_back(loc);
+    }
+    auto containsTarget = [&](const syntax::SyntaxNode& node) {
+        if (target(node.getFirstToken().location()) || target(node.getLastToken().location()))
+            return true;
+        auto range = sm.getFullyExpandedRange(node.sourceRange());
+        return std::ranges::any_of(includeSites, [&](auto loc) { return range.contains(loc); });
+    };
+    for (auto* cls : tree.getMetadata().classDecls)
+        if (cls->parameters && containsTarget(*cls))
+            return true;
+    bool needsDesign = false, inPackage = false;
+    auto visitor = syntax::makeSyntaxVisitor(
+        [&](auto& visitor, const syntax::FunctionDeclarationSyntax& node) {
+            if (!inPackage)
+                return;
+            auto& name = *node.prototype->name;
+            if (target(name.getFirstToken().location()) &&
+                name.kind != syntax::SyntaxKind::IdentifierName &&
+                name.kind != syntax::SyntaxKind::ConstructorName) {
+                // Only a proven ordinary owner can discard design specializations.
+                auto scoped = name.as_if<syntax::ScopedNameSyntax>();
+                auto owner = scoped ? scoped->left->as_if<syntax::IdentifierNameSyntax>() : nullptr;
+                const bool ordinaryOwner =
+                    owner && std::ranges::any_of(tree.getMetadata().classDecls, [&](auto cls) {
+                        return cls->parent == node.parent && !cls->parameters &&
+                               cls->name.valueText() == owner->identifier.valueText();
+                    });
+                needsDesign |= !ordinaryOwner;
+            }
+            visitor.visitDefault(node);
+        },
+        [&](auto&, const syntax::KeywordNameSyntax& node) {
+            // Preserve explicit RTL hierarchy lookups, including macro expansions
+            // and package helpers on which the edited class can depend.
+            needsDesign |= inPackage && node.kind == syntax::SyntaxKind::RootScope;
+        },
+        [&](auto& visitor, const syntax::ClassDeclarationSyntax& node) {
+            if (inPackage)
+                visitor.visitDefault(node);
+        },
+        [&](auto& visitor, const syntax::ModuleDeclarationSyntax& node) {
+            if (node.kind != syntax::SyntaxKind::PackageDeclaration || !containsTarget(node))
+                return;
+            const auto previous = inPackage;
+            inPackage = true;
+            visitor.visitDefault(node);
+            inPackage = previous;
+        });
+    tree.root().visit(visitor);
+    return needsDesign;
 }
 bool declaresPackageFrom(const SourceManager& sm, const syntax::SyntaxTree& tree,
                          std::string_view name, const std::filesystem::path& path) {
@@ -245,8 +312,11 @@ void ServerDriver::issueExplicitContextDiagnostics(const URI& uri) {
 bool ServerDriver::isPackageOnlyContext(const URI& uri) const {
     return !comp && m_packageOnlyContexts.contains(uri);
 }
+bool ServerDriver::isPackageQueryContext(const URI& uri) const {
+    return (!comp || isCooperativeAnalysisEnabled()) && m_packageOnlyContexts.contains(uri);
+}
 void ServerDriver::updatePackageContextKind(const URI& uri, const syntax::SyntaxTree& tree) {
-    if (comp || !m_packageOnlyContexts.contains(uri))
+    if ((comp && !isCooperativeAnalysisEnabled()) || !m_packageOnlyContexts.contains(uri))
         return;
     auto document = docs.find(uri);
     if (document == docs.end())
@@ -259,7 +329,7 @@ void ServerDriver::updatePackageContextKind(const URI& uri, const syntax::Syntax
             sm.getFullPath(location.buffer()) == path)
             directDesign = true;
     }
-    if (directDesign)
+    if (directDesign || (comp && needsPackageDesignContext(sm, tree, path)))
         m_packageOnlyContexts.erase(uri);
     else
         m_packageOnlyContexts.insert(uri);
@@ -325,6 +395,7 @@ std::optional<ServerDriver::PackageIncludeContext> ServerDriver::getExplicitIncl
     handled = false;
     if (comp) {
         refreshConfiguredUnits(ctx);
+        m_packageOnlyContexts.erase(uri);
         // A configured package inclusion is authoritative. Cached standalone documents can
         // otherwise select a different, nearer package with the same name after an edit.
         if (m_designUsesConfiguredUnits) {
@@ -341,6 +412,7 @@ std::optional<ServerDriver::PackageIncludeContext> ServerDriver::getExplicitIncl
                 // Preserve full-design source views' first-include ordering for
                 // multiply included library headers.
                 m_packageOnlyContexts.insert(uri);
+                updatePackageContextKind(uri, *matches.front().tree);
                 return matches.front();
             }
         }

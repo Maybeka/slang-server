@@ -266,6 +266,7 @@ void SymbolIndexer::indexInstanceSyntax(const slang::syntax::HierarchicalInstanc
 }
 
 void SymbolIndexer::indexSymbolName(const slang::ast::Symbol& symbol, bool isUnnamed) {
+    checkpoint();
     if (symbol.getSyntax() != nullptr) {
         addSymbol(symbol.getSyntax(), symbol);
 

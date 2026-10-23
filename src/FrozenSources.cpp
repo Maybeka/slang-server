@@ -83,7 +83,7 @@ void ServerDriver::configureFrozenSources(
         }
     }
 }
-void ServerDriver::configureFrozenInstances() {
+void ServerDriver::configureFrozenInstances(const lsp::RequestContext& ctx) {
     if (!comp || !isFrozenSourcesEnabled() || !m_config.frozenSources.value())
         return;
     const auto config = *m_config.frozenSources.value();
@@ -111,7 +111,8 @@ void ServerDriver::configureFrozenInstances() {
         [this](const lsp::RequestContext& ctx) {
             return m_frozenWitnessUsable &&
                    ctx.hasInputWitness(m_snapshotOwner, m_snapshotRevision);
-        });
+        },
+        ctx);
 }
 std::optional<std::string> ServerDriver::frozenInputWitnessFailure(
     function_ref<void()> checkCancelled) const {

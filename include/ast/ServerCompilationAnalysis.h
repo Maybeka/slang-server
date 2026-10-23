@@ -33,7 +33,11 @@ class ServerCompilationAnalysis : public std::enable_shared_from_this<ServerComp
 public:
     ServerCompilationAnalysis(
         const std::unordered_map<std::string, std::shared_ptr<SlangDoc>>& documents, Bag& options,
-        SourceManager& sourceManager);
+        SourceManager& sourceManager, const lsp::RequestContext& ctx = {});
+
+    /// Only called before this analysis escapes from a private model / driver.
+    void prepareDisposableDiagnostics(const lsp::RequestContext& ctx);
+    bool diagnosticsReady() const { return bool(m_driverAnalysis); }
 
     slang::ast::Compilation compilation;
 

@@ -225,6 +225,20 @@ async def test_scope_reuse_publishes_complete_natural_diagnostics(
             )
             while not client.protocol.diagnostic_events.empty():
                 client.protocol.diagnostic_events.get_nowait()
+            async def finish_committed_batch(batch):
+                # Edited URI publishes first; a closed provider has no document version.
+                # One event per URI can therefore combine two committed generations.
+                # This cached maintenance query never requests analysis. Its response
+                # fences the remainder of an already observed natural stdio publication.
+                await client.workspace_execute_command_async(
+                    types.ExecuteCommandParams(command="slang.scopeLibraryStatus", arguments=[])
+                )
+                while not client.protocol.diagnostic_events.empty():
+                    event = client.protocol.diagnostic_events.get_nowait()
+                    assert event.uri in uris
+                    batch[event.uri] = event
+                assert batch[consumer.as_uri()].version == version
+
             states = []
             for version, (read, broken) in enumerate(
                 ((True, False), (False, True), (False, False)) * 2, 1
@@ -244,6 +258,7 @@ async def test_scope_reuse_publishes_complete_natural_diagnostics(
                     event = await asyncio.wait_for(client.protocol.diagnostic_events.get(), 10)
                     assert event.uri in uris
                     batch[event.uri] = event
+                await finish_committed_batch(batch)
                 diagnostics = batch[consumer.as_uri()].diagnostics
                 assert any("latest_missing_name" in d.message for d in diagnostics) == broken
                 assert any(
@@ -292,6 +307,7 @@ async def test_scope_reuse_publishes_complete_natural_diagnostics(
                         assert last_published <= event.version <= version
                         last_published = event.version
                     batch[event.uri] = event
+                await finish_committed_batch(batch)
                 assert any(
                     "latest_missing_name" in d.message
                     for d in batch[consumer.as_uri()].diagnostics

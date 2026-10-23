@@ -23,6 +23,10 @@
 #include "slang/util/Bag.h"
 
 namespace server {
+/// Derived from the default-off cooperative setting, only for package query views.
+struct PackageQueryViewOptions {
+    bool independent = false;
+};
 
 class ServerCompilation;
 
@@ -107,6 +111,7 @@ private:
 
     /// Selected full-design instances and overrides used by every file view.
     std::optional<ActiveDesignContext> m_activeDesign;
+    bool m_fullDesignView = false;
     std::vector<const slang::ast::InstanceSymbol*> m_sourceInstances;
 
     /// Options used when lazily running driver analysis.

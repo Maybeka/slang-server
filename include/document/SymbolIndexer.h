@@ -8,10 +8,12 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <span>
 #include <string_view>
 #include <type_traits>
 #include <unordered_map>
+#include <utility>
 
 #include "slang/ast/ASTVisitor.h"
 #include "slang/ast/Scope.h"
@@ -47,6 +49,10 @@ public:
     slang::SmallVector<slang::BufferID> enclosingBuffers;
 
     SymbolIndexer(slang::BufferID buffer);
+    void setCheckpoint(std::function<void()> checkpoint) {
+        m_checkpoint = std::move(checkpoint);
+        m_visits = 0;
+    }
 
     const slang::ast::Symbol* getSymbol(const slang::parsing::Token* node) const;
 
@@ -101,6 +107,12 @@ public:
     }
 
 private:
+    std::function<void()> m_checkpoint;
+    size_t m_visits = 0;
+    void checkpoint() {
+        if (m_checkpoint && (m_visits++ & 1023u) == 0)
+            m_checkpoint();
+    }
     /// Whether this scope belongs to the document or one of its includers.
     bool shouldVisit(slang::BufferID buffer) const {
         return buffer == m_buffer ||

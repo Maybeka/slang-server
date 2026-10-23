@@ -13,6 +13,7 @@
 #include "lsp/LspClient.h"
 #include "util/Converters.h"
 #include "util/Logging.h"
+#include "util/UvmPhaseTrace.h"
 #include <algorithm>
 #include <cctype>
 #include <memory>
@@ -20,6 +21,7 @@
 #include <rfl/NoExtraFields.hpp>
 #include <rfl/json.hpp>
 #include <tuple>
+#include <utility>
 
 #include "slang/ast/Compilation.h"
 #include "slang/ast/symbols/PortSymbols.h"
@@ -467,7 +469,8 @@ const slang::ast::Symbol* ServerCompilation::toShallowSymbol(
 ServerCompilation::ServerCompilation(std::vector<std::shared_ptr<SlangDoc>> documents, Bag options,
                                      SourceManager& sourceManager, lsp::LspClient& client,
                                      std::optional<std::string> top,
-                                     const ServerCompilation* previous) :
+                                     const ServerCompilation* previous,
+                                     const lsp::RequestContext& ctx) :
     m_options(std::move(options)), m_top(std::move(top)), m_sourceManager(sourceManager),
     m_client(client) {
 
@@ -479,7 +482,7 @@ ServerCompilation::ServerCompilation(std::vector<std::shared_ptr<SlangDoc>> docu
     if (m_top) {
         m_options.insertOrGet<slang::ast::CompilationOptions>().topModules = {*m_top};
     }
-    refresh();
+    refresh(ctx);
     if (previous) {
         // Copy value-only paths, never symbols from the retiring compilation.
         // Parent selections precede nested selections; disappeared paths decline
@@ -495,51 +498,119 @@ ServerCompilation::ServerCompilation(std::vector<std::shared_ptr<SlangDoc>> docu
             return da != db ? da < db : a < b;
         });
         paths.erase(std::unique(paths.begin(), paths.end()), paths.end());
-        for (const auto& path : paths)
+        for (const auto& path : paths) {
+            ctx.checkpoint("during full-model selection restoration");
             setActiveInstance(path);
+        }
     }
 }
 
-void ServerCompilation::indexModuleDocs() {
-    m_moduleToDoc.clear();
+std::unordered_map<std::string, std::shared_ptr<SlangDoc>> ServerCompilation::indexModuleDocs(
+    const lsp::RequestContext& ctx) {
+    std::unordered_map<std::string, std::shared_ptr<SlangDoc>> modules;
     for (const auto& [path, doc] : m_documents) {
-        auto tree = doc->getSyntaxTree();
+        ctx.checkpoint("during full-model module indexing");
+        auto tree = doc->getSyntaxTree(ctx);
         if (!tree) {
             continue;
         }
         for (auto name : tree->getMetadata().getDeclaredSymbols()) {
-            m_moduleToDoc.emplace(std::string(name), doc);
+            modules.emplace(std::string(name), doc);
         }
     }
+    return modules;
 }
 
-void ServerCompilation::refresh() {
+void ServerCompilation::refresh(const lsp::RequestContext& ctx) {
+    refreshImpl(ctx, false);
+}
+
+void ServerCompilation::prepareUnpublishedDiagnostics(const lsp::RequestContext& ctx) {
+    m_analysis->prepareDisposableDiagnostics(ctx);
+}
+
+void ServerCompilation::prepareDiagnostics(const lsp::RequestContext& ctx) {
+    ctx.throwIfCancelled("before current full-design diagnostics");
+    if (!m_dirty && m_analysis->diagnosticsReady())
+        return;
+    if (m_dirty || m_analysis.use_count() != 1) {
+        refreshImpl(ctx, true);
+        return;
+    }
+    // A fresh model with no retained view can itself be the disposable candidate.
+    // In particular, a retired driver's new root need not coexist with another
+    // identical root just to prepare its first diagnostics. All externally held
+    // views still use the transactional replacement path above.
+    ctx.checkpoint("before unshared full-model diagnostics");
+    UvmPhaseTrace phases;
+    m_dirty = true;
+    const bool refreshing = std::exchange(m_refreshing, true);
+    auto restore = ScopeGuard([&] {
+        m_refreshing = refreshing;
+        if (m_dirty)
+            phases.mark("model-unshared-cancelled");
+    });
+    m_analysis->prepareDisposableDiagnostics(ctx);
+    ctx.checkpoint("before reused full-model publication");
+    m_dirty = false;
+    phases.mark("model-unshared-diagnostics");
+    // A cancelled candidate remains dirty and cannot be used as a diagnostic
+    // baseline. Keep only its structural path hints until the next fresh rebuild;
+    // never resume a partially interrupted semantic traversal.
+}
+
+std::vector<std::shared_ptr<syntax::SyntaxTree>> ServerCompilation::getCurrentSyntaxTrees(
+    const lsp::RequestContext& ctx) {
+    const auto refreshing = std::exchange(m_refreshing, true);
+    auto restore = ScopeGuard([&] { m_refreshing = refreshing; });
+    std::vector<std::shared_ptr<syntax::SyntaxTree>> trees;
+    for (const auto& [_, doc] : m_documents) {
+        ctx.checkpoint("during full-design syntax discovery");
+        trees.push_back(doc->getSyntaxTree(ctx));
+    }
+    return trees;
+}
+
+void ServerCompilation::refreshImpl(const lsp::RequestContext& ctx, bool completeDiagnostics) {
     m_dirty = true;
     m_refreshing = true;
     auto guard = ScopeGuard([&] { m_refreshing = false; });
-    indexModuleDocs();
-    m_analysis = std::make_shared<ServerCompilationAnalysis>(m_documents, m_options,
-                                                             m_sourceManager);
+    // Every compiler pointer and index is private until the model is complete.
+    // Existing ActiveDesignContext consumers continue owning the old analysis.
+    auto modules = indexModuleDocs(ctx);
+    auto analysis = std::make_shared<ServerCompilationAnalysis>(m_documents, m_options,
+                                                                m_sourceManager, ctx);
+    if (completeDiagnostics)
+        analysis->prepareDisposableDiagnostics(ctx);
+    auto activeInstances = syncActiveInstances(*analysis, ctx);
+    std::vector<FrozenInstanceCache::Selection> frozenSelections;
+    if (m_frozenInstances)
+        frozenSelections = m_frozenInstances->prepareSelections(analysis->compilation, ctx);
+    ctx.checkpoint("before full-model publication");
+    m_moduleToDoc.swap(modules);
+    m_analysis.swap(analysis);
+    m_activeInstancesByModule.swap(activeInstances);
+    if (m_frozenInstances)
+        m_frozenInstances->commitSelections(std::move(frozenSelections));
     m_hierarchySearchItems.clear();
     m_hierarchySearchIndexed = false;
-    syncActiveInstances();
     m_dirty = false;
-    if (m_frozenInstances) {
-        m_frozenInstances->resolveSelections(m_analysis->compilation);
-        if (m_frozenModulesChanged)
-            m_frozenModulesChanged(m_frozenInstances->modules());
-    }
+    // Once committed, finish the dependent configuration obligation without cancellation.
+    if (m_frozenInstances && m_frozenModulesChanged)
+        m_frozenModulesChanged(m_frozenInstances->modules());
 }
 
 void ServerCompilation::configureFrozenInstances(
     std::vector<std::string> paths, size_t budgetBytes, FrozenInstanceCache::Witness witness,
     std::function<void(const std::vector<std::string>&)> changed,
-    FrozenInstanceCache::Witness requestWitness) {
-    m_frozenInstances = std::make_unique<FrozenInstanceCache>(std::move(paths), budgetBytes,
-                                                              m_sourceManager, std::move(witness),
-                                                              std::move(requestWitness));
+    FrozenInstanceCache::Witness requestWitness, const lsp::RequestContext& ctx) {
+    auto candidate = std::make_unique<FrozenInstanceCache>(std::move(paths), budgetBytes,
+                                                           m_sourceManager, std::move(witness),
+                                                           std::move(requestWitness));
+    candidate->resolveSelections(m_analysis->compilation, ctx);
+    ctx.checkpoint("before frozen instance configuration publication");
+    m_frozenInstances = std::move(candidate);
     m_frozenModulesChanged = std::move(changed);
-    m_frozenInstances->resolveSelections(m_analysis->compilation);
     if (m_frozenModulesChanged)
         m_frozenModulesChanged(m_frozenInstances->modules());
 }
@@ -564,21 +635,31 @@ std::optional<FrozenInstanceCache::Certificate> ServerCompilation::certifyFrozen
     return m_frozenInstances->certify(trees, ctx, syntaxUnchanged);
 }
 
-void ServerCompilation::ensureCurrent() const {
+void ServerCompilation::ensureCurrent(const lsp::RequestContext& ctx) const {
+    ctx.throwIfCancelled("before current full-model lookup");
     // Syntax discovery during a rebuild can consult the previous symbol paths;
     // it must not recursively rebuild the same compilation.
     if (m_dirty && !m_refreshing)
-        const_cast<ServerCompilation*>(this)->refresh();
+        const_cast<ServerCompilation*>(this)->refresh(ctx);
 }
 
-void ServerCompilation::refreshDocuments(const std::vector<std::shared_ptr<SlangDoc>>& documents) {
+void ServerCompilation::refreshDocuments(const std::vector<std::shared_ptr<SlangDoc>>& documents,
+                                         const lsp::RequestContext& ctx) {
+    invalidateDocuments(documents);
+    refresh(ctx);
+}
+
+void ServerCompilation::invalidateDocuments(
+    const std::vector<std::shared_ptr<SlangDoc>>& documents) {
+    m_dirty = true;
     m_documents.clear();
     for (const auto& document : documents)
         m_documents.emplace(document->getPath(), document);
-    refresh();
 }
 
 bool ServerCompilation::containsCurrentSource(const std::filesystem::path& path) const {
+    if (m_dirty)
+        return false;
     bool found = false;
     for (const auto& tree : m_analysis->compilation.getSyntaxTrees()) {
         for (auto buffer : tree->getSourceBufferIds()) {
@@ -635,8 +716,8 @@ std::optional<hier::QualifiedInstance> ServerCompilation::getActiveInstanceSelec
 }
 
 const slang::ast::InstanceSymbol* ServerCompilation::getActiveInstanceSymbol(
-    std::string_view moduleName) const {
-    ensureCurrent();
+    std::string_view moduleName, const lsp::RequestContext& ctx) const {
+    ensureCurrent(ctx);
     auto it = m_analysis->instances.moduleToInstances.find(std::string(moduleName));
     if (it == m_analysis->instances.moduleToInstances.end()) {
         return nullptr;
@@ -657,20 +738,25 @@ const slang::ast::InstanceSymbol* ServerCompilation::getActiveInstanceSymbol(
 }
 
 ActiveDesignContext ServerCompilation::createActiveDesignContext(
-    std::span<const std::string_view> definitionNames) const {
-    ensureCurrent();
+    std::span<const std::string_view> definitionNames, const lsp::RequestContext& ctx) const {
+    UvmPhaseTrace phases;
+    ensureCurrent(ctx);
+    phases.mark("active-design-current");
     ActiveDesignContext result(m_analysis);
     for (auto name : definitionNames) {
-        if (auto* instance = getActiveInstanceSymbol(name))
+        ctx.checkpoint("during active design projection");
+        if (auto* instance = getActiveInstanceSymbol(name, ctx))
             result.bindInstance(*instance);
     }
+    phases.mark("active-design-projection");
     return result;
 }
 
 std::optional<ActiveGenerateLoop> ServerCompilation::getActiveGenerateLoop(
-    std::string_view moduleName, const syntax::LoopGenerateSyntax& loop) const {
-    ensureCurrent();
-    auto* activeInstance = getActiveInstanceSymbol(moduleName);
+    std::string_view moduleName, const syntax::LoopGenerateSyntax& loop,
+    const lsp::RequestContext& ctx) const {
+    ensureCurrent(ctx);
+    auto* activeInstance = getActiveInstanceSymbol(moduleName, ctx);
     if (!activeInstance)
         return std::nullopt;
 
@@ -697,8 +783,9 @@ std::optional<ActiveGenerateLoop> ServerCompilation::getActiveGenerateLoop(
     return result;
 }
 
-std::optional<std::string> ServerCompilation::getPreferredSymbolPath(std::string_view name) const {
-    ensureCurrent();
+std::optional<std::string> ServerCompilation::getPreferredSymbolPath(
+    std::string_view name, const lsp::RequestContext& ctx) const {
+    ensureCurrent(ctx);
     auto& compilation = m_analysis->compilation;
     auto& root = compilation.getRoot();
 
@@ -786,9 +873,11 @@ std::optional<hier::QualifiedInstance> ServerCompilation::getActiveInstance(
     return std::nullopt;
 }
 
-void ServerCompilation::syncActiveInstances() {
+std::unordered_map<std::string, hier::QualifiedInstance> ServerCompilation::syncActiveInstances(
+    const ServerCompilationAnalysis& analysis, const lsp::RequestContext& ctx) const {
     std::unordered_map<std::string, hier::QualifiedInstance> nextActiveInstances;
-    for (const auto& [moduleName, instances] : m_analysis->instances.moduleToInstances) {
+    for (const auto& [moduleName, instances] : analysis.instances.moduleToInstances) {
+        ctx.checkpoint("during full-model active selection");
         if (instances.empty()) {
             continue;
         }
@@ -809,7 +898,7 @@ void ServerCompilation::syncActiveInstances() {
         }
     }
 
-    m_activeInstancesByModule = std::move(nextActiveInstances);
+    return nextActiveInstances;
 }
 
 std::vector<hier::HierItem_t> ServerCompilation::getScope(const std::string& hierPath,
@@ -826,7 +915,7 @@ std::vector<hier::HierItem_t> ServerCompilation::getScope(const std::string& hie
             certificate.reset();
         }
     }
-    ensureCurrent();
+    ensureCurrent(ctx);
     auto scopeChildren = tryGetScopeChildren(m_analysis->compilation, m_sourceManager, hierPath);
     auto result = scopeChildren.value_or(std::vector<hier::HierItem_t>{});
     if (certificate && m_frozenInstances->selected(hierPath)) {
@@ -852,7 +941,7 @@ std::vector<hier::ScopeStep> ServerCompilation::getScopes(const std::string& hie
             certificate.reset();
         }
     }
-    ensureCurrent();
+    ensureCurrent(ctx);
     std::vector<hier::ScopeStep> result;
     auto& compilation = m_analysis->compilation;
 
@@ -1254,7 +1343,7 @@ std::optional<lsp::ShowDocumentParams> ServerCompilation::getHierDocParams(
 void ServerCompilation::issueDiagnosticsTo(
     slang::DiagnosticEngine& diagEngine, const lsp::RequestContext& ctx,
     const std::function<void(size_t, const slang::Diagnostic&)>& issue) {
-    ensureCurrent();
+    ensureCurrent(ctx);
     m_analysis->issueDiagnosticsTo(diagEngine, ctx, issue);
 }
 

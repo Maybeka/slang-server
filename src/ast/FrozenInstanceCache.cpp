@@ -121,8 +121,15 @@ FrozenInstanceCache::FrozenInstanceCache(std::vector<std::string> paths, size_t 
     for (auto& path : paths)
         m_selections.push_back({.instance = std::move(path)});
 }
-void FrozenInstanceCache::resolveSelections(ast::Compilation& compilation) {
-    for (auto& selection : m_selections) {
+void FrozenInstanceCache::resolveSelections(ast::Compilation& compilation,
+                                            const lsp::RequestContext& ctx) {
+    commitSelections(prepareSelections(compilation, ctx));
+}
+std::vector<FrozenInstanceCache::Selection> FrozenInstanceCache::prepareSelections(
+    ast::Compilation& compilation, const lsp::RequestContext& ctx) const {
+    auto selections = m_selections;
+    for (auto& selection : selections) {
+        ctx.checkpoint("during full-model frozen selection");
         selection.resolved = false;
         selection.modules.clear();
         selection.reason = "exact instance path was not found";
@@ -141,6 +148,7 @@ void FrozenInstanceCache::resolveSelections(ast::Compilation& compilation) {
         std::set<std::string> names;
         auto visit = [&](auto&& self, const ast::Scope& scope) -> void {
             for (const auto& member : scope.members()) {
+                ctx.throwIfCancelled("during full-model frozen subtree");
                 if (auto* child = member.as_if<ast::InstanceSymbol>()) {
                     if (child->getDefinition().definitionKind == ast::DefinitionKind::Module)
                         names.emplace(child->getDefinition().name);
@@ -163,6 +171,8 @@ void FrozenInstanceCache::resolveSelections(ast::Compilation& compilation) {
         selection.reason =
             "instance subtree selected; hierarchy values require an input certificate";
     }
+    ctx.checkpoint("after full-model frozen selection");
+    return selections;
 }
 bool FrozenInstanceCache::selected(std::string_view path) const {
     return std::ranges::any_of(m_selections, [&](const auto& selection) {

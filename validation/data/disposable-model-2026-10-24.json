@@ -1,0 +1,1052 @@
+{
+  "stage": "Disposable complete-model diagnostics and strict source proofs",
+  "baseCommit": "81e540f2f8f879789bc1fdd49e2f9503d23563ee",
+  "totalGoalStatus": "active",
+  "experimentsDefaultOff": true,
+  "fixedInputDebounceAdded": false,
+  "sdkBase": "151a801ceaf6faf23d79a42d210ff67e50eb4660",
+  "sdkPatchSha256": "df6ad858d9379850d7f9f7de9d9301e1885b5cdeaee73224f2321964f5dce017",
+  "qualification": {
+    "binarySha256": "d7cefd5a8262cc59bdf1995e09b7d88d59e3d5f54609ab825cc6cdb4c3a8a5a3",
+    "baselineSha256": "d8755ca394a49d9e4e5632b3ec53d68ad2a89a1827283ba22e05d8d6fd9d86f5",
+    "qualified": true,
+    "pending": [],
+    "checks": {
+      "fixed21Jobs": true,
+      "binaryMatchesReceiptAndPlan": true,
+      "snapshotMatchesReceipt": true,
+      "currentCodeMatchesTestedCode": true,
+      "sdkRestorationVerified": true,
+      "ctest844": true,
+      "python17": true,
+      "transport43": true,
+      "asan54": true,
+      "public56And14FullyUnfrozen": true,
+      "publicIdentity": true,
+      "install-smoke": true,
+      "external-smoke": true,
+      "warm-final-1-identity": true,
+      "warm-final-1-nativeOracle": true,
+      "warm-final-1-cancellations": true,
+      "warm-final-2-identity": true,
+      "warm-final-2-nativeOracle": true,
+      "warm-final-2-cancellations": true,
+      "warm-final-3-identity": true,
+      "warm-final-3-nativeOracle": true,
+      "warm-final-3-cancellations": true,
+      "warm-final-4-identity": true,
+      "warm-final-4-nativeOracle": true,
+      "warm-final-4-cancellations": true,
+      "warm-final-5-identity": true,
+      "warm-final-5-nativeOracle": true,
+      "warm-final-5-cancellations": true,
+      "warm-final-6-identity": true,
+      "warm-final-6-nativeOracle": true,
+      "warm-final-6-cancellations": true,
+      "first-final-1-identity": true,
+      "first-final-1-nativeOracle": true,
+      "first-final-1-cancellations": true,
+      "burst-final-1-identity": true,
+      "burst-final-1-nativeOracle": true,
+      "burst-final-1-cancellations": true,
+      "member-final-1-identity": true,
+      "member-final-1-nativeOracle": true,
+      "member-final-1-cancellations": true,
+      "first-final-2-identity": true,
+      "first-final-2-nativeOracle": true,
+      "first-final-2-cancellations": true,
+      "burst-final-2-identity": true,
+      "burst-final-2-nativeOracle": true,
+      "burst-final-2-cancellations": true,
+      "member-final-2-identity": true,
+      "member-final-2-nativeOracle": true,
+      "member-final-2-cancellations": true,
+      "first-final-3-identity": true,
+      "first-final-3-nativeOracle": true,
+      "first-final-3-cancellations": true,
+      "burst-final-3-identity": true,
+      "burst-final-3-nativeOracle": true,
+      "burst-final-3-cancellations": true,
+      "member-final-3-identity": true,
+      "member-final-3-nativeOracle": true,
+      "member-final-3-cancellations": true,
+      "compact-final-identity": true,
+      "compact-final-nativeOracle": true,
+      "compact-final-cancellations": true,
+      "macro-final-identity": true,
+      "macro-final-nativeOracle": true,
+      "macro-final-cancellations": true,
+      "long-final-1008-identity": true,
+      "long-final-1008-nativeOracle": true,
+      "long-final-1008-cancellations": true,
+      "memory-final-1008-identity": true,
+      "memory-final-1008-nativeOracle": true,
+      "memory-final-1008-cancellations": true,
+      "memory-final-reverse-identity": true,
+      "memory-final-reverse-nativeOracle": true,
+      "memory-final-reverse-cancellations": true,
+      "forced-final-memory-identity": true,
+      "forced-final-memory-nativeOracle": true,
+      "forced-final-memory-cancellations": true,
+      "warm-p50": true,
+      "warm-p95": true,
+      "long-final-1008-baseline-1008Edits": true,
+      "long-final-1008-candidate-1008Edits": true,
+      "memory-final-1008-baseline-1008Edits": true,
+      "memory-final-1008-baseline-actualRetirement": true,
+      "memory-final-1008-baseline-idleQueryReleased": true,
+      "memory-final-1008-candidate-1008Edits": true,
+      "memory-final-1008-candidate-actualRetirement": true,
+      "memory-final-1008-candidate-idleQueryReleased": true,
+      "memory-final-1008-CPU": true,
+      "memory-final-1008-RSS": true,
+      "memory-final-1008-footprint": true,
+      "memory-final-reverse-baseline-1008Edits": true,
+      "memory-final-reverse-baseline-actualRetirement": true,
+      "memory-final-reverse-baseline-idleQueryReleased": true,
+      "memory-final-reverse-candidate-1008Edits": true,
+      "memory-final-reverse-candidate-actualRetirement": true,
+      "memory-final-reverse-candidate-idleQueryReleased": true,
+      "memory-final-reverse-CPU": true,
+      "memory-final-reverse-RSS": true,
+      "memory-final-reverse-footprint": true,
+      "forced-final-memory-baseline-actualRetirement": true,
+      "forced-final-memory-baseline-idleQueryReleased": true,
+      "forced-final-memory-candidate-actualRetirement": true,
+      "forced-final-memory-candidate-idleQueryReleased": true,
+      "all21JobsComplete": true
+    },
+    "failedChecks": [],
+    "shortPairs": {
+      "warm": {
+        "baseline": {
+          "p50": 19.1171355,
+          "p95": 21.3640835,
+          "lastDiagnosticMs": 29.6224795,
+          "lastSuccessfulQueryMs": 19.263208,
+          "allResponsesByRound": [
+            {
+              "cancelled": 0,
+              "maximumMs": 21.73625,
+              "cancelledResponseMs": []
+            },
+            {
+              "cancelled": 0,
+              "maximumMs": 22.290416,
+              "cancelledResponseMs": []
+            },
+            {
+              "cancelled": 0,
+              "maximumMs": 21.192042,
+              "cancelledResponseMs": []
+            },
+            {
+              "cancelled": 0,
+              "maximumMs": 24.908417,
+              "cancelledResponseMs": []
+            },
+            {
+              "cancelled": 0,
+              "maximumMs": 24.250125,
+              "cancelledResponseMs": []
+            },
+            {
+              "cancelled": 0,
+              "maximumMs": 20.063,
+              "cancelledResponseMs": []
+            }
+          ]
+        },
+        "candidate": {
+          "p50": 19.39427075,
+          "p95": 21.352583000000003,
+          "lastDiagnosticMs": 30.677458,
+          "lastSuccessfulQueryMs": 20.1811255,
+          "allResponsesByRound": [
+            {
+              "cancelled": 0,
+              "maximumMs": 22.120041,
+              "cancelledResponseMs": []
+            },
+            {
+              "cancelled": 0,
+              "maximumMs": 21.590875,
+              "cancelledResponseMs": []
+            },
+            {
+              "cancelled": 0,
+              "maximumMs": 22.873416,
+              "cancelledResponseMs": []
+            },
+            {
+              "cancelled": 0,
+              "maximumMs": 22.60275,
+              "cancelledResponseMs": []
+            },
+            {
+              "cancelled": 0,
+              "maximumMs": 28.919541,
+              "cancelledResponseMs": []
+            },
+            {
+              "cancelled": 0,
+              "maximumMs": 20.727541,
+              "cancelledResponseMs": []
+            }
+          ]
+        }
+      },
+      "first": {
+        "baseline": {
+          "p50": 40.828,
+          "p95": 40.828,
+          "lastDiagnosticMs": 71.091917,
+          "lastSuccessfulQueryMs": 40.828,
+          "allResponsesByRound": [
+            {
+              "cancelled": 0,
+              "maximumMs": 40.385167,
+              "cancelledResponseMs": []
+            },
+            {
+              "cancelled": 0,
+              "maximumMs": 90.594042,
+              "cancelledResponseMs": []
+            },
+            {
+              "cancelled": 0,
+              "maximumMs": 40.828,
+              "cancelledResponseMs": []
+            }
+          ]
+        },
+        "candidate": {
+          "p50": 44.692875,
+          "p95": 44.692875,
+          "lastDiagnosticMs": 72.820167,
+          "lastSuccessfulQueryMs": 44.692875,
+          "allResponsesByRound": [
+            {
+              "cancelled": 0,
+              "maximumMs": 44.692875,
+              "cancelledResponseMs": []
+            },
+            {
+              "cancelled": 0,
+              "maximumMs": 45.376292,
+              "cancelledResponseMs": []
+            },
+            {
+              "cancelled": 0,
+              "maximumMs": 44.630375,
+              "cancelledResponseMs": []
+            }
+          ]
+        }
+      },
+      "burst": {
+        "baseline": {
+          "p50": 18.9061875,
+          "p95": 20.159541,
+          "lastDiagnosticMs": 31.418875,
+          "lastSuccessfulQueryMs": 19.772333,
+          "allResponsesByRound": [
+            {
+              "cancelled": 0,
+              "maximumMs": 40.320375,
+              "cancelledResponseMs": []
+            },
+            {
+              "cancelled": 0,
+              "maximumMs": 41.500042,
+              "cancelledResponseMs": []
+            },
+            {
+              "cancelled": 0,
+              "maximumMs": 41.341625,
+              "cancelledResponseMs": []
+            }
+          ]
+        },
+        "candidate": {
+          "p50": 19.449020500000003,
+          "p95": 21.959,
+          "lastDiagnosticMs": 30.918417,
+          "lastSuccessfulQueryMs": 19.305542,
+          "allResponsesByRound": [
+            {
+              "cancelled": 0,
+              "maximumMs": 62.563417,
+              "cancelledResponseMs": []
+            },
+            {
+              "cancelled": 0,
+              "maximumMs": 43.061292,
+              "cancelledResponseMs": []
+            },
+            {
+              "cancelled": 0,
+              "maximumMs": 44.861792,
+              "cancelledResponseMs": []
+            }
+          ]
+        }
+      },
+      "member": {
+        "baseline": {
+          "p50": 761.217042,
+          "p95": 761.217042,
+          "lastDiagnosticMs": 1112.236208,
+          "lastSuccessfulQueryMs": 761.217042,
+          "allResponsesByRound": [
+            {
+              "cancelled": 11,
+              "maximumMs": 761.217042,
+              "cancelledResponseMs": [
+                104.692917,
+                101.6055,
+                101.644959,
+                104.717166,
+                102.17075,
+                99.05675,
+                103.87675,
+                99.9315,
+                100.7565,
+                104.944958,
+                99.638625
+              ]
+            },
+            {
+              "cancelled": 11,
+              "maximumMs": 772.905209,
+              "cancelledResponseMs": [
+                105.492958,
+                99.653166,
+                102.890833,
+                102.24475,
+                104.043875,
+                98.254375,
+                100.994041,
+                106.009667,
+                106.138625,
+                96.583458,
+                106.628916
+              ]
+            },
+            {
+              "cancelled": 11,
+              "maximumMs": 754.080791,
+              "cancelledResponseMs": [
+                106.503625,
+                101.349,
+                101.175416,
+                100.499,
+                100.891625,
+                100.640458,
+                104.694,
+                100.089,
+                100.589417,
+                103.574584,
+                101.015333
+              ]
+            }
+          ]
+        },
+        "candidate": {
+          "p50": 506.82275,
+          "p95": 506.82275,
+          "lastDiagnosticMs": 1029.501833,
+          "lastSuccessfulQueryMs": 506.82275,
+          "allResponsesByRound": [
+            {
+              "cancelled": 11,
+              "maximumMs": 506.82275,
+              "cancelledResponseMs": [
+                106.784584,
+                99.757459,
+                102.07075,
+                102.522667,
+                96.492042,
+                104.564167,
+                100.918666,
+                104.692041,
+                102.077958,
+                99.889041,
+                98.842
+              ]
+            },
+            {
+              "cancelled": 11,
+              "maximumMs": 497.289417,
+              "cancelledResponseMs": [
+                102.538417,
+                104.208333,
+                100.828375,
+                102.112042,
+                103.144083,
+                99.628375,
+                97.4305,
+                105.71125,
+                102.701917,
+                100.980333,
+                97.771084
+              ]
+            },
+            {
+              "cancelled": 11,
+              "maximumMs": 521.674083,
+              "cancelledResponseMs": [
+                102.375417,
+                102.815834,
+                101.09475,
+                104.8055,
+                101.306333,
+                96.708708,
+                105.798667,
+                97.611167,
+                102.229958,
+                104.788625,
+                101.243917
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "longs": {
+      "long-final-1008": {
+        "baseline": {
+          "p50": 20.520333,
+          "p95": 25.205542,
+          "maximum": 115.727917,
+          "lastDiagnosticMs": 36.33,
+          "cancelled": 1,
+          "edits": 1008,
+          "allResponseMaximumMs": 127.538208,
+          "cancelledResponses": [
+            {
+              "index": 572,
+              "queryMs": 127.538208,
+              "error": {
+                "code": -32801,
+                "message": "Document content modified"
+              }
+            }
+          ],
+          "sourceAfterIdle": {
+            "dataBytes": 12436989,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 41325,
+            "indexBytes": 47975
+          }
+        },
+        "candidate": {
+          "p50": 19.7850005,
+          "p95": 23.487208,
+          "maximum": 83.047333,
+          "lastDiagnosticMs": 35.460792,
+          "cancelled": 4,
+          "edits": 1008,
+          "allResponseMaximumMs": 145.296333,
+          "cancelledResponses": [
+            {
+              "index": 725,
+              "queryMs": 103.88525,
+              "error": {
+                "code": -32801,
+                "message": "Document content modified"
+              }
+            },
+            {
+              "index": 726,
+              "queryMs": 109.755167,
+              "error": {
+                "code": -32801,
+                "message": "Document content modified"
+              }
+            },
+            {
+              "index": 727,
+              "queryMs": 100.694666,
+              "error": {
+                "code": -32801,
+                "message": "Document content modified"
+              }
+            },
+            {
+              "index": 730,
+              "queryMs": 145.296333,
+              "error": {
+                "code": -32801,
+                "message": "Document content modified"
+              }
+            }
+          ],
+          "sourceAfterIdle": {
+            "dataBytes": 12436989,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 41325,
+            "indexBytes": 47975
+          }
+        }
+      },
+      "memory-final-1008": {
+        "baseline": {
+          "p50": 19.0852705,
+          "p95": 23.307833,
+          "maximum": 73.027791,
+          "lastDiagnosticMs": 29.800708,
+          "cancelled": 0,
+          "edits": 1008,
+          "allResponseMaximumMs": 73.027791,
+          "cancelledResponses": [],
+          "sourceAfterIdle": {
+            "dataBytes": 12436989,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 41325,
+            "indexBytes": 47975
+          },
+          "memory": {
+            "peakRss": 1257816064,
+            "peakFootprint": 1309345208,
+            "samples": 4479,
+            "cpuSeconds": 32.799540333
+          }
+        },
+        "candidate": {
+          "p50": 19.3478955,
+          "p95": 24.595583,
+          "maximum": 62.353792,
+          "lastDiagnosticMs": 31.464042,
+          "cancelled": 2,
+          "edits": 1008,
+          "allResponseMaximumMs": 105.841,
+          "cancelledResponses": [
+            {
+              "index": 729,
+              "queryMs": 69.958542,
+              "error": {
+                "code": -32801,
+                "message": "Document content modified"
+              }
+            },
+            {
+              "index": 864,
+              "queryMs": 105.841,
+              "error": {
+                "code": -32801,
+                "message": "Document content modified"
+              }
+            }
+          ],
+          "sourceAfterIdle": {
+            "dataBytes": 12436989,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 41325,
+            "indexBytes": 47975
+          },
+          "memory": {
+            "peakRss": 1257766912,
+            "peakFootprint": 1308771768,
+            "samples": 4468,
+            "cpuSeconds": 33.048982375
+          }
+        },
+        "ratios": {
+          "cpuSeconds": 1.0076050468838136,
+          "peakRss": 0.9999609227442654,
+          "peakFootprint": 0.9995620406318393
+        }
+      },
+      "memory-final-reverse": {
+        "baseline": {
+          "p50": 19.778458,
+          "p95": 26.719,
+          "maximum": 80.835416,
+          "lastDiagnosticMs": 31.229167,
+          "cancelled": 1,
+          "edits": 1008,
+          "allResponseMaximumMs": 97.942792,
+          "cancelledResponses": [
+            {
+              "index": 400,
+              "queryMs": 97.942792,
+              "error": {
+                "code": -32801,
+                "message": "Document content modified"
+              }
+            }
+          ],
+          "sourceAfterIdle": {
+            "dataBytes": 12436989,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 41325,
+            "indexBytes": 47975
+          },
+          "memory": {
+            "peakRss": 1259159552,
+            "peakFootprint": 1249035704,
+            "samples": 4498,
+            "cpuSeconds": 33.65015875
+          }
+        },
+        "candidate": {
+          "p50": 19.5525,
+          "p95": 29.364833,
+          "maximum": 96.386459,
+          "lastDiagnosticMs": 34.352542,
+          "cancelled": 1,
+          "edits": 1008,
+          "allResponseMaximumMs": 128.664125,
+          "cancelledResponses": [
+            {
+              "index": 519,
+              "queryMs": 128.664125,
+              "error": {
+                "code": -32801,
+                "message": "Document content modified"
+              }
+            }
+          ],
+          "sourceAfterIdle": {
+            "dataBytes": 12436989,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 41325,
+            "indexBytes": 47975
+          },
+          "memory": {
+            "peakRss": 1254457344,
+            "peakFootprint": 1310016928,
+            "samples": 4486,
+            "cpuSeconds": 34.252409
+          }
+        },
+        "ratios": {
+          "cpuSeconds": 1.0178973969922207,
+          "peakRss": 0.9962655979597413,
+          "peakFootprint": 1.0488226427833163
+        }
+      },
+      "forced-final-memory": {
+        "baseline": {
+          "p50": 19.2078335,
+          "p95": 20.738042,
+          "maximum": 21.727125,
+          "lastDiagnosticMs": 29.819792,
+          "cancelled": 0,
+          "edits": 12,
+          "allResponseMaximumMs": 21.727125,
+          "cancelledResponses": [],
+          "sourceAfterIdle": {
+            "dataBytes": 12436989,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 41325,
+            "indexBytes": 47975
+          },
+          "memory": {
+            "peakRss": 1332658176,
+            "peakFootprint": 1101661528,
+            "samples": 273,
+            "cpuSeconds": 4.371601791
+          }
+        },
+        "candidate": {
+          "p50": 19.0929165,
+          "p95": 19.919709,
+          "maximum": 20.616333,
+          "lastDiagnosticMs": 29.914125,
+          "cancelled": 0,
+          "edits": 12,
+          "allResponseMaximumMs": 20.616333,
+          "cancelledResponses": [],
+          "sourceAfterIdle": {
+            "dataBytes": 12436989,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 41325,
+            "indexBytes": 47975
+          },
+          "memory": {
+            "peakRss": 1327939584,
+            "peakFootprint": 1101612376,
+            "samples": 265,
+            "cpuSeconds": 4.248447833
+          }
+        }
+      }
+    },
+    "acceptance": {
+      "warmMedianP50MaxRatio": 1.1,
+      "warmMedianP95MaxRatio": 1.1,
+      "both1008CpuMaxRatio": 1.1,
+      "both1008RssAndFootprintMaxRatio": 1.05,
+      "firstQuery": "Report every fixed pair and retain any increase; first-certification category remains open, no claim that this candidate eliminates first cost.",
+      "correctness": "All successful queries and complete 612-URI maps equal Native; 1008 inputs / forced and natural retirement / idle query buffers."
+    },
+    "harnessFiles": {
+      "evaluate.py": "64054cd98582e6f2b2dfdea812eebe42c5b45c7e309a904b9ccfdb660db47494",
+      "qualify-input.py": "ebd06bcacbc45b3154314adee0cabbfdb7cff765969c63824d988e3ba4c13700",
+      "qualify-public.py": "e63bdf3cdc4694bb81ca5d19251e3cd195a32a1732ee0147d803c71bc92d98d4",
+      "sampler.py": "ad9d3b2387984053dda68d2e12f6a44a308b18579a164a8485c218867f41827f",
+      "install-smoke.py": "af9e1099362dd5b00f37b321b597ebcd1d69ddf6d7bc5655f59b13c1d14a1286",
+      "run-qualification.py": "060e95b3093c05a57006eecbec08f6ab1f6b5e78d82ab872db41182b3e760445"
+    },
+    "goal": "active: general dependency/effect closure, root atomic binding, source history/position lifetime and budget, further large workloads and final five-category acceptance remain."
+  },
+  "additionalProjects": {
+    "binarySha256": "d7cefd5a8262cc59bdf1995e09b7d88d59e3d5f54609ab825cc6cdb4c3a8a5a3",
+    "cases": 15,
+    "positiveCases": 14,
+    "knownNativeNegativeCase": "W12-encoding-lines",
+    "publicStates": 106,
+    "positivePublicStates": 104,
+    "knownNegativeStates": 2,
+    "allPublicValuesEqualNative": true,
+    "performanceClaim": false,
+    "rows": [
+      {
+        "case": "W01-compare",
+        "project": "spi-block",
+        "statesPerArm": 3,
+        "files": [
+          200
+        ],
+        "uvmPrepared": true,
+        "uvmProjectCacheHit": true,
+        "localDiagnosticUpdates": [
+          0,
+          1,
+          2
+        ],
+        "lastLocalDiagnosticDecline": "",
+        "knownNativeNegative": false
+      },
+      {
+        "case": "W02-local-rename",
+        "project": "spi-block",
+        "statesPerArm": 3,
+        "files": [
+          200
+        ],
+        "uvmPrepared": true,
+        "uvmProjectCacheHit": true,
+        "localDiagnosticUpdates": [
+          0,
+          1,
+          2
+        ],
+        "lastLocalDiagnosticDecline": "",
+        "knownNativeNegative": false
+      },
+      {
+        "case": "W03-local-add-remove",
+        "project": "spi-block",
+        "statesPerArm": 3,
+        "files": [
+          200
+        ],
+        "uvmPrepared": true,
+        "uvmProjectCacheHit": true,
+        "localDiagnosticUpdates": [
+          0,
+          0,
+          0
+        ],
+        "lastLocalDiagnosticDecline": "detached body requires design-dependent finalization",
+        "knownNativeNegative": false
+      },
+      {
+        "case": "W04-ral-ref",
+        "project": "spi-block",
+        "statesPerArm": 3,
+        "files": [
+          200
+        ],
+        "uvmPrepared": true,
+        "uvmProjectCacheHit": true,
+        "localDiagnosticUpdates": [
+          0,
+          0,
+          0
+        ],
+        "lastLocalDiagnosticDecline": "external initializer calls require driver dependency analysis",
+        "knownNativeNegative": false
+      },
+      {
+        "case": "W05-macro-argument",
+        "project": "spi-block",
+        "statesPerArm": 3,
+        "files": [
+          200
+        ],
+        "uvmPrepared": true,
+        "uvmProjectCacheHit": true,
+        "localDiagnosticUpdates": [
+          0,
+          0,
+          0
+        ],
+        "lastLocalDiagnosticDecline": "task calls require transitive timing analysis",
+        "knownNativeNegative": false
+      },
+      {
+        "case": "W06-sequence-local",
+        "project": "spi-block",
+        "statesPerArm": 3,
+        "files": [
+          200
+        ],
+        "uvmPrepared": true,
+        "uvmProjectCacheHit": true,
+        "localDiagnosticUpdates": [
+          0,
+          0,
+          0
+        ],
+        "lastLocalDiagnosticDecline": "",
+        "knownNativeNegative": false
+      },
+      {
+        "case": "W07-pss-multidoc",
+        "project": "spi-pss",
+        "statesPerArm": 3,
+        "files": [
+          200
+        ],
+        "uvmPrepared": true,
+        "uvmProjectCacheHit": false,
+        "localDiagnosticUpdates": [
+          0,
+          1,
+          2
+        ],
+        "lastLocalDiagnosticDecline": "",
+        "knownNativeNegative": false
+      },
+      {
+        "case": "W08-ubus-task",
+        "project": "official-ubus",
+        "statesPerArm": 3,
+        "files": [
+          165
+        ],
+        "uvmPrepared": true,
+        "uvmProjectCacheHit": false,
+        "localDiagnosticUpdates": [
+          0,
+          0,
+          0
+        ],
+        "lastLocalDiagnosticDecline": "task timing changes require caller analysis",
+        "knownNativeNegative": false
+      },
+      {
+        "case": "W09-ubus-config",
+        "project": "official-ubus",
+        "statesPerArm": 3,
+        "files": [
+          165
+        ],
+        "uvmPrepared": true,
+        "uvmProjectCacheHit": true,
+        "localDiagnosticUpdates": [
+          0,
+          0,
+          0
+        ],
+        "lastLocalDiagnosticDecline": "detached body requires design-dependent finalization",
+        "knownNativeNegative": false
+      },
+      {
+        "case": "W10-incomplete-recover",
+        "project": "spi-block",
+        "statesPerArm": 3,
+        "files": [
+          200
+        ],
+        "uvmPrepared": true,
+        "uvmProjectCacheHit": true,
+        "localDiagnosticUpdates": [
+          0,
+          1,
+          2
+        ],
+        "lastLocalDiagnosticDecline": "",
+        "knownNativeNegative": false
+      },
+      {
+        "case": "W11-local-rebind",
+        "project": "spi-block",
+        "statesPerArm": 3,
+        "files": [
+          200
+        ],
+        "uvmPrepared": true,
+        "uvmProjectCacheHit": true,
+        "localDiagnosticUpdates": [
+          0,
+          0,
+          0
+        ],
+        "lastLocalDiagnosticDecline": "task calls require transitive timing analysis",
+        "knownNativeNegative": false
+      },
+      {
+        "case": "W12-encoding-lines",
+        "project": "spi-block",
+        "statesPerArm": 3,
+        "files": [
+          200
+        ],
+        "uvmPrepared": true,
+        "uvmProjectCacheHit": true,
+        "localDiagnosticUpdates": [
+          0,
+          0,
+          0
+        ],
+        "lastLocalDiagnosticDecline": "",
+        "knownNativeNegative": true
+      },
+      {
+        "case": "W13-continuous",
+        "project": "spi-block",
+        "statesPerArm": 11,
+        "files": [
+          200
+        ],
+        "uvmPrepared": true,
+        "uvmProjectCacheHit": true,
+        "localDiagnosticUpdates": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10
+        ],
+        "lastLocalDiagnosticDecline": "",
+        "knownNativeNegative": false
+      },
+      {
+        "case": "W14-negotiated-utf8",
+        "project": "spi-block",
+        "statesPerArm": 3,
+        "files": [
+          200
+        ],
+        "uvmPrepared": true,
+        "uvmProjectCacheHit": true,
+        "localDiagnosticUpdates": [
+          0,
+          0,
+          0
+        ],
+        "lastLocalDiagnosticDecline": "",
+        "knownNativeNegative": false
+      },
+      {
+        "case": "W15-crlf-only",
+        "project": "spi-block",
+        "statesPerArm": 3,
+        "files": [
+          200
+        ],
+        "uvmPrepared": true,
+        "uvmProjectCacheHit": true,
+        "localDiagnosticUpdates": [
+          0,
+          0,
+          0
+        ],
+        "lastLocalDiagnosticDecline": "",
+        "knownNativeNegative": false
+      }
+    ]
+  },
+  "limitations": [
+    "First query remains slower",
+    "Reverse footprint +4.88%, close to 5% gate; no memory reduction claim",
+    "Intermediate cancellations and all-response tails reported separately",
+    "Root binding remains atomic; effect closure and source budget work pending",
+    "UTF-16 plus CRLF query gap reproduced on qualified C1; negative control only"
+  ],
+  "evidenceDirectory": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/strict-proof-model-reuse-2026-10-24",
+  "cleanup": {
+    "removed": [
+      {
+        "path": "untracked/semantic-cancellation-2026-10-23/install",
+        "bytes": 40786458,
+        "binarySha256": "10893644a1ad11268d9c39e202923897a640cd44990873470d8d0ba8fd06fd47",
+        "reason": "Superseded comparator; all consuming runs ended. Raw evidence and source snapshots retained."
+      },
+      {
+        "path": "untracked/resolved-input-proof-2026-10-24/install",
+        "bytes": 40810506,
+        "binarySha256": "81924753ec820ec91ac9414204257c3658a224dcef0a89d41049ae9af469cfa3",
+        "reason": "Superseded comparator; all consuming runs ended. Raw evidence and source snapshots retained."
+      },
+      {
+        "path": "untracked/configured-input-proof-2026-10-24/install",
+        "bytes": 40810506,
+        "binarySha256": "cb44d02fcb17be5d92895f3a6ea9c78ad6b92a34a38e186c0f4d91f48364e2e0",
+        "reason": "Superseded comparator; all consuming runs ended. Raw evidence and source snapshots retained."
+      },
+      {
+        "path": "untracked/final-proof-metadata-2026-10-24/install",
+        "bytes": 40810506,
+        "binarySha256": "2654e88c2482b0732e065f01e70167f9e2b0465c38dc0774c1d997d48bb5fd5d",
+        "reason": "Superseded comparator; all consuming runs ended. Raw evidence and source snapshots retained."
+      },
+      {
+        "path": "untracked/unshared-model-diagnostics-2026-10-24/install",
+        "bytes": 40810666,
+        "binarySha256": "4657f31e9c6d4a5f6c7d019295d5bcba842f9d626dc79d40d1c430f7aca75037",
+        "reason": "Superseded comparator; all consuming runs ended. Raw evidence and source snapshots retained."
+      },
+      {
+        "path": "untracked/strict-proof-model-reuse-2026-10-24/__pycache__",
+        "bytes": 8526,
+        "reason": "Finished Python runs"
+      },
+      {
+        "path": "untracked/real-workloads-2026-10-19/__pycache__",
+        "bytes": 22816,
+        "reason": "Finished Python runs"
+      }
+    ],
+    "totalBytes": 204059984,
+    "preserved": [
+      "C1 qualified baseline",
+      "current d7 install",
+      "active native and ASan build caches",
+      "physical UVM at responsiveness/body-diagnostics installs",
+      "real projects and their in-use CST caches",
+      "raw negative and positive evidence"
+    ],
+    "liveClientsPreserved": [
+      {
+        "pid": 38136,
+        "parent": 38124,
+        "client": "existing Neovim under interactive Neovim PID38123",
+        "binary": "untracked/frozen-analysis-2026-10-20/slang-server-freshness"
+      },
+      {
+        "pid": 94915,
+        "client": "VSCode installed server; outside this task"
+      }
+    ]
+  }
+}

@@ -24,19 +24,28 @@ namespace server {
 
 ServerCompilationAnalysis::ServerCompilationAnalysis(
     const std::unordered_map<std::string, std::shared_ptr<SlangDoc>>& documents, Bag& options,
-    SourceManager& sourceManager) :
+    SourceManager& sourceManager, const lsp::RequestContext& ctx) :
     compilation(options),
     m_analysisOptions(options.getOrDefault<slang::analysis::AnalysisOptions>()) {
+    UvmPhaseTrace phases;
     std::vector<BufferID> bufferIds;
     std::vector<std::shared_ptr<syntax::SyntaxTree>> trees;
     trees.reserve(documents.size());
-    for (auto& [_, doc] : documents)
-        trees.push_back(doc->getSyntaxTree());
+    for (auto& [_, doc] : documents) {
+        ctx.checkpoint("during full-model syntax discovery");
+        trees.push_back(doc->getSyntaxTree(ctx));
+    }
+    phases.mark("model-syntax-discovery");
+    ctx.checkpoint("before full-model library import");
     const bool trusted = importTrustedUvm(compilation, sourceManager, options, trees);
+    ctx.checkpoint("after full-model library import");
+    phases.mark("model-library-import");
     std::unordered_set<BufferID> seenBuffers;
 
     for (auto& tree : trees) {
+        ctx.checkpoint("before full-model syntax installation");
         compilation.addSyntaxTree(tree, trusted);
+        ctx.checkpoint("after full-model syntax installation");
 
         for (auto bufferId : tree->getSourceBufferIds()) {
             if (seenBuffers.insert(bufferId).second)
@@ -44,15 +53,34 @@ ServerCompilationAnalysis::ServerCompilationAnalysis(
         }
     }
 
+    phases.mark("model-syntax-installation");
     // Retain buffer data to prevent deallocation while this compilation exists
     m_retainedBuffers = sourceManager.retainBuffers(bufferIds);
 
     // reset and rebuild indexed info
+    ctx.checkpoint("before full-model root binding");
     auto& root = compilation.getRoot();
-    instances.reset(&root);
+    ctx.checkpoint("after full-model root binding");
+    phases.mark("model-root-binding");
+    instances.reset(&root, [&] { ctx.checkpoint("during full-model instance indexing"); });
+    ctx.checkpoint("after full-model instance indexing");
+    phases.mark("model-instance-indexing");
 
     // symbol references are not indexed until cone tracing is requested
     m_references.reset();
+}
+
+void ServerCompilationAnalysis::prepareDisposableDiagnostics(const lsp::RequestContext& ctx) {
+    UvmPhaseTrace phases;
+    ctx.checkpoint("before private full-design semantics");
+    (void)compilation.getDisposableSemanticDiagnostics(
+        ctx ? std::function<void()>([&] { ctx.checkpoint("during private full-design semantics"); })
+            : std::function<void()>{});
+    ctx.checkpoint("after private full-design semantics");
+    phases.mark("private-full-semantics");
+    (void)getAnalysisManager(ctx);
+    ctx.checkpoint("after private full-design diagnostics");
+    phases.mark("private-full-dataflow");
 }
 
 slang::analysis::AnalysisManager& ServerCompilationAnalysis::getAnalysisManager(

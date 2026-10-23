@@ -121,7 +121,7 @@ index 133958b902d1d14a385158be0f64acfc62cfcab7..6208d74756b29fcfcaad116cfb2e229d
  
  template<typename TVisitor>
 diff --git a/include/slang/ast/Compilation.h b/include/slang/ast/Compilation.h
-index b7ddc64e46b08cf082b7e7ffec12ffe769afc693..6a7c2addee25be71ca2ab99a3cf54ef43edd482d 100644
+index b7ddc64e46b08cf082b7e7ffec12ffe769afc693..47571422f4990a841c5aa35264c610c7df1cf705 100644
 --- a/include/slang/ast/Compilation.h
 +++ b/include/slang/ast/Compilation.h
 @@ -7,6 +7,7 @@
@@ -319,7 +319,17 @@ index b7ddc64e46b08cf082b7e7ffec12ffe769afc693..6a7c2addee25be71ca2ab99a3cf54ef4
  
      /// Indicates whether the design has been compiled and can no longer accept modifications.
      bool isFinalized() const { return finalized; }
-@@ -396,6 +520,7 @@ public:
+@@ -391,11 +515,17 @@ public:
+     /// for lazy evaluation.
+     const Diagnostics& getSemanticDiagnostics();
+ 
++    /// Only for a disposable, unpublished compilation. The checkpoint is confined to this
++    /// outer traversal; recursive binding and imported compilations do not inherit it.
++    /// If it throws, discard the compilation instead of resuming shared mutable ASTs.
++    const Diagnostics& getDisposableSemanticDiagnostics(const std::function<void()>& checkpoint);
++
+     /// Gets all of the diagnostics produced during compilation.
+     const Diagnostics& getAllDiagnostics();
  
      /// Queries if any errors have been issued on any scope within this compilation.
      bool hasIssuedErrors() const { return numErrors > 0; };
@@ -327,7 +337,7 @@ index b7ddc64e46b08cf082b7e7ffec12ffe769afc693..6a7c2addee25be71ca2ab99a3cf54ef4
  
      /// Returns true if there are any fatal errors reported in the compilation,
      /// or if we've hit the configured error limit and stopped elaboration early
-@@ -512,6 +637,11 @@ public:
+@@ -512,6 +642,11 @@ public:
  
      /// Gets the package with the give name, or nullptr if there is no such package.
      const PackageSymbol* getPackage(std::string_view name) const;
@@ -339,7 +349,7 @@ index b7ddc64e46b08cf082b7e7ffec12ffe769afc693..6a7c2addee25be71ca2ab99a3cf54ef4
  
      /// Gets the built-in 'std' package.
      const PackageSymbol& getStdPackage() const { return *stdPkg; }
-@@ -681,7 +811,13 @@ public:
+@@ -681,7 +816,13 @@ public:
      /// Notes that the given symbol is "referenced" somewhere in the AST.
      /// This is used to diagnose unused variables, nets, etc. The @a isLValue parameter
      /// is used to tell whether a value is only assigned or whether it's also read somewhere.
@@ -354,7 +364,7 @@ index b7ddc64e46b08cf082b7e7ffec12ffe769afc693..6a7c2addee25be71ca2ab99a3cf54ef4
  
      /// Checks whether the given syntax node has been referenced in the AST thus far.
      /// The result is a pair, the first item of which is true if the node has been used
-@@ -857,6 +993,50 @@ private:
+@@ -857,6 +998,50 @@ private:
      friend class Scope;
      friend struct DiagnosticVisitor;
  
@@ -405,7 +415,16 @@ index b7ddc64e46b08cf082b7e7ffec12ffe769afc693..6a7c2addee25be71ca2ab99a3cf54ef4
      // Collected information about a resolved bind directive.
      struct ResolvedBind {
          SmallVector<const Symbol*> instTargets;
-@@ -937,6 +1117,10 @@ private:
+@@ -885,7 +1070,7 @@ private:
+     Diagnostic& addDiag(Diagnostic diag);
+ 
+     const RootSymbol& getRoot(bool skipDefParamsAndBinds);
+-    void elaborate();
++    void elaborate(const std::function<void()>& checkpoint);
+     void insertDefinition(Symbol& symbol, const Scope& scope);
+     void parseParamOverrides(
+         bool skipDefParams,
+@@ -937,6 +1122,10 @@ private:
      // for things like variables and nets.
      flat_hash_map<const syntax::SyntaxNode*, std::pair<bool, bool>> referenceStatusMap;
  
@@ -416,7 +435,7 @@ index b7ddc64e46b08cf082b7e7ffec12ffe769afc693..6a7c2addee25be71ca2ab99a3cf54ef4
      // The name map for all module, interface, program, and primitive definitions.
      // The key is a combination of definition name + the scope in which it was declared.
      // The value is a pair -- the first element is a list of definitions that share
-@@ -996,6 +1180,7 @@ private:
+@@ -996,6 +1185,7 @@ private:
      std::unique_ptr<RootSymbol> root;
      SourceManager* sourceManager = nullptr;
      size_t numErrors = 0; // total number of errors inserted into the diagMap
@@ -424,7 +443,7 @@ index b7ddc64e46b08cf082b7e7ffec12ffe769afc693..6a7c2addee25be71ca2ab99a3cf54ef4
      bool finalized = false;
      bool finalizing = false; // to prevent reentrant calls to getRoot()
      bool anyElemsWithTimescales = false;
-@@ -1134,6 +1319,16 @@ private:
+@@ -1134,6 +1324,16 @@ private:
      // The default library.
      std::unique_ptr<SourceLibrary> defaultLibMem;
      const SourceLibrary* defaultLibPtr;
@@ -2014,7 +2033,7 @@ index cb4f631f8f0fe237a9bf4b0212627f3069fc5721..664d00b200f4f2802a3b2b902675a1f0
              // information to point the user towards the right ones.
              Diagnostic diag = *found;
 diff --git a/source/ast/Compilation.cpp b/source/ast/Compilation.cpp
-index ed7528f2c63e43df29c59538afa58b94099e6df0..a47897cd8cb2bb7a387bcc82047e687bbab91613 100644
+index ed7528f2c63e43df29c59538afa58b94099e6df0..d209b341b9dfe2006ee9968ca3e5b1138e9164b3 100644
 --- a/source/ast/Compilation.cpp
 +++ b/source/ast/Compilation.cpp
 @@ -9,12 +9,14 @@
@@ -4389,7 +4408,28 @@ index ed7528f2c63e43df29c59538afa58b94099e6df0..a47897cd8cb2bb7a387bcc82047e687b
  }
  
  const NameSyntax& Compilation::parseName(std::string_view name) {
-@@ -1560,10 +3635,12 @@ void Compilation::elaborate() {
+@@ -1510,7 +3585,7 @@ CompilationUnitSymbol& Compilation::createScriptScope() {
+     return *unit;
+ }
+ 
+-void Compilation::elaborate() {
++void Compilation::elaborate(const std::function<void()>& checkpoint) {
+     SLANG_ASSERT(!isFrozen());
+ 
+     // Make sure our root is created. It's possible that this results in a fatal
+@@ -1523,8 +3598,10 @@ void Compilation::elaborate() {
+     // Touch every symbol, scope, statement, and expression tree so that
+     // we can be sure we have all the diagnostics.
+     uint32_t errorLimit = options.errorLimit == 0 ? UINT32_MAX : options.errorLimit;
+-    DiagnosticVisitor elabVisitor(*this, numErrors, errorLimit);
++    DiagnosticVisitor elabVisitor(*this, numErrors, errorLimit, checkpoint);
+     rootSym.visit(elabVisitor);
++    if (checkpoint)
++        checkpoint();
+ 
+     if (!elabVisitor.finishedEarly() && !elabVisitor.instanceDepthExceeded)
+         elabVisitor.finalize();
+@@ -1560,10 +3637,12 @@ void Compilation::elaborate() {
      // Double check any bind directives for correctness. These were already
      // resolved prior to full elaboration but their diagnostics were not
      // issued so we need to check again.
@@ -4406,7 +4446,7 @@ index ed7528f2c63e43df29c59538afa58b94099e6df0..a47897cd8cb2bb7a387bcc82047e687b
      }
  
      // Report any lingering name conflicts.
-@@ -1680,6 +3757,49 @@ const Diagnostics& Compilation::getParseDiagnostics() {
+@@ -1680,14 +3759,160 @@ const Diagnostics& Compilation::getParseDiagnostics() {
      return *cachedParseDiagnostics;
  }
  
@@ -4456,11 +4496,24 @@ index ed7528f2c63e43df29c59538afa58b94099e6df0..a47897cd8cb2bb7a387bcc82047e687b
  const Diagnostics& Compilation::getSemanticDiagnostics() {
      if (cachedSemanticDiagnostics)
          return *cachedSemanticDiagnostics;
-@@ -1687,7 +3807,99 @@ const Diagnostics& Compilation::getSemanticDiagnostics() {
-     // Elaborate the design.
-     elaborate();
++    return getDisposableSemanticDiagnostics({});
++}
+ 
+-    // Elaborate the design.
+-    elaborate();
++const Diagnostics& Compilation::getDisposableSemanticDiagnostics(
++    const std::function<void()>& checkpoint) {
++    if (checkpoint)
++        checkpoint();
++    if (cachedSemanticDiagnostics)
++        return *cachedSemanticDiagnostics;
  
 -    cachedSemanticDiagnostics.emplace(diagMap.coalesce(sourceManager));
++    // Only this outer pass receives the disposable candidate checkpoint.
++    elaborate(checkpoint);
++    if (checkpoint)
++        checkpoint();
++
 +    if (importedCompilations.empty()) {
 +        cachedSemanticDiagnostics.emplace(diagMap.coalesce(sourceManager, this));
 +    }
@@ -4590,18 +4643,58 @@ index 20da49191e1783e167e65f988365dc788000ff3b..4a81bf314347f16796ce785f15c9b35e
          copyStateInto(c, false);
      };
 diff --git a/source/ast/ElabVisitors.h b/source/ast/ElabVisitors.h
-index 2f346fa600e460dd4df92866801bf263296174c7..bdc738b7144c04e2eee4401a92742a05c804a9a5 100644
+index 2f346fa600e460dd4df92866801bf263296174c7..e141de89c10d1d5775ee1e2f86eaf268fe850c12 100644
 --- a/source/ast/ElabVisitors.h
 +++ b/source/ast/ElabVisitors.h
-@@ -9,6 +9,7 @@
+@@ -7,8 +7,11 @@
+ //------------------------------------------------------------------------------
+ #pragma once
  
++#include <functional>
++
  #include "slang/ast/ASTVisitor.h"
  #include "slang/ast/EvalContext.h"
 +#include "slang/ast/types/TypePrinter.h"
  #include "slang/diagnostics/CompilationDiags.h"
  #include "slang/diagnostics/DeclarationsDiags.h"
  #include "slang/util/TimeTrace.h"
-@@ -314,7 +315,7 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
+@@ -20,8 +23,17 @@ using namespace syntax;
+ // This visitor is used to touch every node in the AST to ensure that all lazily
+ // evaluated members have been realized and we have recorded every diagnostic.
+ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
+-    DiagnosticVisitor(Compilation& compilation, const size_t& numErrors, uint32_t errorLimit) :
+-        compilation(compilation), numErrors(numErrors), errorLimit(errorLimit) {}
++    DiagnosticVisitor(Compilation& compilation, const size_t& numErrors, uint32_t errorLimit,
++                      const std::function<void()>& checkpoint = {}) :
++        compilation(compilation), numErrors(numErrors), errorLimit(errorLimit),
++        checkpoint(checkpoint) {}
++
++    // This visitor is an outer traversal. forceElaborate creates a different visitor
++    // without this callback, so a nested binder never inherits the interruption.
++    void checkPoint() {
++        if (checkpoint && (checkpointVisits++ & 63u) == 0)
++            checkpoint();
++    }
+ 
+     bool finishedEarly() const {
+         return numErrors > errorLimit || hierarchyProblem || abortCurrentRoot;
+@@ -34,6 +46,7 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
+ 
+     template<typename T>
+     bool handleDefault(const T& symbol) {
++        checkPoint();
+         if (finishedEarly())
+             return false;
+ 
+@@ -62,6 +75,7 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
+ 
+     void handle(const RootSymbol& symbol) {
+         for (auto& member : symbol.members()) {
++            checkPoint();
+             member.visit(*this);
+             if (abortCurrentRoot)
+                 abortCurrentRoot = false;
+@@ -314,7 +328,7 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
      }
  
      void handle(const InstanceSymbol& symbol) {
@@ -4610,7 +4703,7 @@ index 2f346fa600e460dd4df92866801bf263296174c7..bdc738b7144c04e2eee4401a92742a05
              return;
  
          // If we're not visiting instances and this instance came from a bind directive
-@@ -368,6 +369,34 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
+@@ -368,6 +382,34 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
          }
      }
  
@@ -4645,7 +4738,7 @@ index 2f346fa600e460dd4df92866801bf263296174c7..bdc738b7144c04e2eee4401a92742a05
      void handle(const SubroutineSymbol& symbol) {
          if (!handleDefault(symbol))
              return;
-@@ -377,7 +406,7 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
+@@ -377,7 +419,7 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
      }
  
      void handle(const DefParamSymbol& symbol) {
@@ -4654,7 +4747,15 @@ index 2f346fa600e460dd4df92866801bf263296174c7..bdc738b7144c04e2eee4401a92742a05
              return;
  
          symbol.getTarget();
-@@ -468,8 +497,11 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
+@@ -449,6 +491,7 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
+     }
+ 
+     void finalize() {
++        checkPoint();
+         // Once everything has been visited, go back over and check things that might
+         // have been influenced by visiting later symbols.
+ 
+@@ -468,8 +511,11 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
                          // Additionally we will unset the canonical pointer so that
                          // we don't try to cache it again in the future.
                          auto& inst = sym->as<InstanceSymbol>();
@@ -4668,7 +4769,7 @@ index 2f346fa600e460dd4df92866801bf263296174c7..bdc738b7144c04e2eee4401a92742a05
                              inst.visit(*this);
                          }
                      }
-@@ -483,6 +515,11 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
+@@ -483,6 +529,11 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
              compilation.virtualIfaceInstances.clear();
  
              for (auto inst : vii) {
@@ -4680,7 +4781,7 @@ index 2f346fa600e460dd4df92866801bf263296174c7..bdc738b7144c04e2eee4401a92742a05
                  inst->visit(*this);
                  compilation.checkVirtualIfaceInstance(*inst);
              }
-@@ -495,13 +532,42 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
+@@ -495,13 +546,43 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
          bool didSomething;
          do {
              didSomething = false;
@@ -4701,6 +4802,7 @@ index 2f346fa600e460dd4df92866801bf263296174c7..bdc738b7144c04e2eee4401a92742a05
 +                didSomething = true;
 +            }
              for (auto symbol : genericClasses) {
++                checkPoint();
                  for (auto& spec : symbol->specializations()) {
                      if (visitedSpecs.emplace(&spec).second)
                          toVisit.push_back(&spec);
@@ -4723,7 +4825,15 @@ index 2f346fa600e460dd4df92866801bf263296174c7..bdc738b7144c04e2eee4401a92742a05
                      spec->visit(*this);
                      didSomething = true;
                  }
-@@ -543,7 +609,7 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
+@@ -514,6 +595,7 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
+         // and force an empty one to make sure we collect all diagnostics that
+         // don't depend on parameter values.
+         for (auto symbol : genericClasses) {
++            checkPoint();
+             if (symbol->numSpecializations() == 0)
+                 symbol->getInvalidSpecialization().visit(*this);
+         }
+@@ -543,7 +625,7 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
      }
  
      bool tryApplyFromCache(const InstanceSymbol& symbol) {
@@ -4732,7 +4842,7 @@ index 2f346fa600e460dd4df92866801bf263296174c7..bdc738b7144c04e2eee4401a92742a05
              return false;
  
          // We can use a cached version of this instance's body if we have already
-@@ -597,7 +663,14 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
+@@ -597,7 +679,14 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
          // Assuming we find an appropriately cached instance, we will store a pointer to it
          // in other instances to facilitate downstream consumers in not needing to recreate
          // this duplication detection logic again.
@@ -4748,6 +4858,15 @@ index 2f346fa600e460dd4df92866801bf263296174c7..bdc738b7144c04e2eee4401a92742a05
  
          // If this is an interface or an instance instantiated within an interface
          // we want to return false so that we continue visiting the body. This is
+@@ -625,6 +714,8 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
+     Compilation& compilation;
+     const size_t& numErrors;
+     uint32_t errorLimit;
++    std::function<void()> checkpoint;
++    size_t checkpointVisits = 0;
+     bool visitInstances = true;
+     bool disableCache = false;
+     bool hierarchyProblem = false;
 diff --git a/source/ast/EvalContext.cpp b/source/ast/EvalContext.cpp
 index bcb4144155bf08dc3f4823e4f887d0e430ae696b..dfff1ba8610a54d5715ad46fd3b3e89e49ea0e82 100644
 --- a/source/ast/EvalContext.cpp
@@ -11881,10 +12000,10 @@ index 0000000000000000000000000000000000000000..c770624b956dcae565401abb3920f6bd
 +}
 diff --git a/tests/unittests/ast/PackageAnalysisTests.cpp b/tests/unittests/ast/PackageAnalysisTests.cpp
 new file mode 100644
-index 0000000000000000000000000000000000000000..c0e074e6ee72c9b16857a893159de193fc9b0455
+index 0000000000000000000000000000000000000000..0c2323ae62c3135d2fa378c246bffa2e0f2d5b61
 --- /dev/null
 +++ b/tests/unittests/ast/PackageAnalysisTests.cpp
-@@ -0,0 +1,793 @@
+@@ -0,0 +1,923 @@
 +// SPDX-FileCopyrightText: Michael Popoloski
 +// SPDX-License-Identifier: MIT
 +
@@ -12677,4 +12796,134 @@ index 0000000000000000000000000000000000000000..c0e074e6ee72c9b16857a893159de193
 +        return diagnostic.code == diag::UnusedPackageTypedef && diagnostic.symbol &&
 +               diagnostic.symbol->name == "unused_t";
 +    }));
++}
++
++namespace {
++struct SemanticTraversalCancelled {};
++std::string disposableSemanticSource() {
++    std::string text = "package checkpoint_pkg; class C;\n";
++    for (int i = 0; i < 2200; ++i)
++        text += "function int f" + std::to_string(i) + "(); return " + std::to_string(i) +
++                "; endfunction\n";
++    return text + "endclass endpackage\n";
++}
++} // namespace
++
++TEST_CASE("Disposable outer semantic checkpoints discard canceled candidates",
++          "[semantic-checkpoint]") {
++    SourceManager sources;
++    auto tree = SyntaxTree::fromText(disposableSemanticSource(), sources);
++    CompilationOptions options;
++    options.flags = CompilationFlags::PackageAnalysis;
++    for (size_t cancelAt : {1, 3, 5}) {
++        auto candidate = std::make_unique<Compilation>(options);
++        candidate->addSyntaxTree(tree);
++        size_t visits = 0;
++        CHECK_THROWS_AS(candidate->getDisposableSemanticDiagnostics([&] {
++            if (++visits == cancelAt)
++                throw SemanticTraversalCancelled{};
++        }),
++                        SemanticTraversalCancelled);
++        CHECK(visits == cancelAt);
++        CHECK_FALSE(candidate->isElaborated());
++        // No attempt to resume a potentially interrupted candidate.
++        candidate.reset();
++        Compilation retry(options);
++        retry.addSyntaxTree(tree);
++        CHECK(retry.getSemanticDiagnostics().empty());
++    }
++}
++
++TEST_CASE("Outer semantic checkpoint is not installed on recursive force elaboration",
++          "[semantic-checkpoint]") {
++    SourceManager sources;
++    auto tree = SyntaxTree::fromText(disposableSemanticSource(), sources);
++    CompilationOptions options;
++    options.flags = CompilationFlags::PackageAnalysis;
++    Compilation candidate(options);
++    candidate.addSyntaxTree(tree);
++    size_t visits = 0;
++    bool checked = false;
++    bool nested = false;
++    CHECK(candidate
++              .getDisposableSemanticDiagnostics([&] {
++                  REQUIRE_FALSE(nested);
++                  ++visits;
++                  if (!checked) {
++                      checked = true;
++                      nested = true;
++                      auto before = visits;
++                      candidate.forceElaborate(candidate.getRoot());
++                      CHECK(visits == before);
++                      nested = false;
++                  }
++              })
++              .empty());
++    CHECK(checked);
++    CHECK(visits > 2);
++    auto before = visits;
++    candidate.forceElaborate(candidate.getRoot());
++    CHECK(visits == before);
++}
++
++TEST_CASE("Canceled outer semantic traversal preserves imported generic owner state",
++          "[semantic-checkpoint][trusted-package]") {
++    SourceManager sources;
++    auto tree = SyntaxTree::fromText(R"(
++package uvm_pkg;
++    class uvm_object;
++        int tag;
++        virtual function int get_tag(); return tag; endfunction
++    endclass
++    class box #(type T);
++        T value;
++        extern function int read_field();
++    endclass
++    function int box::read_field(); return value.field; endfunction
++endpackage
++)",
++                                     sources, "fixed.sv");
++    CompilationOptions options;
++    options.flags = CompilationFlags::PackageAnalysis;
++    auto library = std::make_shared<Compilation>(options);
++    library->addSyntaxTree(tree);
++    REQUIRE(library->getSemanticDiagnostics().empty());
++    auto package = library->getPackage("uvm_pkg");
++    auto& generic = package->find("box")->as<GenericClassDefSymbol>();
++    auto prefix = sources.captureImmutablePrefix(tree->getSourceBufferIds());
++    const auto bytes = library->getTotalBytesAllocated();
++    const auto fixedSpecializations = generic.numSpecializations();
++    for (bool broken : {false, true}) {
++        SourceManager consumerSources;
++        consumerSources.inheritImmutablePrefix(prefix);
++        auto text = disposableSemanticSource();
++        const std::string head = "package checkpoint_pkg; class C;";
++        text.replace(text.find(head), head.size(),
++                     std::string("package user_pkg; import uvm_pkg::*; class Packet; int ") +
++                         (broken ? "other" : "field") +
++                         "; endclass class Test extends uvm_object; box#(Packet) payload;\n");
++        auto suffix = SyntaxTree::fromText(text, consumerSources, "consumer.sv");
++        auto candidate = std::make_unique<Compilation>(options);
++        candidate->importPackage(library, "uvm_pkg", consumerSources);
++        candidate->addSyntaxTree(suffix);
++        size_t visits = 0;
++        CHECK_THROWS_AS(candidate->getDisposableSemanticDiagnostics([&] {
++            if (++visits == 3) {
++                CHECK_FALSE(candidate->getImportedClassSpecializations().empty());
++                throw SemanticTraversalCancelled{};
++            }
++        }),
++                        SemanticTraversalCancelled);
++        candidate.reset();
++        CHECK(library->getPackage("uvm_pkg") == package);
++        CHECK(library->getSemanticDiagnostics().empty());
++        CHECK(generic.numSpecializations() == fixedSpecializations);
++        CHECK(library->getTotalBytesAllocated() == bytes);
++        Compilation retry(options);
++        retry.importPackage(library, "uvm_pkg", consumerSources);
++        retry.addSyntaxTree(suffix);
++        CHECK(retry.getSemanticDiagnostics().empty() == !broken);
++        CHECK(generic.numSpecializations() == fixedSpecializations);
++        CHECK(library->getTotalBytesAllocated() == bytes);
++    }
 +}
