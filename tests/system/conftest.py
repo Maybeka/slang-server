@@ -67,15 +67,20 @@ class LanguageClientProtocol(LanguageServerProtocol):
         super().__init__(*args, **kwargs)
 
         self._notification_futures = {}
+        self._notification_predicates = {}
 
     def _handle_notification(self, method_name, params):
         if method_name == types.CANCEL_REQUEST:
             self._handle_cancel_notification(params.id)
             return
 
-        future = self._notification_futures.pop(method_name, None)
-        if future:
-            future.set_result(params)
+        future = self._notification_futures.get(method_name)
+        predicate = self._notification_predicates.get(method_name)
+        if future and (future.done() or predicate is None or predicate(params)):
+            self._notification_futures.pop(method_name, None)
+            self._notification_predicates.pop(method_name, None)
+            if not future.done():
+                future.set_result(params)
 
         try:
             handler = self._get_handler(method_name)
@@ -87,7 +92,7 @@ class LanguageClientProtocol(LanguageServerProtocol):
                 "Failed to handle notification '%s': %s", method_name, params
             )
 
-    def wait_for_notification(self, method: str, callback=None):
+    def wait_for_notification(self, method: str, callback=None, *, predicate=None):
         future: Future = Future()
         if callback:
 
@@ -98,6 +103,7 @@ class LanguageClientProtocol(LanguageServerProtocol):
             future.add_done_callback(wrapper)
 
         self._notification_futures[method] = future
+        self._notification_predicates[method] = predicate
         return future
 
     def wait_for_notification_async(self, method: str):

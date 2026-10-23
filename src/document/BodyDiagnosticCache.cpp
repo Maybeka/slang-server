@@ -3,6 +3,7 @@
 
 #include "ast/ServerCompilation.h"
 #include "ast/TrustedUvmLibrary.h"
+#include "document/BodyLineProof.h"
 #include "document/NativeDiagnosticSnapshot.h"
 #include "util/Converters.h"
 #include "util/UvmPhaseTrace.h"
@@ -167,6 +168,9 @@ std::shared_ptr<const BodyDiagnosticBaseline> BodyDiagnosticCache::capture(
     // replaceBuffer clears the editor BufferID's FileInfo even while old FileData
     // is pinned. Keep one target-file value, not a chain of edited source owners.
     baseline->text = std::string(d.getDocument(uri)->getText());
+    baseline->targetBuffer =
+        baseline->originals.front()->getSyntax()->getFirstToken().location().buffer();
+    baseline->sourcePins = d.sm.retainBuffers({&baseline->targetBuffer, 1});
     auto publication = d.m_nativeDiagnosticSnapshot;
     UvmPhaseTrace capturePhases;
     capturePhases.mark(!publication ? "body-native-publication-missing"
@@ -218,6 +222,11 @@ BodyDiagnosticCache::BodyDiagnosticCache(ServerDriver& d, const URI& target, siz
     analysisOptions = baseline->analysisOptions;
     owner = baseline->owner;
     originals = baseline->originals;
+    if (lineSensitive) {
+        originalTarget = baseline->targetBuffer;
+        lineText = baseline->text;
+        linePins = baseline->sourcePins;
+    }
     auto path = d.sm.getFullPath(d.getDocument(uri)->getBuffer());
     // Macro locations frequently revisit the same physical buffers. Resolve each
     // buffer's path once during this construction, including synthetic buffers.
@@ -582,9 +591,16 @@ void BodyDiagnosticCache::validateSlice(const Slice& slice) const {
 void BodyDiagnosticCache::publish(const std::shared_ptr<syntax::SyntaxTree>& tree, size_t newEnd,
                                   const lsp::RequestContext& ctx,
                                   const std::function<void()>& validate) {
-    require(!lineSensitive || baselineLine == driver.sm.getRawLineNumber(SourceLocation(
-                                                  tree->getSourceBufferIds().front(), newEnd)),
-            "line shift affects diagnostics in later macro bodies");
+    if (lineSensitive && baselineLine != driver.sm.getRawLineNumber(SourceLocation(
+                                             tree->getSourceBufferIds().front(), newEnd))) {
+        if (!lineProof) {
+            lineProof = std::make_shared<BodyLineProof>(
+                driver.sm, *owner, *originals.front(), originalTarget, end, lineText,
+                driver.sm.getFullPath(driver.getDocument(uri)->getBuffer()).string(), ctx);
+            std::string().swap(lineText);
+        }
+        lineProof->validate(driver.getDocument(uri)->getText(), newEnd, ctx);
+    }
     auto slice = analyze(tree, ctx);
     validateSlice(slice);
     auto document = driver.getDocument(uri);

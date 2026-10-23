@@ -17,6 +17,8 @@ struct BodyDiagnosticBaseline {
     URI uri;
     size_t begin = 0, end = 0;
     uint32_t bufferLimit = 0;
+    slang::BufferID targetBuffer;
+    std::vector<std::shared_ptr<void>> sourcePins;
     std::string text;
     std::shared_ptr<slang::ast::Compilation> owner;
     std::vector<const slang::ast::SubroutineSymbol*> originals;
@@ -49,6 +51,10 @@ private:
     uint32_t bufferLimit;
     bool lineSensitive;
     size_t baselineLine;
+    slang::BufferID originalTarget;
+    std::string lineText;
+    std::vector<std::shared_ptr<void>> linePins;
+    std::shared_ptr<class BodyLineProof> lineProof;
     std::shared_ptr<slang::ast::Compilation> owner, baselineBinding;
     std::vector<const slang::ast::ClassType*> specializations;
     std::vector<const slang::ast::SubroutineSymbol*> originals;

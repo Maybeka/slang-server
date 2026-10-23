@@ -29,7 +29,8 @@ async def test_package_header_unsaved_context(client: SlangClient) -> None:
 
     async def opened(uri: str, text: str) -> None:
         pending = client.protocol.wait_for_notification(
-            types.TEXT_DOCUMENT_PUBLISH_DIAGNOSTICS
+            types.TEXT_DOCUMENT_PUBLISH_DIAGNOSTICS,
+            predicate=lambda notice: notice.uri == uri,
         )
         client.openText(uri, text)
         diagnostics = await asyncio.wait_for(asyncio.wrap_future(pending), 10)
@@ -38,7 +39,8 @@ async def test_package_header_unsaved_context(client: SlangClient) -> None:
 
     async def changed(text: str, version: int):
         pending = client.protocol.wait_for_notification(
-            types.TEXT_DOCUMENT_PUBLISH_DIAGNOSTICS
+            types.TEXT_DOCUMENT_PUBLISH_DIAGNOSTICS,
+            predicate=lambda notice: notice.uri == header_uri and notice.version == version,
         )
         client.text_document_did_change(
             types.DidChangeTextDocumentParams(

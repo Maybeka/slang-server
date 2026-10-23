@@ -1419,7 +1419,7 @@ TEST_CASE("Local diagnostics inherit warning pragmas and current line macro valu
             CHECK(result.localDiagnosticUpdates == (pragma ? 1 : 0));
             if (!pragma)
                 CHECK(result.localDiagnosticDecline ==
-                      "line shift affects diagnostics in later macro bodies");
+                      "later macro line value affects semantic structure");
             checkNativeDiagnostics(workspace, server, text);
         }
     }
@@ -2645,5 +2645,227 @@ TEST_CASE("Fixed reference proofs retain package call driver boundaries",
     INFO(status.localDiagnosticDecline);
     CHECK(status.localDiagnosticUpdates == 0);
     CHECK(status.localDiagnosticDecline.find("full effect analysis") != std::string::npos);
+    checkNativeDiagnostics(workspace, server, text);
+}
+
+TEST_CASE("Later runtime line arguments preserve native diagnostics across multiline edits",
+          "[method-body-diagnostics][later-macro-lines]") {
+    const bool certify = GENERATE(false, true);
+    const bool nested = GENERATE(false, true);
+    const bool primary = GENERATE(false, true);
+    const std::string argument = GENERATE(std::string("`__LINE__"), std::string("`BODY_LINE"));
+    Workspace workspace;
+    if (primary)
+        workspace.write("design.f", "+incdir+.\nprelude.sv\nitem.svh\ntail.sv\n");
+    auto original = std::string("`define BODY_LINE `__LINE__\n") + header;
+    original.insert(
+        original.find("  function int combine"),
+        "  function void report(input string message, input int line_number); endfunction\n");
+    original.replace(original.rfind("return value;"), 13,
+                     "report(\"test\", " + argument + "); return value;");
+    if (nested) {
+        original = "`define REPORT report(\"test\", `BODY_LINE)\n" + original;
+        original.replace(original.rfind("report(\"test\", " + argument + ");"),
+                         std::string("report(\"test\", " + argument + ");").size(), "`REPORT;");
+    }
+    workspace.write("item.svh", original);
+    auto cfg = localDiagnosticConfig;
+    if (certify)
+        cfg.insert(cfg.size() - 1, ",\"experimentalMethodBodyCertification\":true");
+    workspace.write(".slang/server.json", cfg);
+    BodyTestServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    for (int version = 2; version <= 4; ++version) {
+        auto text = original;
+        text.replace(text.find("local_1 + charl"), 15,
+                     version == 3 ? "local_0 + charl" : "local_0 +\n charl");
+        change(server, doc.m_uri, version, text);
+        server.runBackgroundWork({});
+        REQUIRE(state(server).active);
+        const auto result = diagnosticState(server);
+        INFO(result.localDiagnosticDecline);
+        CHECK(result.localDiagnosticUpdates == uint64_t(version - 1));
+        checkNativeDiagnostics(workspace, server, text);
+    }
+}
+
+TEST_CASE("Later macro proof rejects semantic line uses and accepts reset logical lines",
+          "[method-body-diagnostics][later-macro-lines]") {
+    const bool certify = GENERATE(false, true);
+    struct Variant {
+        const char* declaration;
+        const char* statement;
+        bool local;
+        const char* prefix;
+    };
+    const auto variant = GENERATE(
+        Variant{"function void report(input int line_number); endfunction", "report(`__LINE__);",
+                true, ""},
+        Variant{"function void report(input int line_number); endfunction", "report(`__LINE__);",
+                true, "`line 200 \"logical.svh\" 0\n"},
+        Variant{"function void report(input int line_number); endfunction",
+                "report(`__LINE__ + 1);", false, ""},
+        Variant{"function void report(input int line_number); endfunction",
+                "if (`__LINE__ > 0) report(1);", false, ""},
+        Variant{"static function void report(input int line_number); endfunction",
+                "report(`__LINE__);", false, ""},
+        Variant{"task report(input int line_number); endtask", "report(`__LINE__);", false, ""},
+        Variant{"function void report(input int unsigned line_number); endfunction",
+                "report(`__LINE__);", false, ""},
+        Variant{"function void report(input longint line_number); endfunction",
+                "report(`__LINE__);", false, ""},
+        Variant{"function int report(input int line_number); return line_number; endfunction",
+                "report(`__LINE__);", false, ""},
+        Variant{"function void report(input int line_number); endfunction", "$display(`__LINE__);",
+                false, ""},
+        Variant{"function void report(input int line_number); endfunction",
+                "`MUTATE report(`__LINE__);", false, ""});
+    Workspace workspace;
+    auto original = std::string("`define MUTATE `define ALTERED 1\n") + header;
+    original.insert(original.find("  function int combine"),
+                    std::string(variant.declaration) + "\n");
+    original.insert(original.find("  function int later"), variant.prefix);
+    original.replace(original.rfind("return value;"), 13,
+                     std::string(variant.statement) + " return value;");
+    workspace.write("item.svh", original);
+    auto cfg = localDiagnosticConfig;
+    if (certify)
+        cfg.insert(cfg.size() - 1, ",\"experimentalMethodBodyCertification\":true");
+    workspace.write(".slang/server.json", cfg);
+    BodyTestServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    auto text = original;
+    text.replace(text.find("local_1 + charl"), 15, "local_0 +\n charl");
+    change(server, doc.m_uri, 2, text);
+    server.runBackgroundWork({});
+    const auto status = diagnosticState(server);
+    INFO(variant.statement);
+    INFO(status.localDiagnosticDecline);
+    CHECK(status.localDiagnosticUpdates == (variant.local ? 1 : 0));
+    checkNativeDiagnostics(workspace, server, text);
+}
+
+TEST_CASE("Later macro proof cancellation leaves the complete native publication intact",
+          "[method-body-diagnostics][later-macro-lines]") {
+    const auto boundary = GENERATE("later macro native contexts", "later macro token proof",
+                                   "later nested macro proof", "before later macro proof",
+                                   "after later macro proof");
+    Workspace workspace;
+    auto original = std::string("`define LINE `__LINE__\n") + header;
+    original.insert(original.find("  function int combine"),
+                    "function void report(input int line_number); endfunction\n");
+    original.replace(original.rfind("return value;"), 13, "report(`LINE); return value;");
+    workspace.write("item.svh", original);
+    auto cfg = localDiagnosticConfig;
+    cfg.insert(cfg.size() - 1, ",\"experimentalMethodBodyCertification\":true");
+    workspace.write(".slang/server.json", cfg);
+    BodyTestServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    const auto before = diagnosticMap(server);
+    auto text = original;
+    text.replace(text.find("local_1 + charl"), 15, "local_0 +\n charl");
+    change(server, doc.m_uri, 2, text);
+    lsp::RequestContext ctx("background", 171);
+    bool reached = false;
+    ctx.setCheckpointObserverForTesting([&](std::string_view where) {
+        if (where == boundary) {
+            reached = true;
+            ctx.cancel();
+        }
+    });
+    CHECK_THROWS_AS(server.runBackgroundWork(ctx), lsp::RequestCancelled);
+    REQUIRE(reached);
+    CHECK(diagnosticMap(server) == before);
+    CHECK(server.client.diagnosticVersions.at(doc.m_uri) == 1);
+    server.runBackgroundWork({});
+    INFO(diagnosticState(server).localDiagnosticDecline);
+    CHECK(diagnosticState(server).localDiagnosticUpdates == 1);
+    checkNativeDiagnostics(workspace, server, text);
+}
+
+TEST_CASE("Multiline local diagnostics keep later method hover and resolve current",
+          "[method-body-diagnostics][later-macro-lines]") {
+    const auto view = GENERATE("source", "expanded", "both");
+    Workspace workspace;
+    auto original = header;
+    original.insert(original.find("  function int combine"),
+                    "function void report(input int line_number); endfunction\n");
+    original.replace(original.rfind("return value;"), 13, "report(`__LINE__); return value;");
+    original.replace(original.find("return (local_1 + charl);"), 25,
+                     "return later(local_1 + charl);");
+    workspace.write("item.svh", original);
+    auto cfg = localDiagnosticConfig;
+    cfg.insert(cfg.size() - 1,
+               std::string(
+                   ",\"experimentalMethodBodyCertification\":true,\"hovers\":{\"macroView\":\"") +
+                   view + "\"}");
+    workspace.write(".slang/server.json", cfg);
+    BodyTestServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    auto text = original;
+    text.replace(text.find("local_1 + charl"), 15, "local_0 +\n charl");
+    change(server, doc.m_uri, 2, text);
+    doc.m_text = text;
+    server.runBackgroundWork({});
+    INFO(diagnosticState(server).localDiagnosticDecline);
+    CHECK(diagnosticState(server).localDiagnosticUpdates == 1);
+    const auto at = text.find("return later(") + 9;
+    const auto response = server.getDocCompletion(
+        {.textDocument = {.uri = doc.m_uri}, .position = doc.getPosition(at)});
+    const auto& items = rfl::get<std::vector<lsp::CompletionItem>>(response);
+    const auto ticket = std::ranges::find_if(items, [](const auto& item) {
+        return item.label == "charl";
+    });
+    REQUIRE(ticket != items.end());
+    REQUIRE(ticket->data);
+    const auto hover = rfl::json::write(
+        server.getDocHover({.textDocument = {.uri = doc.m_uri}, .position = doc.getPosition(at)}));
+    REQUIRE(state(server).active);
+    CHECK(server.getCompletionItemResolve(*ticket).documentation.has_value());
+    const auto completion = rfl::json::write(bodyCompletions(server, doc, at));
+    checkNativeDiagnostics(workspace, server, text);
+    bodyConfig(workspace, false);
+    auto nativeConfig =
+        std::string("{\"indexingThreads\":1,\"flags\":\"--single-unit --threads "
+                    "1\",\"compilationFilelist\":\"design.f\",\"hovers\":{\"macroView\":\"") +
+        view + "\"}}";
+    workspace.write(".slang/server.json", nativeConfig);
+    ServerHarness native(workspace.params());
+    auto oracle = native.openFile("item.svh", text);
+    CHECK(completion == rfl::json::write(bodyCompletions(native, oracle, at)));
+    CHECK(hover == rfl::json::write(native.getDocHover({.textDocument = {.uri = oracle.m_uri},
+                                                        .position = oracle.getPosition(at)})));
+}
+
+TEST_CASE("Nested edited-body macros cannot alter the retained following environment",
+          "[method-body-diagnostics][later-macro-lines]") {
+    const bool argument = GENERATE(false, true);
+    Workspace workspace;
+    auto original = std::string("`define AFTER 1\n`define STATE `define AFTER "
+                                "missing_user_name\n`define NESTED `STATE\n`define WRAP(x) x\n") +
+                    header;
+    original.replace(original.rfind("return value;"), 13, "return `AFTER;");
+    workspace.write("item.svh", original);
+    auto cfg = localDiagnosticConfig;
+    cfg.insert(cfg.size() - 1, ",\"experimentalMethodBodyCertification\":true");
+    workspace.write(".slang/server.json", cfg);
+    BodyTestServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    auto text = original;
+    text.insert(text.find("    int local_0"), argument ? "`WRAP(`STATE)\n" : "`NESTED\n");
+    change(server, doc.m_uri, 2, text);
+    server.runBackgroundWork({});
+    CHECK_FALSE(state(server).active);
+    CHECK(diagnosticState(server).localDiagnosticUpdates == 0);
     checkNativeDiagnostics(workspace, server, text);
 }

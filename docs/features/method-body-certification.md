@@ -39,8 +39,8 @@ certification the temporary capture is released; the ordinary body diagnostic ca
 single original owner. Context retirement discards the entire local state before replacing the
 driver. A newly completed current native pass can seed a later attempt after fallback.
 
-This retains existing diagnostic coverage limits. Line-count changes in a file with later macro
-expansions conservatively require native diagnostics, including common UVM `uvm_info` cases.
+This retains diagnostic coverage limits. Later macro expansions can qualify through the
+restricted runtime-line proof below; other line-dependent structure still requires native analysis.
 General changed external reference usage, specialization dependencies, unsupported local declarations,
 driver/timing effects and bounded/fatal streams also retain native fallback. Moving certification
 into background does not eliminate its first-use cost. Publication checks are observations of
@@ -91,5 +91,34 @@ navigation and consumer overlays. Normal instance-function references such as UV
 can qualify. Changed package/static/task/constructor call references still require native effect
 analysis; all other driver, timing, initializer, specialization and fatal-stream checks remain.
 Without a qualifying fixed provider, external usage changes retain native fallback. This does not
-provide a general reference dependency ledger or remove later-macro line restrictions. See the
+provide a general reference dependency ledger. See the
 [fixed-provider evaluation](../development/fixed-provider-reference-evaluation.md).
+
+
+Line-count changes can reuse retained diagnostics for later methods in the same class when a
+fresh parse proves that their expanded CST tokens are identical except for builtin `__LINE__`
+integers used as entire runtime input arguments of direct, ordinary nonstatic void instance
+functions. Both the original literal and formal must be signed 32-bit `int`; the current value
+must fit its nonnegative range. This admits common UVM log line arguments without rebinding
+unmodified neighboring methods. It does not replace their semantic graphs or driver effects.
+
+Each affected method replays its own entry macro environment, keyword version, logical line
+and warning directives. Direct intrinsic uses are checked even though they are absent from the
+preprocessor reference list. Nested definitions are followed; preprocessing state changes,
+conditional definitions, token concatenation, ambiguous contexts, syntax errors and external
+elaboration dependencies require native analysis. Every publication reparses the current
+expansions and rechecks token shape, provenance and the original runtime-argument proof.
+Line numbers used in returns, branches, dimensions, strings, system calls, static/task calls,
+other types or conversions remain outside this proof. Existing body driver, timing, reference,
+specialization, error-limit, complete input and final version checks continue to apply.
+
+Hover and completion documentation for enclosing or later retained declarations use the current
+native view, so they cannot print old body text, expanded line values or source links. Ordinary
+edited-body hover continues to use its current local compilation. Native documentation is rendered
+inside the value certificate and then fully revalidated, preserving earlier completion tickets
+from the same document version. Cancellation during the proof
+leaves the previous complete diagnostic publication intact and permits retry. The proof is
+lazy and belongs to one original diagnostic owner, without a chain of edited semantic owners.
+
+See the [later-macro evaluation](../development/later-macro-line-evaluation.md) for the
+original multiline CVA6 measurements, current Native documentation checks and remaining limits.

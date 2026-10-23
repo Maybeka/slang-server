@@ -360,6 +360,7 @@ add_library(
   src/document/ShallowAnalysis.cpp
   src/document/MethodScopeOverlay.cpp
   src/document/BodyDiagnosticCache.cpp
+  src/document/BodyLineProof.cpp
   src/document/SlangDoc.cpp
   src/document/SymbolIndexer.cpp
   src/document/InlayHintCollector.cpp

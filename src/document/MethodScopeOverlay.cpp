@@ -96,17 +96,48 @@ void validateBodyPreprocessing(const std::string& methodText) {
     }
     need(depth == 0, "body leaves conditional preprocessing state open");
 }
-void validateMacroPreprocessing(const parsing::MacroRefMetadata& reference) {
+void validateMacroPreprocessing(
+    const parsing::MacroRefMetadata& reference,
+    std::span<const syntax::DefineDirectiveSyntax* const> inherited = {},
+    const lsp::RequestContext& ctx = {}) {
     if (!reference.definition)
         return;
-    std::string expansion;
-    for (auto token : reference.definition->body) {
-        expansion += token.rawText();
-        expansion += ' ';
+    std::map<std::string_view, const syntax::DefineDirectiveSyntax*> environment;
+    for (auto definition : inherited)
+        environment.emplace(definition->name.valueText(), definition);
+    std::vector<const syntax::DefineDirectiveSyntax*> pending{reference.definition};
+    std::set<const syntax::DefineDirectiveSyntax*> checked;
+    static const std::regex uses(R"(`([a-zA-Z_][a-zA-Z_0-9]*))");
+    auto follow = [&](const std::string& text) {
+        for (std::sregex_iterator it(text.begin(), text.end(), uses), end; it != end; ++it)
+            if (auto found = environment.find((*it)[1].str()); found != environment.end())
+                pending.push_back(found->second);
+    };
+    // Macro actual arguments can invoke another macro even when the wrapper's
+    // own definition contains only an ordinary formal parameter.
+    if (!inherited.empty())
+        follow(reference.syntax->toString());
+    while (!pending.empty()) {
+        ctx.checkpoint("macro preprocessing proof");
+        auto definition = pending.back();
+        pending.pop_back();
+        if (!checked.insert(definition).second)
+            continue;
+        need(checked.size() < 4096, "macro preprocessing proof exceeds definition bound");
+        std::string expansion;
+        for (auto token : definition->body) {
+            expansion += token.rawText();
+            expansion += ' ';
+        }
+        need(!std::regex_search(expansion, stateDirectives()) &&
+                 !std::regex_search(expansion, bodyConditionals()),
+             "macro expansion can change surrounding preprocessing state");
+        if (!inherited.empty()) {
+            need(expansion.find("``") == std::string::npos,
+                 "macro token concatenation requires full preprocessing");
+            follow(expansion);
+        }
     }
-    need(!std::regex_search(expansion, stateDirectives()) &&
-             !std::regex_search(expansion, bodyConditionals()),
-         "macro expansion can change surrounding preprocessing state");
 }
 std::vector<std::string> directoryEntries(const fs::path& path) {
     need(fs::canonical(path) == fs::absolute(path).lexically_normal(),
@@ -1226,14 +1257,7 @@ bool MethodScopeOverlay::apply(const lsp::DidChangeTextDocumentParams& p, const 
             commitGeneralText(p, std::move(next), nextBodyEnd, nextFunctionEnd, ctx, synced);
             return true;
         }
-        const bool changedLines = std::count(text.begin(), text.begin() + functionEnd, '\n') !=
-                                  std::count(next.begin(), next.begin() + nextFunctionEnd, '\n');
-        if (config.experimentalMethodBodyDiagnostics.value() && !bodyDiagnostics && changedLines &&
-            (bodyLineSensitiveDeclaration || !bodyLineDependents.empty())) {
-            diagnosticBaselineVersion = version;
-            diagnosticDecline = "line shift affects diagnostics in later macro bodies";
-        }
-        else if (!optimizedCertification(config))
+        if (!optimizedCertification(config))
             prepareLocalDiagnostics(config, ctx);
         return generalApply(p, config, ctx, synced, std::move(next), nextBodyEnd, nextFunctionEnd);
     }
@@ -1434,7 +1458,7 @@ bool MethodScopeOverlay::generalApply(const lsp::DidChangeTextDocumentParams& p,
     ctx.checkpoint("before method mini parse");
     auto tree = syntax::SyntaxTree::fromBuffer(source, driver->sm, treeOptions->bag(), bodyMacros);
     for (const auto& reference : tree->getPreprocessorMetadata().macroRefs)
-        validateMacroPreprocessing(reference);
+        validateMacroPreprocessing(reference, bodyMacros, ctx);
     phases.mark("body-apply-parse");
     auto unit = std::make_shared<ShallowCompilation>(driver->sm, tree,
                                                      bodyOwner->getShallowCompilation(),
@@ -1761,11 +1785,55 @@ std::optional<std::optional<lsp::Hover>> MethodScopeOverlay::hoverImpl(
         !generalSite(position))
         return {};
     ensureGeneralBinding(config, ctx);
-    ast::BodyQueryEvaluationGuard guard(bodyBlocked);
-    BodySourceProjection projection(driver->sm, driver->getDocument(uri)->getBuffer(),
-                                    miniAnalysis->getBuffer(), originalBodyEnd, bodyEnd,
-                                    bodyBufferLimit);
-    auto result = driver->getDocHover(uri, position, ctx, view, miniAnalysis);
+    std::optional<ast::BodyQueryEvaluationGuard> guard(std::in_place, bodyBlocked);
+    std::optional<BodySourceProjection> projection(std::in_place, driver->sm,
+                                                   driver->getDocument(uri)->getBuffer(),
+                                                   miniAnalysis->getBuffer(), originalBodyEnd,
+                                                   bodyEnd, bodyBufferLimit);
+    auto info = driver->getDefinitionInfoAt(uri, position, ctx, miniAnalysis);
+    auto requiresCurrent = [&](const DefinitionInfo::SyntaxTarget& target) {
+        if (!target.node)
+            return false;
+        auto first = driver->sm.getFullyExpandedLoc(target.node->getFirstToken().location());
+        auto last = driver->sm.getFullyExpandedLoc(target.node->getLastToken().range().end());
+        if (first.buffer().getId() >= bodyBufferLimit)
+            return false;
+        const auto path = driver->sm.getFullPath(driver->getDocument(uri)->getBuffer());
+        if (first.buffer().getId() != originalBuffer &&
+            driver->sm.getFullPath(first.buffer()) != path)
+            return false;
+        // Enclosing code contains the old body; later code can contain old
+        // intrinsic values and source links. Render those through the native view.
+        return first.offset() >= originalBodyEnd || last.offset() > bodyBegin;
+    };
+    if (info)
+        for (const auto& target : info->targets) {
+            bool current = false;
+            if (auto symbol = std::get_if<DefinitionInfo::SymbolTarget>(&target))
+                current = std::ranges::any_of(symbol->syntaxes, requiresCurrent);
+            else if (auto port = std::get_if<DefinitionInfo::PortConnectionTarget>(&target))
+                current = std::ranges::any_of(port->outer.syntaxes, requiresCurrent) ||
+                          std::ranges::any_of(port->inner.syntaxes, requiresCurrent);
+            else if (auto macro = std::get_if<DefinitionInfo::MacroTarget>(&target))
+                if (auto syntax = macro->syntaxTarget())
+                    current = requiresCurrent(*syntax);
+            if (current) {
+                // Keep this value certificate and its completion tickets. Returning
+                // an unsupported-query sentinel would make the dispatcher discard
+                // the entire overlay for this one native documentation request.
+                projection.reset();
+                guard.reset();
+                auto hover = driver->getDocHover(uri, position, ctx, view);
+                ctx.checkpoint("before current native method hover response");
+                return std::optional<std::optional<lsp::Hover>>(std::in_place, std::move(hover));
+            }
+        }
+    auto hovers = config.hovers.value();
+    if (view)
+        hovers.macroView = *view;
+    auto result = info ? std::optional<lsp::Hover>(lsp::Hover{
+                             .contents = info->getHover(miniAnalysis->getBuffer(), hovers)})
+                       : driver->getDocHover(uri, position, ctx, view, miniAnalysis);
     ctx.checkpoint("before method hover response");
     return std::optional<std::optional<lsp::Hover>>(std::in_place, std::move(result));
 }
@@ -1818,10 +1886,15 @@ std::optional<lsp::CompletionItem> MethodScopeOverlay::resolveImpl(
                                 driver->sm.getFullyExpandedLoc(symbol.location) == position)
                                 enclosing = true;
                         }
-                    if (enclosing) {
+                    const bool retainedLater = data->bufferId < bodyBufferLimit &&
+                                               position.offset() >= originalBodyEnd;
+                    if (enclosing || retainedLater) {
                         auto native = driver->getDocument(uri)->getAnalysis(ctx);
                         data->bufferId = native->getBuffer().getId();
-                        data->offset = position.offset();
+                        data->offset = retainedLater
+                                           ? size_t(int64_t(position.offset()) + int64_t(bodyEnd) -
+                                                    int64_t(originalBodyEnd))
+                                           : position.offset();
                         if (data->receiverBufferId)
                             data->receiverBufferId = native->getBuffer().getId();
                         auto out = item;
@@ -1944,14 +2017,6 @@ void MethodScopeOverlay::prepareLocalDiagnostics(const Config& config,
     try {
         UvmPhaseTrace phases;
         const auto baselineEnd = diagnosticBaseline ? diagnosticBaseline->end : functionEnd;
-        if (diagnosticBaseline && (bodyLineSensitiveDeclaration || !bodyLineDependents.empty()) &&
-            std::count(diagnosticBaseline->text.begin(),
-                       diagnosticBaseline->text.begin() + baselineEnd,
-                       '\n') != std::count(text.begin(), text.begin() + functionEnd, '\n')) {
-            diagnosticDecline = "line shift affects diagnostics in later macro bodies";
-            diagnosticBaseline.reset();
-            return;
-        }
         auto baselineText = diagnosticBaseline ? std::string_view(diagnosticBaseline->text)
                                                : std::string_view(text);
         validateBodyPreprocessing(
@@ -1982,7 +2047,7 @@ void MethodScopeOverlay::prepareLocalDiagnostics(const Config& config,
         auto tree = syntax::SyntaxTree::fromBuffer(source, driver->sm, treeOptions->bag(),
                                                    bodyMacros);
         for (const auto& reference : tree->getPreprocessorMetadata().macroRefs)
-            validateMacroPreprocessing(reference);
+            validateMacroPreprocessing(reference, bodyMacros, ctx);
         bodyDiagnostics = std::make_unique<BodyDiagnosticCache>(
             *driver, uri, functionBegin, baselineEnd, tree,
             bodyLineSensitiveDeclaration || !bodyLineDependents.empty(), ctx, diagnosticBaseline,
