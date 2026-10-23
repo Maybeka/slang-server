@@ -45,3 +45,23 @@ Changed external reference usage, specialization dependencies, unsupported local
 driver/timing effects and bounded/fatal streams also retain native fallback. Moving certification
 into background does not eliminate its first-use cost. Publication checks are observations of
 filesystem contents at their checkpoints, not atomic filesystem snapshots.
+
+When a complete native publication runs with this option and local diagnostics enabled, the
+real diagnostic client records raw diagnostic values and their physical publication routes.
+The draft commits only after successful full publication; scoped observers are restored on
+cancellation. First local certification can use this exact batch after checking its generation,
+configuration, context and compilation owner. Editor URI aliases are resolved when consuming
+physical routes. Selecting a DUT instance only refreshes shallow views and preserves this
+full-design publication; source/configuration invalidation still rejects it. The snapshot has
+weak semantic ownership and transfers its raw data into one pending baseline. After certification
+or decline, no second driver-owned raw copy remains. Paths without a matching publication use
+the existing detached comparison and formatting path.
+
+Initial source witnesses read each distinct path once under the experiment. On macOS, complete
+content proofs use an opened descriptor's resolved path, read all bytes, and recheck EOF,
+regular-file identity and descriptor/path consistency. The implementation rejects symlink paths and nonregular files, and checks for replacement,
+growth/shrink and observed changes during the read. Metadata alone
+never admits reuse. Unsupported descriptor path queries and other platforms keep the portable
+strict path/content reader. Directory, missing-lookup, configuration and final version checks
+remain in place. These are observed checkpoints, with the same filesystem snapshot limitation
+as the original reader.

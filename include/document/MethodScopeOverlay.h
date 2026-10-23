@@ -146,7 +146,7 @@ private:
     std::shared_ptr<slang::syntax::SyntaxTree> miniTree;
     std::shared_ptr<ShallowAnalysis> miniAnalysis;
 
-    static std::optional<std::string> read(const std::string&);
+    static std::optional<std::string> read(const std::string&, bool fastPath = false);
     static std::string plain(const SlangDoc&);
     static void require(bool, const char*);
     const DTO& completion(size_t context, size_t index) const;

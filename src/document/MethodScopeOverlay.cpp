@@ -15,6 +15,13 @@
 #include <sstream>
 #include <tuple>
 
+#if defined(__APPLE__)
+#    include <cerrno>
+#    include <fcntl.h>
+#    include <sys/param.h>
+#    include <sys/stat.h>
+#    include <unistd.h>
+#endif
 #include "slang/ast/ASTVisitor.h"
 #include "slang/ast/EvalContext.h"
 #include "slang/ast/expressions/LiteralExpressions.h"
@@ -29,6 +36,7 @@
 #include "slang/parsing/Parser.h"
 #include "slang/parsing/Preprocessor.h"
 #include "slang/syntax/AllSyntax.h"
+#include "slang/util/ScopeGuard.h"
 
 namespace server {
 using namespace slang;
@@ -240,7 +248,59 @@ std::string MethodScopeOverlay::plain(const SlangDoc& document) {
     bytes.remove_suffix(1);
     return std::string(bytes);
 }
-std::optional<std::string> MethodScopeOverlay::read(const std::string& path) {
+std::optional<std::string> MethodScopeOverlay::read(const std::string& path,
+                                                    [[maybe_unused]] bool fastPath) {
+#if defined(__APPLE__)
+    if (fastPath) {
+        // The descriptor proves the resolved path of the bytes actually read,
+        // avoiding canonical()'s repeated ancestor walks for every project file.
+        // This is still a fresh complete content read, not a metadata certificate.
+        const int fd = ::open(path.c_str(), O_RDONLY | O_CLOEXEC | O_NONBLOCK);
+        if (fd < 0) {
+            if (errno == ENOENT)
+                return {};
+            need(false, "unreadable certificate input");
+        }
+        auto close = ScopeGuard([&] { ::close(fd); });
+        struct stat before;
+        need(::fstat(fd, &before) == 0 && S_ISREG(before.st_mode), "nonregular certificate input");
+        char resolved[MAXPATHLEN];
+        if (::fcntl(fd, F_GETPATH, resolved) == 0) {
+            need(fs::path(resolved) == fs::path(path) &&
+                     fs::absolute(path).lexically_normal() == fs::path(path),
+                 "symlink input unsupported");
+            need(before.st_size >= 0 && uint64_t(before.st_size) <= std::string().max_size(),
+                 "input size unavailable");
+            std::string bytes(size_t(before.st_size), '\0');
+            size_t offset = 0;
+            while (offset < bytes.size()) {
+                const auto count = ::read(fd, bytes.data() + offset, bytes.size() - offset);
+                if (count < 0 && errno == EINTR)
+                    continue;
+                need(count > 0, "input changed or read failed");
+                offset += size_t(count);
+            }
+            char extra;
+            ssize_t count;
+            do {
+                count = ::read(fd, &extra, 1);
+            } while (count < 0 && errno == EINTR);
+            struct stat after, current;
+            need(count == 0 && ::fstat(fd, &after) == 0 && ::lstat(path.c_str(), &current) == 0 &&
+                     S_ISREG(current.st_mode) && after.st_dev == current.st_dev &&
+                     after.st_ino == current.st_ino && before.st_size == after.st_size &&
+                     after.st_size == current.st_size &&
+                     before.st_mtimespec.tv_sec == after.st_mtimespec.tv_sec &&
+                     before.st_mtimespec.tv_nsec == after.st_mtimespec.tv_nsec &&
+                     before.st_ctimespec.tv_sec == after.st_ctimespec.tv_sec &&
+                     before.st_ctimespec.tv_nsec == after.st_ctimespec.tv_nsec &&
+                     ::fcntl(fd, F_GETPATH, resolved) == 0 && fs::path(resolved) == fs::path(path),
+                 "input changed or read failed");
+            return bytes;
+        }
+        // Unsupported descriptor path queries retain the portable strict proof.
+    }
+#endif
     std::error_code error;
     auto status = fs::status(path, error);
     if (error == std::errc::no_such_file_or_directory || (!error && !fs::exists(status)))
@@ -921,7 +981,11 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
     // A path can appear as a source, lookup and context watch input. Never let
     // a later read replace a witness already checked against the parsed bytes.
     auto witness = [&](const std::string& path) -> const std::optional<std::string>& {
-        auto bytes = read(path);
+        if (optimizedCertification(config))
+            if (auto found = disk.find(path); found != disk.end())
+                return found->second;
+        ctx.checkpoint("method source witness read");
+        auto bytes = read(path, optimizedCertification(config));
         auto [it, inserted] = disk.try_emplace(path, bytes);
         need(inserted || it->second == bytes, "input changed during certification");
         return it->second;
@@ -1061,7 +1125,7 @@ bool MethodScopeOverlay::valid(const Config& config, const lsp::RequestContext& 
     phases.mark("body-validate-directories");
     for (auto& [path, bytes] : disk) {
         ctx.checkpoint("method input validation");
-        if (read(path) != bytes)
+        if (read(path, optimizedCertification(config)) != bytes)
             return false;
     }
     phases.mark("body-validate-files");

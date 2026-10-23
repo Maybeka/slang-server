@@ -301,6 +301,7 @@ void ServerDiagClient::report(const slang::ReportedDiagnostic& diag) {
     }
     // end of text diag related code
 
+    const auto physicalUri = mainLoc->uri;
     mainLoc->uri = resolveUri(mainLoc->uri);
     auto uri = mainLoc->uri;
     if (m_update)
@@ -352,6 +353,8 @@ void ServerDiagClient::report(const slang::ReportedDiagnostic& diag) {
             m_diagnostics[uri].back().tags = {lsp::DiagnosticTag::Unnecessary};
         }
     }
+    if (m_reportObserver)
+        m_reportObserver(physicalUri);
 }
 
 void ServerDiagClient::clear(URI uri) {

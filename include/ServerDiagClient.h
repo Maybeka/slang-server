@@ -10,6 +10,7 @@
 #include "SlangLspClient.h"
 #include "lsp/URI.h"
 #include <functional>
+#include <utility>
 
 #include "slang/diagnostics/DiagnosticClient.h"
 namespace server {
@@ -98,6 +99,13 @@ public:
         m_diagnostics.insert_or_assign(uri, std::move(diagnostics));
         m_dirtyUris.emplace(uri);
     }
+    // Scoped observers see physical keys only for diagnostics added to an LSP bucket.
+    // Returning the previous observer allows exception-safe restoration by the caller.
+    using ReportObserver = std::function<void(const URI&)>;
+    ReportObserver exchangeReportObserver(ReportObserver observer) {
+        return std::exchange(m_reportObserver, std::move(observer));
+    }
+    URI resolvePublicationUri(const URI& physical) const { return resolveUri(physical); }
     /// reports from the diagnostic engine
     void report(const slang::ReportedDiagnostic& to_report) override;
 
@@ -125,6 +133,7 @@ private:
         std::vector<lsp::Diagnostic> diagnostics;
         std::unordered_multimap<size_t, size_t> index;
     };
+    ReportObserver m_reportObserver;
     bool m_deltaPublishing;
     struct Publications {
         std::unordered_map<URI, Published> published;

@@ -97,13 +97,17 @@ slang::analysis::AnalysisManager& ServerCompilationAnalysis::getAnalysisManager(
     return *m_driverAnalysis;
 }
 
-void ServerCompilationAnalysis::issueDiagnosticsTo(slang::DiagnosticEngine& diagEngine,
-                                                   const lsp::RequestContext& ctx) {
+void ServerCompilationAnalysis::issueDiagnosticsTo(
+    slang::DiagnosticEngine& diagEngine, const lsp::RequestContext& ctx,
+    const std::function<void(size_t, const slang::Diagnostic&)>& issue) {
     UvmPhaseTrace phases;
     ctx.throwIfCancelled("before full-design semantics");
     // Semantic diagnostics from compilation
     for (auto& diag : compilation.getSemanticDiagnostics()) {
-        diagEngine.issue(diag);
+        if (issue)
+            issue(1, diag);
+        else
+            diagEngine.issue(diag);
     }
 
     phases.mark("diagnostic-full-semantics");
@@ -111,9 +115,13 @@ void ServerCompilationAnalysis::issueDiagnosticsTo(slang::DiagnosticEngine& diag
     // Driver analysis diagnostics (multi-driven, unused, etc)
     auto& driverAnalysis = getAnalysisManager(ctx);
     phases.mark("diagnostic-full-dataflow");
-    INFO("Driver analysis found {} diagnostics", driverAnalysis.getDiagnostics().size());
-    for (auto& diag : driverAnalysis.getDiagnostics()) {
-        diagEngine.issue(diag);
+    const auto diagnostics = driverAnalysis.getDiagnostics();
+    INFO("Driver analysis found {} diagnostics", diagnostics.size());
+    for (const auto& diag : diagnostics) {
+        if (issue)
+            issue(2, diag);
+        else
+            diagEngine.issue(diag);
     }
 }
 

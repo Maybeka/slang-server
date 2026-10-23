@@ -2,7 +2,9 @@
 #include "document/BodyDiagnosticCache.h"
 
 #include "ast/ServerCompilation.h"
+#include "document/NativeDiagnosticSnapshot.h"
 #include "util/Converters.h"
+#include "util/UvmPhaseTrace.h"
 #include <algorithm>
 #include <set>
 
@@ -164,11 +166,36 @@ std::shared_ptr<const BodyDiagnosticBaseline> BodyDiagnosticCache::capture(
     // replaceBuffer clears the editor BufferID's FileInfo even while old FileData
     // is pinned. Keep one target-file value, not a chain of edited source owners.
     baseline->text = std::string(d.getDocument(uri)->getText());
-    for (const auto& tree : owner->getSyntaxTrees())
-        baseline->diagnostics[0].append_range(tree->diagnostics());
-    baseline->diagnostics[1].append_range(owner->getSemanticDiagnostics());
-    baseline->diagnostics[2].append_range(manager.getDiagnostics());
+    auto publication = d.m_nativeDiagnosticSnapshot;
+    UvmPhaseTrace capturePhases;
+    capturePhases.mark(!publication ? "body-native-publication-missing"
+                       : publication->generation != d.m_fullDiagnosticGeneration
+                           ? "body-native-publication-generation-changed"
+                       : publication->context.lock() != d.m_snapshotOwner
+                           ? "body-native-publication-context-changed"
+                       : publication->owner.lock() != owner
+                           ? "body-native-publication-owner-changed"
+                       : publication->config != rfl::json::write(d.m_config)
+                           ? "body-native-publication-config-changed"
+                           : "body-native-publication-matched");
+    if (publication && publication->generation == d.m_fullDiagnosticGeneration &&
+        publication->context.lock() == d.m_snapshotOwner && publication->owner.lock() == owner &&
+        publication->config == rfl::json::write(d.m_config)) {
+        baseline->publication = std::move(publication);
+        ctx.checkpoint("native diagnostic routes reused");
+    }
+
+    if (!baseline->publication) {
+        for (const auto& tree : owner->getSyntaxTrees())
+            baseline->diagnostics[0].append_range(tree->diagnostics());
+        baseline->diagnostics[1].append_range(owner->getSemanticDiagnostics());
+        baseline->diagnostics[2].append_range(manager.getDiagnostics());
+    }
     ctx.checkpoint("after method diagnostic capture");
+    // Transfer the raw publication into this one pending certificate. Once it
+    // becomes retained buckets or is declined, no second project-sized copy stays.
+    if (baseline->publication)
+        d.m_nativeDiagnosticSnapshot.reset();
     return baseline;
 }
 
@@ -180,6 +207,7 @@ BodyDiagnosticCache::BodyDiagnosticCache(ServerDriver& d, const URI& target, siz
                                          const std::shared_ptr<syntax::SyntaxTree>& current) :
     driver(d), uri(target), begin(start), end(stop), lineSensitive(sensitive),
     baselineLine(d.sm.getRawLineNumber(SourceLocation(tree->getSourceBufferIds().front(), stop))) {
+    UvmPhaseTrace phases;
     auto baseline = saved ? std::move(saved) : capture(d, target, start, stop, ctx);
     require(baseline->driver == &d && baseline->context.lock() == d.m_snapshotOwner &&
                 baseline->uri == uri && baseline->begin == start && baseline->end == stop,
@@ -190,12 +218,22 @@ BodyDiagnosticCache::BodyDiagnosticCache(ServerDriver& d, const URI& target, siz
     owner = baseline->owner;
     originals = baseline->originals;
     auto path = d.sm.getFullPath(d.getDocument(uri)->getBuffer());
+    // Macro locations frequently revisit the same physical buffers. Resolve each
+    // buffer's path once during this construction, including synthetic buffers.
+    std::unordered_map<BufferID, bool> targetBuffers;
+    auto targetLocation = [&](SourceLocation loc) {
+        if (!loc)
+            return false;
+        auto [it, inserted] = targetBuffers.try_emplace(loc.buffer(), false);
+        if (inserted)
+            it->second = d.sm.getFullPath(loc.buffer()) == path;
+        return it->second;
+    };
     auto local = [&](const Diagnostic& diagnostic) {
         auto loc = d.sm.getFullyExpandedLoc(diagnostic.location);
-        if (loc && d.sm.getFullPath(loc.buffer()) == path && begin <= loc.offset() &&
-            loc.offset() < end && !std::ranges::any_of(originals, [&](auto fn) {
-                return outerMethodCheck(diagnostic, fn);
-            }))
+        if (targetLocation(loc) && begin <= loc.offset() && loc.offset() < end &&
+            !std::ranges::any_of(originals,
+                                 [&](auto fn) { return outerMethodCheck(diagnostic, fn); }))
             return true;
         for (auto fn : originals)
             if (contained(diagnostic.symbol, fn) && !outerMethodCheck(diagnostic, fn))
@@ -204,18 +242,27 @@ BodyDiagnosticCache::BodyDiagnosticCache(ServerDriver& d, const URI& target, siz
     };
     Diagnostics baselineDiagnostics;
     std::array<Diagnostics, 3> retainedDiagnostics;
-    for (const auto& diagnostic : baseline->diagnostics[0]) {
-        auto loc = d.sm.getFullyExpandedLoc(diagnostic.location);
-        (loc && d.sm.getFullPath(loc.buffer()) == path && begin <= loc.offset() &&
-                 loc.offset() < end
-             ? baselineDiagnostics
-             : retainedDiagnostics[0])
-            .push_back(diagnostic);
-    }
-    for (const auto& diagnostic : baseline->diagnostics[1])
-        (local(diagnostic) ? baselineDiagnostics : retainedDiagnostics[1]).push_back(diagnostic);
-    for (const auto& diagnostic : baseline->diagnostics[2])
-        (local(diagnostic) ? baselineDiagnostics : retainedDiagnostics[2]).push_back(diagnostic);
+    const auto& raw = baseline->publication ? baseline->publication->diagnostics
+                                            : baseline->diagnostics;
+    for (size_t phase = 0; phase < raw.size(); ++phase)
+        for (size_t index = 0; index < raw[phase].size(); ++index) {
+            ctx.checkpoint("local diagnostic publication certificate");
+            const auto& diagnostic = raw[phase][index];
+            auto loc = d.sm.getFullyExpandedLoc(diagnostic.location);
+            bool belongs = phase == 0
+                               ? targetLocation(loc) && begin <= loc.offset() && loc.offset() < end
+                               : local(diagnostic);
+            if (belongs)
+                baselineDiagnostics.push_back(diagnostic);
+            else if (baseline->publication) {
+                for (const auto& route : baseline->publication->routes[phase][index])
+                    retained[phase][d.diagClient->resolvePublicationUri(route)].push_back(
+                        diagnostic);
+            }
+            else
+                retainedDiagnostics[phase].push_back(diagnostic);
+        }
+    phases.mark("body-diagnostic-partition");
     auto initial = analyze(tree, ctx);
     auto expected = rendered(baselineDiagnostics, d.sm, d.client, settings);
     Diagnostics combined;
@@ -223,6 +270,7 @@ BodyDiagnosticCache::BodyDiagnosticCache(ServerDriver& d, const URI& target, siz
         combined.append_range(phase);
     auto actual = rendered(combined, d.sm, d.client, settings);
     require(expected == actual, "detached diagnostic baseline differs from full design");
+    phases.mark("body-diagnostic-compare");
     baselineBinding = initial.compilation;
     specializations = std::move(initial.specializations);
     references = std::move(initial.references);
@@ -231,19 +279,26 @@ BodyDiagnosticCache::BodyDiagnosticCache(ServerDriver& d, const URI& target, siz
     // diagnostics. Unsupported first edits should not pay for a baseline we discard.
     if (current)
         validateSlice(analyze(current, ctx));
-    auto collector = std::make_shared<DiagnosticBuckets>(d);
-    DiagnosticEngine engine(d.sm);
-    engine.applySettings(settings);
-    engine.setMappingsFromPragmas();
-    engine.addClient(collector);
-    for (size_t phase = 0; phase < retainedDiagnostics.size(); ++phase) {
-        collector->phase = phase;
-        for (const auto& diagnostic : retainedDiagnostics[phase]) {
-            ctx.checkpoint("local diagnostic publication certificate");
-            engine.issue(diagnostic);
+    phases.mark("body-diagnostic-eligibility");
+    if (!baseline->publication) {
+        auto collector = std::make_shared<DiagnosticBuckets>(d);
+        DiagnosticEngine engine(d.sm);
+        engine.applySettings(settings);
+        engine.setMappingsFromPragmas();
+        engine.addClient(collector);
+        for (size_t phase = 0; phase < retainedDiagnostics.size(); ++phase) {
+            collector->phase = phase;
+            for (const auto& diagnostic : retainedDiagnostics[phase]) {
+                ctx.checkpoint("local diagnostic bucket formatting");
+                engine.issue(diagnostic);
+            }
         }
+        retained = std::move(collector->buckets);
     }
-    retained = std::move(collector->buckets);
+    else
+        ctx.checkpoint("native diagnostic buckets reused");
+    phases.mark(baseline->publication ? "body-diagnostic-native-routes"
+                                      : "body-diagnostic-formatted-routes");
     affectedUris.insert(uri);
     const auto bodyStart = originals.front()
                                ->getSyntax()
@@ -258,7 +313,7 @@ BodyDiagnosticCache::BodyDiagnosticCache(ServerDriver& d, const URI& target, siz
                 auto location = [&](SourceLocation loc) {
                     for (auto actual :
                          {d.sm.getFullyExpandedLoc(loc), d.sm.getFullyOriginalLoc(loc)})
-                        if (actual && d.sm.getFullPath(actual.buffer()) == path) {
+                        if (targetLocation(actual)) {
                             affected = true;
                             require(actual.offset() <= bodyStart || actual.offset() >= end,
                                     "outside diagnostic references the replaced body");
@@ -277,6 +332,7 @@ BodyDiagnosticCache::BodyDiagnosticCache(ServerDriver& d, const URI& target, siz
                 if (affected)
                     affectedUris.insert(key);
             }
+    phases.mark("body-diagnostic-affected");
     ctx.checkpoint("after local diagnostic baseline");
 }
 

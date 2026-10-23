@@ -49,5 +49,12 @@ function(stageBundledUvm target)
       "$<TARGET_FILE_DIR:${target}>/${SLANG_SERVER_BUNDLED_UVM_RELATIVE_PATH}/preparsed/default.cst"
     VERBATIM)
   add_dependencies(${target}_bundled_uvm bundled_uvm_preparsed)
+  # Test and production executables can share one runtime directory. Serialize
+  # staging writers so parallel builds cannot remove/replace the same UVM files.
+  get_property(previous_uvm_stage GLOBAL PROPERTY SLANG_SERVER_PREVIOUS_UVM_STAGE)
+  if(previous_uvm_stage)
+    add_dependencies(${target}_bundled_uvm ${previous_uvm_stage})
+  endif()
+  set_property(GLOBAL PROPERTY SLANG_SERVER_PREVIOUS_UVM_STAGE ${target}_bundled_uvm)
   add_dependencies(${target} ${target}_bundled_uvm)
 endfunction()

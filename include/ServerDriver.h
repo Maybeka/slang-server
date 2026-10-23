@@ -396,6 +396,7 @@ private:
     uint64_t m_snapshotRevision = 0;
     uint64_t m_diagnosticGeneration = 0;
     uint64_t m_fullDiagnosticGeneration = 0;
+    std::shared_ptr<const struct NativeDiagnosticSnapshot> m_nativeDiagnosticSnapshot;
     flat_hash_map<URI, uint64_t> m_pendingIncludedDiagnostics;
 
     enum class OwnerDiscoveryState { None, Unique, Ambiguous, LimitExceeded };

@@ -2165,3 +2165,196 @@ TEST_CASE("Deferred preprocessing failure cannot reuse outside diagnostics after
     server.runBackgroundWork({});
     checkNativeDiagnostics(workspace, server, text);
 }
+
+TEST_CASE("Native diagnostic routes avoid first-use retained formatting",
+          "[body-certification][native-diagnostic-routes]") {
+    const bool enabled = GENERATE(false, true);
+    const bool selectInstance = GENERATE(false, true);
+    Workspace workspace;
+    workspace.write(".slang/server.json", certificationConfig(enabled));
+    workspace.write("prelude.sv", "package prelude; unknown_type field; endpackage\n");
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    if (selectInstance)
+        REQUIRE(server.setActiveInstance("tail"));
+    auto doc = server.openFile("item.svh", header);
+    doc.doc->getAnalysis();
+    const auto initial = diagnosticMap(server);
+    REQUIRE_FALSE(initial.at(URI::fromFile(workspace.root / "prelude.sv").str()).empty());
+    size_t reusedCapture = 0, reusedBuckets = 0, formattedBuckets = 0;
+    lsp::RequestContext ctx("diagnostic routes", 51);
+    ctx.setCheckpointObserverForTesting([&](std::string_view where) {
+        reusedCapture += where == "native diagnostic routes reused";
+        reusedBuckets += where == "native diagnostic buckets reused";
+        formattedBuckets += where == "local diagnostic bucket formatting";
+    });
+    auto text = edited();
+    change(server, doc.m_uri, 2, text, ctx);
+    server.runBackgroundWork(ctx);
+    CHECK(reusedCapture == (enabled ? 1 : 0));
+    CHECK(reusedBuckets == (enabled ? 1 : 0));
+    CHECK((formattedBuckets == 0) == enabled);
+    CHECK(diagnosticState(server).localDiagnosticUpdates == 1);
+    checkNativeDiagnostics(workspace, server, text);
+}
+
+TEST_CASE("Initial source witnesses read duplicate paths once with final content proof",
+          "[body-certification][native-diagnostic-routes]") {
+    const bool mutate = GENERATE(false, true);
+    size_t reads[2]{};
+    for (const bool enabled : {false, true}) {
+        Workspace workspace;
+        workspace.write(".slang/server.json", certificationConfig(enabled));
+        workspace.write("sibling.svh", "class Sibling; int field; endclass\n");
+        workspace.write("owner.sv", "package owner;\n`include \"sibling.svh\"\n"
+                                    "`include \"item.svh\"\nendpackage\n");
+        CertificationServer server(workspace.params());
+        server.setBuildFile((workspace.root / "design.f").string());
+        auto doc = server.openFile("item.svh", header);
+        doc.doc->getAnalysis();
+        lsp::RequestContext ctx("initial witnesses", 52);
+        bool changed = false;
+        ctx.setCheckpointObserverForTesting([&](std::string_view where) {
+            reads[enabled] += where == "method source witness read";
+            if (mutate && where == "method certificate sources ready") {
+                REQUIRE_FALSE(changed);
+                changed = true;
+                workspace.write("sibling.svh", "class Sibling; int other; endclass\n");
+            }
+        });
+        change(server, doc.m_uri, 2, edited(), ctx);
+        CHECK(state(server).active == !mutate);
+        CHECK(doc.doc->getText() == edited() + '\0');
+        CHECK(doc.doc->getVersion() == 2);
+        CHECK(reads[enabled] > 0);
+        if (mutate)
+            CHECK(changed);
+    }
+    // A mutation can make the legacy constructor abort before visiting later
+    // paths. Compare read counts only when both constructors finish successfully.
+    if (!mutate)
+        CHECK(reads[1] < reads[0]);
+}
+
+TEST_CASE("Cancelled native route capture rolls back and restores its client observer",
+          "[body-certification][native-diagnostic-routes]") {
+    Workspace workspace;
+    workspace.write(".slang/server.json", certificationConfig());
+    workspace.write("prelude.sv", "package prelude; unknown_type field; endpackage\n");
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", header);
+    doc.doc->getAnalysis();
+    const auto original = diagnosticMap(server);
+    auto text = header;
+    text.insert(0, "`define NATIVE_ONLY 1\n");
+    change(server, doc.m_uri, 2, text);
+    size_t observed = 0;
+    auto client = server.m_driver->diagClient;
+    auto previous = client->exchangeReportObserver([&](const URI&) { ++observed; });
+    auto restore = slang::ScopeGuard([&] { client->exchangeReportObserver(std::move(previous)); });
+    lsp::RequestContext ctx("native cancellation", 53);
+    size_t routes = 0;
+    ctx.setCheckpointObserverForTesting([&](std::string_view where) {
+        if (where == "native diagnostic route capture" && ++routes == 2)
+            ctx.cancel();
+    });
+    CHECK_THROWS_AS(server.runBackgroundWork(ctx), lsp::RequestCancelled);
+    REQUIRE(routes == 2);
+    CHECK(diagnosticMap(server) == original);
+    auto restored = client->exchangeReportObserver({});
+    REQUIRE(bool(restored));
+    restored(doc.m_uri);
+    CHECK(observed == 1);
+    client->exchangeReportObserver(std::move(restored));
+    server.runBackgroundWork({});
+    restored = client->exchangeReportObserver({});
+    REQUIRE(bool(restored));
+    restored(doc.m_uri);
+    CHECK(observed == 2);
+    checkNativeDiagnostics(workspace, server, text);
+}
+
+TEST_CASE("Native diagnostic physical routes follow editor aliases and macro filtering",
+          "[body-certification][native-diagnostic-routes]") {
+    const bool alias = GENERATE(false, true);
+    Workspace workspace;
+    workspace.write(".slang/server.json", certificationConfig());
+    const std::string prelude = "package prelude; missing_type field; endpackage\n";
+    workspace.write("prelude.sv", prelude);
+    auto original = std::string("`define LOCAL_READ(X) X\n") + header;
+    original.replace(original.find("local_1 + charl"), 15, "`LOCAL_READ(local_1) + charl");
+    workspace.write("item.svh", original);
+    if (alias)
+        std::filesystem::create_directory_symlink(workspace.root, workspace.root / "alias");
+    const auto target = alias ? "alias/item.svh" : "item.svh";
+    const auto other = alias ? "alias/prelude.sv" : "prelude.sv";
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto outside = server.openFile(other, prelude);
+    auto doc = server.openFile(target, original);
+    doc.doc->getAnalysis();
+    size_t reused = 0;
+    lsp::RequestContext ctx("macro route", 54);
+    ctx.setCheckpointObserverForTesting(
+        [&](std::string_view where) { reused += where == "native diagnostic buckets reused"; });
+    auto text = original;
+    text.replace(text.find("`LOCAL_READ(local_1)"), 20, "`LOCAL_READ(absent_local)");
+    change(server, doc.m_uri, 2, text, ctx);
+    server.runBackgroundWork(ctx);
+    REQUIRE(state(server).active);
+    CHECK(diagnosticState(server).localDiagnosticUpdates == 1);
+    CHECK(reused == 1);
+    CHECK_FALSE(server.client.getDiagnostics(doc.m_uri).empty());
+    CHECK_FALSE(server.client.getDiagnostics(outside.m_uri).empty());
+    auto actual = diagnosticMap(server);
+    bodyConfig(workspace, false);
+    BodyTestServer native(workspace.params());
+    native.setBuildFile((workspace.root / "design.f").string());
+    native.openFile(other, prelude);
+    native.openFile(target, text);
+    CHECK(actual == diagnosticMap(native));
+}
+
+TEST_CASE("Complete input proof rejects changed path identity and nonregular sources",
+          "[body-certification][native-diagnostic-routes]") {
+    auto kind = GENERATE("file-link", "directory-link", "directory", "missing");
+    Workspace workspace;
+    workspace.write(".slang/server.json", certificationConfig());
+    std::filesystem::create_directory(workspace.root / "headers");
+    const std::string sibling = "class Sibling; int field; endclass\n";
+    workspace.write("headers/sibling.svh", sibling);
+    workspace.write("replacement.svh", sibling);
+    workspace.write("owner.sv", "package owner;\n`include \"headers/sibling.svh\"\n"
+                                "`include \"item.svh\"\nendpackage\n");
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", header);
+    doc.doc->getAnalysis();
+    lsp::RequestContext ctx("input identity", 55);
+    bool reached = false;
+    ctx.setCheckpointObserverForTesting([&](std::string_view where) {
+        if (where != "method certificate sources ready")
+            return;
+        REQUIRE_FALSE(reached);
+        reached = true;
+        auto source = workspace.root / "headers/sibling.svh";
+        if (std::string_view(kind) == "directory-link") {
+            std::filesystem::rename(workspace.root / "headers", workspace.root / "actual");
+            std::filesystem::create_directory_symlink(workspace.root / "actual",
+                                                      workspace.root / "headers");
+        }
+        else {
+            std::filesystem::remove(source);
+            if (std::string_view(kind) == "file-link")
+                std::filesystem::create_symlink(workspace.root / "replacement.svh", source);
+            else if (std::string_view(kind) == "directory")
+                std::filesystem::create_directory(source);
+        }
+    });
+    change(server, doc.m_uri, 2, edited(), ctx);
+    REQUIRE(reached);
+    CHECK_FALSE(state(server).active);
+    CHECK(doc.doc->getVersion() == 2);
+    CHECK(doc.doc->getText() == edited() + '\0');
+}

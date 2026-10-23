@@ -21,6 +21,7 @@ struct BodyDiagnosticBaseline {
     std::shared_ptr<slang::ast::Compilation> owner;
     std::vector<const slang::ast::SubroutineSymbol*> originals;
     std::array<slang::Diagnostics, 3> diagnostics;
+    std::shared_ptr<const struct NativeDiagnosticSnapshot> publication;
     slang::analysis::AnalysisOptions analysisOptions;
     slang::DiagnosticEngine::SettingsSnapshot settings;
 };
@@ -60,6 +61,7 @@ private:
     struct Slice {
         std::shared_ptr<slang::ast::Compilation> compilation;
         std::array<slang::Diagnostics, 3> diagnostics;
+        std::shared_ptr<const struct NativeDiagnosticSnapshot> publication;
         References references;
         std::vector<std::string> calls;
         std::vector<const slang::ast::ClassType*> specializations;

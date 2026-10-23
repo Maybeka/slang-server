@@ -14,6 +14,7 @@
 #include "ast/ServerCompilation.h"
 #include "ast/TrustedUvmLibrary.h"
 #include "completions/CompletionDispatch.h"
+#include "document/NativeDiagnosticSnapshot.h"
 #include "document/SlangDoc.h"
 #include "lsp/LspTypes.h"
 #include "lsp/RequestContext.h"
@@ -534,10 +535,38 @@ void ServerDriver::publishCompilationDiagnostics(const URI* priorityUri,
         if (clearSources.contains(URI::fromFile(sm.getFullPath(doc->getBuffer()))))
             diagClient->clear(uri);
     diagEngine.setMappingsFromPragmas();
+    std::shared_ptr<NativeDiagnosticSnapshot> publication;
+    if (m_config.experimentalMethodBodyCertification.value() &&
+        m_config.experimentalMethodBodyQueries.value() &&
+        m_config.experimentalMethodBodyDiagnostics.value() &&
+        diagEngine.captureSettings().errorLimit == 0) {
+        publication = std::make_shared<NativeDiagnosticSnapshot>();
+        publication->owner = design.retainCompilation();
+        publication->context = m_snapshotOwner;
+        publication->config = rfl::json::write(m_config);
+    }
+    // The observer exists only during each issue call. A cancelled full pass
+    // discards its private draft without replacing the last committed snapshot.
+    auto issue = [&](size_t phase, const Diagnostic& diagnostic) {
+        if (!publication) {
+            diagEngine.issue(diagnostic);
+            return;
+        }
+        if (ctx)
+            ctx->checkpoint("native diagnostic route capture");
+        publication->diagnostics[phase].push_back(diagnostic);
+        auto& routes = publication->routes[phase].emplace_back();
+        auto previous = diagClient->exchangeReportObserver(
+            [&](const URI& uri) { routes.push_back(uri); });
+        auto restore = ScopeGuard([&] { diagClient->exchangeReportObserver(std::move(previous)); });
+        diagEngine.issue(diagnostic);
+    };
     for (const auto& tree : trees)
         for (const auto& diagnostic : tree->diagnostics())
-            diagEngine.issue(diagnostic);
-    comp->issueDiagnosticsTo(diagEngine, ctx ? *ctx : lsp::RequestContext{});
+            issue(0, diagnostic);
+    comp->issueDiagnosticsTo(diagEngine, ctx ? *ctx : lsp::RequestContext{},
+                             publication ? std::function<void(size_t, const Diagnostic&)>(issue)
+                                         : std::function<void(size_t, const Diagnostic&)>{});
     for (const auto& [uri, doc] : docs) {
         if (currentSources.contains(URI::fromFile(sm.getFullPath(doc->getBuffer())))) {
             issueExplicitContextDiagnostics(uri);
@@ -557,6 +586,11 @@ void ServerDriver::publishCompilationDiagnostics(const URI* priorityUri,
     if (!m_diagnosticGeneration)
         ++m_diagnosticGeneration;
     m_fullDiagnosticGeneration = m_diagnosticGeneration;
+    if (publication)
+        publication->generation = m_fullDiagnosticGeneration;
+    m_nativeDiagnosticSnapshot = std::move(publication);
+    UvmPhaseTrace().mark(m_nativeDiagnosticSnapshot ? "native-diagnostic-routes-captured"
+                                                    : "native-diagnostic-routes-disabled");
 }
 
 void ServerDriver::prepareForContextRetirement() {
@@ -1040,6 +1074,7 @@ void ServerDriver::onWorkspaceDidChangeWatchedFiles(
 }
 
 void ServerDriver::invalidateAnalysesAndRefreshClient() {
+    m_nativeDiagnosticSnapshot.reset();
     ++m_snapshotRevision;
     for (auto& [_, doc] : docs) {
         doc->invalidateAnalysis();
@@ -1057,7 +1092,11 @@ bool ServerDriver::setActiveInstance(std::string_view hierPath) {
         return false;
     }
 
+    // Selection changes shallow views, not the complete native diagnostic pass.
+    // Consumers still prove the exact compilation owner / generation before reuse.
+    auto publication = std::move(m_nativeDiagnosticSnapshot);
     invalidateAnalysesAndRefreshClient();
+    m_nativeDiagnosticSnapshot = std::move(publication);
     return true;
 }
 

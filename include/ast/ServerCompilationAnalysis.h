@@ -11,6 +11,7 @@
 #include "InstanceIndexer.h"
 #include "ReferenceIndexer.h"
 #include "document/SlangDoc.h"
+#include <functional>
 #include <memory>
 #include <set>
 #include <string>
@@ -41,8 +42,9 @@ public:
     InstanceIndexer instances;
 
     /// Issue all semantic diagnostics from the compilation to the diagnostic engine
-    void issueDiagnosticsTo(slang::DiagnosticEngine& diagEngine,
-                            const lsp::RequestContext& ctx = {});
+    void issueDiagnosticsTo(
+        slang::DiagnosticEngine& diagEngine, const lsp::RequestContext& ctx = {},
+        const std::function<void(size_t, const slang::Diagnostic&)>& issue = {});
 
     /// Get the full-design drivers for a value symbol.
     std::vector<const slang::analysis::ValueDriver*> getDrivers(
