@@ -61,6 +61,10 @@
           "description": "Experimental local method-body diagnostics. Default off. Requires experimentalMethodBodyQueries and a completed full-design diagnostic context. Unsupported dependency changes use full current analysis.",
           "type": "boolean"
         },
+        "experimentalMethodBodyCertificateRenewal": {
+          "description": "Experimental renewal of local method-body certificates. Default off. Requires experimentalMethodBodyQueries. Revalidates the existing input witnesses and preserves the lexical owner and diagnostic baseline across 64-edit windows. Unsupported edits and source-storage limits still use native analysis and context retirement.",
+          "type": "boolean"
+        },
         "experimentalCooperativeAnalysis": {
           "description": "Experimental cooperative syntax parsing and background context retirement. Default off. Cancelled syntax candidates are discarded; semantic model construction retains phase-boundary cancellation. Keeps the current query owner until a private replacement is ready; new input cancels replacement parsing. A hard source-storage limit still forces synchronous retirement to bound retained generations.",
           "type": "boolean"

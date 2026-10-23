@@ -105,6 +105,14 @@ struct Config {
                      bool>
         experimentalMethodBodyDiagnostics = false;
 
+    rfl::Description<"Experimental renewal of local method-body certificates. Default off. "
+                     "Requires experimentalMethodBodyQueries. Revalidates the existing input "
+                     "witnesses and preserves the lexical owner and diagnostic baseline across "
+                     "64-edit windows. Unsupported edits and source-storage limits still "
+                     "use native analysis and context retirement.",
+                     bool>
+        experimentalMethodBodyCertificateRenewal = false;
+
     rfl::Description<"Experimental cooperative syntax parsing and background context retirement. "
                      "Default off. Cancelled syntax candidates are discarded; semantic model "
                      "construction retains phase-boundary cancellation. "

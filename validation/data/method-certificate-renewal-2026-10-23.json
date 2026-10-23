@@ -1,0 +1,1225 @@
+{
+  "baselineCommit": "2db54246c5bc1d6fa0c4d3fb795dcbca21ec7814",
+  "baselineBinarySha256": "5b74a4ed82499a2bf01c53e0ef95efb41b94319e1b71c2e0505b30c95678f2cf",
+  "candidateBinarySha256": "07dfe95cf883358c2d6b0655d565daa09a88d8ca2249d2f9b6cafb3966b4d228",
+  "experimentalDefault": false,
+  "cooperativeBothArms": true,
+  "debounceAdded": false,
+  "tests": {
+    "ctest": 785,
+    "python": 17,
+    "transport": 43,
+    "renewalCases": 3,
+    "renewalAssertions": 2498,
+    "sdkRestoredFiles": 709
+  },
+  "warm": {
+    "baseline": {
+      "samples": 48,
+      "pooledMedianMs": 51.925062499999996,
+      "maximum": 61.735792
+    },
+    "candidate": {
+      "samples": 48,
+      "pooledMedianMs": 47.810520499999996,
+      "maximum": 60.278375
+    }
+  },
+  "warmStability": {
+    "baseline": null,
+    "candidate": null
+  },
+  "runs": {
+    "forced-memory": {
+      "native": {
+        "p50": 4321.936958,
+        "p95": 7855.240917,
+        "maximum": 8479.837959,
+        "lastHoverMs": 8479.837959,
+        "lastDiagnosticMs": 8800.906959,
+        "cancelled": 0,
+        "successes": 12,
+        "status": {
+          "active": false,
+          "accepted": 0,
+          "decline": "",
+          "version": 0,
+          "localDiagnosticUpdates": 0,
+          "localDiagnosticDecline": "",
+          "certificateRenewals": 0,
+          "retainedHandles": 0
+        },
+        "postIdleStatus": {
+          "active": false,
+          "accepted": 0,
+          "version": 0,
+          "decline": "",
+          "certificateRenewals": 0,
+          "retainedHandles": 0,
+          "localDiagnosticUpdates": 0,
+          "localDiagnosticDecline": ""
+        },
+        "postIdlePublications": 0,
+        "memory": {
+          "peakRss": 1459896320,
+          "peakFootprint": 1097188864,
+          "samples": 616
+        },
+        "diagnosticHash": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "finalFiles": 612
+      },
+      "baseline": {
+        "p50": 48.8356665,
+        "p95": 82.004042,
+        "maximum": 85.026334,
+        "lastHoverMs": 47.76675,
+        "lastDiagnosticMs": 80.892209,
+        "cancelled": 0,
+        "successes": 12,
+        "status": {
+          "active": true,
+          "accepted": 14,
+          "decline": "",
+          "version": 15,
+          "localDiagnosticUpdates": 8,
+          "localDiagnosticDecline": "",
+          "certificateRenewals": null,
+          "retainedHandles": null
+        },
+        "postIdleStatus": {
+          "active": false,
+          "accepted": 0,
+          "version": 0,
+          "decline": "",
+          "localDiagnosticUpdates": 0,
+          "localDiagnosticDecline": ""
+        },
+        "postIdlePublications": 0,
+        "memory": {
+          "peakRss": 1595588608,
+          "peakFootprint": 1234732640,
+          "samples": 267
+        },
+        "diagnosticHash": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "finalFiles": 612
+      },
+      "candidate": {
+        "p50": 54.000542,
+        "p95": 90.357083,
+        "maximum": 90.357083,
+        "lastHoverMs": 48.092333,
+        "lastDiagnosticMs": 82.945083,
+        "cancelled": 3,
+        "successes": 9,
+        "status": {
+          "active": true,
+          "accepted": 14,
+          "decline": "",
+          "version": 15,
+          "localDiagnosticUpdates": 8,
+          "localDiagnosticDecline": "",
+          "certificateRenewals": 0,
+          "retainedHandles": 0
+        },
+        "postIdleStatus": {
+          "active": false,
+          "accepted": 0,
+          "version": 0,
+          "decline": "",
+          "certificateRenewals": 0,
+          "retainedHandles": 0,
+          "localDiagnosticUpdates": 0,
+          "localDiagnosticDecline": ""
+        },
+        "postIdlePublications": 0,
+        "memory": {
+          "peakRss": 1595342848,
+          "peakFootprint": 1234765408,
+          "samples": 261
+        },
+        "diagnosticHash": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "finalFiles": 612
+      }
+    },
+    "long-1008": {
+      "candidate": {
+        "p50": 51.147417,
+        "p95": 81.172667,
+        "maximum": 107.438917,
+        "lastHoverMs": 87.151166,
+        "lastDiagnosticMs": 121.151666,
+        "cancelled": 21,
+        "successes": 987,
+        "status": {
+          "active": true,
+          "accepted": 1010,
+          "decline": "",
+          "version": 1011,
+          "localDiagnosticUpdates": 800,
+          "localDiagnosticDecline": "",
+          "certificateRenewals": 15,
+          "retainedHandles": 0
+        },
+        "postIdleStatus": {
+          "active": false,
+          "accepted": 0,
+          "version": 0,
+          "decline": "",
+          "certificateRenewals": 0,
+          "retainedHandles": 0,
+          "localDiagnosticUpdates": 0,
+          "localDiagnosticDecline": ""
+        },
+        "postIdlePublications": 612,
+        "memory": null,
+        "diagnosticHash": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "finalFiles": 612
+      },
+      "baseline": {
+        "p50": 41.402,
+        "p95": 49.268292,
+        "maximum": 1082.604375,
+        "lastHoverMs": 1082.604375,
+        "lastDiagnosticMs": 1419.414125,
+        "cancelled": 945,
+        "successes": 63,
+        "status": {
+          "active": false,
+          "accepted": 0,
+          "decline": "current query context required",
+          "version": 0,
+          "localDiagnosticUpdates": 0,
+          "localDiagnosticDecline": "",
+          "certificateRenewals": null,
+          "retainedHandles": null
+        },
+        "postIdleStatus": {
+          "active": false,
+          "accepted": 0,
+          "version": 0,
+          "decline": "current query context required",
+          "localDiagnosticUpdates": 0,
+          "localDiagnosticDecline": ""
+        },
+        "postIdlePublications": 612,
+        "memory": null,
+        "diagnosticHash": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "finalFiles": 612
+      },
+      "native": {
+        "p50": 4271.4304785,
+        "p95": 8284.249875,
+        "maximum": 8924.818584,
+        "lastHoverMs": 8924.818584,
+        "lastDiagnosticMs": 9253.826917,
+        "cancelled": 0,
+        "successes": 12,
+        "status": {
+          "active": false,
+          "accepted": 0,
+          "decline": "",
+          "version": 0,
+          "localDiagnosticUpdates": 0,
+          "localDiagnosticDecline": "",
+          "certificateRenewals": 0,
+          "retainedHandles": 0
+        },
+        "postIdleStatus": {
+          "active": false,
+          "accepted": 0,
+          "version": 0,
+          "decline": "",
+          "certificateRenewals": 0,
+          "retainedHandles": 0,
+          "localDiagnosticUpdates": 0,
+          "localDiagnosticDecline": ""
+        },
+        "postIdlePublications": 0,
+        "memory": null,
+        "diagnosticHash": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "finalFiles": 612
+      }
+    },
+    "long-96": {
+      "native": {
+        "p50": 4424.012000000001,
+        "p95": 8414.828125,
+        "maximum": 9107.143084,
+        "lastHoverMs": 9107.143084,
+        "lastDiagnosticMs": 9428.6155,
+        "cancelled": 0,
+        "successes": 12,
+        "status": {
+          "active": false,
+          "accepted": 0,
+          "decline": "",
+          "version": 0,
+          "localDiagnosticUpdates": 0,
+          "localDiagnosticDecline": "",
+          "certificateRenewals": 0,
+          "retainedHandles": 0
+        },
+        "postIdleStatus": {
+          "active": false,
+          "accepted": 0,
+          "version": 0,
+          "decline": "",
+          "certificateRenewals": 0,
+          "retainedHandles": 0,
+          "localDiagnosticUpdates": 0,
+          "localDiagnosticDecline": ""
+        },
+        "postIdlePublications": 0,
+        "memory": null,
+        "diagnosticHash": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "finalFiles": 612
+      },
+      "baseline": {
+        "p50": 54.352459,
+        "p95": 61.821958,
+        "maximum": 960.981959,
+        "lastHoverMs": 960.981959,
+        "lastDiagnosticMs": 1288.421834,
+        "cancelled": 33,
+        "successes": 63,
+        "status": {
+          "active": false,
+          "accepted": 0,
+          "decline": "current query context required",
+          "version": 0,
+          "localDiagnosticUpdates": 0,
+          "localDiagnosticDecline": "",
+          "certificateRenewals": null,
+          "retainedHandles": null
+        },
+        "postIdleStatus": {
+          "active": false,
+          "accepted": 0,
+          "version": 0,
+          "decline": "current query context required",
+          "localDiagnosticUpdates": 0,
+          "localDiagnosticDecline": ""
+        },
+        "postIdlePublications": 612,
+        "memory": null,
+        "diagnosticHash": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "finalFiles": 612
+      },
+      "candidate": {
+        "p50": 52.4830835,
+        "p95": 67.199292,
+        "maximum": 70.692375,
+        "lastHoverMs": 67.341542,
+        "lastDiagnosticMs": 111.942833,
+        "cancelled": 0,
+        "successes": 96,
+        "status": {
+          "active": true,
+          "accepted": 98,
+          "decline": "",
+          "version": 99,
+          "localDiagnosticUpdates": 80,
+          "localDiagnosticDecline": "",
+          "certificateRenewals": 1,
+          "retainedHandles": 0
+        },
+        "postIdleStatus": {
+          "active": true,
+          "accepted": 98,
+          "version": 99,
+          "decline": "",
+          "certificateRenewals": 1,
+          "retainedHandles": 0,
+          "localDiagnosticUpdates": 80,
+          "localDiagnosticDecline": ""
+        },
+        "postIdlePublications": 0,
+        "memory": null,
+        "diagnosticHash": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "finalFiles": 612
+      }
+    },
+    "memory-1008": {
+      "native": {
+        "p50": 4176.5395625,
+        "p95": 7635.413542,
+        "maximum": 8292.83075,
+        "lastHoverMs": 8292.83075,
+        "lastDiagnosticMs": 8612.464209,
+        "cancelled": 0,
+        "successes": 12,
+        "status": {
+          "active": false,
+          "accepted": 0,
+          "decline": "",
+          "version": 0,
+          "localDiagnosticUpdates": 0,
+          "localDiagnosticDecline": "",
+          "certificateRenewals": 0,
+          "retainedHandles": 0
+        },
+        "postIdleStatus": {
+          "active": false,
+          "accepted": 0,
+          "version": 0,
+          "decline": "",
+          "certificateRenewals": 0,
+          "retainedHandles": 0,
+          "localDiagnosticUpdates": 0,
+          "localDiagnosticDecline": ""
+        },
+        "postIdlePublications": 0,
+        "memory": {
+          "peakRss": 1459863552,
+          "peakFootprint": 1098286592,
+          "samples": 605
+        },
+        "diagnosticHash": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "finalFiles": 612
+      },
+      "baseline": {
+        "p50": 51.816625,
+        "p95": 58.893541,
+        "maximum": 903.324125,
+        "lastHoverMs": 903.324125,
+        "lastDiagnosticMs": 1228.063959,
+        "cancelled": 945,
+        "successes": 63,
+        "status": {
+          "active": false,
+          "accepted": 0,
+          "decline": "current query context required",
+          "version": 0,
+          "localDiagnosticUpdates": 0,
+          "localDiagnosticDecline": "",
+          "certificateRenewals": null,
+          "retainedHandles": null
+        },
+        "postIdleStatus": {
+          "active": false,
+          "accepted": 0,
+          "version": 0,
+          "decline": "current query context required",
+          "localDiagnosticUpdates": 0,
+          "localDiagnosticDecline": ""
+        },
+        "postIdlePublications": 0,
+        "memory": {
+          "peakRss": 1617018880,
+          "peakFootprint": 1189086744,
+          "samples": 3876
+        },
+        "diagnosticHash": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "finalFiles": 612
+      },
+      "candidate": {
+        "p50": 53.0546245,
+        "p95": 85.840959,
+        "maximum": 108.18775,
+        "lastHoverMs": 48.114208,
+        "lastDiagnosticMs": 81.321042,
+        "cancelled": 52,
+        "successes": 956,
+        "status": {
+          "active": true,
+          "accepted": 1010,
+          "decline": "",
+          "version": 1011,
+          "localDiagnosticUpdates": 718,
+          "localDiagnosticDecline": "",
+          "certificateRenewals": 15,
+          "retainedHandles": 0
+        },
+        "postIdleStatus": {
+          "active": false,
+          "accepted": 0,
+          "version": 0,
+          "decline": "",
+          "certificateRenewals": 0,
+          "retainedHandles": 0,
+          "localDiagnosticUpdates": 0,
+          "localDiagnosticDecline": ""
+        },
+        "postIdlePublications": 0,
+        "memory": {
+          "peakRss": 1604157440,
+          "peakFootprint": 1196115552,
+          "samples": 3839
+        },
+        "diagnosticHash": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "finalFiles": 612
+      }
+    },
+    "warm-1": {
+      "native": {
+        "p50": 4120.724375,
+        "p95": 8253.400291,
+        "maximum": 8901.793416,
+        "lastHoverMs": 8901.793416,
+        "lastDiagnosticMs": 9221.843291,
+        "cancelled": 0,
+        "successes": 12,
+        "status": {
+          "active": false,
+          "accepted": 0,
+          "decline": "",
+          "version": 0,
+          "localDiagnosticUpdates": 0,
+          "localDiagnosticDecline": "",
+          "certificateRenewals": 0,
+          "retainedHandles": 0
+        },
+        "postIdleStatus": {
+          "active": false,
+          "accepted": 0,
+          "version": 0,
+          "decline": "",
+          "certificateRenewals": 0,
+          "retainedHandles": 0,
+          "localDiagnosticUpdates": 0,
+          "localDiagnosticDecline": ""
+        },
+        "postIdlePublications": 0,
+        "memory": null,
+        "diagnosticHash": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "finalFiles": 612
+      },
+      "baseline": {
+        "p50": 53.5060625,
+        "p95": 56.126625,
+        "maximum": 56.980375,
+        "lastHoverMs": 52.3815,
+        "lastDiagnosticMs": 89.09075,
+        "cancelled": 0,
+        "successes": 12,
+        "status": {
+          "active": true,
+          "accepted": 14,
+          "decline": "",
+          "version": 15,
+          "localDiagnosticUpdates": 12,
+          "localDiagnosticDecline": "",
+          "certificateRenewals": null,
+          "retainedHandles": null
+        },
+        "postIdleStatus": {
+          "active": true,
+          "accepted": 14,
+          "version": 15,
+          "decline": "",
+          "localDiagnosticUpdates": 12,
+          "localDiagnosticDecline": ""
+        },
+        "postIdlePublications": 0,
+        "memory": null,
+        "diagnosticHash": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "finalFiles": 612
+      },
+      "candidate": {
+        "p50": 56.7681665,
+        "p95": 59.463667,
+        "maximum": 60.278375,
+        "lastHoverMs": 57.419834,
+        "lastDiagnosticMs": 99.991,
+        "cancelled": 0,
+        "successes": 12,
+        "status": {
+          "active": true,
+          "accepted": 14,
+          "decline": "",
+          "version": 15,
+          "localDiagnosticUpdates": 11,
+          "localDiagnosticDecline": "",
+          "certificateRenewals": 0,
+          "retainedHandles": 0
+        },
+        "postIdleStatus": {
+          "active": true,
+          "accepted": 14,
+          "version": 15,
+          "decline": "",
+          "certificateRenewals": 0,
+          "retainedHandles": 0,
+          "localDiagnosticUpdates": 11,
+          "localDiagnosticDecline": ""
+        },
+        "postIdlePublications": 0,
+        "memory": null,
+        "diagnosticHash": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "finalFiles": 612
+      }
+    },
+    "warm-2": {
+      "candidate": {
+        "p50": 47.5772295,
+        "p95": 48.558417,
+        "maximum": 48.740958,
+        "lastHoverMs": 46.39875,
+        "lastDiagnosticMs": 79.492833,
+        "cancelled": 0,
+        "successes": 12,
+        "status": {
+          "active": true,
+          "accepted": 14,
+          "decline": "",
+          "version": 15,
+          "localDiagnosticUpdates": 13,
+          "localDiagnosticDecline": "",
+          "certificateRenewals": 0,
+          "retainedHandles": 0
+        },
+        "postIdleStatus": {
+          "active": true,
+          "accepted": 14,
+          "version": 15,
+          "decline": "",
+          "certificateRenewals": 0,
+          "retainedHandles": 0,
+          "localDiagnosticUpdates": 13,
+          "localDiagnosticDecline": ""
+        },
+        "postIdlePublications": 0,
+        "memory": null,
+        "diagnosticHash": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "finalFiles": 612
+      },
+      "baseline": {
+        "p50": 46.680729,
+        "p95": 48.409209,
+        "maximum": 51.28275,
+        "lastHoverMs": 46.329667,
+        "lastDiagnosticMs": 81.614333,
+        "cancelled": 0,
+        "successes": 12,
+        "status": {
+          "active": true,
+          "accepted": 14,
+          "decline": "",
+          "version": 15,
+          "localDiagnosticUpdates": 13,
+          "localDiagnosticDecline": "",
+          "certificateRenewals": null,
+          "retainedHandles": null
+        },
+        "postIdleStatus": {
+          "active": true,
+          "accepted": 14,
+          "version": 15,
+          "decline": "",
+          "localDiagnosticUpdates": 13,
+          "localDiagnosticDecline": ""
+        },
+        "postIdlePublications": 0,
+        "memory": null,
+        "diagnosticHash": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "finalFiles": 612
+      },
+      "native": {
+        "p50": 4162.4621455,
+        "p95": 8047.431792,
+        "maximum": 8675.772917,
+        "lastHoverMs": 8675.772917,
+        "lastDiagnosticMs": 8998.976292,
+        "cancelled": 0,
+        "successes": 12,
+        "status": {
+          "active": false,
+          "accepted": 0,
+          "decline": "",
+          "version": 0,
+          "localDiagnosticUpdates": 0,
+          "localDiagnosticDecline": "",
+          "certificateRenewals": 0,
+          "retainedHandles": 0
+        },
+        "postIdleStatus": {
+          "active": false,
+          "accepted": 0,
+          "version": 0,
+          "decline": "",
+          "certificateRenewals": 0,
+          "retainedHandles": 0,
+          "localDiagnosticUpdates": 0,
+          "localDiagnosticDecline": ""
+        },
+        "postIdlePublications": 0,
+        "memory": null,
+        "diagnosticHash": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "finalFiles": 612
+      }
+    },
+    "warm-3": {
+      "native": {
+        "p50": 4071.3436250000004,
+        "p95": 8005.935792,
+        "maximum": 8665.879209,
+        "lastHoverMs": 8665.879209,
+        "lastDiagnosticMs": 8999.896417,
+        "cancelled": 0,
+        "successes": 12,
+        "status": {
+          "active": false,
+          "accepted": 0,
+          "decline": "",
+          "version": 0,
+          "localDiagnosticUpdates": 0,
+          "localDiagnosticDecline": "",
+          "certificateRenewals": 0,
+          "retainedHandles": 0
+        },
+        "postIdleStatus": {
+          "active": false,
+          "accepted": 0,
+          "version": 0,
+          "decline": "",
+          "certificateRenewals": 0,
+          "retainedHandles": 0,
+          "localDiagnosticUpdates": 0,
+          "localDiagnosticDecline": ""
+        },
+        "postIdlePublications": 0,
+        "memory": null,
+        "diagnosticHash": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "finalFiles": 612
+      },
+      "baseline": {
+        "p50": 51.537042,
+        "p95": 53.675875,
+        "maximum": 54.160958,
+        "lastHoverMs": 50.431,
+        "lastDiagnosticMs": 85.520875,
+        "cancelled": 0,
+        "successes": 12,
+        "status": {
+          "active": true,
+          "accepted": 14,
+          "decline": "",
+          "version": 15,
+          "localDiagnosticUpdates": 13,
+          "localDiagnosticDecline": "",
+          "certificateRenewals": null,
+          "retainedHandles": null
+        },
+        "postIdleStatus": {
+          "active": true,
+          "accepted": 14,
+          "version": 15,
+          "decline": "",
+          "localDiagnosticUpdates": 13,
+          "localDiagnosticDecline": ""
+        },
+        "postIdlePublications": 0,
+        "memory": null,
+        "diagnosticHash": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "finalFiles": 612
+      },
+      "candidate": {
+        "p50": 47.920542,
+        "p95": 48.887875,
+        "maximum": 49.530458,
+        "lastHoverMs": 47.4395,
+        "lastDiagnosticMs": 79.95075,
+        "cancelled": 0,
+        "successes": 12,
+        "status": {
+          "active": true,
+          "accepted": 14,
+          "decline": "",
+          "version": 15,
+          "localDiagnosticUpdates": 13,
+          "localDiagnosticDecline": "",
+          "certificateRenewals": 0,
+          "retainedHandles": 0
+        },
+        "postIdleStatus": {
+          "active": true,
+          "accepted": 14,
+          "version": 15,
+          "decline": "",
+          "certificateRenewals": 0,
+          "retainedHandles": 0,
+          "localDiagnosticUpdates": 13,
+          "localDiagnosticDecline": ""
+        },
+        "postIdlePublications": 0,
+        "memory": null,
+        "diagnosticHash": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "finalFiles": 612
+      }
+    },
+    "warm-4": {
+      "candidate": {
+        "p50": 45.987874500000004,
+        "p95": 47.569125,
+        "maximum": 49.877458,
+        "lastHoverMs": 42.72725,
+        "lastDiagnosticMs": 74.292042,
+        "cancelled": 0,
+        "successes": 12,
+        "status": {
+          "active": true,
+          "accepted": 14,
+          "decline": "",
+          "version": 15,
+          "localDiagnosticUpdates": 13,
+          "localDiagnosticDecline": "",
+          "certificateRenewals": 0,
+          "retainedHandles": 0
+        },
+        "postIdleStatus": {
+          "active": true,
+          "accepted": 14,
+          "version": 15,
+          "decline": "",
+          "certificateRenewals": 0,
+          "retainedHandles": 0,
+          "localDiagnosticUpdates": 13,
+          "localDiagnosticDecline": ""
+        },
+        "postIdlePublications": 0,
+        "memory": null,
+        "diagnosticHash": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "finalFiles": 612
+      },
+      "baseline": {
+        "p50": 55.815167,
+        "p95": 57.13125,
+        "maximum": 61.735792,
+        "lastHoverMs": 55.549209,
+        "lastDiagnosticMs": 93.611625,
+        "cancelled": 0,
+        "successes": 12,
+        "status": {
+          "active": true,
+          "accepted": 14,
+          "decline": "",
+          "version": 15,
+          "localDiagnosticUpdates": 10,
+          "localDiagnosticDecline": "",
+          "certificateRenewals": null,
+          "retainedHandles": null
+        },
+        "postIdleStatus": {
+          "active": true,
+          "accepted": 14,
+          "version": 15,
+          "decline": "",
+          "localDiagnosticUpdates": 10,
+          "localDiagnosticDecline": ""
+        },
+        "postIdlePublications": 0,
+        "memory": null,
+        "diagnosticHash": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "finalFiles": 612
+      },
+      "native": {
+        "p50": 4153.960854,
+        "p95": 8161.674541,
+        "maximum": 8822.374209,
+        "lastHoverMs": 8822.374209,
+        "lastDiagnosticMs": 9148.5305,
+        "cancelled": 0,
+        "successes": 12,
+        "status": {
+          "active": false,
+          "accepted": 0,
+          "decline": "",
+          "version": 0,
+          "localDiagnosticUpdates": 0,
+          "localDiagnosticDecline": "",
+          "certificateRenewals": 0,
+          "retainedHandles": 0
+        },
+        "postIdleStatus": {
+          "active": false,
+          "accepted": 0,
+          "version": 0,
+          "decline": "",
+          "certificateRenewals": 0,
+          "retainedHandles": 0,
+          "localDiagnosticUpdates": 0,
+          "localDiagnosticDecline": ""
+        },
+        "postIdlePublications": 0,
+        "memory": null,
+        "diagnosticHash": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "finalFiles": 612
+      }
+    }
+  },
+  "sourceSha256": "6c2ecbefd33ef844ecbbe63d7282d37406714d9c18ef52711337e760141668cb",
+  "artifacts": {
+    "build-qualified.log": "35a8350b7ce53ed05c5566c9bf50f2465f9b65f41d3461b2db4fba5de02555b2",
+    "cleanup.json": "8c340c1ba812894765cf5f97af9063a35ad474e2c44170144455f56e9ece8a23",
+    "cleanup.py": "3581d7e0f540ae4dae78bf2999b8647d17b2d6109d00a6e8688ba6c7a20a81bd",
+    "ctest.log": "b8442842870d8539c792eaeb92c66be5d3837a0e68d7dfb1d779e4718c3693da",
+    "default-smoke.log": "98d86f42b177baf1b50534f75f1a501beec3f3b06961c11150a3bb620f198cfb",
+    "external-smoke.json": "6f7b6bcac36c490cb17cb4706ef32ddb58992eea9bf027492cec3c4ee071fe27",
+    "external-smoke.log": "98d86f42b177baf1b50534f75f1a501beec3f3b06961c11150a3bb620f198cfb",
+    "external-smoke.phases.tsv": "c8426bfeb7d633e884fcb785b46bd9ed3ec0f2037542e91ff48ae503e5c6e087",
+    "forced-memory-baseline-memory.json": "84cdcb83c3bc871b57b20b8f5d357ee98f32e2163b57343720b4e169686c9043",
+    "forced-memory-baseline.stderr": "83391095c9249cc4789f7d30c3ebfa762a3f30589a2259389de1044a780fb11c",
+    "forced-memory-candidate-memory.json": "eac574142c0c0806084d0e482f58ca315bc336a9d6c3203bfdfe97d2f21062f5",
+    "forced-memory-candidate.stderr": "f7922ec46ff33379944a6d2c61c903a9fd5f99bcd9ceb35431d92ccf7116c521",
+    "forced-memory-native-memory.json": "a63eb4a01c78f2ece72254c46c4656c168ceca0524cbf123108cabe5a1b24fe1",
+    "forced-memory-native.stderr": "410c3e4fd4a42fdbf30d9d532e3ecf1e64459b934d1ee5d21119e1915cbbb8ba",
+    "forced-memory.generations.tsv": "f8a59093afaef0ff614b29b3ba19f48b4e9d76b8be1f631d88a39ee2ec4214c2",
+    "forced-memory.json": "73305cac16cfdd04db13ca503366908ad99a3643fb542e9c61273ea05771505e",
+    "forced-memory.log": "8a386d9a73edd6448b802822bbcf4e3a806656381b217230ef39235a21dbda8e",
+    "forced-memory.phases.tsv": "f1faf1a9ebf85fae24467848304f2329896f4519ffbbca815fe80cfaf4049b4d",
+    "install-smoke.json": "9f3d5b02289edf9c2e673d17bb905eaffec1608901aa196d930a82be9b9468d6",
+    "install-smoke.phases.tsv": "a1eae2b6a1bbead58663c5482bbf762c4db88334c7760b0c9564862344e80a4b",
+    "install-smoke.py": "a401d18dcef7bd029682c5ccdc369bb62892129af422da1a001e59a3fd2d001d",
+    "install.log": "5b71ea2f6a0238cbbffea24a87b5ee1fd752abeac9e05079bfb182bff70fe22b",
+    "long-1008-baseline.stderr": "d27d936527f6482bf0e5f806cde3c522f160d52cd1ccfad9f143f5e069307f98",
+    "long-1008-candidate.stderr": "36c119e5922cac5a5206114f8ddf1f84067701dfbec6b110bd7354367a2bf986",
+    "long-1008-native.stderr": "36a56b13d8579347dfd9b5c2f239943ee1332dbd5878c8e35cc4073b8c913cbb",
+    "long-1008.json": "3f7f43e46c90b089759b82e883dbab59b8f372ff2ad56ac00058578cc8f1dd7c",
+    "long-1008.log": "e1471368b2ae4330f31ae1d7a62623fb8cf71e3693eac88e0a2b73f7c3132493",
+    "long-96-baseline.stderr": "539421018c36d5161a182740dc9bf641b78fe14a4d9324189a1227647dfb87da",
+    "long-96-candidate.stderr": "a77bd477db5e03168009a378ffa8aaf498751826937d10664d776a2a6ab59cca",
+    "long-96-native.stderr": "1d0910dbcda7d516ce4320e8a8a0598149cd15281bde6202639c53c6852a6c68",
+    "long-96.json": "e499f5e606dc901783f59d552dd5607f9e6799cb4f0fc1ec351cd014a309a794",
+    "long-96.log": "d772a2a4a9bc7ac5d4106fddca469ca44eaf2ba859273e2b922f618dba3ae23b",
+    "memory-1008-baseline-memory.json": "14cf73c7acbf7176bed6e090e4d7b6b3ed3afe63521abc98d7566fe6291d6ffe",
+    "memory-1008-baseline.stderr": "ccefb11106317337cab9b8b80562d6745edffa2d1dc1badd450a03efe32a56a2",
+    "memory-1008-candidate-memory.json": "0e15be7a611c66c5547c2725908cb16037373d643f6c3d99b28cf6c9f1d39e88",
+    "memory-1008-candidate.stderr": "edd210e81de81f72eaf3fc687d938894490b3159939c32316d416f649ef99147",
+    "memory-1008-native-memory.json": "49d185ef071fda3ed735430b98ebccf4d954a07c27c68d413d2440ab3bd25f2b",
+    "memory-1008-native.stderr": "77174f834d282525be1f80e71814ee0d6b136e81d115c17d19416734b69fca34",
+    "memory-1008.generations.tsv": "6435ac1653b2b2d356e381c921bb77a041138e557860bf7674f1a94a57836819",
+    "memory-1008.json": "68e0e379a1150239ded0f0424e6e11d4578068d2b8c15885b7beec793d967d32",
+    "memory-1008.log": "3e889cd8e847fceeb400a12a52b24af9ef69a5688f8dd2c68ee0cba0a1e88af2",
+    "memory-1008.phases.tsv": "2a4e845813203566ad873ecee5bff2c59ccece183ff9e5ba9243cac829a340c8",
+    "plan.md": "57a10b84da60a1682266055f8f44c03d8d41b1e2a9edc2a67b92101ab6e5ffb2",
+    "public-0-local-completion_then_hover-memory.json": "a1614687265e7cd6e6eb2df2868cb15d41d30c72e371ad4284d91131094f69e6",
+    "public-0-local-hover_first-memory.json": "7c8800ccab3eef501af63787340b156d687e46576735fdb788670a85a2b0b55e",
+    "public-0-native-completion_then_hover-memory.json": "a90d6656ebd318dd23845371ece379e918dbb823e4f8832f1c55cf304979b86d",
+    "public-0-native-hover_first-memory.json": "2755c84173e7e4eccb17cdfb8439f8e36f9da71c17f43caeefbb571b5f1dc5d7",
+    "public-0-previous-completion_then_hover-memory.json": "6ace94767ee4f9147edec79049603e5eb8640b4a41d9f3724258362023339754",
+    "public-0-previous-hover_first-memory.json": "40228e4edf6b602e6570536992f22708b095879fa05546035a67ba809499f1ed",
+    "public.generations.tsv": "202bba3329d3d70362a7bc0019890aaa5e070d657730aea0cfcea11a593e5881",
+    "public.json": "93338e71b6d21a6ba80557e1cf0a5a7d5c336f2ba3e07642b7229583b216646e",
+    "public.log": "5ea9dfaff1a591fc1088bd2221c41dff96cdb4064f14da06eeea4d9595cc25bf",
+    "python.log": "b548cefdc2945976877c7e149627dcea561b743f1bf6c648d2efdd09239c04b5",
+    "qualify-input.py": "92255015d564cff2caeddd80171a38cbb7b4f1bd76722ce146d5cd997ccd6c80",
+    "qualify-public.py": "3ef3fa8739f183fdcf34ce1d575f845926f6db887c7a5ceda3357d52bc513fce",
+    "run-followups.py": "6530a9655ae159187371de51da7ec3a402136baa1a94e3520619f2956331cbb6",
+    "run-qualified.py": "3e3ec74a80420b0ca998ce21c08e8bdeb366acb8c8e6e30caaa766369caea575",
+    "sdk-replay.json": "e3a6d456d2f990346e813d1a1e9948aa563717661ba8687e0008f2fa6e41d3b4",
+    "sdk-restore-check.py": "1d7fcb19342eea4b9e30f9861ccc9a351529ed6fea6a5aaebcaf591247638085",
+    "summarize.py": "a02ef6c9d64cf709271a9f9c22e4aacb2b3dcc54e811f785244568d74dd136fc",
+    "transport.log": "453a3b3665b439720f57d9cbdbbb6178d67d9b39206e93d7bfb9cfdb19ddb233",
+    "unit-renewal.log": "fa877cd44e8e2ec6fffc4f14a330166dcbeeefdf85c8a6f5c8a2d48606eb36be",
+    "warm-1-baseline.stderr": "efaaac48fccb0ddbd93358d67556aef1d9622ecf5a6ee47f81a37954b1119d55",
+    "warm-1-candidate.stderr": "c2820d668627781600ecc035717edff1ef4083fe155db64e2dee4364dc8fb710",
+    "warm-1-native.stderr": "38ed7460fcdd7c6afb159882d62e0370dd7ccb6e6da170d7a8fb43d3b16b92d0",
+    "warm-1.json": "77eb533f2a77932a1baada53e281ec700c136c8e39321ead987a269163296b8f",
+    "warm-1.log": "e60b535e6a882869fe590e784d7e8a062f2b3cecdff046b127b6aa5068cb33fc",
+    "warm-2-baseline.stderr": "63ac3118fea7438e1e24bd6cd43ab47cfe1f3fee1d89e6e6f3ffdee2ca3f0902",
+    "warm-2-candidate.stderr": "a9d859ebf9e47495322b1f42757d06a7a635b9e17d93500f6e65cd00437a0778",
+    "warm-2-native.stderr": "d4ef423631797b58d7c522220a7482985b6ac0d56afc42d52bc3c032bc7bebfe",
+    "warm-2.json": "23f83d111bf476ccd2f86bf914bdfa1296a45a528088b5a3ee032be27ce64a9e",
+    "warm-2.log": "ed4c82e49885cdc0bb6d13bc934cca82b1baa7a8f4d4d2f6db9b2c1ca5e8d542",
+    "warm-3-baseline.stderr": "dd634503e5f31f80061a6a64a7595322efa676547fed72eb5da91f94b83e6424",
+    "warm-3-candidate.stderr": "7013efafd584bdaf1018edaaf69720c58d6c607e5248b46ea6e3f4901723de6b",
+    "warm-3-native.stderr": "d6f1f0c5ae45fd622b0c3cbd0ebb753bf3494875fd5e65d614cb99e0fc933b93",
+    "warm-3.json": "8fc6d9a13b19f1926686f6969dcef59811aa30853c93c49cb8b0385b249fc040",
+    "warm-3.log": "607d69f982d1573b2095645ba3f0401d16c245b2460ef3873fe4c73d1a54025b",
+    "warm-4-baseline.stderr": "10efc31c9bec281d8cf585680df12aabf778cd7718a4e030a0e1b60774df4023",
+    "warm-4-candidate.stderr": "da784dbdd31013c38f52fcb61a6dacba929b3c3cc0dcb76c849b57f23191e43b",
+    "warm-4-native.stderr": "4a7f1d6a551e229a9c988591b1fabcf7e6714a91bfca70c343fcb9d84e96bcc0",
+    "warm-4.json": "fb89a321b3a7bb026ec89fd57094b0ad76a13382e6be441fcb0009f0447279dd",
+    "warm-4.log": "c6907762ee82b40f535053615b6ae5794b6b3bbc3a6caf2ec7b67785ac20f6be",
+    "write-report.py": "35bec6a725a7cf4f40e97a28259750380092892fdf6a0b7266ab4d239e3f5918"
+  },
+  "mechanism": {
+    "memory-1008": {
+      "native": {
+        "generations": {
+          "retired": 1
+        },
+        "phases": {}
+      },
+      "baseline": {
+        "generations": {
+          "retired": 23
+        },
+        "phases": {
+          "body-prepare-context": {
+            "count": 1,
+            "medianMs": 4.435,
+            "sumMs": 4.435
+          },
+          "body-prepare-macros": {
+            "count": 1,
+            "medianMs": 0.091,
+            "sumMs": 0.091
+          },
+          "body-prepare-snapshot": {
+            "count": 1,
+            "medianMs": 0.918,
+            "sumMs": 0.918
+          },
+          "body-prepare-witnesses": {
+            "count": 1,
+            "medianMs": 46.203,
+            "sumMs": 46.203
+          },
+          "body-validate-context": {
+            "count": 318,
+            "medianMs": 0.027,
+            "sumMs": 9.051
+          },
+          "body-validate-directories": {
+            "count": 318,
+            "medianMs": 0.113,
+            "sumMs": 36.745
+          },
+          "body-validate-files": {
+            "count": 314,
+            "medianMs": 15.29,
+            "sumMs": 4848.7
+          },
+          "body-apply-text": {
+            "count": 64,
+            "medianMs": 0.248,
+            "sumMs": 16.099
+          },
+          "body-apply-parse": {
+            "count": 64,
+            "medianMs": 0.279,
+            "sumMs": 17.942
+          },
+          "body-apply-bind": {
+            "count": 64,
+            "medianMs": 0.127,
+            "sumMs": 9.511000000000001
+          },
+          "body-apply-index": {
+            "count": 64,
+            "medianMs": 0.059,
+            "sumMs": 3.783
+          },
+          "body-apply-revalidate": {
+            "count": 64,
+            "medianMs": 15.455,
+            "sumMs": 1005.361
+          }
+        }
+      },
+      "candidate": {
+        "generations": {
+          "replacement-cancelled": 148,
+          "retired": 1
+        },
+        "phases": {
+          "body-prepare-context": {
+            "count": 1,
+            "medianMs": 4.498,
+            "sumMs": 4.498
+          },
+          "body-prepare-macros": {
+            "count": 1,
+            "medianMs": 0.085,
+            "sumMs": 0.085
+          },
+          "body-prepare-snapshot": {
+            "count": 1,
+            "medianMs": 1.102,
+            "sumMs": 1.102
+          },
+          "body-prepare-witnesses": {
+            "count": 1,
+            "medianMs": 59.917,
+            "sumMs": 59.917
+          },
+          "body-validate-context": {
+            "count": 4856,
+            "medianMs": 0.028,
+            "sumMs": 142.671
+          },
+          "body-validate-directories": {
+            "count": 4856,
+            "medianMs": 0.116,
+            "sumMs": 576.479
+          },
+          "body-validate-files": {
+            "count": 4585,
+            "medianMs": 15.406,
+            "sumMs": 72386.107
+          },
+          "body-apply-text": {
+            "count": 1010,
+            "medianMs": 0.253,
+            "sumMs": 259.358
+          },
+          "body-apply-parse": {
+            "count": 1010,
+            "medianMs": 0.277,
+            "sumMs": 281.986
+          },
+          "body-apply-bind": {
+            "count": 1010,
+            "medianMs": 0.129,
+            "sumMs": 132.687
+          },
+          "body-apply-index": {
+            "count": 1010,
+            "medianMs": 0.061,
+            "sumMs": 61.906
+          },
+          "body-apply-revalidate": {
+            "count": 1003,
+            "medianMs": 15.738,
+            "sumMs": 16164.882
+          }
+        }
+      }
+    },
+    "forced-memory": {
+      "native": {
+        "generations": {
+          "retired": 1
+        },
+        "phases": {}
+      },
+      "baseline": {
+        "generations": {
+          "replacement-cancelled": 5,
+          "retired": 1
+        },
+        "phases": {
+          "body-prepare-context": {
+            "count": 1,
+            "medianMs": 4.399,
+            "sumMs": 4.399
+          },
+          "body-prepare-macros": {
+            "count": 1,
+            "medianMs": 0.084,
+            "sumMs": 0.084
+          },
+          "body-prepare-snapshot": {
+            "count": 1,
+            "medianMs": 1.402,
+            "sumMs": 1.402
+          },
+          "body-prepare-witnesses": {
+            "count": 1,
+            "medianMs": 50.151,
+            "sumMs": 50.151
+          },
+          "body-validate-context": {
+            "count": 68,
+            "medianMs": 0.024,
+            "sumMs": 1.858
+          },
+          "body-validate-directories": {
+            "count": 68,
+            "medianMs": 0.105,
+            "sumMs": 7.306
+          },
+          "body-validate-files": {
+            "count": 63,
+            "medianMs": 14.093,
+            "sumMs": 888.218
+          },
+          "body-apply-text": {
+            "count": 14,
+            "medianMs": 0.2515,
+            "sumMs": 3.6
+          },
+          "body-apply-parse": {
+            "count": 14,
+            "medianMs": 0.27,
+            "sumMs": 3.841
+          },
+          "body-apply-bind": {
+            "count": 14,
+            "medianMs": 0.128,
+            "sumMs": 3.28
+          },
+          "body-apply-index": {
+            "count": 14,
+            "medianMs": 0.0615,
+            "sumMs": 0.852
+          },
+          "body-apply-revalidate": {
+            "count": 14,
+            "medianMs": 14.109,
+            "sumMs": 196.793
+          }
+        }
+      },
+      "candidate": {
+        "generations": {
+          "replacement-cancelled": 5,
+          "retired": 1
+        },
+        "phases": {
+          "body-prepare-context": {
+            "count": 1,
+            "medianMs": 4.347,
+            "sumMs": 4.347
+          },
+          "body-prepare-macros": {
+            "count": 1,
+            "medianMs": 0.084,
+            "sumMs": 0.084
+          },
+          "body-prepare-snapshot": {
+            "count": 1,
+            "medianMs": 1.019,
+            "sumMs": 1.019
+          },
+          "body-prepare-witnesses": {
+            "count": 1,
+            "medianMs": 51.486,
+            "sumMs": 51.486
+          },
+          "body-validate-context": {
+            "count": 59,
+            "medianMs": 0.03,
+            "sumMs": 1.812
+          },
+          "body-validate-directories": {
+            "count": 59,
+            "medianMs": 0.118,
+            "sumMs": 7.257
+          },
+          "body-validate-files": {
+            "count": 56,
+            "medianMs": 15.8765,
+            "sumMs": 878.172
+          },
+          "body-apply-text": {
+            "count": 14,
+            "medianMs": 0.2485,
+            "sumMs": 3.588
+          },
+          "body-apply-parse": {
+            "count": 14,
+            "medianMs": 0.2745,
+            "sumMs": 3.838
+          },
+          "body-apply-bind": {
+            "count": 14,
+            "medianMs": 0.1365,
+            "sumMs": 3.438
+          },
+          "body-apply-index": {
+            "count": 14,
+            "medianMs": 0.0595,
+            "sumMs": 0.843
+          },
+          "body-apply-revalidate": {
+            "count": 14,
+            "medianMs": 16.118000000000002,
+            "sumMs": 222.481
+          }
+        }
+      }
+    }
+  }
+}

@@ -21,6 +21,8 @@ public:
         bool active = false;
         uint64_t accepted = 0;
         int version = 0;
+        uint64_t renewals = 0;
+        size_t retainedHandles = 0;
     };
     MethodScopeOverlay(ServerDriver&, const Config&, const URI&, size_t editOffset,
                        const lsp::RequestContext&);
@@ -47,7 +49,9 @@ public:
     bool publishLocalDiagnostics(const Config&, const lsp::RequestContext&);
     uint64_t localDiagnosticUpdates() const;
     std::string localDiagnosticDecline() const;
-    Statistics statistics() const { return {accepted != 0, accepted, version}; }
+    Statistics statistics() const {
+        return {accepted != 0, accepted, version, renewals, handles.size()};
+    }
 
 private:
     struct DTO {
@@ -103,6 +107,9 @@ private:
     uint32_t originalBuffer = 0, currentBuffer = 0;
     int version = 0;
     uint64_t accepted = 0, inputRevision = 0, indexRevision = 0;
+    uint64_t renewals = 0;
+    uint32_t certificateEdits = 0;
+    void acceptGeneralEdit();
     std::vector<uint32_t> handles;
     std::vector<std::string> outerNames;
     std::map<std::string, std::optional<std::string>> disk;

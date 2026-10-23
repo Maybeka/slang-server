@@ -3,6 +3,7 @@
 #include "util/Converters.h"
 #include "utils/ServerHarness.h"
 #include <atomic>
+#include <catch2/generators/catch_generators.hpp>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
@@ -1720,4 +1721,154 @@ TEST_CASE("Local hover preserves local type and field values in package function
                                         .position = doc.getPosition(offsets[i])})));
         }
     }
+}
+
+TEST_CASE("Method certificate renewal preserves one diagnostic baseline across edit windows",
+          "[method-certificate-renewal]") {
+    const bool enabled = GENERATE(false, true);
+    Workspace workspace;
+    auto config = localDiagnosticConfig;
+    config.insert(config.size() - 1, std::string(",\"experimentalMethodBodyCertificateRenewal\":") +
+                                         (enabled ? "true" : "false"));
+    workspace.write(".slang/server.json", config);
+    BodyTestServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", header);
+    doc.doc->getAnalysis();
+    auto* owner = server.m_driver.get();
+    const auto epoch = owner->completions.getCompletionEpoch();
+    struct RenewalState {
+        uint64_t certificateRenewals;
+        size_t retainedHandles;
+    };
+    std::optional<lsp::CompletionItem> stale;
+    for (int edit = 1; edit <= (enabled ? 193 : 65); ++edit) {
+        auto text = header;
+        text.replace(text.find("local_1 + charl"), 15,
+                     std::string(edit % 3 == 0 ? "local_0 + absent_local + "
+                                               : "local_0 +\n charl + ") +
+                         std::to_string(edit));
+        change(server, doc.m_uri, edit + 1, text);
+        doc.m_text = text;
+        if (!enabled && edit == 65) {
+            CHECK_FALSE(state(server).active);
+            break;
+        }
+        REQUIRE(state(server).active);
+        CHECK(state(server).accepted == uint64_t(edit));
+        server.runBackgroundWork({});
+        CHECK(server.m_driver.get() == owner);
+        CHECK(owner->completions.getCompletionEpoch() == epoch);
+        CHECK(diagnosticState(server).localDiagnosticUpdates == uint64_t(edit));
+        auto status =
+            rfl::from_generic<RenewalState>(
+                *server.executeCommand({.command = "slang.methodScopeStatus",
+                                        .arguments = std::vector<lsp::LSPAny>{rfl::to_generic(
+                                            std::string("compact"))}}))
+                .value();
+        CHECK(status.certificateRenewals == uint64_t((edit - 1) / 64));
+        CHECK(status.retainedHandles == 0);
+        if (edit == 64 || edit == 65 || edit == 128 || edit == 129 || edit == 193) {
+            auto at = text.find("return (") + 10;
+            auto response = server.getDocCompletion(
+                {.textDocument = {.uri = doc.m_uri}, .position = doc.getPosition(at)});
+            auto items = rfl::get<std::vector<lsp::CompletionItem>>(response);
+            auto found = std::ranges::find_if(items, [](const auto& item) {
+                return item.label == "local_0";
+            });
+            REQUIRE(found != items.end());
+            if (stale) {
+                auto resolved = server.getCompletionItemResolve(*stale);
+                CHECK_FALSE(resolved.data);
+            }
+            stale = *found;
+            checkNativeDiagnostics(workspace, server, text);
+            workspace.write(".slang/server.json", config);
+        }
+    }
+}
+
+TEST_CASE("Renewal retains cancellation safety and rejects changed outer inputs",
+          "[method-certificate-renewal]") {
+    auto invalidate = GENERATE("none", "signature", "outside", "dependency", "macro");
+    Workspace workspace;
+    auto config = localDiagnosticConfig;
+    config.insert(config.size() - 1, ",\"experimentalMethodBodyCertificateRenewal\":true");
+    workspace.write(".slang/server.json", config);
+    BodyTestServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", header);
+    doc.doc->getAnalysis();
+    for (int edit = 1; edit <= 64; ++edit) {
+        auto text = header;
+        text.replace(text.find("local_1 + charl"), 15, "local_0 + " + std::to_string(edit));
+        change(server, doc.m_uri, edit + 1, text);
+    }
+    REQUIRE(state(server).accepted == 64);
+    auto text = header;
+    lsp::RequestContext cancellation("textDocument/didChange", 23);
+    bool reached = false;
+    cancellation.setCheckpointObserverForTesting([&](std::string_view where) {
+        if (where == "method certificate renewal") {
+            reached = true;
+            cancellation.cancel();
+        }
+    });
+    CHECK_THROWS_AS(change(server, doc.m_uri, 66, text, cancellation), lsp::RequestCancelled);
+    REQUIRE(reached);
+    CHECK(doc.doc->getVersion() == 66);
+    REQUIRE(state(server).accepted == 65);
+    CHECK(state(server).active);
+    server.runBackgroundWork({});
+    CHECK(diagnosticState(server).localDiagnosticUpdates == 1);
+    if (std::string_view(invalidate) == "signature")
+        text.replace(text.find("input int alpha"), 15, "input longint alpha");
+    else if (std::string_view(invalidate) == "outside")
+        text.replace(text.find("int marker"), 10, "longint marker");
+    else if (std::string_view(invalidate) == "dependency")
+        workspace.write("prelude.sv", "package prelude; int changed; endpackage\n");
+    else if (std::string_view(invalidate) == "macro")
+        text.insert(text.find("int local_0"), "`define UNSAFE_RENEWAL 1\n");
+    else
+        text.replace(text.find("local_1 + charl"), 15, "local_0 + charl");
+    change(server, doc.m_uri, 67, text);
+    CHECK(state(server).active == (std::string_view(invalidate) == "none"));
+    // The disk witness rejects reuse before a watcher event. Notify native caches
+    // as an editor would before checking the rebuilt full-design diagnostics.
+    if (std::string_view(invalidate) == "dependency")
+        server.onWorkspaceDidChangeWatchedFiles(
+            {.changes = {{.uri = URI::fromFile(workspace.root / "prelude.sv"),
+                          .type = lsp::FileChangeType::Changed}}});
+    server.runBackgroundWork({});
+    checkNativeDiagnostics(workspace, server, text);
+}
+
+TEST_CASE("Standalone method renewal retains the hard source-storage retirement bound",
+          "[method-certificate-renewal][frozen-retirement]") {
+    const bool enabled = GENERATE(false, true);
+    Workspace workspace;
+    auto config = localDiagnosticConfig;
+    config.insert(config.size() - 1, std::string(",\"experimentalCooperativeAnalysis\":true,"
+                                                 "\"experimentalMethodBodyCertificateRenewal\":") +
+                                         (enabled ? "true" : "false"));
+    workspace.write(".slang/server.json", config);
+    struct Harness : BodyTestServer {
+        using BodyTestServer::BodyTestServer;
+        using SlangServer::m_contextBudget;
+        using SlangServer::m_contextEpoch;
+    };
+    Harness server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", header);
+    doc.doc->getAnalysis();
+    auto epoch = server.m_driver->completions.getCompletionEpoch();
+    server.m_contextEpoch = epoch;
+    server.m_contextBudget = 1; // Above the hard high-water mark with no library experiments.
+    auto text = edited();
+    change(server, doc.m_uri, 2, text);
+    CHECK((server.m_driver->completions.getCompletionEpoch() != epoch) == enabled);
+    CHECK(server.m_driver->getDocument(doc.m_uri)->getText() == text + '\0');
+    server.m_driver->getDocument(doc.m_uri)->getAnalysis();
+    server.runBackgroundWork({});
+    checkNativeDiagnostics(workspace, server, text);
 }

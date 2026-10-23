@@ -974,9 +974,14 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
         compact->sources.cwd = frozen.input->sources.cwd;
         frozen.input = std::move(compact);
     }
-    handles.reserve(bodyQueries ? 66 : 10);
-    handles.push_back(originalBuffer);
-    handles.push_back(currentBuffer);
+    // General-body completion tickets carry an epoch and exact editor version;
+    // they never consult the legacy buffer-id list. Keep that list bounded to
+    // the independently capped legacy overlay instead of growing per keystroke.
+    if (!generalBody) {
+        handles.reserve(bodyQueries ? 66 : 10);
+        handles.push_back(originalBuffer);
+        handles.push_back(currentBuffer);
+    }
     phases.mark("body-prepare-witnesses");
     ctx.checkpoint("after method certificate");
 }
@@ -1051,9 +1056,15 @@ catch (const std::exception&) {
 bool MethodScopeOverlay::apply(const lsp::DidChangeTextDocumentParams& p, const Config& config,
                                const lsp::RequestContext& ctx, bool& synced, bool deferBinding) {
     need(valid(config, ctx) && p.textDocument.uri == uri && p.textDocument.version > version &&
-             accepted < (bodyQueries ? 64u : 8u) && !p.contentChanges.empty() &&
-             (bodyQueries || p.contentChanges.size() == 1),
+             (accepted < (bodyQueries ? 64u : 8u) ||
+              (generalBody && config.experimentalMethodBodyCertificateRenewal.value())) &&
+             !p.contentChanges.empty() && (bodyQueries || p.contentChanges.size() == 1),
          "method context/version/bound changed");
+    // valid() above rechecks the original immutable owner and all current input witnesses.
+    // A renewal is bookkeeping on that same proof, never a new owner based on edited syntax.
+    // Commit it only after the edit succeeds (including the deferred-binding text path).
+    if (generalBody && certificateEdits == 64)
+        ctx.checkpoint("method certificate renewal");
     std::string next = text;
     for (const auto& change : p.contentChanges) {
         if (auto* whole = rfl::get_if<lsp::TextDocumentContentChangeWholeDocument>(&change)) {
@@ -1385,10 +1396,19 @@ void MethodScopeOverlay::commitGeneralText(const lsp::DidChangeTextDocumentParam
     version = p.textDocument.version;
     auto document = driver->getDocument(uri);
     currentBuffer = document->getBuffer().getId();
-    handles.push_back(currentBuffer);
+
     documents.at(uri) = DocumentWitness{document.get(), currentBuffer, version,
                                         std::move(witnessText)};
     inputRevision = driver->getContextInputRevision();
+    acceptGeneralEdit();
+}
+
+void MethodScopeOverlay::acceptGeneralEdit() {
+    if (certificateEdits == 64) {
+        certificateEdits = 0;
+        ++renewals;
+    }
+    ++certificateEdits;
     ++accepted;
 }
 

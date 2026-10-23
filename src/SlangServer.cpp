@@ -255,6 +255,8 @@ lsp::InitializeResult SlangServer::getInitialize(const lsp::InitializeParams& pa
                     uint64_t accepted;
                     int version;
                     std::string decline;
+                    uint64_t certificateRenewals;
+                    size_t retainedHandles;
                     uint64_t localDiagnosticUpdates;
                     std::string localDiagnosticDecline;
                     std::optional<uint64_t> parserUnits;
@@ -268,6 +270,7 @@ lsp::InitializeResult SlangServer::getInitialize(const lsp::InitializeParams& pa
 #endif
                 return rfl::to_generic(
                     State{state.active, state.accepted, state.version, m_methodScopeDecline,
+                          state.renewals, state.retainedHandles,
                           m_methodScope ? m_methodScope->localDiagnosticUpdates() : 0,
                           m_methodScope ? m_methodScope->localDiagnosticDecline() : "", count,
                           documents, sources});
@@ -1829,7 +1832,9 @@ void SlangServer::maybeRetireParsedContext(const lsp::RequestContext* retirement
     if ((!m_config.experimentalUvmPrefixCache.value() &&
          !m_config.experimentalFrozenSources.value() &&
          !m_config.experimentalUvmSemanticCache.value() &&
-         !m_config.experimentalScopeSemanticCache.value()) ||
+         !m_config.experimentalScopeSemanticCache.value() &&
+         !(m_config.experimentalMethodBodyQueries.value() &&
+           m_config.experimentalMethodBodyCertificateRenewal.value())) ||
         std::getenv("SLANG_UVM_GENERATION_DISABLE") || !m_driver) {
         m_contextRetirementPending = false;
         return;

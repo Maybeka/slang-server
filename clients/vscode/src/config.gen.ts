@@ -24,6 +24,8 @@ export interface Config {
   experimentalMethodBodyQueries?: boolean
   /** Experimental local method-body diagnostics. Default off. Requires experimentalMethodBodyQueries and a completed full-design diagnostic context. Unsupported dependency changes use full current analysis. */
   experimentalMethodBodyDiagnostics?: boolean
+  /** Experimental renewal of local method-body certificates. Default off. Requires experimentalMethodBodyQueries. Revalidates the existing input witnesses and preserves the lexical owner and diagnostic baseline across 64-edit windows. Unsupported edits and source-storage limits still use native analysis and context retirement. */
+  experimentalMethodBodyCertificateRenewal?: boolean
   /** Experimental cooperative syntax parsing and background context retirement. Default off. Cancelled syntax candidates are discarded; semantic model construction retains phase-boundary cancellation. Keeps the current query owner until a private replacement is ready; new input cancels replacement parsing. A hard source-storage limit still forces synchronous retirement to bound retained generations. */
   experimentalCooperativeAnalysis?: boolean
   /** Experimental immutable UVM prefix reuse. Default off. External macros affecting UVM must come from command-line/configuration flags. Unsupported source changes or preprocessing state use native parsing. */
