@@ -8,12 +8,34 @@
 
 namespace server {
 
+// A completed native pass captured before synchronizing any edited text. Values
+// are copied while current; the one original compilation owns all referenced symbols.
+struct BodyDiagnosticBaseline {
+    explicit BodyDiagnosticBaseline(const URI& target) : uri(target) {}
+    ServerDriver* driver = nullptr;
+    std::weak_ptr<const void> context;
+    URI uri;
+    size_t begin = 0, end = 0;
+    uint32_t bufferLimit = 0;
+    std::string text;
+    std::shared_ptr<slang::ast::Compilation> owner;
+    std::vector<const slang::ast::SubroutineSymbol*> originals;
+    std::array<slang::Diagnostics, 3> diagnostics;
+    slang::analysis::AnalysisOptions analysisOptions;
+    slang::DiagnosticEngine::SettingsSnapshot settings;
+};
+
 /// One complete native diagnostic baseline, never a chain of edited owners.
 class BodyDiagnosticCache {
 public:
+    static std::shared_ptr<const BodyDiagnosticBaseline> capture(ServerDriver&, const URI&,
+                                                                 size_t begin, size_t end,
+                                                                 const lsp::RequestContext&);
     BodyDiagnosticCache(ServerDriver&, const URI&, size_t begin, size_t end,
                         const std::shared_ptr<slang::syntax::SyntaxTree>&, bool lineSensitive,
-                        const lsp::RequestContext&);
+                        const lsp::RequestContext&,
+                        std::shared_ptr<const BodyDiagnosticBaseline> = {},
+                        const std::shared_ptr<slang::syntax::SyntaxTree>& current = {});
     void publish(const std::shared_ptr<slang::syntax::SyntaxTree>&, size_t newEnd,
                  const lsp::RequestContext&, const std::function<void()>& validate);
     uint64_t updates = 0;
@@ -42,6 +64,7 @@ private:
         std::vector<std::string> calls;
         std::vector<const slang::ast::ClassType*> specializations;
     };
+    void validateSlice(const Slice&) const;
     Slice analyze(const std::shared_ptr<slang::syntax::SyntaxTree>&, const lsp::RequestContext&);
 };
 } // namespace server

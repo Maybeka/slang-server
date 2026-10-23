@@ -983,6 +983,7 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
         handles.push_back(currentBuffer);
     }
     phases.mark("body-prepare-witnesses");
+    captureLocalBaseline(config, ctx);
     ctx.checkpoint("after method certificate");
 }
 
@@ -995,7 +996,8 @@ MethodScopeOverlay::~MethodScopeOverlay() {
 bool MethodScopeOverlay::belongsTo(const ServerDriver& d) const {
     return driver == &d && frozen.owner == d.m_snapshotOwner;
 }
-bool MethodScopeOverlay::valid(const Config& config, const lsp::RequestContext& ctx) const try {
+bool MethodScopeOverlay::validContext(const Config& config, const lsp::RequestContext& ctx) const
+    try {
     UvmPhaseTrace phases;
     if (generalBody)
         for (auto original : bodyBlocked)
@@ -1032,6 +1034,25 @@ bool MethodScopeOverlay::valid(const Config& config, const lsp::RequestContext& 
     if (count != documents.size())
         return false;
     phases.mark("body-validate-context");
+    return true;
+}
+catch (const lsp::RequestCancelled&) {
+    throw;
+}
+catch (const std::exception&) {
+    return false;
+}
+
+bool MethodScopeOverlay::optimizedCertification(const Config& config) const {
+    return generalBody && config.experimentalMethodBodyCertification.value();
+}
+bool MethodScopeOverlay::validForWork(const Config& config, const lsp::RequestContext& ctx) const {
+    return optimizedCertification(config) ? validContext(config, ctx) : valid(config, ctx);
+}
+bool MethodScopeOverlay::valid(const Config& config, const lsp::RequestContext& ctx) const try {
+    if (!validContext(config, ctx))
+        return false;
+    UvmPhaseTrace phases;
     for (const auto& [path, entries] : directories) {
         ctx.checkpoint("method directory validation");
         if (directoryEntries(path) != entries)
@@ -1044,6 +1065,7 @@ bool MethodScopeOverlay::valid(const Config& config, const lsp::RequestContext& 
             return false;
     }
     phases.mark("body-validate-files");
+    ctx.checkpoint("method inputs certified");
     return true;
 }
 catch (const lsp::RequestCancelled&) {
@@ -1055,12 +1077,15 @@ catch (const std::exception&) {
 
 bool MethodScopeOverlay::apply(const lsp::DidChangeTextDocumentParams& p, const Config& config,
                                const lsp::RequestContext& ctx, bool& synced, bool deferBinding) {
-    need(valid(config, ctx) && p.textDocument.uri == uri && p.textDocument.version > version &&
+    need(validForWork(config, ctx) && p.textDocument.uri == uri &&
+             p.textDocument.version > version &&
              (accepted < (bodyQueries ? 64u : 8u) ||
               (generalBody && config.experimentalMethodBodyCertificateRenewal.value())) &&
              !p.contentChanges.empty() && (bodyQueries || p.contentChanges.size() == 1),
          "method context/version/bound changed");
-    // valid() above rechecks the original immutable owner and all current input witnesses.
+    ctx.checkpoint("before method edit work");
+    // The original owner and current document witnesses are checked above.
+    // Full input contents are rechecked before body / response publication.
     // A renewal is bookkeeping on that same proof, never a new owner based on edited syntax.
     // Commit it only after the edit succeeds (including the deferred-binding text path).
     if (generalBody && certificateEdits == 64)
@@ -1103,6 +1128,7 @@ bool MethodScopeOverlay::apply(const lsp::DidChangeTextDocumentParams& p, const 
                  "fixed line layout required");
     }
     if (generalBody) {
+        captureLocalBaseline(config, ctx);
         if (deferBinding) {
             // A superseded notification still advances text and its witness. Do
             // not discard the fixed lexical owner or bind obsolete intermediate
@@ -1117,7 +1143,7 @@ bool MethodScopeOverlay::apply(const lsp::DidChangeTextDocumentParams& p, const 
             diagnosticBaselineVersion = version;
             diagnosticDecline = "line shift affects diagnostics in later macro bodies";
         }
-        else
+        else if (!optimizedCertification(config))
             prepareLocalDiagnostics(config, ctx);
         return generalApply(p, config, ctx, synced, std::move(next), nextBodyEnd, nextFunctionEnd);
     }
@@ -1368,7 +1394,9 @@ bool MethodScopeOverlay::generalApply(const lsp::DidChangeTextDocumentParams& p,
              "body changes macro environment");
     auto analysis = std::make_shared<ShallowAnalysis>(source.id, unit, ctx);
     phases.mark("body-apply-index");
-    need(valid(config, ctx), "inputs changed before body publication");
+    need(bindOnly && optimizedCertification(config) ? validContext(config, ctx)
+                                                    : valid(config, ctx),
+         "inputs changed before body publication");
     phases.mark("body-apply-revalidate");
     if (!bindOnly)
         commitGeneralText(p, std::move(next), nextBodyEnd, nextFunctionEnd, ctx, synced);
@@ -1462,8 +1490,82 @@ const MethodScopeOverlay::DTO& MethodScopeOverlay::completion(size_t context, si
 }
 std::optional<std::vector<lsp::CompletionItem>> MethodScopeOverlay::complete(
     const lsp::CompletionParams& p, const Config& config, const lsp::RequestContext& ctx) try {
+    auto result = completeImpl(p, config, ctx);
+    if (result && optimizedCertification(config)) {
+        ctx.checkpoint("before method complete certification");
+        if (!valid(config, ctx))
+            return {};
+        ctx.checkpoint("after method complete certification");
+    }
+    return result;
+}
+catch (const lsp::RequestCancelled&) {
+    throw;
+}
+catch (const std::exception&) {
+    return {};
+}
+
+std::optional<std::vector<lsp::LocationLink>> MethodScopeOverlay::define(
+    const lsp::DefinitionParams& p, const Config& config, const lsp::RequestContext& ctx) try {
+    auto result = defineImpl(p, config, ctx);
+    if (result && optimizedCertification(config)) {
+        ctx.checkpoint("before method define certification");
+        if (!valid(config, ctx))
+            return {};
+        ctx.checkpoint("after method define certification");
+    }
+    return result;
+}
+catch (const lsp::RequestCancelled&) {
+    throw;
+}
+catch (const std::exception&) {
+    return {};
+}
+
+std::optional<std::optional<lsp::Hover>> MethodScopeOverlay::hover(
+    const URI& target, const lsp::Position& position, const Config& config,
+    const lsp::RequestContext& ctx, std::optional<Config::HoverConfig::MacroView> view) try {
+    auto result = hoverImpl(target, position, config, ctx, view);
+    if (result && optimizedCertification(config)) {
+        ctx.checkpoint("before method hover certification");
+        if (!valid(config, ctx))
+            return {};
+        ctx.checkpoint("after method hover certification");
+    }
+    return result;
+}
+catch (const lsp::RequestCancelled&) {
+    throw;
+}
+catch (const std::exception&) {
+    return {};
+}
+
+std::optional<lsp::CompletionItem> MethodScopeOverlay::resolve(const lsp::CompletionItem& item,
+                                                               const Config& config,
+                                                               const lsp::RequestContext& ctx) try {
+    auto result = resolveImpl(item, config, ctx);
+    if (result && optimizedCertification(config)) {
+        ctx.checkpoint("before method resolve certification");
+        if (!valid(config, ctx))
+            return {};
+        ctx.checkpoint("after method resolve certification");
+    }
+    return result;
+}
+catch (const lsp::RequestCancelled&) {
+    throw;
+}
+catch (const std::exception&) {
+    return {};
+}
+
+std::optional<std::vector<lsp::CompletionItem>> MethodScopeOverlay::completeImpl(
+    const lsp::CompletionParams& p, const Config& config, const lsp::RequestContext& ctx) try {
     if (generalBody) {
-        if (!accepted || p.textDocument.uri != uri || !valid(config, ctx) ||
+        if (!accepted || p.textDocument.uri != uri || !validForWork(config, ctx) ||
             !generalSite(p.position))
             return {};
         ensureGeneralBinding(config, ctx);
@@ -1492,7 +1594,7 @@ std::optional<std::vector<lsp::CompletionItem>> MethodScopeOverlay::complete(
             }
         return out;
     }
-    if (!accepted || p.textDocument.uri != uri || !valid(config, ctx) ||
+    if (!accepted || p.textDocument.uri != uri || !validForWork(config, ctx) ||
         (p.context && p.context->triggerKind == lsp::CompletionTriggerKind::TriggerCharacter)) {
         return {};
     }
@@ -1529,9 +1631,9 @@ catch (const std::exception&) {
     return {};
 }
 
-std::optional<std::vector<lsp::LocationLink>> MethodScopeOverlay::define(
+std::optional<std::vector<lsp::LocationLink>> MethodScopeOverlay::defineImpl(
     const lsp::DefinitionParams& p, const Config& config, const lsp::RequestContext& ctx) try {
-    if (!accepted || p.textDocument.uri != uri || !valid(config, ctx))
+    if (!accepted || p.textDocument.uri != uri || !validForWork(config, ctx))
         return {};
     if (generalBody) {
         if (!generalSite(p.position))
@@ -1562,10 +1664,11 @@ catch (const std::exception&) {
     return {};
 }
 
-std::optional<std::optional<lsp::Hover>> MethodScopeOverlay::hover(
+std::optional<std::optional<lsp::Hover>> MethodScopeOverlay::hoverImpl(
     const URI& target, const lsp::Position& position, const Config& config,
     const lsp::RequestContext& ctx, std::optional<Config::HoverConfig::MacroView> view) try {
-    if (!generalBody || !accepted || target != uri || !valid(config, ctx) || !generalSite(position))
+    if (!generalBody || !accepted || target != uri || !validForWork(config, ctx) ||
+        !generalSite(position))
         return {};
     ensureGeneralBinding(config, ctx);
     ast::BodyQueryEvaluationGuard guard(bodyBlocked);
@@ -1583,10 +1686,9 @@ catch (const std::exception&) {
     return {};
 }
 
-std::optional<lsp::CompletionItem> MethodScopeOverlay::resolve(const lsp::CompletionItem& item,
-                                                               const Config& config,
-                                                               const lsp::RequestContext& ctx) try {
-    if (!accepted || !valid(config, ctx))
+std::optional<lsp::CompletionItem> MethodScopeOverlay::resolveImpl(
+    const lsp::CompletionItem& item, const Config& config, const lsp::RequestContext& ctx) try {
+    if (!accepted || !validForWork(config, ctx))
         return {};
     if (item.data) {
         auto payload = *item.data;
@@ -1720,6 +1822,29 @@ catch (const std::exception&) {
     return {};
 }
 
+void MethodScopeOverlay::captureLocalBaseline(const Config& config,
+                                              const lsp::RequestContext& ctx) {
+    if (!optimizedCertification(config) || !config.experimentalMethodBodyDiagnostics.value() ||
+        bodyDiagnostics || diagnosticBaseline || diagnosticCaptureVersion == version)
+        return;
+    diagnosticCaptureVersion = version;
+    try {
+        validateBodyPreprocessing(text.substr(functionBegin, functionEnd - functionBegin));
+        UvmPhaseTrace phases;
+        diagnosticBaseline = BodyDiagnosticCache::capture(*driver, uri, functionBegin, functionEnd,
+                                                          ctx);
+        phases.mark("body-diagnostic-capture");
+        diagnosticDecline.clear();
+    }
+    catch (const lsp::RequestCancelled&) {
+        diagnosticCaptureVersion = -1;
+        throw;
+    }
+    catch (const std::exception& error) {
+        diagnosticDecline = error.what();
+    }
+}
+
 void MethodScopeOverlay::prepareLocalDiagnostics(const Config& config,
                                                  const lsp::RequestContext& ctx) {
     if (!generalBody || !config.experimentalMethodBodyDiagnostics.value() || bodyDiagnostics ||
@@ -1727,11 +1852,25 @@ void MethodScopeOverlay::prepareLocalDiagnostics(const Config& config,
         return;
     diagnosticBaselineVersion = version;
     try {
-        std::string padded = text.substr(0, functionBegin);
+        UvmPhaseTrace phases;
+        const auto baselineEnd = diagnosticBaseline ? diagnosticBaseline->end : functionEnd;
+        if (diagnosticBaseline && (bodyLineSensitiveDeclaration || !bodyLineDependents.empty()) &&
+            std::count(diagnosticBaseline->text.begin(),
+                       diagnosticBaseline->text.begin() + baselineEnd,
+                       '\n') != std::count(text.begin(), text.begin() + functionEnd, '\n')) {
+            diagnosticDecline = "line shift affects diagnostics in later macro bodies";
+            diagnosticBaseline.reset();
+            return;
+        }
+        auto baselineText = diagnosticBaseline ? std::string_view(diagnosticBaseline->text)
+                                               : std::string_view(text);
+        validateBodyPreprocessing(
+            std::string(baselineText.substr(functionBegin, baselineEnd - functionBegin)));
+        std::string padded(baselineText.substr(0, functionBegin));
         for (auto& c : padded)
             if (c != '\n' && c != '\r')
                 c = ' ';
-        padded += text.substr(functionBegin, functionEnd - functionBegin);
+        padded += baselineText.substr(functionBegin, baselineEnd - functionBegin);
         auto source = driver->sm.assignQueryText(
             driver->sm.getFullPath(driver->getDocument(uri)->getBuffer()).string(), padded);
         for (const auto& line :
@@ -1752,9 +1891,14 @@ void MethodScopeOverlay::prepareLocalDiagnostics(const Config& config,
                                                   directive.name, directive.severity, true);
         auto tree = syntax::SyntaxTree::fromBuffer(source, driver->sm, treeOptions->bag(),
                                                    bodyMacros);
+        for (const auto& reference : tree->getPreprocessorMetadata().macroRefs)
+            validateMacroPreprocessing(reference);
         bodyDiagnostics = std::make_unique<BodyDiagnosticCache>(
-            *driver, uri, functionBegin, functionEnd, tree,
-            bodyLineSensitiveDeclaration || !bodyLineDependents.empty(), ctx);
+            *driver, uri, functionBegin, baselineEnd, tree,
+            bodyLineSensitiveDeclaration || !bodyLineDependents.empty(), ctx, diagnosticBaseline,
+            optimizedCertification(config) ? miniTree : nullptr);
+        diagnosticBaseline.reset();
+        phases.mark("body-diagnostic-certification");
         diagnosticDecline.clear();
     }
     catch (const lsp::RequestCancelled&) {
@@ -1763,6 +1907,7 @@ void MethodScopeOverlay::prepareLocalDiagnostics(const Config& config,
     }
     catch (const std::exception& error) {
         diagnosticDecline = error.what();
+        diagnosticBaseline.reset();
     }
 }
 
@@ -1776,10 +1921,14 @@ std::string MethodScopeOverlay::localDiagnosticDecline() const {
 bool MethodScopeOverlay::publishLocalDiagnostics(const Config& config,
                                                  const lsp::RequestContext& ctx) {
     if (!generalBody || !accepted || !config.experimentalMethodBodyDiagnostics.value() ||
-        !bodyDiagnostics || !valid(config, ctx))
+        (!bodyDiagnostics && !optimizedCertification(config)) || !validForWork(config, ctx))
         return false;
     try {
         ensureGeneralBinding(config, ctx);
+        if (optimizedCertification(config) && !bodyDiagnostics)
+            prepareLocalDiagnostics(config, ctx);
+        if (!bodyDiagnostics)
+            return false;
         bodyDiagnostics->publish(miniTree, functionEnd, ctx, [&] {
             need(valid(config, ctx), "inputs changed during local diagnostics");
         });
@@ -1813,6 +1962,7 @@ bool MethodScopeOverlay::publishLocalDiagnostics(const Config& config,
     catch (const std::exception& error) {
         diagnosticDecline = error.what();
         bodyDiagnostics.reset();
+        diagnosticBaseline.reset();
         return false;
     }
 }

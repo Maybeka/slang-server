@@ -113,6 +113,14 @@ struct Config {
                      bool>
         experimentalMethodBodyCertificateRenewal = false;
 
+    rfl::Description<"Experimental method-body certification at publication boundaries. Default "
+                     "off. Requires experimentalMethodBodyQueries. Skips redundant preflight "
+                     "disk reads but still verifies complete input contents before returning "
+                     "local results. Retains one completed original diagnostic baseline across "
+                     "superseded edits and certifies its local slice on diagnostic demand.",
+                     bool>
+        experimentalMethodBodyCertification = false;
+
     rfl::Description<"Experimental cooperative syntax parsing and background context retirement. "
                      "Default off. Cancelled syntax candidates are discarded; semantic model "
                      "construction retains phase-boundary cancellation. "

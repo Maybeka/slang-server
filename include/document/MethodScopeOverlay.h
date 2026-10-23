@@ -12,6 +12,7 @@
 namespace server {
 
 class BodyDiagnosticCache;
+struct BodyDiagnosticBaseline;
 
 /// Opt-in local function/task queries retaining one original lexical context.
 /// The legacy closed-int overlay keeps its independent value-only implementation.
@@ -77,9 +78,25 @@ private:
     };
     ServerDriver* driver;
     std::unique_ptr<BodyDiagnosticCache> bodyDiagnostics;
+    std::shared_ptr<const BodyDiagnosticBaseline> diagnosticBaseline;
+    bool optimizedCertification(const Config&) const;
+    bool validContext(const Config&, const lsp::RequestContext&) const;
+    bool validForWork(const Config&, const lsp::RequestContext&) const;
+    std::optional<std::vector<lsp::CompletionItem>> completeImpl(const lsp::CompletionParams&,
+                                                                 const Config&,
+                                                                 const lsp::RequestContext&);
+    std::optional<std::vector<lsp::LocationLink>> defineImpl(const lsp::DefinitionParams&,
+                                                             const Config&,
+                                                             const lsp::RequestContext&);
+    std::optional<std::optional<lsp::Hover>> hoverImpl(
+        const URI&, const lsp::Position&, const Config&, const lsp::RequestContext&,
+        std::optional<Config::HoverConfig::MacroView>);
+    std::optional<lsp::CompletionItem> resolveImpl(const lsp::CompletionItem&, const Config&,
+                                                   const lsp::RequestContext&);
     std::string diagnosticDecline;
     uint64_t diagnosticUpdates = 0;
-    int diagnosticBaselineVersion = -1;
+    int diagnosticBaselineVersion = -1, diagnosticCaptureVersion = -1;
+    void captureLocalBaseline(const Config&, const lsp::RequestContext&);
     void prepareLocalDiagnostics(const Config&, const lsp::RequestContext&);
     URI uri;
     std::string text, configKey, optionsKey, packageName, className, functionName, functionPath;

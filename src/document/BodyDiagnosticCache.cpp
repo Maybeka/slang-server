@@ -114,15 +114,17 @@ std::vector<std::string> rendered(const Diagnostics& diagnostics, SourceManager&
 }
 } // namespace
 
-BodyDiagnosticCache::BodyDiagnosticCache(ServerDriver& d, const URI& target, size_t start,
-                                         size_t stop,
-                                         const std::shared_ptr<syntax::SyntaxTree>& tree,
-                                         bool sensitive, const lsp::RequestContext& ctx) :
-    driver(d), uri(target), begin(start), end(stop),
-    bufferLimit(uint32_t(d.sm.getSourceLocationEntryCount())), lineSensitive(sensitive),
-    baselineLine(d.sm.getRawLineNumber(SourceLocation(tree->getSourceBufferIds().front(), stop))),
-    analysisOptions(d.options.getOrDefault<analysis::AnalysisOptions>()),
-    settings(d.diagEngine.captureSettings()) {
+std::shared_ptr<const BodyDiagnosticBaseline> BodyDiagnosticCache::capture(
+    ServerDriver& d, const URI& uri, size_t start, size_t stop, const lsp::RequestContext& ctx) {
+    ctx.checkpoint("before method diagnostic capture");
+    auto baseline = std::make_shared<BodyDiagnosticBaseline>(uri);
+    baseline->driver = &d;
+    baseline->context = d.m_snapshotOwner;
+    baseline->begin = start;
+    baseline->end = stop;
+    baseline->bufferLimit = uint32_t(d.sm.getSourceLocationEntryCount());
+    baseline->settings = d.diagEngine.captureSettings();
+    baseline->analysisOptions = d.options.getOrDefault<analysis::AnalysisOptions>();
     require(d.comp && d.m_fullDiagnosticGeneration &&
                 d.m_fullDiagnosticGeneration == d.m_diagnosticGeneration &&
                 d.comp->containsCurrentSource(d.sm.getFullPath(d.getDocument(uri)->getBuffer())),
@@ -131,9 +133,10 @@ BodyDiagnosticCache::BodyDiagnosticCache(ServerDriver& d, const URI& target, siz
         require(!d.hasExplicitContextError(key) && d.comp->containsCurrentSource(d.sm.getFullPath(
                                                        d.getDocument(key)->getBuffer())),
                 "open document outside full-design diagnostic coverage");
-    require(settings.errorLimit == 0, "bounded diagnostic streams require full analysis");
+    require(baseline->settings.errorLimit == 0, "bounded diagnostic streams require full analysis");
     auto design = d.comp->createActiveDesignContext({});
-    owner = design.retainCompilation();
+    auto owner = design.retainCompilation();
+    baseline->owner = owner;
     require(!owner->hasFatalErrors(), "fatal baseline diagnostics require native analysis");
     auto& manager = design.getAnalysis().getAnalysisManager(ctx);
     auto path = d.sm.getFullPath(d.getDocument(uri)->getBuffer());
@@ -142,7 +145,7 @@ BodyDiagnosticCache::BodyDiagnosticCache(ServerDriver& d, const URI& target, siz
         if (!syntax)
             continue;
         auto first = syntax->getFirstToken().location();
-        if (!d.sm.isFileLoc(first) || first.offset() != begin ||
+        if (!d.sm.isFileLoc(first) || first.offset() != start ||
             d.sm.getFullPath(first.buffer()) != path)
             continue;
         require(fn->getParentScope()->asSymbol().kind == ast::SymbolKind::ClassType &&
@@ -152,10 +155,41 @@ BodyDiagnosticCache::BodyDiagnosticCache(ServerDriver& d, const URI& target, siz
                     ast::CompilationFlags::TrackSubroutineBodyDependencies) &&
                     !fn->bodyHasExternalDependents.load(std::memory_order_relaxed),
                 "method has external elaboration dependencies");
-        originals.push_back(fn);
+        baseline->originals.push_back(fn);
     }
-    require(!originals.empty(), "method absent from full-design analysis");
-    require(originals.size() == 1, "multiple full-design method contexts require full diagnostics");
+    require(!baseline->originals.empty(), "method absent from full-design analysis");
+    require(baseline->originals.size() == 1,
+            "multiple full-design method contexts require full diagnostics");
+
+    // replaceBuffer clears the editor BufferID's FileInfo even while old FileData
+    // is pinned. Keep one target-file value, not a chain of edited source owners.
+    baseline->text = std::string(d.getDocument(uri)->getText());
+    for (const auto& tree : owner->getSyntaxTrees())
+        baseline->diagnostics[0].append_range(tree->diagnostics());
+    baseline->diagnostics[1].append_range(owner->getSemanticDiagnostics());
+    baseline->diagnostics[2].append_range(manager.getDiagnostics());
+    ctx.checkpoint("after method diagnostic capture");
+    return baseline;
+}
+
+BodyDiagnosticCache::BodyDiagnosticCache(ServerDriver& d, const URI& target, size_t start,
+                                         size_t stop,
+                                         const std::shared_ptr<syntax::SyntaxTree>& tree,
+                                         bool sensitive, const lsp::RequestContext& ctx,
+                                         std::shared_ptr<const BodyDiagnosticBaseline> saved,
+                                         const std::shared_ptr<syntax::SyntaxTree>& current) :
+    driver(d), uri(target), begin(start), end(stop), lineSensitive(sensitive),
+    baselineLine(d.sm.getRawLineNumber(SourceLocation(tree->getSourceBufferIds().front(), stop))) {
+    auto baseline = saved ? std::move(saved) : capture(d, target, start, stop, ctx);
+    require(baseline->driver == &d && baseline->context.lock() == d.m_snapshotOwner &&
+                baseline->uri == uri && baseline->begin == start && baseline->end == stop,
+            "original diagnostic baseline belongs to another context");
+    bufferLimit = baseline->bufferLimit;
+    settings = baseline->settings;
+    analysisOptions = baseline->analysisOptions;
+    owner = baseline->owner;
+    originals = baseline->originals;
+    auto path = d.sm.getFullPath(d.getDocument(uri)->getBuffer());
     auto local = [&](const Diagnostic& diagnostic) {
         auto loc = d.sm.getFullyExpandedLoc(diagnostic.location);
         if (loc && d.sm.getFullPath(loc.buffer()) == path && begin <= loc.offset() &&
@@ -168,28 +202,35 @@ BodyDiagnosticCache::BodyDiagnosticCache(ServerDriver& d, const URI& target, siz
                 return true;
         return false;
     };
-    Diagnostics baseline;
+    Diagnostics baselineDiagnostics;
     std::array<Diagnostics, 3> retainedDiagnostics;
-    for (const auto& t : owner->getSyntaxTrees())
-        for (const auto& diagnostic : t->diagnostics()) {
-            auto loc = d.sm.getFullyExpandedLoc(diagnostic.location);
-            (loc && d.sm.getFullPath(loc.buffer()) == path && begin <= loc.offset() &&
-                     loc.offset() < end
-                 ? baseline
-                 : retainedDiagnostics[0])
-                .push_back(diagnostic);
-        }
-    for (auto& diagnostic : owner->getSemanticDiagnostics())
-        (local(diagnostic) ? baseline : retainedDiagnostics[1]).push_back(diagnostic);
-    for (auto& diagnostic : manager.getDiagnostics())
-        (local(diagnostic) ? baseline : retainedDiagnostics[2]).push_back(diagnostic);
+    for (const auto& diagnostic : baseline->diagnostics[0]) {
+        auto loc = d.sm.getFullyExpandedLoc(diagnostic.location);
+        (loc && d.sm.getFullPath(loc.buffer()) == path && begin <= loc.offset() &&
+                 loc.offset() < end
+             ? baselineDiagnostics
+             : retainedDiagnostics[0])
+            .push_back(diagnostic);
+    }
+    for (const auto& diagnostic : baseline->diagnostics[1])
+        (local(diagnostic) ? baselineDiagnostics : retainedDiagnostics[1]).push_back(diagnostic);
+    for (const auto& diagnostic : baseline->diagnostics[2])
+        (local(diagnostic) ? baselineDiagnostics : retainedDiagnostics[2]).push_back(diagnostic);
     auto initial = analyze(tree, ctx);
-    auto expected = rendered(baseline, d.sm, d.client, settings);
+    auto expected = rendered(baselineDiagnostics, d.sm, d.client, settings);
     Diagnostics combined;
     for (auto& phase : initial.diagnostics)
         combined.append_range(phase);
     auto actual = rendered(combined, d.sm, d.client, settings);
     require(expected == actual, "detached diagnostic baseline differs from full design");
+    baselineBinding = initial.compilation;
+    specializations = std::move(initial.specializations);
+    references = std::move(initial.references);
+    calls = std::move(initial.calls);
+    // Test current dependency / reference eligibility before formatting all retained
+    // diagnostics. Unsupported first edits should not pay for a baseline we discard.
+    if (current)
+        validateSlice(analyze(current, ctx));
     auto collector = std::make_shared<DiagnosticBuckets>(d);
     DiagnosticEngine engine(d.sm);
     engine.applySettings(settings);
@@ -236,10 +277,6 @@ BodyDiagnosticCache::BodyDiagnosticCache(ServerDriver& d, const URI& target, siz
                 if (affected)
                     affectedUris.insert(key);
             }
-    baselineBinding = initial.compilation;
-    specializations = std::move(initial.specializations);
-    references = std::move(initial.references);
-    calls = std::move(initial.calls);
     ctx.checkpoint("after local diagnostic baseline");
 }
 
@@ -390,13 +427,7 @@ BodyDiagnosticCache::Slice BodyDiagnosticCache::analyze(
     return result;
 }
 
-void BodyDiagnosticCache::publish(const std::shared_ptr<syntax::SyntaxTree>& tree, size_t newEnd,
-                                  const lsp::RequestContext& ctx,
-                                  const std::function<void()>& validate) {
-    require(!lineSensitive || baselineLine == driver.sm.getRawLineNumber(SourceLocation(
-                                                  tree->getSourceBufferIds().front(), newEnd)),
-            "line shift affects diagnostics in later macro bodies");
-    auto slice = analyze(tree, ctx);
+void BodyDiagnosticCache::validateSlice(const Slice& slice) const {
     require(slice.references == references, "method changes external reference usage");
     require(slice.calls == calls, "method changes specialization or declaration dependencies");
     require(
@@ -437,6 +468,16 @@ void BodyDiagnosticCache::publish(const std::shared_ptr<syntax::SyntaxTree>& tre
             require(driver.diagEngine.getSeverity(diagnostic.code, diagnostic.location) !=
                         DiagnosticSeverity::Fatal,
                     "fatal diagnostics require full analysis");
+}
+
+void BodyDiagnosticCache::publish(const std::shared_ptr<syntax::SyntaxTree>& tree, size_t newEnd,
+                                  const lsp::RequestContext& ctx,
+                                  const std::function<void()>& validate) {
+    require(!lineSensitive || baselineLine == driver.sm.getRawLineNumber(SourceLocation(
+                                                  tree->getSourceBufferIds().front(), newEnd)),
+            "line shift affects diagnostics in later macro bodies");
+    auto slice = analyze(tree, ctx);
+    validateSlice(slice);
     auto document = driver.getDocument(uri);
     BodySourceProjection projection(driver.sm, document->getBuffer(),
                                     tree->getSourceBufferIds().front(), end, newEnd, bufferLimit);
