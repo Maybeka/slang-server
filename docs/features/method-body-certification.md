@@ -41,7 +41,7 @@ driver. A newly completed current native pass can seed a later attempt after fal
 
 This retains existing diagnostic coverage limits. Line-count changes in a file with later macro
 expansions conservatively require native diagnostics, including common UVM `uvm_info` cases.
-Changed external reference usage, specialization dependencies, unsupported local declarations,
+General changed external reference usage, specialization dependencies, unsupported local declarations,
 driver/timing effects and bounded/fatal streams also retain native fallback. Moving certification
 into background does not eliminate its first-use cost. Publication checks are observations of
 filesystem contents at their checkpoints, not atomic filesystem snapshots.
@@ -83,3 +83,13 @@ bytes, including absent layers, in runtime-only witnesses; these are excluded fr
 serialization and the public schema. This closes the window where an options file changes
 before the first local certificate. Explicitly trusted frozen libraries keep their existing
 fixed-dependency / manual-rebuild contract.
+
+
+Local diagnostics can also prove a changed read/write reference bit when that bit was already
+set in an explicitly trusted provider's original exported usage profile. The proof excludes later
+navigation and consumer overlays. Normal instance-function references such as UVM `get_name()`
+can qualify. Changed package/static/task/constructor call references still require native effect
+analysis; all other driver, timing, initializer, specialization and fatal-stream checks remain.
+Without a qualifying fixed provider, external usage changes retain native fallback. This does not
+provide a general reference dependency ledger or remove later-macro line restrictions. See the
+[fixed-provider evaluation](../development/fixed-provider-reference-evaluation.md).

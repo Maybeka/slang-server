@@ -2,6 +2,7 @@
 #include "document/BodyDiagnosticCache.h"
 
 #include "ast/ServerCompilation.h"
+#include "ast/TrustedUvmLibrary.h"
 #include "document/NativeDiagnosticSnapshot.h"
 #include "util/Converters.h"
 #include "util/UvmPhaseTrace.h"
@@ -275,6 +276,7 @@ BodyDiagnosticCache::BodyDiagnosticCache(ServerDriver& d, const URI& target, siz
     specializations = std::move(initial.specializations);
     references = std::move(initial.references);
     calls = std::move(initial.calls);
+    effectSensitiveCalls = std::move(initial.effectSensitiveCalls);
     // Test current dependency / reference eligibility before formatting all retained
     // diagnostics. Unsupported first edits should not pay for a baseline we discard.
     if (current)
@@ -365,6 +367,25 @@ BodyDiagnosticCache::Slice BodyDiagnosticCache::analyze(
         compilation.forceElaborate(fn);
         LocalBoundaries boundaries;
         fn.visit(boundaries);
+        auto callEffects = ast::makeVisitor([&](auto& visitor, const ast::CallExpression& call) {
+            // A safe outer call must not hide a package/static/task call in its
+            // receiver or actual arguments, including system-call arguments.
+            visitor.visitDefault(call);
+            if (call.isSystemCall())
+                return;
+            const auto target = std::get<const ast::SubroutineSymbol*>(call.subroutine);
+            const auto parent = target->getParentScope();
+            if (parent && parent->asSymbol().kind == ast::SymbolKind::ClassType &&
+                !target->flags.has(ast::MethodFlags::Static | ast::MethodFlags::Constructor) &&
+                target->subroutineKind == ast::SubroutineKind::Function)
+                return;
+            if (const auto node = target->getSyntax())
+                result.effectSensitiveCalls.insert(node);
+            if (const auto prototype = target->getPrototype())
+                if (const auto node = prototype->getSyntax())
+                    result.effectSensitiveCalls.insert(node);
+        });
+        fn.visit(callEffects);
         roots.push_back(&fn);
         ctx.checkpoint("after local diagnostic binding");
     }
@@ -484,7 +505,39 @@ BodyDiagnosticCache::Slice BodyDiagnosticCache::analyze(
 }
 
 void BodyDiagnosticCache::validateSlice(const Slice& slice) const {
-    require(slice.references == references, "method changes external reference usage");
+    if (slice.references != references) {
+        // A fixed provider's exported use exists independently of this editable
+        // caller. Changing a bit already set by that provider cannot change the
+        // full-design read/write status. Do not use isReferenced here: later
+        // navigation can add uses to a provider's separate mutable overlay.
+        auto equivalent = [&](const syntax::SyntaxNode* node, std::pair<bool, bool> before,
+                              std::pair<bool, bool> after) {
+            if (before == after)
+                return true;
+            require(!effectSensitiveCalls.contains(node) &&
+                        !slice.effectSensitiveCalls.contains(node),
+                    "changed package/static/task calls require full effect analysis");
+            std::pair<bool, bool> fixed{};
+            for (const auto& library : {driver.m_trustedUvm, driver.m_trustedScopes})
+                if (library && library->compilation) {
+                    auto usage = library->compilation->getExportedReferenceUsage(*node);
+                    fixed.first |= usage.first;
+                    fixed.second |= usage.second;
+                }
+            return (before.first == after.first || fixed.first) &&
+                   (before.second == after.second || fixed.second);
+        };
+        for (const auto& [node, before] : references) {
+            auto found = slice.references.find(node);
+            require(equivalent(node, before,
+                               found == slice.references.end() ? std::pair<bool, bool>{}
+                                                               : found->second),
+                    "method changes external reference usage");
+        }
+        for (const auto& [node, after] : slice.references)
+            if (!references.contains(node))
+                require(equivalent(node, {}, after), "method changes external reference usage");
+    }
     require(slice.calls == calls, "method changes specialization or declaration dependencies");
     require(
         slice.specializations.size() == specializations.size() &&

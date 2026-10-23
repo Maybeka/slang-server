@@ -121,7 +121,7 @@ index 133958b902d1d14a385158be0f64acfc62cfcab7..6208d74756b29fcfcaad116cfb2e229d
  
  template<typename TVisitor>
 diff --git a/include/slang/ast/Compilation.h b/include/slang/ast/Compilation.h
-index b7ddc64e46b08cf082b7e7ffec12ffe769afc693..97525163b70d022e90d648a47138fe114edd9789 100644
+index b7ddc64e46b08cf082b7e7ffec12ffe769afc693..6a7c2addee25be71ca2ab99a3cf54ef43edd482d 100644
 --- a/include/slang/ast/Compilation.h
 +++ b/include/slang/ast/Compilation.h
 @@ -7,6 +7,7 @@
@@ -290,7 +290,7 @@ index b7ddc64e46b08cf082b7e7ffec12ffe769afc693..97525163b70d022e90d648a47138fe11
  
      /// Gets the override node for a top-level definition, creating it if necessary. This must be
      /// called before the compilation is finalized. The syntax node can come from another
-@@ -366,10 +473,22 @@ public:
+@@ -366,10 +473,27 @@ public:
      /// so will result in an exception.
      const RootSymbol& getRoot();
  
@@ -304,6 +304,11 @@ index b7ddc64e46b08cf082b7e7ffec12ffe769afc693..97525163b70d022e90d648a47138fe11
 +    Diagnostics getBodyQueryDiagnostics();
 +    const auto& getBodyQueryReferences() const { return referenceStatusMap; }
 +
++    /// Usage exported before the first importing consumer. Later navigation and
++    /// mutable consumer uses are deliberately excluded. Returns no usage before
++    /// an export exists; this does not force binding or export a mutable graph.
++    std::pair<bool, bool> getExportedReferenceUsage(const syntax::SyntaxNode& node) const;
++
      /// Gets the root of the design without attempting to finalize it.
      /// This means that (if the design has not been finalized previously) things like
      /// defparams will not be resolved, root instances will not have been created, etc.
@@ -314,7 +319,7 @@ index b7ddc64e46b08cf082b7e7ffec12ffe769afc693..97525163b70d022e90d648a47138fe11
  
      /// Indicates whether the design has been compiled and can no longer accept modifications.
      bool isFinalized() const { return finalized; }
-@@ -396,6 +515,7 @@ public:
+@@ -396,6 +520,7 @@ public:
  
      /// Queries if any errors have been issued on any scope within this compilation.
      bool hasIssuedErrors() const { return numErrors > 0; };
@@ -322,7 +327,7 @@ index b7ddc64e46b08cf082b7e7ffec12ffe769afc693..97525163b70d022e90d648a47138fe11
  
      /// Returns true if there are any fatal errors reported in the compilation,
      /// or if we've hit the configured error limit and stopped elaboration early
-@@ -512,6 +632,11 @@ public:
+@@ -512,6 +637,11 @@ public:
  
      /// Gets the package with the give name, or nullptr if there is no such package.
      const PackageSymbol* getPackage(std::string_view name) const;
@@ -334,7 +339,7 @@ index b7ddc64e46b08cf082b7e7ffec12ffe769afc693..97525163b70d022e90d648a47138fe11
  
      /// Gets the built-in 'std' package.
      const PackageSymbol& getStdPackage() const { return *stdPkg; }
-@@ -681,7 +806,13 @@ public:
+@@ -681,7 +811,13 @@ public:
      /// Notes that the given symbol is "referenced" somewhere in the AST.
      /// This is used to diagnose unused variables, nets, etc. The @a isLValue parameter
      /// is used to tell whether a value is only assigned or whether it's also read somewhere.
@@ -349,7 +354,7 @@ index b7ddc64e46b08cf082b7e7ffec12ffe769afc693..97525163b70d022e90d648a47138fe11
  
      /// Checks whether the given syntax node has been referenced in the AST thus far.
      /// The result is a pair, the first item of which is true if the node has been used
-@@ -857,6 +988,50 @@ private:
+@@ -857,6 +993,50 @@ private:
      friend class Scope;
      friend struct DiagnosticVisitor;
  
@@ -400,7 +405,7 @@ index b7ddc64e46b08cf082b7e7ffec12ffe769afc693..97525163b70d022e90d648a47138fe11
      // Collected information about a resolved bind directive.
      struct ResolvedBind {
          SmallVector<const Symbol*> instTargets;
-@@ -937,6 +1112,10 @@ private:
+@@ -937,6 +1117,10 @@ private:
      // for things like variables and nets.
      flat_hash_map<const syntax::SyntaxNode*, std::pair<bool, bool>> referenceStatusMap;
  
@@ -411,7 +416,7 @@ index b7ddc64e46b08cf082b7e7ffec12ffe769afc693..97525163b70d022e90d648a47138fe11
      // The name map for all module, interface, program, and primitive definitions.
      // The key is a combination of definition name + the scope in which it was declared.
      // The value is a pair -- the first element is a list of definitions that share
-@@ -996,6 +1175,7 @@ private:
+@@ -996,6 +1180,7 @@ private:
      std::unique_ptr<RootSymbol> root;
      SourceManager* sourceManager = nullptr;
      size_t numErrors = 0; // total number of errors inserted into the diagMap
@@ -419,7 +424,7 @@ index b7ddc64e46b08cf082b7e7ffec12ffe769afc693..97525163b70d022e90d648a47138fe11
      bool finalized = false;
      bool finalizing = false; // to prevent reentrant calls to getRoot()
      bool anyElemsWithTimescales = false;
-@@ -1134,6 +1314,16 @@ private:
+@@ -1134,6 +1319,16 @@ private:
      // The default library.
      std::unique_ptr<SourceLibrary> defaultLibMem;
      const SourceLibrary* defaultLibPtr;
@@ -1964,7 +1969,7 @@ index cb4f631f8f0fe237a9bf4b0212627f3069fc5721..664d00b200f4f2802a3b2b902675a1f0
              // information to point the user towards the right ones.
              Diagnostic diag = *found;
 diff --git a/source/ast/Compilation.cpp b/source/ast/Compilation.cpp
-index ed7528f2c63e43df29c59538afa58b94099e6df0..07faefa34bf1fc880347c38704088f27499a09b8 100644
+index ed7528f2c63e43df29c59538afa58b94099e6df0..a47897cd8cb2bb7a387bcc82047e687bbab91613 100644
 --- a/source/ast/Compilation.cpp
 +++ b/source/ast/Compilation.cpp
 @@ -9,12 +9,14 @@
@@ -4239,7 +4244,7 @@ index ed7528f2c63e43df29c59538afa58b94099e6df0..07faefa34bf1fc880347c38704088f27
      SLANG_ASSERT(!isFrozen());
      auto [it, inserted] = referenceStatusMap.emplace(&node, std::pair{!isLValue, isLValue});
      if (!inserted) {
-@@ -1467,18 +3468,83 @@ void Compilation::noteReference(const SyntaxNode& node, bool isLValue) {
+@@ -1467,18 +3468,92 @@ void Compilation::noteReference(const SyntaxNode& node, bool isLValue) {
      }
  }
  
@@ -4300,12 +4305,21 @@ index ed7528f2c63e43df29c59538afa58b94099e6df0..07faefa34bf1fc880347c38704088f27
 +    }
  }
  
- std::pair<bool, bool> Compilation::isReferenced(const SyntaxNode& node) const {
+-std::pair<bool, bool> Compilation::isReferenced(const SyntaxNode& node) const {
 -    auto it = referenceStatusMap.find(&node);
 -    if (it == referenceStatusMap.end())
 -        return {false, false};
--
++std::pair<bool, bool> Compilation::getExportedReferenceUsage(const SyntaxNode& node) const {
++    if (exportedReferenceStatus) {
++        if (auto found = exportedReferenceStatus->find(&node);
++            found != exportedReferenceStatus->end())
++            return found->second;
++    }
++    return {};
++}
+ 
 -    return it->second;
++std::pair<bool, bool> Compilation::isReferenced(const SyntaxNode& node) const {
 +    auto read = [&](auto&& self, const Compilation& compilation,
 +                    bool inherited) -> std::pair<bool, bool> {
 +        std::pair<bool, bool> result{};
@@ -4330,7 +4344,7 @@ index ed7528f2c63e43df29c59538afa58b94099e6df0..07faefa34bf1fc880347c38704088f27
  }
  
  const NameSyntax& Compilation::parseName(std::string_view name) {
-@@ -1560,10 +3626,12 @@ void Compilation::elaborate() {
+@@ -1560,10 +3635,12 @@ void Compilation::elaborate() {
      // Double check any bind directives for correctness. These were already
      // resolved prior to full elaboration but their diagnostics were not
      // issued so we need to check again.
@@ -4347,7 +4361,7 @@ index ed7528f2c63e43df29c59538afa58b94099e6df0..07faefa34bf1fc880347c38704088f27
      }
  
      // Report any lingering name conflicts.
-@@ -1680,6 +3748,49 @@ const Diagnostics& Compilation::getParseDiagnostics() {
+@@ -1680,6 +3757,49 @@ const Diagnostics& Compilation::getParseDiagnostics() {
      return *cachedParseDiagnostics;
  }
  
@@ -4397,7 +4411,7 @@ index ed7528f2c63e43df29c59538afa58b94099e6df0..07faefa34bf1fc880347c38704088f27
  const Diagnostics& Compilation::getSemanticDiagnostics() {
      if (cachedSemanticDiagnostics)
          return *cachedSemanticDiagnostics;
-@@ -1687,7 +3798,99 @@ const Diagnostics& Compilation::getSemanticDiagnostics() {
+@@ -1687,7 +3807,99 @@ const Diagnostics& Compilation::getSemanticDiagnostics() {
      // Elaborate the design.
      elaborate();
  
@@ -11479,10 +11493,10 @@ index 0000000000000000000000000000000000000000..c770624b956dcae565401abb3920f6bd
 +}
 diff --git a/tests/unittests/ast/PackageAnalysisTests.cpp b/tests/unittests/ast/PackageAnalysisTests.cpp
 new file mode 100644
-index 0000000000000000000000000000000000000000..b0cb1f87aa73a79fcd0710226d2e5c366c751a8e
+index 0000000000000000000000000000000000000000..c0e074e6ee72c9b16857a893159de193fc9b0455
 --- /dev/null
 +++ b/tests/unittests/ast/PackageAnalysisTests.cpp
-@@ -0,0 +1,785 @@
+@@ -0,0 +1,793 @@
 +// SPDX-FileCopyrightText: Michael Popoloski
 +// SPDX-License-Identifier: MIT
 +
@@ -12237,6 +12251,7 @@ index 0000000000000000000000000000000000000000..b0cb1f87aa73a79fcd0710226d2e5c36
 +    REQUIRE(unused);
 +    REQUIRE(owner->isReferenced(*used).first);
 +    REQUIRE_FALSE(owner->isReferenced(*unused).first);
++    CHECK_FALSE(owner->getExportedReferenceUsage(*used).first);
 +    auto prefix = sources.captureImmutablePrefix(tree->getSourceBufferIds());
 +    SourceManager currentSources;
 +    currentSources.inheritImmutablePrefix(prefix);
@@ -12244,8 +12259,15 @@ index 0000000000000000000000000000000000000000..b0cb1f87aa73a79fcd0710226d2e5c36
 +    first.importPackage(owner, "fixed", currentSources);
 +    REQUIRE(first.isReferenced(*used).first);
 +    REQUIRE_FALSE(first.isReferenced(*unused).first);
++    CHECK(owner->getExportedReferenceUsage(*used).first);
++    CHECK_FALSE(owner->getExportedReferenceUsage(*unused).first);
 +    owner->noteReference(*unused); // e.g. completion / hover in the immutable library
 +    REQUIRE(owner->isReferenced(*unused).first);
++    CHECK_FALSE(owner->getExportedReferenceUsage(*unused).first);
++    CHECK_FALSE(owner->getExportedReferenceUsage(*unused).second);
++    owner->noteReference(*unused, true);
++    CHECK(owner->isReferenced(*unused).second);
++    CHECK_FALSE(owner->getExportedReferenceUsage(*unused).second);
 +    CHECK_FALSE(first.isReferenced(*unused).first);
 +    Compilation next(options);
 +    next.importPackage(owner, "fixed", currentSources);

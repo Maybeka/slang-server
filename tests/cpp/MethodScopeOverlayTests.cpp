@@ -2556,3 +2556,94 @@ TEST_CASE("First method certificate compares options with the bytes originally l
     CHECK(rfl::json::write(actual) == rfl::json::write(expected));
     CHECK(actualMap == diagnosticMap(native));
 }
+
+TEST_CASE("Fixed provider usage proves added and removed method references",
+          "[method-body-diagnostics][fixed-provider-reference]") {
+    const bool providerUses = GENERATE(false, true);
+    const bool callerUses = GENERATE(false, true);
+    CAPTURE(providerUses, callerUses);
+    Workspace workspace;
+    auto config = certificationConfig();
+    config.insert(config.size() - 1,
+                  ",\"experimentalScopeSemanticCache\":true,"
+                  "\"frozenSources\":{\"packages\":[\"provider\"],\"maxMiB\":256}");
+    workspace.write(".slang/server.json", config);
+    workspace.write(
+        "prelude.sv",
+        std::string("package provider; class Base;\n"
+                    "function int get_value(input int value); return value; endfunction\n") +
+            (providerUses ? "function int fixed_caller(); return get_value(1); endfunction\n"
+                          : "") +
+            "endclass endpackage\n");
+    auto initial = header;
+    initial.replace(initial.find("class Accumulator;"), 18,
+                    "class Accumulator extends provider::Base;");
+    if (callerUses)
+        initial.replace(initial.find("local_1 + charl"), 15, "get_value(local_1) + charl");
+    workspace.write("item.svh", initial);
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", initial);
+    doc.doc->getAnalysis();
+    auto library = server.executeCommand(
+        {.command = "slang.scopeLibraryStatus", .arguments = std::vector<lsp::LSPAny>{}});
+    REQUIRE(library);
+    REQUIRE(rfl::json::write(*library).find("\"prepared\":true") != std::string::npos);
+    for (int version = 2; version <= 4; ++version) {
+        const bool use = version % 2 ? callerUses : !callerUses;
+        auto text = initial;
+        const std::string previous = callerUses ? "get_value(local_1) + charl" : "local_1 + charl";
+        text.replace(text.find(previous), previous.size(),
+                     use ? "get_value(local_0) + charl + 1" : "local_0 + charl + 1");
+        change(server, doc.m_uri, version, text);
+        server.runBackgroundWork({});
+        const auto status = diagnosticState(server);
+        INFO(status.localDiagnosticDecline);
+        if (providerUses)
+            CHECK(status.localDiagnosticUpdates == uint64_t(version - 1));
+        else if (version == 2)
+            CHECK(status.localDiagnosticUpdates == 0);
+        checkNativeDiagnostics(workspace, server, text);
+    }
+}
+
+TEST_CASE("Fixed reference proofs retain package call driver boundaries",
+          "[method-body-diagnostics][fixed-provider-reference]") {
+    const bool writesGlobal = GENERATE(false, true);
+    const auto callShape = GENERATE("direct", "member", "system");
+    CAPTURE(writesGlobal, callShape);
+    Workspace workspace;
+    auto config = certificationConfig();
+    config.insert(config.size() - 1,
+                  ",\"experimentalScopeSemanticCache\":true,"
+                  "\"frozenSources\":{\"packages\":[\"provider\"],\"maxMiB\":256}");
+    workspace.write(".slang/server.json", config);
+    workspace.write("prelude.sv",
+                    std::string("package provider; int shared;\nfunction int peek();\n") +
+                        (writesGlobal ? "shared = 1; return 1;\n" : "return shared;\n") +
+                        "endfunction\nfunction int fixed_caller(); return peek(); endfunction\n"
+                        "class Base;\n"
+                        "function int get_value(input int value); return value; endfunction\n"
+                        "function int fixed_caller(); return get_value(1); endfunction\n"
+                        "endclass endpackage\n");
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto initial = header;
+    initial.replace(initial.find("class Accumulator;"), 18,
+                    "class Accumulator extends provider::Base;");
+    auto doc = server.openFile("item.svh", initial);
+    doc.doc->getAnalysis();
+    auto text = initial;
+    const std::string call = std::string_view(callShape) == "member" ? "get_value(provider::peek())"
+                             : std::string_view(callShape) == "system"
+                                 ? "$countones(provider::peek())"
+                                 : "provider::peek()";
+    text.replace(text.find("local_1 + charl"), 15, call + " + local_0 + charl");
+    change(server, doc.m_uri, 2, text);
+    server.runBackgroundWork({});
+    const auto status = diagnosticState(server);
+    INFO(status.localDiagnosticDecline);
+    CHECK(status.localDiagnosticUpdates == 0);
+    CHECK(status.localDiagnosticDecline.find("full effect analysis") != std::string::npos);
+    checkNativeDiagnostics(workspace, server, text);
+}

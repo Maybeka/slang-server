@@ -56,6 +56,7 @@ private:
     std::unordered_set<URI> affectedUris;
     References references;
     std::vector<std::string> calls;
+    std::unordered_set<const slang::syntax::SyntaxNode*> effectSensitiveCalls;
     slang::analysis::AnalysisOptions analysisOptions;
     slang::DiagnosticEngine::SettingsSnapshot settings;
     struct Slice {
@@ -64,6 +65,7 @@ private:
         std::shared_ptr<const struct NativeDiagnosticSnapshot> publication;
         References references;
         std::vector<std::string> calls;
+        std::unordered_set<const slang::syntax::SyntaxNode*> effectSensitiveCalls;
         std::vector<const slang::ast::ClassType*> specializations;
     };
     void validateSlice(const Slice&) const;
