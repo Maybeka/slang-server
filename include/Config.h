@@ -130,6 +130,15 @@ struct Config {
                      bool>
         experimentalCooperativeAnalysis = false;
 
+    rfl::Description<
+        "Additional mutable source-history allowance per generation in MiB (1..4096, default "
+        "64). Includes text and source-location tables beyond the initial working set. "
+        "Experimental context retirement starts at half this allowance and becomes synchronous "
+        "at the full allowance. Does not enable experiments or cap process RSS, retained fixed "
+        "providers, or source namespaces still held by live views.",
+        uint32_t>
+        sourceHistoryMaxMiB = 64;
+
     rfl::Description<"Experimental immutable UVM prefix reuse. Default off. External macros "
                      "affecting UVM must come from command-line/configuration flags. Unsupported "
                      "source changes or preprocessing state use native parsing.",

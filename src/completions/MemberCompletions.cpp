@@ -869,13 +869,61 @@ void MemberCompletionQuery::addCompletions(std::vector<lsp::CompletionItem>& res
     }
 }
 
+void MemberCompletionQuery::retainReceiverText(lsp::CompletionItem& item, const SlangDoc& doc) {
+    if (!item.data || !doc.getVersion())
+        return;
+    const auto* object = std::get_if<rfl::Generic::Object>(&item.data->variant());
+    if (!object || !std::ranges::any_of(*object, [](const auto& entry) {
+            return entry.first == "receiverBufferId";
+        }))
+        return;
+    auto data = rfl::from_generic<CompletionData, rfl::UnderlyingEnums>(*item.data);
+    if (!data || !data->receiverBufferId)
+        return;
+    // An include can have a separate physical buffer ID for the same editor
+    // text. Admit that alias only by exact file and byte identity. Macro and
+    // private slice offsets remain subject to their existing certificate checks.
+    if (*data->receiverBufferId != doc.getBuffer().getId()) {
+        auto& sm = doc.getSourceManager();
+        BufferID receiver(*data->receiverBufferId, "completion receiver source");
+        if (!sm.isFileLoc(SourceLocation(receiver, 0)) ||
+            sm.getFullPath(receiver) != sm.getFullPath(doc.getBuffer()) ||
+            sm.getSourceText(receiver) != doc.getText())
+            return;
+    }
+    data->receiverTextIdentity = doc.getCompletionTextIdentity();
+    item.data = rfl::to_generic<rfl::UnderlyingEnums>(*data);
+}
+
 void MemberCompletionQuery::resolveLogical(CompletionDispatch& dispatch, lsp::CompletionItem& item,
                                            const lsp::RequestContext& ctx) {
     if (!item.data)
         return;
     auto data = rfl::from_generic<CompletionData, rfl::UnderlyingEnums>(*item.data);
-    if (!data || data->receiverBufferId) {
+    if (!data) {
         item.data.reset();
+        return;
+    }
+    if (data->receiverBufferId) {
+        auto doc = getDriver(dispatch).getDocument(URI(data->documentUri));
+        if (!doc || !doc->getVersion() || !data->receiverTextIdentity ||
+            *data->receiverTextIdentity != doc->getCompletionTextIdentity() ||
+            !data->receiverOffset || *data->receiverOffset >= doc->getText().size()) {
+            item.data.reset();
+            return;
+        }
+        auto analysis = doc->getAnalysis(ctx);
+        if (!analysis) {
+            item.data.reset();
+            return;
+        }
+        // Rebind the same text offset through the current receiver specialization.
+        // Never use a buffer ID from the retired source namespace.
+        data->receiverBufferId = analysis->getBuffer().getId();
+        data->bufferId = 0;
+        data->offset = 0;
+        item.data = rfl::to_generic<rfl::UnderlyingEnums>(*data);
+        resolve(dispatch, item, ctx, std::move(analysis));
         return;
     }
     // Expired physical IDs / offsets are never interpreted in the replacement SourceManager.
@@ -902,6 +950,9 @@ void MemberCompletionQuery::resolve(CompletionDispatch& dispatch, lsp::Completio
 
     auto doc = getDriver(dispatch).getDocument(URI(data->documentUri));
     if (!doc)
+        return;
+    if (data->receiverTextIdentity &&
+        (!doc->getVersion() || *data->receiverTextIdentity != doc->getCompletionTextIdentity()))
         return;
 
     if (!analysis)
@@ -964,6 +1015,14 @@ void MemberCompletionQuery::resolve(CompletionDispatch& dispatch, lsp::Completio
         return;
     }
 
+    // Name lookup unwraps an extern method prototype to its implementation.
+    // Preserve the declaration selected by the completion response, including
+    // its documentation, when a logical handle is rebound after retirement.
+    if (data->symbolKind == ast::SymbolKind::MethodPrototype) {
+        if (auto* subroutine = symbol->as_if<ast::SubroutineSymbol>())
+            if (auto* prototype = subroutine->getPrototype())
+                symbol = prototype;
+    }
     if (symbol->kind == ast::SymbolKind::Subroutine)
         for (auto body : analysis->getShallowCompilation()->getBodyQueryRoots())
             if (symbol->getParentScope() == body->getParentScope() && symbol->name == body->name)

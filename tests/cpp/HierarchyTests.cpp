@@ -1,3 +1,4 @@
+#include <catch2/generators/catch_generators.hpp>
 // SPDX-FileCopyrightText: Hudson River Trading
 // SPDX-License-Identifier: MIT
 
@@ -515,4 +516,81 @@ TEST_CASE("HierLocationRetargetsNonTopModuleAfterEdit") {
     REQUIRE(after.has_value());
     CHECK(after->uri.getPath().ends_with("two_mods.sv"));
     CHECK(after->range.start.line == baselineLine + 2);
+}
+
+TEST_CASE("Hierarchy search cancellation commits no partial index", "[hierarchy-cancellation]") {
+    const auto boundary = GENERATE("during hierarchy search index",
+                                   "before hierarchy search index commit",
+                                   "during hierarchy search matching");
+    ServerHarness server("comp_repo");
+    server.setBuildFile("cpu_design.f");
+    lsp::RequestContext ctx("workspace/executeCommand", lsp::ID_t{711});
+    bool reached = false;
+    ctx.setCheckpointObserverForTesting([&](std::string_view at) {
+        if (at == boundary) {
+            reached = true;
+            ctx.cancel();
+        }
+    });
+    CHECK_THROWS_AS(server.executeCommand({.command = "slang.searchHierarchy",
+                                           .arguments = std::vector<lsp::LSPAny>{rfl::to_generic(
+                                               std::string("instruction"))}},
+                                          ctx),
+                    lsp::RequestCancelled);
+    REQUIRE(reached);
+    const auto retried = server.m_driver->comp->searchHierarchy("instruction");
+    ServerHarness native("comp_repo");
+    native.setBuildFile("cpu_design.f");
+    CHECK(rfl::json::write(retried) ==
+          rfl::json::write(native.m_driver->comp->searchHierarchy("instruction")));
+}
+
+TEST_CASE("Hierarchy commands carry cancellation before model work", "[hierarchy-cancellation]") {
+    const auto operation = GENERATE("slang.searchHierarchy", "slang.getInstances",
+                                    "slang.showHierLocation", "slang.openModuleDefinition");
+    ServerHarness server("comp_repo");
+    server.setBuildFile("cpu_design.f");
+    lsp::RequestContext ctx("workspace/executeCommand", lsp::ID_t{712});
+    ctx.cancel();
+    rfl::Generic argument = rfl::to_generic(std::string("cpu"));
+    const auto method = std::string_view(operation);
+    if (method == "slang.getInstances")
+        argument = rfl::to_generic(lsp::TextDocumentPositionParams{
+            .textDocument = {.uri = URI::fromFile(std::filesystem::current_path() / "cpu.sv")},
+            .position = {0, 0}});
+    else if (method == "slang.showHierLocation")
+        argument = rfl::to_generic(
+            server::SlangServer::ShowHierLocationArgs{.hierPath = "cpu_testbench.dut"});
+    CHECK_THROWS_AS(server.executeCommand({.command = operation,
+                                           .arguments = std::vector<lsp::LSPAny>{argument}},
+                                          ctx),
+                    lsp::RequestCancelled);
+}
+
+TEST_CASE("Active instance cancellation preserves every previous selection",
+          "[hierarchy-cancellation]") {
+    const auto boundary = GENERATE("during active instance chain",
+                                   "during active instance selection",
+                                   "before active instance selection commit");
+    ServerHarness server("comp_repo");
+    server.setBuildFile("cpu_design.f");
+    REQUIRE(server.setActiveInstance("cpu_testbench.dut.alu_inst"));
+    const auto before = rfl::json::write(server.getActiveInstance("alu"));
+    lsp::RequestContext ctx("workspace/executeCommand", lsp::ID_t{714});
+    bool reached = false;
+    ctx.setCheckpointObserverForTesting([&](std::string_view at) {
+        if (at == boundary) {
+            reached = true;
+            ctx.cancel();
+        }
+    });
+    lsp::ExecuteCommandParams params{
+        .command = "slang.setActiveInstance",
+        .arguments = std::vector<lsp::LSPAny>{
+            rfl::to_generic(std::string("cpu_testbench.dut.gen_alu_array[1].gen_alu_inst"))}};
+    CHECK_THROWS_AS(server.executeCommand(params, ctx), lsp::RequestCancelled);
+    REQUIRE(reached);
+    CHECK(rfl::json::write(server.getActiveInstance("alu")) == before);
+    REQUIRE(server.executeCommand(params));
+    CHECK(rfl::json::write(server.getActiveInstance("alu")) != before);
 }

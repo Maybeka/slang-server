@@ -1,0 +1,932 @@
+{
+  "stage": "Source lifecycle, input admission, task diagnostics and independent receiver reads",
+  "baseCommit": "17c05257df985a451c8ee3fd9e0607e700f44bb7",
+  "totalGoalStatus": "active",
+  "experimentsDefaultOff": true,
+  "fixedInputDebounceAdded": false,
+  "sdkBase": "151a801ceaf6faf23d79a42d210ff67e50eb4660",
+  "sdkPatchSha256": "083b053b41c0e3f47353d999510b00a78829286ce5a75ca7812a3c7e33644e37",
+  "qualification": {
+    "qualified": true,
+    "binarySha256": "9bcb0349e935f1bb7dacbbfe271775e4a064e9c695907fe1d2fbb91e61aafe05",
+    "pending": [],
+    "checks": {
+      "fixed34": true,
+      "binaryReceipt": true,
+      "sourceSnapshot": true,
+      "currentSource": true,
+      "ctest863": true,
+      "python17": true,
+      "transport43": true,
+      "asanFull848": true,
+      "asanSDK8": true,
+      "sdk709": true,
+      "public56": true,
+      "additional15": true,
+      "install-smoke": true,
+      "external-smoke": true,
+      "preserve-untracked/compact-source-metadata-2026-10-24/evaluation.json": true,
+      "warm-final-1-identity": true,
+      "warm-final-1-native612": true,
+      "warm-final-1-cancellations": true,
+      "warm-final-2-identity": true,
+      "warm-final-2-native612": true,
+      "warm-final-2-cancellations": true,
+      "warm-final-3-identity": true,
+      "warm-final-3-native612": true,
+      "warm-final-3-cancellations": true,
+      "warm-final-4-identity": true,
+      "warm-final-4-native612": true,
+      "warm-final-4-cancellations": true,
+      "warm-final-5-identity": true,
+      "warm-final-5-native612": true,
+      "warm-final-5-cancellations": true,
+      "warm-final-6-identity": true,
+      "warm-final-6-native612": true,
+      "warm-final-6-cancellations": true,
+      "first-final-1-identity": true,
+      "first-final-1-native612": true,
+      "first-final-1-cancellations": true,
+      "burst-final-1-identity": true,
+      "burst-final-1-native612": true,
+      "burst-final-1-cancellations": true,
+      "member-final-1-identity": true,
+      "member-final-1-native612": true,
+      "member-final-1-cancellations": true,
+      "first-final-2-identity": true,
+      "first-final-2-native612": true,
+      "first-final-2-cancellations": true,
+      "burst-final-2-identity": true,
+      "burst-final-2-native612": true,
+      "burst-final-2-cancellations": true,
+      "member-final-2-identity": true,
+      "member-final-2-native612": true,
+      "member-final-2-cancellations": true,
+      "first-final-3-identity": true,
+      "first-final-3-native612": true,
+      "first-final-3-cancellations": true,
+      "burst-final-3-identity": true,
+      "burst-final-3-native612": true,
+      "burst-final-3-cancellations": true,
+      "member-final-3-identity": true,
+      "member-final-3-native612": true,
+      "member-final-3-cancellations": true,
+      "compact-final-identity": true,
+      "compact-final-native612": true,
+      "compact-final-cancellations": true,
+      "macro-final-identity": true,
+      "macro-final-native612": true,
+      "macro-final-cancellations": true,
+      "long-final-1008-identity": true,
+      "long-final-1008-native612": true,
+      "long-final-1008-cancellations": true,
+      "long-final-1008-1008": true,
+      "memory-final-1008-identity": true,
+      "memory-final-1008-native612": true,
+      "memory-final-1008-cancellations": true,
+      "memory-final-1008-cpuSeconds": true,
+      "memory-final-1008-peakRss": true,
+      "memory-final-1008-peakFootprint": true,
+      "memory-final-1008-budget64": true,
+      "memory-final-1008-withinHard": true,
+      "memory-final-1008-usefulCacheBound": true,
+      "memory-final-1008-oldQueryReleased": true,
+      "memory-final-1008-managersBound": true,
+      "memory-final-1008-1008": true,
+      "memory-final-reverse-identity": true,
+      "memory-final-reverse-native612": true,
+      "memory-final-reverse-cancellations": true,
+      "memory-final-reverse-cpuSeconds": true,
+      "memory-final-reverse-peakRss": true,
+      "memory-final-reverse-peakFootprint": true,
+      "memory-final-reverse-budget64": true,
+      "memory-final-reverse-withinHard": true,
+      "memory-final-reverse-usefulCacheBound": true,
+      "memory-final-reverse-oldQueryReleased": true,
+      "memory-final-reverse-managersBound": true,
+      "memory-final-reverse-1008": true,
+      "forced-final-memory-identity": true,
+      "forced-final-memory-native612": true,
+      "forced-final-memory-cancellations": true,
+      "forced-final-memory-baseline-actualRetirement": true,
+      "forced-final-memory-candidate-actualRetirement": true,
+      "forced-final-memory-budget64": true,
+      "forced-final-memory-withinHard": true,
+      "forced-final-memory-usefulCacheBound": true,
+      "forced-final-memory-oldQueryReleased": true,
+      "forced-final-memory-managersBound": true,
+      "macro-lifecycle-forward-identity": true,
+      "macro-lifecycle-forward-native612": true,
+      "macro-lifecycle-forward-cancellations": true,
+      "macro-lifecycle-forward-cpuSeconds": true,
+      "macro-lifecycle-forward-peakRss": true,
+      "macro-lifecycle-forward-peakFootprint": true,
+      "macro-lifecycle-forward-baseline-actualRetirement": true,
+      "macro-lifecycle-forward-candidate-actualRetirement": true,
+      "macro-lifecycle-forward-budget64": true,
+      "macro-lifecycle-forward-withinHard": true,
+      "macro-lifecycle-forward-usefulCacheBound": true,
+      "macro-lifecycle-forward-oldQueryReleased": true,
+      "macro-lifecycle-forward-managersBound": true,
+      "macro-lifecycle-forward-252": true,
+      "macro-lifecycle-reverse-identity": true,
+      "macro-lifecycle-reverse-native612": true,
+      "macro-lifecycle-reverse-cancellations": true,
+      "macro-lifecycle-reverse-cpuSeconds": true,
+      "macro-lifecycle-reverse-peakRss": true,
+      "macro-lifecycle-reverse-peakFootprint": true,
+      "macro-lifecycle-reverse-baseline-actualRetirement": true,
+      "macro-lifecycle-reverse-candidate-actualRetirement": true,
+      "macro-lifecycle-reverse-budget64": true,
+      "macro-lifecycle-reverse-withinHard": true,
+      "macro-lifecycle-reverse-usefulCacheBound": true,
+      "macro-lifecycle-reverse-oldQueryReleased": true,
+      "macro-lifecycle-reverse-managersBound": true,
+      "macro-lifecycle-reverse-252": true,
+      "proof-count-identity": true,
+      "proof-count-native612": true,
+      "proof-count-cancellations": true,
+      "long4032-current-identity": true,
+      "long4032-current-native612": true,
+      "long4032-current-cancellations": true,
+      "long4032-current-cpuSeconds": true,
+      "long4032-current-peakRss": true,
+      "long4032-current-peakFootprint": true,
+      "long4032-current-budget64": true,
+      "long4032-current-withinHard": true,
+      "long4032-current-usefulCacheBound": true,
+      "long4032-current-oldQueryReleased": true,
+      "long4032-current-managersBound": true,
+      "long4032-current-4032": true,
+      "project-W01-compare-1-identity": true,
+      "project-W01-compare-1-oracle": true,
+      "project-W01-compare-1-sequence": true,
+      "project-W01-compare-2-identity": true,
+      "project-W01-compare-2-oracle": true,
+      "project-W01-compare-2-sequence": true,
+      "project-W01-compare-3-identity": true,
+      "project-W01-compare-3-oracle": true,
+      "project-W01-compare-3-sequence": true,
+      "project-W07-pss-multidoc-1-identity": true,
+      "project-W07-pss-multidoc-1-oracle": true,
+      "project-W07-pss-multidoc-1-sequence": true,
+      "project-W07-pss-multidoc-2-identity": true,
+      "project-W07-pss-multidoc-2-oracle": true,
+      "project-W07-pss-multidoc-2-sequence": true,
+      "project-W07-pss-multidoc-3-identity": true,
+      "project-W07-pss-multidoc-3-oracle": true,
+      "project-W07-pss-multidoc-3-sequence": true,
+      "project-W08-ubus-task-1-identity": true,
+      "project-W08-ubus-task-1-oracle": true,
+      "project-W08-ubus-task-1-sequence": true,
+      "project-W08-ubus-task-2-identity": true,
+      "project-W08-ubus-task-2-oracle": true,
+      "project-W08-ubus-task-2-sequence": true,
+      "project-W08-ubus-task-3-identity": true,
+      "project-W08-ubus-task-3-oracle": true,
+      "project-W08-ubus-task-3-sequence": true,
+      "warm-p50": true,
+      "warm-p95": true,
+      "first-p50": true,
+      "first-lastDiagnosticMs": true,
+      "W01-compare-queryMs-p50": true,
+      "W01-compare-queryMs-p95": true,
+      "W01-compare-diagnosticMs-p50": true,
+      "W01-compare-diagnosticMs-p95": true,
+      "W07-pss-multidoc-queryMs-p50": true,
+      "W07-pss-multidoc-queryMs-p95": true,
+      "W07-pss-multidoc-diagnosticMs-p50": true,
+      "W07-pss-multidoc-diagnosticMs-p95": true,
+      "W08-ubus-task-queryMs-p50": true,
+      "W08-ubus-task-queryMs-p95": true,
+      "W08-ubus-task-diagnosticMs-p50": true,
+      "W08-ubus-task-diagnosticMs-p95": true,
+      "proofCountReduced": true,
+      "all34Complete": true
+    },
+    "failedChecks": [],
+    "summary": {
+      "memory-final-1008": {
+        "ratios": {
+          "cpuSeconds": 0.9679376521571279,
+          "peakRss": 0.9425361981527305,
+          "peakFootprint": 0.9469910861448902
+        },
+        "arms": {
+          "native": {
+            "p50": 2525.1972295,
+            "p95": 4215.450584,
+            "maximum": 4590.382208,
+            "cancelled": 0,
+            "lastDiagnosticMs": 5076.379125,
+            "memory": {
+              "peakRss": 1514143744,
+              "peakFootprint": 1151305264,
+              "samples": 534,
+              "cpuSeconds": 11.796968041
+            }
+          },
+          "baseline": {
+            "p50": 19.7508955,
+            "p95": 22.006416,
+            "maximum": 44.699666,
+            "cancelled": 0,
+            "lastDiagnosticMs": 30.071958,
+            "memory": {
+              "peakRss": 1337491456,
+              "peakFootprint": 1165542840,
+              "samples": 4337,
+              "cpuSeconds": 32.323577708
+            },
+            "actualRetirements": 1
+          },
+          "candidate": {
+            "p50": 19.856354,
+            "p95": 22.989125,
+            "maximum": 36.28925,
+            "cancelled": 0,
+            "lastDiagnosticMs": 27.935375,
+            "memory": {
+              "peakRss": 1260634112,
+              "peakFootprint": 1103758680,
+              "samples": 4436,
+              "cpuSeconds": 31.287207916
+            },
+            "actualRetirements": 0
+          }
+        },
+        "candidateSourceStorage": {
+          "storage": {
+            "current": {
+              "source": {
+                "dataBytes": 10032057,
+                "queryBytes": 29742,
+                "queryBuffers": 2,
+                "retainedNameBytes": 43267,
+                "indexBytes": 24700
+              },
+              "managers": 1,
+              "locationTableBytes": 14680397,
+              "immutableTableBytes": 3506495
+            },
+            "retained": {
+              "source": {
+                "dataBytes": 0,
+                "queryBytes": 0,
+                "queryBuffers": 0,
+                "retainedNameBytes": 0,
+                "indexBytes": 0
+              },
+              "managers": 0,
+              "locationTableBytes": 0,
+              "immutableTableBytes": 0
+            },
+            "total": {
+              "source": {
+                "dataBytes": 10032057,
+                "queryBytes": 29742,
+                "queryBuffers": 2,
+                "retainedNameBytes": 43267,
+                "indexBytes": 24700
+              },
+              "managers": 1,
+              "locationTableBytes": 14680397,
+              "immutableTableBytes": 3506495
+            }
+          },
+          "retirementEnabled": true,
+          "historyMaxMiB": 64,
+          "historyBaseBytes": 13680262,
+          "historySoftLimitBytes": 47234694,
+          "historyHardLimitBytes": 80789126,
+          "retirementPending": false
+        }
+      },
+      "memory-final-reverse": {
+        "ratios": {
+          "cpuSeconds": 1.0002107915938077,
+          "peakRss": 0.9432601535428732,
+          "peakFootprint": 1.0050800463462528
+        },
+        "arms": {
+          "candidate": {
+            "p50": 20.8960415,
+            "p95": 22.941917,
+            "maximum": 37.477833,
+            "cancelled": 0,
+            "lastDiagnosticMs": 32.893292,
+            "memory": {
+              "peakRss": 1262174208,
+              "peakFootprint": 1105364288,
+              "samples": 4447,
+              "cpuSeconds": 31.94962
+            },
+            "actualRetirements": 0
+          },
+          "baseline": {
+            "p50": 20.010813,
+            "p95": 22.141875,
+            "maximum": 40.200084,
+            "cancelled": 0,
+            "lastDiagnosticMs": 29.841,
+            "memory": {
+              "peakRss": 1338097664,
+              "peakFootprint": 1099777368,
+              "samples": 4353,
+              "cpuSeconds": 31.942886708
+            },
+            "actualRetirements": 1
+          },
+          "native": {
+            "p50": 2491.696333,
+            "p95": 4183.919,
+            "maximum": 4555.956958,
+            "cancelled": 0,
+            "lastDiagnosticMs": 5050.655292,
+            "memory": {
+              "peakRss": 1513766912,
+              "peakFootprint": 1150846488,
+              "samples": 533,
+              "cpuSeconds": 11.680294083
+            }
+          }
+        },
+        "candidateSourceStorage": {
+          "storage": {
+            "current": {
+              "source": {
+                "dataBytes": 10032057,
+                "queryBytes": 29742,
+                "queryBuffers": 2,
+                "retainedNameBytes": 43267,
+                "indexBytes": 24700
+              },
+              "managers": 1,
+              "locationTableBytes": 14680397,
+              "immutableTableBytes": 3506495
+            },
+            "retained": {
+              "source": {
+                "dataBytes": 0,
+                "queryBytes": 0,
+                "queryBuffers": 0,
+                "retainedNameBytes": 0,
+                "indexBytes": 0
+              },
+              "managers": 0,
+              "locationTableBytes": 0,
+              "immutableTableBytes": 0
+            },
+            "total": {
+              "source": {
+                "dataBytes": 10032057,
+                "queryBytes": 29742,
+                "queryBuffers": 2,
+                "retainedNameBytes": 43267,
+                "indexBytes": 24700
+              },
+              "managers": 1,
+              "locationTableBytes": 14680397,
+              "immutableTableBytes": 3506495
+            }
+          },
+          "retirementEnabled": true,
+          "historyMaxMiB": 64,
+          "historyBaseBytes": 13680262,
+          "historySoftLimitBytes": 47234694,
+          "historyHardLimitBytes": 80789126,
+          "retirementPending": false
+        }
+      },
+      "forced-final-memory": {
+        "ratios": {
+          "cpuSeconds": 0.9884793858534109,
+          "peakRss": 0.9956491193472446,
+          "peakFootprint": 1.0048402650362167
+        },
+        "arms": {
+          "native": {
+            "p50": 2490.8811459999997,
+            "p95": 4154.655041,
+            "maximum": 4523.131625,
+            "cancelled": 0,
+            "lastDiagnosticMs": 5002.423791,
+            "memory": {
+              "peakRss": 1516552192,
+              "peakFootprint": 1154778672,
+              "samples": 526,
+              "cpuSeconds": 11.615165291
+            }
+          },
+          "baseline": {
+            "p50": 17.897271,
+            "p95": 19.450167,
+            "maximum": 19.605083,
+            "cancelled": 0,
+            "lastDiagnosticMs": 26.898166,
+            "memory": {
+              "peakRss": 1329283072,
+              "peakFootprint": 1100105048,
+              "samples": 246,
+              "cpuSeconds": 4.0692565
+            },
+            "actualRetirements": 1
+          },
+          "candidate": {
+            "p50": 16.558042,
+            "p95": 22.277292,
+            "maximum": 22.578542,
+            "cancelled": 0,
+            "lastDiagnosticMs": 33.033209,
+            "memory": {
+              "peakRss": 1323499520,
+              "peakFootprint": 1105429848,
+              "samples": 233,
+              "cpuSeconds": 4.022376166
+            },
+            "actualRetirements": 1
+          }
+        },
+        "candidateSourceStorage": {
+          "storage": {
+            "current": {
+              "source": {
+                "dataBytes": 12436989,
+                "queryBytes": 0,
+                "queryBuffers": 0,
+                "retainedNameBytes": 41325,
+                "indexBytes": 47975
+              },
+              "managers": 1,
+              "locationTableBytes": 7023091,
+              "immutableTableBytes": 3506495
+            },
+            "retained": {
+              "source": {
+                "dataBytes": 10002315,
+                "queryBytes": 0,
+                "queryBuffers": 0,
+                "retainedNameBytes": 43267,
+                "indexBytes": 24700
+              },
+              "managers": 1,
+              "locationTableBytes": 3670349,
+              "immutableTableBytes": 3506495
+            },
+            "total": {
+              "source": {
+                "dataBytes": 12545168,
+                "queryBytes": 0,
+                "queryBuffers": 0,
+                "retainedNameBytes": 63385,
+                "indexBytes": 72675
+              },
+              "managers": 2,
+              "locationTableBytes": 10693440,
+              "immutableTableBytes": 3506495
+            }
+          },
+          "retirementEnabled": true,
+          "historyMaxMiB": 64,
+          "historyBaseBytes": 19304644,
+          "historySoftLimitBytes": 52859076,
+          "historyHardLimitBytes": 86413508,
+          "retirementPending": false
+        }
+      },
+      "macro-lifecycle-forward": {
+        "ratios": {
+          "cpuSeconds": 1.0021952753550738,
+          "peakRss": 1.0281398172114438,
+          "peakFootprint": 1.0054188502612158
+        },
+        "arms": {
+          "native": {
+            "p50": 2489.109292,
+            "p95": 4144.070542,
+            "maximum": 4521.912916,
+            "cancelled": 0,
+            "lastDiagnosticMs": 5002.949791,
+            "memory": {
+              "peakRss": 1515077632,
+              "peakFootprint": 1152026160,
+              "samples": 466,
+              "cpuSeconds": 11.6497835
+            }
+          },
+          "baseline": {
+            "p50": 17.225396,
+            "p95": 476.175416,
+            "maximum": 476.175416,
+            "cancelled": 246,
+            "lastDiagnosticMs": 952.595708,
+            "memory": {
+              "peakRss": 1430552576,
+              "peakFootprint": 1100596568,
+              "samples": 1127,
+              "cpuSeconds": 28.445842958
+            },
+            "actualRetirements": 8
+          },
+          "candidate": {
+            "p50": 13.6721875,
+            "p95": 473.494792,
+            "maximum": 473.494792,
+            "cancelled": 246,
+            "lastDiagnosticMs": 954.367125,
+            "memory": {
+              "peakRss": 1470808064,
+              "peakFootprint": 1106560536,
+              "samples": 1128,
+              "cpuSeconds": 28.508289416
+            },
+            "actualRetirements": 4
+          }
+        },
+        "candidateSourceStorage": {
+          "storage": {
+            "current": {
+              "source": {
+                "dataBytes": 12498962,
+                "queryBytes": 0,
+                "queryBuffers": 0,
+                "retainedNameBytes": 100369,
+                "indexBytes": 47975
+              },
+              "managers": 1,
+              "locationTableBytes": 28062172,
+              "immutableTableBytes": 3506495
+            },
+            "retained": {
+              "source": {
+                "dataBytes": 9998227,
+                "queryBytes": 0,
+                "queryBuffers": 0,
+                "retainedNameBytes": 86798,
+                "indexBytes": 24700
+              },
+              "managers": 1,
+              "locationTableBytes": 117440845,
+              "immutableTableBytes": 3506495
+            },
+            "total": {
+              "source": {
+                "dataBytes": 12603053,
+                "queryBytes": 0,
+                "queryBuffers": 0,
+                "retainedNameBytes": 165960,
+                "indexBytes": 72675
+              },
+              "managers": 2,
+              "locationTableBytes": 145503017,
+              "immutableTableBytes": 3506495
+            }
+          },
+          "retirementEnabled": true,
+          "historyMaxMiB": 64,
+          "historyBaseBytes": 19309344,
+          "historySoftLimitBytes": 52863776,
+          "historyHardLimitBytes": 86418208,
+          "retirementPending": false
+        }
+      },
+      "macro-lifecycle-reverse": {
+        "ratios": {
+          "cpuSeconds": 0.9988023481054952,
+          "peakRss": 1.0379881804466928,
+          "peakFootprint": 1.0318543214075024
+        },
+        "arms": {
+          "candidate": {
+            "p50": 13.911646,
+            "p95": 468.203958,
+            "maximum": 468.203958,
+            "cancelled": 246,
+            "lastDiagnosticMs": 950.926416,
+            "memory": {
+              "peakRss": 1499267072,
+              "peakFootprint": 1136821832,
+              "samples": 1127,
+              "cpuSeconds": 28.451380083
+            },
+            "actualRetirements": 4
+          },
+          "baseline": {
+            "p50": 17.6716455,
+            "p95": 466.488708,
+            "maximum": 466.488708,
+            "cancelled": 246,
+            "lastDiagnosticMs": 946.626583,
+            "memory": {
+              "peakRss": 1444397056,
+              "peakFootprint": 1101727064,
+              "samples": 1117,
+              "cpuSeconds": 28.485495791
+            },
+            "actualRetirements": 8
+          },
+          "native": {
+            "p50": 2480.8204164999997,
+            "p95": 4132.964333,
+            "maximum": 4503.134584,
+            "cancelled": 0,
+            "lastDiagnosticMs": 4982.287959,
+            "memory": {
+              "peakRss": 1516748800,
+              "peakFootprint": 1154975280,
+              "samples": 468,
+              "cpuSeconds": 11.655908125
+            }
+          }
+        },
+        "candidateSourceStorage": {
+          "storage": {
+            "current": {
+              "source": {
+                "dataBytes": 12498958,
+                "queryBytes": 0,
+                "queryBuffers": 0,
+                "retainedNameBytes": 100369,
+                "indexBytes": 47975
+              },
+              "managers": 1,
+              "locationTableBytes": 28062172,
+              "immutableTableBytes": 3506495
+            },
+            "retained": {
+              "source": {
+                "dataBytes": 9998223,
+                "queryBytes": 0,
+                "queryBuffers": 0,
+                "retainedNameBytes": 86798,
+                "indexBytes": 24700
+              },
+              "managers": 1,
+              "locationTableBytes": 117440845,
+              "immutableTableBytes": 3506495
+            },
+            "total": {
+              "source": {
+                "dataBytes": 12603045,
+                "queryBytes": 0,
+                "queryBuffers": 0,
+                "retainedNameBytes": 165960,
+                "indexBytes": 72675
+              },
+              "managers": 2,
+              "locationTableBytes": 145503017,
+              "immutableTableBytes": 3506495
+            }
+          },
+          "retirementEnabled": true,
+          "historyMaxMiB": 64,
+          "historyBaseBytes": 19309340,
+          "historySoftLimitBytes": 52863772,
+          "historyHardLimitBytes": 86418204,
+          "retirementPending": false
+        }
+      },
+      "long4032-current": {
+        "ratios": {
+          "cpuSeconds": 0.9997407936461931,
+          "peakRss": 0.998389108293494,
+          "peakFootprint": 0.8255003135580037
+        },
+        "arms": {
+          "native": {
+            "p50": 2478.3772085,
+            "p95": 4140.506,
+            "maximum": 4506.355,
+            "cancelled": 0,
+            "lastDiagnosticMs": 4986.979542,
+            "memory": {
+              "peakRss": 1515749376,
+              "peakFootprint": 1152796208,
+              "samples": 467,
+              "cpuSeconds": 11.613246416
+            }
+          },
+          "baseline": {
+            "p50": 19.583208,
+            "p95": 22.266375,
+            "maximum": 52.488,
+            "cancelled": 5,
+            "lastDiagnosticMs": 29.368375,
+            "memory": {
+              "peakRss": 1261174784,
+              "peakFootprint": 1335510480,
+              "samples": 16506,
+              "cpuSeconds": 116.1873525
+            },
+            "actualRetirements": 1
+          },
+          "candidate": {
+            "p50": 20.029708499999998,
+            "p95": 22.883917,
+            "maximum": 42.897042,
+            "cancelled": 4,
+            "lastDiagnosticMs": 30.435292,
+            "memory": {
+              "peakRss": 1259143168,
+              "peakFootprint": 1102464320,
+              "samples": 15476,
+              "cpuSeconds": 116.157236
+            },
+            "actualRetirements": 0
+          }
+        },
+        "candidateSourceStorage": {
+          "storage": {
+            "current": {
+              "source": {
+                "dataBytes": 10032057,
+                "queryBytes": 29742,
+                "queryBuffers": 2,
+                "retainedNameBytes": 43267,
+                "indexBytes": 24700
+              },
+              "managers": 1,
+              "locationTableBytes": 29360461,
+              "immutableTableBytes": 3506495
+            },
+            "retained": {
+              "source": {
+                "dataBytes": 0,
+                "queryBytes": 0,
+                "queryBuffers": 0,
+                "retainedNameBytes": 0,
+                "indexBytes": 0
+              },
+              "managers": 0,
+              "locationTableBytes": 0,
+              "immutableTableBytes": 0
+            },
+            "total": {
+              "source": {
+                "dataBytes": 10032057,
+                "queryBytes": 29742,
+                "queryBuffers": 2,
+                "retainedNameBytes": 43267,
+                "indexBytes": 24700
+              },
+              "managers": 1,
+              "locationTableBytes": 29360461,
+              "immutableTableBytes": 3506495
+            }
+          },
+          "retirementEnabled": true,
+          "historyMaxMiB": 64,
+          "historyBaseBytes": 13680262,
+          "historySoftLimitBytes": 47234694,
+          "historyHardLimitBytes": 80789126,
+          "retirementPending": false
+        }
+      },
+      "warm": {
+        "baseline": {
+          "p50": 18.454104,
+          "p95": 21.236187,
+          "lastDiagnosticMs": 32.546437499999996
+        },
+        "candidate": {
+          "p50": 19.970094000000003,
+          "p95": 22.4726455,
+          "lastDiagnosticMs": 31.887292
+        }
+      },
+      "first": {
+        "baseline": {
+          "p50": 40.994208,
+          "p95": 40.994208,
+          "lastDiagnosticMs": 67.539542
+        },
+        "candidate": {
+          "p50": 37.59575,
+          "p95": 37.59575,
+          "lastDiagnosticMs": 64.593959
+        }
+      },
+      "burst": {
+        "baseline": {
+          "p50": 19.390396,
+          "p95": 23.178625,
+          "lastDiagnosticMs": 29.297834
+        },
+        "candidate": {
+          "p50": 18.427374999999998,
+          "p95": 22.128083,
+          "lastDiagnosticMs": 32.7805
+        }
+      },
+      "member": {
+        "baseline": {
+          "p50": 523.94575,
+          "p95": 523.94575,
+          "lastDiagnosticMs": 1135.99775
+        },
+        "candidate": {
+          "p50": 480.938584,
+          "p95": 480.938584,
+          "lastDiagnosticMs": 995.447541
+        }
+      },
+      "W01-compare": {
+        "baseline": {
+          "queryMs": {
+            "p50": 3.2583339999999996,
+            "p95": 3.417625
+          },
+          "diagnosticMs": {
+            "p50": 7.440042,
+            "p95": 7.603417
+          }
+        },
+        "candidate": {
+          "queryMs": {
+            "p50": 2.2821875,
+            "p95": 2.363042
+          },
+          "diagnosticMs": {
+            "p50": 6.4967295,
+            "p95": 6.586791
+          }
+        }
+      },
+      "W07-pss-multidoc": {
+        "baseline": {
+          "queryMs": {
+            "p50": 3.329417,
+            "p95": 3.668584
+          },
+          "diagnosticMs": {
+            "p50": 6.984875000000001,
+            "p95": 7.2485
+          }
+        },
+        "candidate": {
+          "queryMs": {
+            "p50": 2.355771,
+            "p95": 2.487041
+          },
+          "diagnosticMs": {
+            "p50": 6.007771,
+            "p95": 6.239875
+          }
+        }
+      },
+      "W08-ubus-task": {
+        "baseline": {
+          "queryMs": {
+            "p50": 3.120521,
+            "p95": 3.243292
+          },
+          "diagnosticMs": {
+            "p50": 53.284145499999994,
+            "p95": 54.083833
+          }
+        },
+        "candidate": {
+          "queryMs": {
+            "p50": 1.746938,
+            "p95": 1.830959
+          },
+          "diagnosticMs": {
+            "p50": 5.139291999999999,
+            "p95": 5.278208
+          }
+        }
+      },
+      "proofCounts": {
+        "native": 0,
+        "baseline": 42,
+        "candidate": 28
+      }
+    },
+    "goal": "Five-category goal active. Qualification of this candidate does not close remaining implementation categories."
+  },
+  "gates": null,
+  "tests": {
+    "ctest": 863,
+    "asanServerCases": 848,
+    "asanServerAssertions": 111057,
+    "asanSdkCases": 8,
+    "asanSdkAssertions": 84,
+    "python": 17,
+    "transport": 43,
+    "leakDetection": false
+  },
+  "rawEvidence": {
+    "code-receipt.json": "0bc084a87f1291b802be6a049b3b015339e2df8c48572137a85f1bde9f2983ef",
+    "unit-receipt.json": "294cdd02ceed9f7b690218bd7a7eab20830ff981bf8e8cd61e6894520e1592e2",
+    "qualification-plan.json": "9d0573df563e27e8c3a71437ab66bf0b1e1881749ff26057223f1373ef760c0a",
+    "evaluation.json": "23704aed0e9bc49a3c4d63579c42c1d6141d03a3c556fae2d60e58ef72bdaf74",
+    "public-package-view.json": "e141c1f07faafaf9d9747dd043d8aa3b55241fee28628a7009097c4c24a9078b",
+    "additional-projects.json": "dd1aba8b09c9bd25b09b2f2f3218e021f4d10aeb0c9bace11a26c8a3ca362dd3"
+  },
+  "notes": [
+    "Qualification covers the tested candidate; all five categories are not complete.",
+    "Warm CVA6 queries regress within the declared gate; mixed macro pressure cancels 246/252 intermediate queries per arm.",
+    "Extra-project timing waits for each query and diagnostic; do not pool with independent 100ms CVA6 input.",
+    "Post-qualification changes are documentation and compact validation records only; tested product source remains unchanged."
+  ]
+}

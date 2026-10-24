@@ -12,6 +12,9 @@
 #include "util/Logging.h"
 #include "util/UvmPhaseTrace.h"
 #include <algorithm>
+#include <chrono>
+#include <cstdio>
+#include <cstdlib>
 #include <unordered_set>
 
 #include "slang/analysis/AnalysisManager.h"
@@ -22,9 +25,53 @@
 
 namespace server {
 
+namespace {
+// Mechanism-only sampling. One row per root; no per-checkpoint file I/O and no
+// clock reads unless this separate probe is explicitly enabled.
+class RootBindingTrace {
+    using Clock = std::chrono::steady_clock;
+    std::string path;
+    Clock::time_point last;
+    Clock::duration maximum{};
+    size_t checks = 0;
+    bool finished = false;
+
+public:
+    explicit RootBindingTrace(bool active) {
+        if (active)
+            if (auto value = std::getenv("SLANG_ROOT_QUANTUM_TRACE")) {
+                path = value;
+                last = Clock::now();
+            }
+    }
+    void checkpoint() {
+        if (path.empty())
+            return;
+        auto now = Clock::now();
+        maximum = std::max(maximum, now - last);
+        last = now;
+        ++checks;
+    }
+    void finish(bool completed) noexcept {
+        if (path.empty() || finished)
+            return;
+        finished = true;
+        maximum = std::max(maximum, Clock::now() - last);
+        if (auto file = std::fopen(path.c_str(), "a")) {
+            auto micros = std::chrono::duration_cast<std::chrono::microseconds>(maximum).count();
+            std::fprintf(file, "%ld\t%lld\t%zu\t%d\n", long(slang::OS::getpid()),
+                         static_cast<long long>(micros), checks, int(completed));
+            std::fclose(file);
+        }
+    }
+    ~RootBindingTrace() { finish(false); }
+};
+} // namespace
+
 ServerCompilationAnalysis::ServerCompilationAnalysis(
     const std::unordered_map<std::string, std::shared_ptr<SlangDoc>>& documents, Bag& options,
-    SourceManager& sourceManager, const lsp::RequestContext& ctx) :
+    SourceManager& sourceManager, const lsp::RequestContext& ctx, bool allowDisposableRoot,
+    std::shared_ptr<const void> sourceOwner) :
     compilation(options),
     m_analysisOptions(options.getOrDefault<slang::analysis::AnalysisOptions>()) {
     UvmPhaseTrace phases;
@@ -38,6 +85,10 @@ ServerCompilationAnalysis::ServerCompilationAnalysis(
     phases.mark("model-syntax-discovery");
     ctx.checkpoint("before full-model library import");
     const bool trusted = importTrustedUvm(compilation, sourceManager, options, trees);
+    // Native models need the same namespace lifetime guarantee as imported views.
+    // Keep only the SourceLifetime (sources + library identities), never the driver.
+    if (sourceOwner && !compilation.getSourceOwnerLease())
+        compilation.retainSourceOwner(std::move(sourceOwner));
     ctx.checkpoint("after full-model library import");
     phases.mark("model-library-import");
     std::unordered_set<BufferID> seenBuffers;
@@ -59,7 +110,15 @@ ServerCompilationAnalysis::ServerCompilationAnalysis(
 
     // reset and rebuild indexed info
     ctx.checkpoint("before full-model root binding");
-    auto& root = compilation.getRoot();
+    const bool disposableRoot = ctx && allowDisposableRoot;
+    RootBindingTrace rootTrace(disposableRoot);
+    auto checkpointRoot = [&] {
+        rootTrace.checkpoint();
+        ctx.checkpoint("during private root binding");
+    };
+    auto& root = disposableRoot ? compilation.getDisposableRoot(checkpointRoot)
+                                : compilation.getRoot();
+    rootTrace.finish(true);
     ctx.checkpoint("after full-model root binding");
     phases.mark("model-root-binding");
     instances.reset(&root, [&] { ctx.checkpoint("during full-model instance indexing"); });
@@ -154,16 +213,21 @@ void ServerCompilationAnalysis::issueDiagnosticsTo(
 }
 
 std::vector<const slang::analysis::ValueDriver*> ServerCompilationAnalysis::getDrivers(
-    const slang::ast::ValueSymbol& symbol) {
+    const slang::ast::ValueSymbol& symbol, const lsp::RequestContext& ctx) {
     if (!m_analysisQueries) {
-        auto& manager = getAnalysisManager();
+        auto& manager = getAnalysisManager(ctx);
         m_analysisQueries = std::make_unique<slang::analysis::AnalysisQueries>(compilation,
                                                                                manager);
     }
-    return m_analysisQueries->getDrivers(symbol);
+    ctx.checkpoint("before cone driver lookup");
+    auto result = m_analysisQueries->getDrivers(symbol);
+    ctx.checkpoint("after cone driver lookup");
+    return result;
 }
 
-const slang::ast::Symbol& ServerCompilationAnalysis::lookupConeSymbol(const std::string& path) {
+const slang::ast::Symbol& ServerCompilationAnalysis::lookupConeSymbol(
+    const std::string& path, const lsp::RequestContext& ctx) {
+    ctx.checkpoint("before cone path lookup");
     slang::ast::LookupResult result;
     slang::ast::ASTContext context(compilation.getRoot(), slang::ast::LookupLocation::max);
     slang::ast::Lookup::name(compilation.parseName(path), context, slang::ast::LookupFlags::None,
@@ -172,11 +236,13 @@ const slang::ast::Symbol& ServerCompilationAnalysis::lookupConeSymbol(const std:
         throw std::runtime_error(fmt::format("Could not find path in compiled design: {}", path));
     }
 
+    ctx.checkpoint("after cone path lookup");
     return *result.found;
 }
 
-std::set<ConeLeaf> ServerCompilationAnalysis::getDriverCone(const std::string& path) {
-    const auto& symbol = lookupConeSymbol(path);
+std::set<ConeLeaf> ServerCompilationAnalysis::getDriverCone(const std::string& path,
+                                                            const lsp::RequestContext& ctx) {
+    const auto& symbol = lookupConeSymbol(path, ctx);
     const slang::ast::ValueSymbol* lookupSymbol = symbol.as_if<slang::ast::ValueSymbol>();
     const slang::ast::ValueSymbol* resultSymbol =
         ConeLeaf::concreteSymbol(&symbol)->as_if<slang::ast::ValueSymbol>();
@@ -184,16 +250,17 @@ std::set<ConeLeaf> ServerCompilationAnalysis::getDriverCone(const std::string& p
         throw std::runtime_error(fmt::format("Path is not a value symbol: {}", path));
     }
 
-    auto drivers = getDrivers(*resultSymbol);
+    auto drivers = getDrivers(*resultSymbol, ctx);
     if (lookupSymbol != resultSymbol) {
-        for (auto* driver : getDrivers(*lookupSymbol)) {
+        for (auto* driver : getDrivers(*lookupSymbol, ctx)) {
             if (std::ranges::find(drivers, driver) == drivers.end()) {
                 drivers.push_back(driver);
             }
         }
     }
-    DriversTracer tracer(resultSymbol);
+    DriversTracer tracer(resultSymbol, ctx);
     for (auto* driver : drivers) {
+        ctx.checkpoint("during driver cone traversal");
         // slang sets the containingSymbol on an input port driver to the
         // instance body. Visit the parent InstanceSymbol instead so we
         // include the port's connection expression in the driver.
@@ -223,11 +290,14 @@ std::set<ConeLeaf> ServerCompilationAnalysis::getDriverCone(const std::string& p
     return tracer.getLeaves();
 }
 
-std::set<ConeLeaf> ServerCompilationAnalysis::getLoadCone(const std::string& path) {
-    const auto& symbol = lookupConeSymbol(path);
+std::set<ConeLeaf> ServerCompilationAnalysis::getLoadCone(const std::string& path,
+                                                          const lsp::RequestContext& ctx) {
+    const auto& symbol = lookupConeSymbol(path, ctx);
     if (!m_references) {
-        m_references.emplace();
-        m_references->reset(&compilation.getRoot());
+        ReferenceIndexer prepared;
+        prepared.reset(&compilation.getRoot(), ctx);
+        ctx.checkpoint("before cone reference index commit");
+        m_references.emplace(std::move(prepared));
     }
 
     auto it = m_references->symbolToUses.find(
@@ -238,9 +308,10 @@ std::set<ConeLeaf> ServerCompilationAnalysis::getLoadCone(const std::string& pat
 
     std::set<ConeLeaf> leaves;
     for (const auto* use : it->second) {
+        ctx.checkpoint("during load cone traversal");
         // Event / control state belongs to this use only. Symbol allocation
         // order must not turn an unrelated port connection into a self-load.
-        LoadsTracer coneTracer(&symbol);
+        LoadsTracer coneTracer(&symbol, ctx);
         use->visit(coneTracer);
         const auto current = coneTracer.getLeaves();
         leaves.insert(current.begin(), current.end());

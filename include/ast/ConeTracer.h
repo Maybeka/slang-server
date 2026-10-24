@@ -7,6 +7,7 @@
 //------------------------------------------------------------------------------
 #pragma once
 
+#include "lsp/RequestContext.h"
 #include "util/ScopedRestore.h"
 #include <functional>
 #include <set>
@@ -73,11 +74,19 @@ protected:
     }
 
 private:
-    ConeTracer(const slang::ast::Symbol* root) : root(ConeLeaf::concreteSymbol(root)) {}
+    ConeTracer(const slang::ast::Symbol* root, const lsp::RequestContext& ctx) :
+        root(ConeLeaf::concreteSymbol(root)), context(ctx) {}
+
+    lsp::RequestContext context;
 
     std::set<ConeLeaf> leaves;
 
 public:
+    template<typename T>
+    void visit(const T& node) {
+        context.checkpoint("during cone AST traversal");
+        slang::ast::ASTVisitor<TDerived, slang::ast::VisitFlags::AllGood>::visit(node);
+    }
     std::set<ConeLeaf> getLeaves() { return leaves; }
     friend TDerived;
 };
@@ -182,7 +191,8 @@ public:
         }
     }
 
-    DriversTracer(const slang::ast::Symbol* root) : ConeTracer(root) {}
+    DriversTracer(const slang::ast::Symbol* root, const lsp::RequestContext& ctx = {}) :
+        ConeTracer(root, ctx) {}
 };
 
 struct LoadsTracer : public ConeTracer<LoadsTracer> {
@@ -262,5 +272,6 @@ public:
         }
     }
 
-    LoadsTracer(const slang::ast::Symbol* root) : ConeTracer(root) {}
+    LoadsTracer(const slang::ast::Symbol* root, const lsp::RequestContext& ctx = {}) :
+        ConeTracer(root, ctx) {}
 };

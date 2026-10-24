@@ -56,6 +56,9 @@ private:
     /// The buffer of the actual source text (no expansions)
     slang::SourceBuffer m_buffer;
 
+    // Changes with editor text; survives an exact-text driver handoff only.
+    uint64_t m_completionTextIdentity;
+
     /// The syntax tree for this document
     std::shared_ptr<slang::syntax::SyntaxTree> m_tree;
 
@@ -135,6 +138,8 @@ public:
     const slang::BufferID getBuffer() const { return m_buffer.id; }
     std::optional<int> getVersion() const { return m_version; }
     void setVersion(std::optional<int> version) { m_version = version; }
+    uint64_t getCompletionTextIdentity() const { return m_completionTextIdentity; }
+    void inheritCompletionTextIdentity(const SlangDoc& previous);
     const std::string_view getText() const;
     const URI& getURI() { return m_uri; }
     std::string_view getPath() const { return m_uri.getPath(); }

@@ -14,9 +14,10 @@
 
 namespace server {
 
-std::vector<ConeEntry> ConeResult::getLocations() const {
+std::vector<ConeEntry> ConeResult::getLocations(const lsp::RequestContext& ctx) const {
     std::vector<ConeEntry> result;
     for (const auto& leaf : m_leaves) {
+        ctx.checkpoint("during cone result conversion");
         auto range = leaf.getDeclarationRange();
         if (range.start().valid()) {
             auto fullPath = std::filesystem::absolute(m_sourceManager.getFileName(range.start()));
@@ -28,10 +29,11 @@ std::vector<ConeEntry> ConeResult::getLocations() const {
     return result;
 }
 
-std::vector<std::string> ConeResult::getPaths() const {
+std::vector<std::string> ConeResult::getPaths(const lsp::RequestContext& ctx) const {
     std::vector<std::string> result;
     std::set<std::string> seen;
     for (const auto& leaf : m_leaves) {
+        ctx.checkpoint("during cone result conversion");
         std::string hier = leaf.getHierarchicalPath();
         if (seen.insert(hier).second) {
             result.push_back(hier);

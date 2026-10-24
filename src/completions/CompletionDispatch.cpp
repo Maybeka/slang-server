@@ -501,6 +501,7 @@ void CompletionDispatch::getCompletions(std::vector<lsp::CompletionItem>& result
         if (item.kind == lsp::CompletionItemKind::Module)
             item.data = std::string(doc->getURI().str());
         context.query->setCompletionEdit(item);
+        completions::MemberCompletionQuery::retainReceiverText(item, *doc);
         if ((m_driver.isUvmPrefixCacheEnabled() || m_driver.isFrozenSourcesEnabled() ||
              (m_parsedLibraryCache && m_parsedLibraryCache->requireEpoch)) &&
             item.data && item.data->to_object())

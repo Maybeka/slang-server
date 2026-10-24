@@ -65,6 +65,7 @@ struct Data {
     bool labelOnly = false;
     std::optional<uint32_t> receiverBufferId;
     std::optional<uint64_t> receiverOffset;
+    std::optional<uint64_t> receiverTextIdentity;
     bool operator==(const Data&) const = default;
 };
 struct QueryPayload {
@@ -1608,9 +1609,10 @@ bool MethodScopeOverlay::generalApply(const lsp::DidChangeTextDocumentParams& p,
              "body changes macro environment");
     auto analysis = std::make_shared<ShallowAnalysis>(source.id, unit, ctx);
     phases.mark("body-apply-index");
-    need(bindOnly && optimizedCertification(config) ? validContext(config, ctx)
-                                                    : valid(config, ctx),
-         "inputs changed before body publication");
+    // This commits synchronized text and a private provisional slice. Queries,
+    // diagnostics and native fallbacks independently perform the complete proof
+    // at their publication / admission boundaries; no success is cached across requests.
+    need(validForWork(config, ctx), "inputs changed before body publication");
     phases.mark("body-apply-revalidate");
     if (!bindOnly)
         commitGeneralText(p, std::move(next), nextBodyEnd, nextFunctionEnd, ctx, synced);

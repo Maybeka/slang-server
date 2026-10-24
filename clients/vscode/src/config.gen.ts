@@ -30,6 +30,8 @@ export interface Config {
   experimentalMethodBodyCertification?: boolean
   /** Experimental cooperative syntax parsing and background context retirement. Default off. Cancelled syntax candidates are discarded; semantic model construction retains phase-boundary cancellation. Keeps the current query owner until a private replacement is ready; new input cancels replacement parsing. A hard source-storage limit still forces synchronous retirement to bound retained generations. */
   experimentalCooperativeAnalysis?: boolean
+  /** Additional mutable source-history allowance per generation in MiB (1..4096, default 64). Includes text and source-location tables beyond the initial working set. Experimental context retirement starts at half this allowance and becomes synchronous at the full allowance. Does not enable experiments or cap process RSS, retained fixed providers, or source namespaces still held by live views. */
+  sourceHistoryMaxMiB?: number
   /** Experimental immutable UVM prefix reuse. Default off. External macros affecting UVM must come from command-line/configuration flags. Unsupported source changes or preprocessing state use native parsing. */
   experimentalUvmPrefixCache?: boolean
   /** Experimental semantic reuse of an explicitly configured, user-trusted immutable UVM library. Default off. Library files and dependencies are assumed unchanged until slang.rebuildUvmLibrary or configuration reload. No automatic dependency freshness is promised. Mutable user types and generic specializations remain per-consumer. */

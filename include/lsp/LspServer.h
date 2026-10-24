@@ -504,7 +504,7 @@ protected:
     ///
     /// @since 3.16.0
     virtual std::optional<std::vector<CallHierarchyItem>> getDocPrepareCallHierarchy(
-        const CallHierarchyPrepareParams&) {
+        const CallHierarchyPrepareParams&, RequestContext = {}) {
         return std::optional<std::vector<CallHierarchyItem>>{};
     }
 
@@ -967,7 +967,7 @@ protected:
     ///
     /// @since 3.16.0
     virtual std::optional<std::vector<CallHierarchyIncomingCall>> getCallHierarchyIncomingCalls(
-        const CallHierarchyIncomingCallsParams&) {
+        const CallHierarchyIncomingCallsParams&, RequestContext = {}) {
         return std::optional<std::vector<CallHierarchyIncomingCall>>{};
     }
 

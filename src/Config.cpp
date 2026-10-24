@@ -96,6 +96,10 @@ rfl::Result<Config> Config::fromFiles(const std::optional<std::string>& workspac
             fmt::format("Failed to convert final config: {}", finalConfig.error().what()));
     }
 
+    if (!finalConfig->sourceHistoryMaxMiB.value() ||
+        finalConfig->sourceHistoryMaxMiB.value() > 4096)
+        return rfl::error("sourceHistoryMaxMiB must be between 1 and 4096");
+
     auto hasField = [](const std::optional<rfl::Generic::Object>& obj,
                        std::string_view fieldName) -> bool {
         return obj && obj->count(std::string(fieldName)) > 0;

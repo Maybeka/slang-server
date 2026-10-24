@@ -2208,7 +2208,9 @@ TEST_CASE("Inherited method resolve retains the receiver specialization", "[clas
     auto params = makeCompletionResolveParams(
         {"documentation", "detail", "insertText", "insertTextFormat", "textEdit"});
     params.capabilities.textDocument->completion->completionItem->snippetSupport = true;
+    const bool replaceDriver = GENERATE(false, true);
     ServerHarness server(params);
+    REQUIRE(server.loadConfig(Config{.experimentalCooperativeAnalysis = true}));
     auto doc = server.openFile("specialized_methods.sv", R"(
 package members;
 class base #(int W = 8);
@@ -2232,10 +2234,106 @@ endmodule
         });
         REQUIRE(method != items.end());
         REQUIRE(method->m_item.kind == lsp::CompletionItemKind::Method);
+        if (replaceDriver)
+            REQUIRE(server.loadConfig(Config{.experimentalCooperativeAnalysis = true}));
         method->resolve();
         REQUIRE(method->m_item.documentation);
         CHECK(getCompletionTextEdit(method->m_item).newText.find(type) != std::string::npos);
     }
+}
+
+TEST_CASE("Receiver completion rejects changed text even when an editor version is reused",
+          "[class-members][completion-retirement]") {
+    const bool replaceDriver = GENERATE(false, true);
+    const bool restoreOriginal = GENERATE(false, true);
+    const bool editorChange = GENERATE(false, true);
+    auto params = makeCompletionResolveParams({"documentation", "detail"});
+    ServerHarness server(params);
+    REQUIRE(server.loadConfig(Config{.experimentalCooperativeAnalysis = true}));
+    const std::string text = R"(
+class base #(int W = 8);
+    function void consume(bit [W-1:0] value); endfunction
+endclass
+module top;
+    base #(64) handle;
+    initial handle.;
+endmodule
+)";
+    auto doc = server.openFile("stale_receiver.sv", text);
+    const auto uri = doc.doc->getURI();
+    auto items = doc.after("handle.").getCompletions(".");
+    auto method = std::ranges::find_if(items, [](const auto& item) {
+        return item.m_item.label == "consume";
+    });
+    REQUIRE(method != items.end());
+    REQUIRE_FALSE(method->m_item.documentation);
+    // Reusing a version is legal for a new open. A buffer ID alone cannot prove
+    // that a retained byte offset still denotes the same receiver text.
+    if (editorChange) {
+        doc.append("\n// edited");
+        doc.publishChanges();
+        if (restoreOriginal) {
+            doc.replaceAll(text);
+            doc.publishChanges();
+        }
+    }
+    else {
+        server.onDocDidOpen(
+            lsp::DidOpenTextDocumentParams{.textDocument = {.uri = uri,
+                                                            .languageId = "systemverilog",
+                                                            .version = 1,
+                                                            .text = "// new open\n" + text}});
+        if (restoreOriginal)
+            server.onDocDidOpen(lsp::DidOpenTextDocumentParams{
+                .textDocument = {
+                    .uri = uri, .languageId = "systemverilog", .version = 1, .text = text}});
+    }
+    if (replaceDriver)
+        REQUIRE(server.loadConfig(Config{.experimentalCooperativeAnalysis = true}));
+    method->resolve();
+    CHECK_FALSE(method->m_item.documentation);
+    CHECK_FALSE(method->m_item.data);
+}
+
+TEST_CASE("Receiver completion survives retirement with virtual interface parameters and modport",
+          "[class-members][completion-retirement]") {
+    auto params = makeCompletionResolveParams({"documentation", "detail"});
+    ServerHarness server(params);
+    REQUIRE(server.loadConfig(Config{.experimentalCooperativeAnalysis = true}));
+    const bool modport = GENERATE(false, true);
+    std::string text = R"(
+interface bus #(int W = 8);
+    logic [W-1:0] value;
+    int hidden;
+    modport consumer(input value);
+endinterface
+class item;
+    virtual bus #(16).consumer vif;
+    function void run(); vif.; endfunction
+endclass
+module top; item handle; endmodule
+)";
+    if (!modport)
+        text.erase(text.find(".consumer"), std::string(".consumer").size());
+    auto doc = server.openFile("retained_virtual_receiver.sv", text);
+    auto items = doc.after("vif.").getCompletions(".");
+    CHECK(std::ranges::any_of(items, [](const auto& item) {
+              return item.m_item.label == "hidden";
+          }) == !modport);
+    auto value = std::ranges::find_if(items, [](const auto& item) {
+        return item.m_item.label == "value";
+    });
+    REQUIRE(value != items.end());
+    REQUIRE(value->m_item.labelDetails);
+    auto reference = *value;
+    reference.resolve();
+    REQUIRE(reference.m_item.documentation);
+    const auto expected = rfl::get<lsp::MarkupContent>(*reference.m_item.documentation).value;
+    REQUIRE(server.loadConfig(Config{.experimentalCooperativeAnalysis = true}));
+    value->resolve();
+    REQUIRE(value->m_item.documentation);
+    const auto& documentation = rfl::get<lsp::MarkupContent>(*value->m_item.documentation);
+    CHECK(documentation.value == expected);
 }
 
 TEST_CASE("Chained type parameters complete with concrete types and declaration documentation",

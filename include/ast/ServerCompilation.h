@@ -50,7 +50,8 @@ public:
                       SourceManager& sourceManager, lsp::LspClient& client,
                       std::optional<std::string> top = std::nullopt,
                       const ServerCompilation* previous = nullptr,
-                      const lsp::RequestContext& ctx = {});
+                      const lsp::RequestContext& ctx = {}, bool disposableRoot = false,
+                      std::shared_ptr<const void> sourceOwner = {});
 
     ~ServerCompilation() = default;
 
@@ -85,11 +86,11 @@ public:
     }
 
     /// Get instances by module; Used for the 'instances' view. Includes declaration metadata.
-    std::vector<hier::InstanceSet> getScopesByModule();
+    std::vector<hier::InstanceSet> getScopesByModule(const lsp::RequestContext& ctx = {});
 
     /// Get instances of a specific module
     const std::vector<const slang::ast::InstanceSymbol*>& getInstancesOfModule(
-        const std::string& moduleName) const;
+        const std::string& moduleName, const lsp::RequestContext& ctx = {}) const;
 
     /// Return the file path that the active compilation resolved for a symbol name, if any.
     std::optional<std::string> getPreferredSymbolPath(std::string_view name,
@@ -99,10 +100,11 @@ public:
     /// canonical (`top.bus8`) or an alias that resolves through an interface port
     /// (`top.tap.data_bus`); slang's lookup resolves both. Returns false if the path isn't
     /// contained by an instance.
-    bool setActiveInstance(const std::string& hierPath);
+    bool setActiveInstance(const std::string& hierPath, const lsp::RequestContext& ctx = {});
 
     /// Return the active instance for a module, falling back to a deterministic default.
-    std::optional<hier::QualifiedInstance> getActiveInstance(const std::string& moduleName);
+    std::optional<hier::QualifiedInstance> getActiveInstance(const std::string& moduleName,
+                                                             const lsp::RequestContext& ctx = {});
 
     /// Return the elaborated active instance symbol for a module, if any.
     const slang::ast::InstanceSymbol* getActiveInstanceSymbol(
@@ -126,24 +128,28 @@ public:
                                            const lsp::RequestContext& ctx = {});
 
     /// Search the elaborated hierarchy for instances, scopes, ports, parameters, and signals.
-    hier::HierarchySearchResult searchHierarchy(const std::string& query);
+    hier::HierarchySearchResult searchHierarchy(const std::string& query,
+                                                const lsp::RequestContext& ctx = {});
 
     /// Resolve the document location for a hierarchical path on-demand.
-    std::optional<lsp::Location> getHierLocation(const std::string& hierPath);
+    std::optional<lsp::Location> getHierLocation(const std::string& hierPath,
+                                                 const lsp::RequestContext& ctx = {});
 
     /// Return instances for given doc position
-    std::vector<std::string> getInstances(const lsp::TextDocumentPositionParams&);
+    std::vector<std::string> getInstances(const lsp::TextDocumentPositionParams&,
+                                          const lsp::RequestContext& ctx = {});
 
     /// Prepare cone tracing using LSP call hierarchy API
     std::vector<lsp::CallHierarchyItem> getDocPrepareCallHierarchy(
-        const lsp::CallHierarchyPrepareParams& params);
+        const lsp::CallHierarchyPrepareParams& params, const lsp::RequestContext& ctx = {});
 
     /// Deduce WCP variable vs scope
     // TODO -- remove once not needed for cone tracing
-    bool isWcpVariable(const std::string& path);
+    bool isWcpVariable(const std::string& path, const lsp::RequestContext& ctx = {});
 
     /// Get document and position params for a given RTL path
-    std::optional<lsp::ShowDocumentParams> getHierDocParams(const std::string& path);
+    std::optional<lsp::ShowDocumentParams> getHierDocParams(const std::string& path,
+                                                            const lsp::RequestContext& ctx = {});
 
     /// Issue all semantic diagnostics from the compilation to the diagnostic engine
     void issueDiagnosticsTo(
@@ -151,10 +157,10 @@ public:
         const std::function<void(size_t, const slang::Diagnostic&)>& issue = {});
 
     /// Return the driver cone for the given RTL path, valid until the compilation is refreshed.
-    ConeResult getDriverCone(const std::string& path);
+    ConeResult getDriverCone(const std::string& path, const lsp::RequestContext& ctx = {});
 
     /// Return the load cone for the given RTL path, valid until the compilation is refreshed.
-    ConeResult getLoadCone(const std::string& path);
+    ConeResult getLoadCone(const std::string& path, const lsp::RequestContext& ctx = {});
 
 private:
     friend class ServerDriver;
@@ -176,7 +182,8 @@ private:
 
     // Used when going from hierPath -> compilation symbol -> shallow compilation symbol
     // Therefore we get more up to date source locations
-    const slang::ast::Symbol* toShallowSymbol(const slang::ast::Symbol& symbol) const;
+    const slang::ast::Symbol* toShallowSymbol(const slang::ast::Symbol& symbol,
+                                              const lsp::RequestContext& ctx = {}) const;
 
     /// Build m_moduleToDoc from the declared symbols of each document's syntax tree.
     std::unordered_map<std::string, std::shared_ptr<SlangDoc>> indexModuleDocs(
@@ -193,7 +200,11 @@ private:
     std::unordered_map<std::string, std::shared_ptr<SlangDoc>> m_moduleToDoc;
 
     /// Copy of compilation options
+    // Source namespace lifetime, independent of the driver and its old models.
+    std::shared_ptr<const void> m_sourceOwner;
     Bag m_options;
+    // Execution control is deliberately not part of semantic / snapshot options.
+    bool m_disposableRoot = false;
 
     /// Owned storage for top module name, used with setTopLevel
     /// CompilationOptions::topModules uses string_view, so we need to own the string here

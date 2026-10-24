@@ -18,6 +18,7 @@
 #include "lsp/URI.h"
 #include "util/Converters.h"
 #include "util/Logging.h"
+#include "util/SourceHistoryBudget.h"
 #include "util/UvmPhaseTrace.h"
 #include <algorithm>
 #include <cctype>
@@ -59,6 +60,14 @@ namespace fs = std::filesystem;
 
 namespace server {
 namespace {
+bool sourceHistoryEnabled(const Config& config) {
+    return config.experimentalUvmPrefixCache.value() || config.experimentalFrozenSources.value() ||
+           config.experimentalUvmSemanticCache.value() ||
+           config.experimentalScopeSemanticCache.value() ||
+           config.experimentalCooperativeAnalysis.value() ||
+           (config.experimentalMethodBodyQueries.value() &&
+            config.experimentalMethodBodyCertificateRenewal.value());
+}
 void republishDriverDiagnostics(ServerDriver& driver) {
     // A candidate can publish during construction. The retired owner's final
     // clears must precede the current owner's authoritative publication.
@@ -142,12 +151,14 @@ lsp::InitializeResult SlangServer::getInitialize(const lsp::InitializeParams& pa
     registerCommand<std::string, std::monostate, &SlangServer::openWaveform>("slang.openWaveform");
 
     registerDesignCommand<std::string, std::vector<server::ConeEntry>>(
-        "slang.getDriversWithLocation", [](ServerCompilation& comp, const std::string& hierPath) {
-            return comp.getDriverCone(hierPath).getLocations();
+        "slang.getDriversWithLocation",
+        [](ServerCompilation& comp, const std::string& hierPath, const lsp::RequestContext& ctx) {
+            return comp.getDriverCone(hierPath, ctx).getLocations(ctx);
         });
     registerDesignCommand<std::string, std::vector<server::ConeEntry>>(
-        "slang.getLoadsWithLocation", [](ServerCompilation& comp, const std::string& hierPath) {
-            return comp.getLoadCone(hierPath).getLocations();
+        "slang.getLoadsWithLocation",
+        [](ServerCompilation& comp, const std::string& hierPath, const lsp::RequestContext& ctx) {
+            return comp.getLoadCone(hierPath, ctx).getLocations(ctx);
         });
 
     // Hierarchy View (sidebar)
@@ -156,8 +167,9 @@ lsp::InitializeResult SlangServer::getInitialize(const lsp::InitializeParams& pa
     registerCommand<std::string, std::vector<hier::ScopeStep>, &SlangServer::getScopes>(
         "slang.getScopes");
     registerDesignCommand<std::string, hier::HierarchySearchResult>(
-        "slang.searchHierarchy", [](ServerCompilation& comp, const std::string& query) {
-            return comp.searchHierarchy(query);
+        "slang.searchHierarchy",
+        [](ServerCompilation& comp, const std::string& query, const lsp::RequestContext& ctx) {
+            return comp.searchHierarchy(query, ctx);
         });
     registerCommand<ShowHierLocationArgs, std::monostate, &SlangServer::showHierLocation>(
         "slang.showHierLocation");
@@ -204,6 +216,21 @@ lsp::InitializeResult SlangServer::getInitialize(const lsp::InitializeParams& pa
                                                   [this](std::monostate) {
                                                       return m_driver->scopeLibraryStatus();
                                                   });
+    registerCommand<std::monostate, rfl::Generic>("slang.sourceStorageStatus", [this](
+                                                                                   std::monostate) {
+        struct Status {
+            SourceStorageRegistry::Usage storage;
+            bool retirementEnabled;
+            uint32_t historyMaxMiB;
+            size_t historyBaseBytes, historySoftLimitBytes, historyHardLimitBytes;
+            bool retirementPending;
+        };
+        return rfl::to_generic(
+            Status{m_driver->sourceStorageUsage(),
+                   sourceHistoryEnabled(m_config) && !std::getenv("SLANG_UVM_GENERATION_DISABLE"),
+                   m_config.sourceHistoryMaxMiB.value(), m_contextBaseBytes, m_contextBudget,
+                   m_contextHardBudget, m_contextRetirementPending});
+    });
     registerCommand<std::monostate, bool>("slang.rebuildScopeLibrary", [this](std::monostate) {
         m_driver->invalidateUvmParseCache();
         return loadConfig(m_config, true, true, true, true);
@@ -295,14 +322,18 @@ lsp::InitializeResult SlangServer::getInitialize(const lsp::InitializeParams& pa
     for (auto& [name, command] : m_commands) {
         if (name == "slang.methodScopeStatus" || name == "slang.frozenSourcesStatus" ||
             name == "slang.scopeLibraryStatus" || name == "slang.uvmLibraryStatus" ||
-            name == "slang.refreshFrozenSources" || name == "slang.rebuildScopeLibrary" ||
-            name == "slang.rebuildUvmLibrary" || name == "slang.setTopLevel" ||
-            name == "slang.setBuildFile" || name == "slang.addDefine" ||
-            name == "slang.autoConfigure")
+            name == "slang.sourceStorageStatus" || name == "slang.refreshFrozenSources" ||
+            name == "slang.rebuildScopeLibrary" || name == "slang.rebuildUvmLibrary" ||
+            name == "slang.setTopLevel" || name == "slang.setBuildFile" ||
+            name == "slang.addDefine" || name == "slang.autoConfigure")
             continue;
-        command = [this, original = std::move(command)](rfl::Generic args,
-                                                        const lsp::RequestContext& ctx) {
-            recoverMethodInputs(ctx);
+        const bool localHover = name == "slang.previewHover";
+        command = [this, original = std::move(command),
+                   localHover](rfl::Generic args, const lsp::RequestContext& ctx) {
+            if (localHover)
+                recoverMethodInputs(ctx);
+            else
+                certifyMethodInputs(ctx);
             return original(std::move(args), ctx);
         };
     }
@@ -585,6 +616,8 @@ void SlangServer::setExplore() {
     m_driver = ServerDriver::createForExplore(m_indexer, m_client, m_config, workspacePath,
                                               m_driver.get());
     republishDriverDiagnostics(*m_driver);
+    resetSourceHistoryBudget(m_driver->sm.getSourceLocationTableBytes() +
+                             m_driver->sm.getMemoryUsage());
     m_driver->diagClient->pushDiags();
     m_contextWatchesDirty = true;
     refreshContextFileWatches();
@@ -622,6 +655,8 @@ std::monostate SlangServer::setTopLevel(const std::string& path) {
     m_driver = ServerDriver::createFromTop(m_indexer, m_client, m_config, URI::fromFile(topPath),
                                            workspacePath, m_driver.get());
     republishDriverDiagnostics(*m_driver);
+    resetSourceHistoryBudget(m_driver->sm.getSourceLocationTableBytes() +
+                             m_driver->sm.getMemoryUsage());
     m_contextWatchesDirty = true;
     refreshContextFileWatches();
 
@@ -643,26 +678,29 @@ std::monostate SlangServer::setBuildFile(const std::string& path) {
                                                  std::vector<std::string>{path}, workspacePath,
                                                  m_driver.get());
     republishDriverDiagnostics(*m_driver);
+    resetSourceHistoryBudget(m_driver->sm.getSourceLocationTableBytes() +
+                             m_driver->sm.getMemoryUsage());
     m_contextWatchesDirty = true;
     refreshContextFileWatches();
     return std::monostate{};
 }
 
-std::vector<hier::InstanceSet> SlangServer::getScopesByModule(const std::monostate&) {
+std::vector<hier::InstanceSet> SlangServer::getScopesByModule(const std::monostate&,
+                                                              const lsp::RequestContext& ctx) {
     if (!m_driver->comp) {
         ERROR("No compilation available, cannot get scopes by module");
         return {};
     }
-    return m_driver->comp->getScopesByModule();
+    return m_driver->comp->getScopesByModule(ctx);
 }
 
 std::vector<hier::QualifiedInstance> SlangServer::getInstancesOfModule(
-    const std::string moduleName) {
+    const std::string moduleName, const lsp::RequestContext& ctx) {
     if (!m_driver->comp) {
         ERROR("No compilation available, cannot get instances of module {}", moduleName);
         return {};
     }
-    auto instances = m_driver->comp->getInstancesOfModule(moduleName);
+    auto instances = m_driver->comp->getInstancesOfModule(moduleName, ctx);
     if (instances.empty()) {
         m_client.showError(fmt::format("Module {} not found", moduleName));
         return {};
@@ -670,6 +708,7 @@ std::vector<hier::QualifiedInstance> SlangServer::getInstancesOfModule(
     std::vector<hier::QualifiedInstance> result;
     result.reserve(instances.size());
     for (const auto* inst : instances) {
+        ctx.checkpoint("during module instance listing");
         result.push_back(hier::toQualifiedInstance(*inst, m_driver->sm));
     }
     return result;
@@ -744,8 +783,8 @@ std::vector<hier::ScopeStep> SlangServer::getScopes(const std::string& hierPath,
     return scopes;
 }
 
-bool SlangServer::setActiveInstance(const std::string& hierPath) {
-    if (!m_driver || !m_driver->setActiveInstance(hierPath)) {
+bool SlangServer::setActiveInstance(const std::string& hierPath, const lsp::RequestContext& ctx) {
+    if (!m_driver || !m_driver->setActiveInstance(hierPath, ctx)) {
         m_client.showError(fmt::format("Failed to set active instance {}", hierPath));
         return false;
     }
@@ -755,32 +794,33 @@ bool SlangServer::setActiveInstance(const std::string& hierPath) {
 bool SlangServer::activateInstance(const SlangLspClient::ActivateInstanceParams& params,
                                    const lsp::RequestContext& ctx) {
     ctx.throwIfCancelled("before activating instance");
-    if (!setActiveInstance(params.hierPath))
+    if (!setActiveInstance(params.hierPath, ctx))
         return false;
 
     m_client.onActiveInstanceChanged(params);
     if (params.interactionSource == SlangLspClient::InteractionSource::codeLensGotoInstantiation) {
-        showHierLocation({.hierPath = params.hierPath, .takeFocus = true});
+        showHierLocation({.hierPath = params.hierPath, .takeFocus = true}, ctx);
     }
     ctx.info("Activated instance {}", params.hierPath);
     return true;
 }
 
 std::optional<hier::QualifiedInstance> SlangServer::getActiveInstance(
-    const std::string& moduleName) {
+    const std::string& moduleName, const lsp::RequestContext& ctx) {
     if (!m_driver->comp) {
         ERROR("No compilation available, cannot get active instance for {}", moduleName);
         return std::nullopt;
     }
-    return m_driver->comp->getActiveInstance(moduleName);
+    return m_driver->comp->getActiveInstance(moduleName, ctx);
 }
 
-std::optional<lsp::Location> SlangServer::getHierLocation(const std::string& hierPath) {
+std::optional<lsp::Location> SlangServer::getHierLocation(const std::string& hierPath,
+                                                          const lsp::RequestContext& ctx) {
     if (!m_driver->comp) {
         ERROR("No compilation available, cannot resolve location for {}", hierPath);
         return std::nullopt;
     }
-    auto location = m_driver->comp->getHierLocation(hierPath);
+    auto location = m_driver->comp->getHierLocation(hierPath, ctx);
     if (location) {
         return location;
     }
@@ -794,7 +834,8 @@ std::optional<lsp::Location> SlangServer::getHierLocation(const std::string& hie
     auto packageName = std::string_view(hierPath).substr(0, separator);
     auto memberName = std::string_view(hierPath).substr(separator + 2);
     for (const auto& [_, doc] : m_driver->docs) {
-        auto analysis = doc->getAnalysis();
+        ctx.checkpoint("during package hierarchy location lookup");
+        auto analysis = doc->getAnalysis(ctx);
         auto* pkg = analysis->getCompilation()->getPackage(packageName);
         auto* member = pkg ? pkg->lookupName(memberName) : nullptr;
         if (!member) {
@@ -817,8 +858,10 @@ std::optional<lsp::Location> SlangServer::getHierLocation(const std::string& hie
     return std::nullopt;
 }
 
-std::monostate SlangServer::showHierLocation(const ShowHierLocationArgs& args) {
-    auto location = getHierLocation(args.hierPath);
+std::monostate SlangServer::showHierLocation(const ShowHierLocationArgs& args,
+                                             const lsp::RequestContext& ctx) {
+    auto location = getHierLocation(args.hierPath, ctx);
+    ctx.checkpoint("before hierarchy location publication");
     if (!location) {
         return {};
     }
@@ -839,12 +882,13 @@ std::monostate SlangServer::showLocation(const lsp::Location& location) {
     return {};
 }
 
-std::monostate SlangServer::openModuleDefinition(const std::string& moduleName) {
+std::monostate SlangServer::openModuleDefinition(const std::string& moduleName,
+                                                 const lsp::RequestContext& ctx) {
     if (!m_driver->comp) {
         ERROR("No compilation available, cannot open module definition for {}", moduleName);
         return {};
     }
-    auto instances = m_driver->comp->getInstancesOfModule(moduleName);
+    auto instances = m_driver->comp->getInstancesOfModule(moduleName, ctx);
     if (instances.empty()) {
         WARN("openModuleDefinition: module {} has no instances", moduleName);
         return {};
@@ -857,6 +901,7 @@ std::monostate SlangServer::openModuleDefinition(const std::string& moduleName) 
     if (m_driver->isDocumentOpen(declLoc.uri)) {
         return {};
     }
+    ctx.checkpoint("before module definition publication");
     m_client.onShowDocument(lsp::ShowDocumentParams{
         .uri = declLoc.uri,
         .takeFocus = false,
@@ -877,12 +922,13 @@ std::monostate SlangServer::openModuleDefinition(const std::string& moduleName) 
 // crawl the AST limited just to the modules in question or we can attempt to use the
 // provided hierarchical path to deduce where such points may be and then use the remainder
 // of the provided path.
-std::vector<std::string> SlangServer::getInstances(const lsp::TextDocumentPositionParams& params) {
+std::vector<std::string> SlangServer::getInstances(const lsp::TextDocumentPositionParams& params,
+                                                   const lsp::RequestContext& ctx) {
     if (!m_driver->comp) {
         ERROR("No compilation available, cannot get instances");
         return {};
     }
-    return m_driver->comp->getInstances(params);
+    return m_driver->comp->getInstances(params, ctx);
 }
 
 std::vector<std::string> SlangServer::getModulesInFile(const std::string path) {
@@ -940,25 +986,27 @@ void SlangServer::onWaveformLoaded(const std::string& path) {
 }
 
 std::optional<std::vector<lsp::CallHierarchyItem>> SlangServer::getDocPrepareCallHierarchy(
-    const lsp::CallHierarchyPrepareParams& params) {
+    const lsp::CallHierarchyPrepareParams& params, lsp::RequestContext ctx) {
     if (!m_driver->comp) {
         ERROR("No compilation available, cannot trace cones");
         return std::nullopt;
     }
 
-    return m_driver->comp->getDocPrepareCallHierarchy(params);
+    return m_driver->comp->getDocPrepareCallHierarchy(params, ctx);
 }
 
 // TODO: Use custom client code to render drivers/loads
 std::optional<std::vector<lsp::CallHierarchyIncomingCall>> SlangServer::
-    getCallHierarchyIncomingCalls(const lsp::CallHierarchyIncomingCallsParams& params) {
+    getCallHierarchyIncomingCalls(const lsp::CallHierarchyIncomingCallsParams& params,
+                                  lsp::RequestContext ctx) {
     if (!m_driver->comp) {
         ERROR("No compilation available, cannot trace cones");
         return std::nullopt;
     }
     // Drivers are presented as "incoming calls" in the call hierarchy view.
     std::vector<lsp::CallHierarchyIncomingCall> result;
-    for (const auto& entry : m_driver->comp->getDriverCone(params.item.name).getLocations()) {
+    for (const auto& entry :
+         m_driver->comp->getDriverCone(params.item.name, ctx).getLocations(ctx)) {
         result.push_back({
             .from =
                 {
@@ -1008,6 +1056,10 @@ std::vector<std::string> SlangServer::getLoads(const std::string& path) {
 bool SlangServer::loadConfig(const Config& config, bool forceIndexing, bool requireValidConfig,
                              bool deferOpenDiagnostics, bool preserveDesign,
                              const lsp::RequestContext* retirementContext) {
+    if (!config.sourceHistoryMaxMiB.value() || config.sourceHistoryMaxMiB.value() > 4096) {
+        m_client.showError("sourceHistoryMaxMiB must be between 1 and 4096");
+        return false;
+    }
     const auto workspacePath = m_workspaceFolder ? std::optional<std::string_view>(
                                                        m_workspaceFolder->uri.getPath())
                                                  : std::nullopt;
@@ -1115,6 +1167,16 @@ bool SlangServer::loadConfig(const Config& config, bool forceIndexing, bool requ
         m_diagnosticFallbackReason.clear();
 
     // Send config to editor client if it needs to parse general configs
+    if (sourceHistoryEnabled(m_config)) {
+        m_contextEpoch = m_driver->completions.getCompletionEpoch();
+        resetSourceHistoryBudget(m_driver->sm.getSourceLocationTableBytes() +
+                                 m_driver->sm.getMemoryUsage());
+    }
+    else {
+        m_contextEpoch = 0;
+        m_contextBaseBytes = m_contextBudget = m_contextHardBudget = 0;
+    }
+    m_contextEdits = 0;
     m_client.setConfig(m_config);
     return true;
 }
@@ -1508,7 +1570,7 @@ rfl::Variant<lsp::Definition, std::vector<lsp::DefinitionLink>, std::monostate> 
                 out.push_back({link.targetUri, link.targetRange});
             return lsp::Definition(out);
         }
-        recoverMethodInputs(ctx);
+        certifyMethodInputs(ctx);
         discardMethodScope();
     }
     if (auto instance = m_driver->getDesignInstancePathAt(params.textDocument.uri, params.position,
@@ -1537,7 +1599,7 @@ std::optional<lsp::Hover> SlangServer::getDocHover(const lsp::HoverParams& param
         if (auto hover = m_methodScope->hover(params.textDocument.uri, params.position, m_config,
                                               ctx))
             return std::move(*hover);
-        recoverMethodInputs(ctx);
+        certifyMethodInputs(ctx);
         discardMethodScope();
     }
     return m_driver->getDocHover(params.textDocument.uri, params.position, ctx);
@@ -1561,7 +1623,7 @@ std::optional<lsp::Hover> SlangServer::previewHover(const PreviewHoverArgs& args
         if (auto hover = m_methodScope->hover(args.textDocument.uri, args.position, m_config, ctx,
                                               view))
             return std::move(*hover);
-        recoverMethodInputs(ctx);
+        certifyMethodInputs(ctx);
         discardMethodScope();
     }
     return m_driver->getDocHover(args.textDocument.uri, args.position, ctx, view);
@@ -1629,6 +1691,22 @@ void SlangServer::recoverMethodInputs(const lsp::RequestContext& ctx) {
     ctx.checkpoint("after method input reload");
 }
 
+void SlangServer::certifyMethodInputs(const lsp::RequestContext& ctx) {
+    recoverMethodInputs(ctx);
+    ensureMethodScopeDriver();
+    if (!m_methodScope || !m_config.experimentalMethodBodyCertification.value())
+        return;
+    // Text synchronization is provisional. A native consumer must not obtain
+    // semantic results from the old filesystem cache without admitting all of
+    // the certificate inputs first. Failed admission reloads privately and keeps
+    // every latest unsaved editor buffer, including on invalid configuration.
+    if (m_methodScope->observedInputChange() || !m_methodScope->valid(m_config, ctx)) {
+        m_methodInputReloadPending = true;
+        discardMethodScope();
+        recoverMethodInputs(ctx);
+    }
+}
+
 void SlangServer::onBeforeMessage(const lsp::RequestContext& ctx) {
     // Notifications must synchronize every incremental edit, including superseded
     // ones. Certification can rebuild or fail, so it belongs before requests and
@@ -1639,8 +1717,15 @@ void SlangServer::onBeforeMessage(const lsp::RequestContext& ctx) {
         ctx.method().starts_with("$/") || ctx.method() == "workspace/didChangeWatchedFiles" ||
         ctx.method() == "workspace/didChangeConfiguration")
         return;
-    if (ctx.method() != "workspace/executeCommand")
-        recoverMethodInputs(ctx);
+    if (ctx.method() != "workspace/executeCommand") {
+        // These four local result constructors retain their final complete proof.
+        // Other protocol requests can use native syntax / semantic paths directly.
+        if (ctx.method() == "textDocument/hover" || ctx.method() == "textDocument/completion" ||
+            ctx.method() == "textDocument/definition" || ctx.method() == "completionItem/resolve")
+            recoverMethodInputs(ctx);
+        else
+            certifyMethodInputs(ctx);
+    }
     certifyFrozenInputs(&ctx);
 }
 
@@ -1703,6 +1788,25 @@ void SlangServer::onForegroundComplete() {
         (!m_driver || !m_driver->isDiagnosticSnapshotCurrent(*m_activeDiagnosticSnapshot))) {
         m_diagnosticProcess->cancel();
         m_activeDiagnosticSnapshot.reset();
+    }
+    // A query can allocate source names or complete a previously deferred parse.
+    // Observe that growth after publishing the reply, without counting queries
+    // as edits or introducing a settling delay. Soft pressure schedules private
+    // maintenance; only the existing hard bound requires immediate retirement.
+    if (m_driver && sourceHistoryEnabled(m_config) &&
+        !std::getenv("SLANG_UVM_GENERATION_DISABLE")) {
+        const auto epoch = m_driver->completions.getCompletionEpoch();
+        const auto bytes = m_driver->sm.getSourceLocationTableBytes() +
+                           m_driver->sm.getMemoryUsage();
+        if (m_contextEpoch != epoch) {
+            m_contextEpoch = epoch;
+            resetSourceHistoryBudget(bytes);
+        }
+        if (bytes > m_contextBudget) {
+            m_contextRetirementPending = true;
+            if (bytes >= m_contextHardBudget)
+                maybeRetireParsedContext();
+        }
     }
 }
 
@@ -1826,7 +1930,9 @@ void SlangServer::runBackgroundWork(const lsp::RequestContext& ctx) {
     ensureMethodScopeDriver();
     if (m_methodScope && m_methodScope->publishLocalDiagnostics(m_config, ctx))
         return;
-    recoverMethodInputs(ctx);
+    // A declined local slice can reach native diagnostics without a foreground
+    // query. It carries exactly the same input admission obligation.
+    certifyMethodInputs(ctx);
     if (!m_diagnosticExecutable.empty()) {
         try {
             if (!m_diagnosticProcess) {
@@ -1892,14 +1998,28 @@ void SlangServer::onDocDidOpen(const lsp::DidOpenTextDocumentParams& params) {
                            params.textDocument.version, !m_diagnosticExecutable.empty());
 }
 
+void SlangServer::resetSourceHistoryBudget(size_t initialBytes) {
+    m_contextEdits = 0;
+    m_contextRetirementPending = false;
+    m_contextRetry.reset();
+    if (!sourceHistoryEnabled(m_config)) {
+        m_contextEpoch = 0;
+        m_contextBaseBytes = m_contextBudget = m_contextHardBudget = 0;
+        return;
+    }
+    // Tickets emitted before the first retirement must already identify their
+    // namespace, including cooperative Native mode without any frozen library.
+    m_driver->completions.requireCompletionEpoch();
+    m_contextEpoch = m_driver->completions.getCompletionEpoch();
+    m_contextBaseBytes = initialBytes;
+    auto limits = SourceHistoryBudget::limits(initialBytes, m_config.sourceHistoryMaxMiB.value());
+    m_contextBudget = limits.soft;
+    m_contextHardBudget = limits.hard;
+}
+
 void SlangServer::maybeRetireParsedContext(const lsp::RequestContext* retirementContext) {
-    if ((!m_config.experimentalUvmPrefixCache.value() &&
-         !m_config.experimentalFrozenSources.value() &&
-         !m_config.experimentalUvmSemanticCache.value() &&
-         !m_config.experimentalScopeSemanticCache.value() &&
-         !(m_config.experimentalMethodBodyQueries.value() &&
-           m_config.experimentalMethodBodyCertificateRenewal.value())) ||
-        std::getenv("SLANG_UVM_GENERATION_DISABLE") || !m_driver) {
+    if (!sourceHistoryEnabled(m_config) || std::getenv("SLANG_UVM_GENERATION_DISABLE") ||
+        !m_driver) {
         m_contextRetirementPending = false;
         m_contextRetry.reset();
         return;
@@ -1909,7 +2029,7 @@ void SlangServer::maybeRetireParsedContext(const lsp::RequestContext* retirement
     auto bytes = table + m_driver->sm.getMemoryUsage();
     if (m_contextEpoch != epoch) {
         m_contextEpoch = epoch;
-        m_contextBudget = std::max<size_t>(16 * 1024 * 1024, bytes * 2);
+        resetSourceHistoryBudget(bytes);
         m_contextEdits = 0;
         m_contextRetirementPending = false;
         m_contextRetry.reset();
@@ -1924,10 +2044,10 @@ void SlangServer::maybeRetireParsedContext(const lsp::RequestContext* retirement
         return;
     }
     if (!retirementContext && m_config.experimentalCooperativeAnalysis.value() &&
-        bytes / 2 <= m_contextBudget) {
+        bytes < m_contextHardBudget) {
         // Keep a hard high-water mark: endlessly cancelled work must not retain
-        // unbounded source generations. At twice the ordinary trigger, use the
-        // existing synchronous fallback and include it in performance accounting.
+        // unbounded source generations. At the full configured growth allowance,
+        // use synchronous retirement and include it in performance accounting.
         m_contextRetirementPending = true;
         ++m_contextEdits;
         return;
@@ -1973,7 +2093,7 @@ void SlangServer::maybeRetireParsedContext(const lsp::RequestContext* retirement
         m_driver->completions.requireCompletionEpoch();
         m_contextEpoch = m_driver->completions.getCompletionEpoch();
         auto fresh = m_driver->sm.getSourceLocationTableBytes() + m_driver->sm.getMemoryUsage();
-        m_contextBudget = std::max<size_t>(16 * 1024 * 1024, fresh * 2);
+        resetSourceHistoryBudget(fresh);
         m_contextEdits = 0;
         m_contextRetry.reset();
         trace("retired", m_contextEpoch, fresh);
@@ -1995,7 +2115,7 @@ void SlangServer::maybeRetireParsedContext(const lsp::RequestContext* retirement
             m_driver->completions.requireCompletionEpoch();
             m_contextEpoch = actual;
             auto fresh = m_driver->sm.getSourceLocationTableBytes() + m_driver->sm.getMemoryUsage();
-            m_contextBudget = std::max<size_t>(16 * 1024 * 1024, fresh * 2);
+            resetSourceHistoryBudget(fresh);
             m_contextEdits = 0;
         }
         else
@@ -2272,7 +2392,7 @@ rfl::Variant<std::vector<lsp::CompletionItem>, lsp::CompletionList, std::monosta
     if (m_methodScope) {
         if (auto result = m_methodScope->complete(params, m_config, requestCtx))
             return *result;
-        recoverMethodInputs(requestCtx);
+        certifyMethodInputs(requestCtx);
         discardMethodScope();
     }
     std::vector<lsp::CompletionItem> results;
@@ -2332,10 +2452,7 @@ lsp::CompletionItem SlangServer::getCompletionItemResolve(const lsp::CompletionI
         // Native resolution of an enclosing declaration can need current full
         // syntax. Retain the value certificate while its inputs remain valid so
         // other items from this same completion response still resolve safely.
-        if (!m_methodScope->valid(m_config, ctx)) {
-            recoverMethodInputs(ctx);
-            discardMethodScope();
-        }
+        certifyMethodInputs(ctx);
     }
     // A method query's values belong to one certificate and document version.
     // Never reinterpret an expired handle in a replacement SourceManager, even
@@ -2449,7 +2566,7 @@ std::optional<std::vector<lsp::CodeLens>> SlangServer::getDocCodeLens(
             continue;
         }
 
-        const auto& instances = m_driver->comp->getInstancesOfModule(moduleName);
+        const auto& instances = m_driver->comp->getInstancesOfModule(moduleName, ctx);
         if (instances.empty()) {
             continue;
         }

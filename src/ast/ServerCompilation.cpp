@@ -39,7 +39,8 @@ namespace {
 // source location, then by hierarchical path. Used as a deterministic default "active"
 // instance when the user hasn't picked one.
 const slang::ast::InstanceSymbol* choosePreferredInstance(
-    const std::vector<const slang::ast::InstanceSymbol*>& instances) {
+    const std::vector<const slang::ast::InstanceSymbol*>& instances,
+    const lsp::RequestContext& ctx = {}) {
     auto depth = [](const slang::ast::InstanceSymbol& i) {
         auto p = i.getHierarchicalPath();
         return std::count(p.begin(), p.end(), '.');
@@ -65,6 +66,7 @@ const slang::ast::InstanceSymbol* choosePreferredInstance(
 
     const slang::ast::InstanceSymbol* preferred = nullptr;
     for (const auto* inst : instances) {
+        ctx.checkpoint("during preferred instance selection");
         if (!preferred || less(inst, preferred)) {
             preferred = inst;
         }
@@ -75,7 +77,7 @@ const slang::ast::InstanceSymbol* choosePreferredInstance(
 void setActiveInterfaceInstance(
     const slang::ast::Symbol& symbol,
     std::unordered_map<std::string, hier::QualifiedInstance>& activeInstancesByModule,
-    const SourceManager& sourceManager) {
+    const SourceManager& sourceManager, const lsp::RequestContext& ctx = {}) {
     if (auto inst = symbol.as_if<slang::ast::InstanceSymbol>()) {
         activeInstancesByModule[std::string(inst->getDefinition().name)] =
             hier::toQualifiedInstance(*inst, sourceManager);
@@ -84,8 +86,9 @@ void setActiveInterfaceInstance(
 
     if (auto arr = symbol.as_if<slang::ast::InstanceArraySymbol>()) {
         for (const auto* element : arr->elements) {
+            ctx.checkpoint("during interface selection array");
             if (element) {
-                setActiveInterfaceInstance(*element, activeInstancesByModule, sourceManager);
+                setActiveInterfaceInstance(*element, activeInstancesByModule, sourceManager, ctx);
             }
         }
     }
@@ -93,15 +96,16 @@ void setActiveInterfaceInstance(
         auto connection = resolveInterfaceConnection(*port);
         if (connection.resolvedEndpoint && connection.resolvedEndpoint != &symbol)
             setActiveInterfaceInstance(*connection.resolvedEndpoint, activeInstancesByModule,
-                                       sourceManager);
+                                       sourceManager, ctx);
     }
 }
 
 void setConnectedInterfaceInstances(
     const slang::ast::InstanceSymbol& inst,
     std::unordered_map<std::string, hier::QualifiedInstance>& activeInstancesByModule,
-    const SourceManager& sourceManager) {
+    const SourceManager& sourceManager, const lsp::RequestContext& ctx = {}) {
     for (const auto* conn : inst.getPortConnections()) {
+        ctx.checkpoint("during interface selection connection");
         if (!conn || conn->port.kind != slang::ast::SymbolKind::InterfacePort) {
             continue;
         }
@@ -111,12 +115,14 @@ void setConnectedInterfaceInstances(
             continue;
         }
 
-        setActiveInterfaceInstance(*connectedSym, activeInstancesByModule, sourceManager);
+        setActiveInterfaceInstance(*connectedSym, activeInstancesByModule, sourceManager, ctx);
     }
 }
 
-const slang::ast::InstanceSymbol* getEnclosingInstance(const slang::ast::Symbol& symbol) {
+const slang::ast::InstanceSymbol* getEnclosingInstance(const slang::ast::Symbol& symbol,
+                                                       const lsp::RequestContext& ctx = {}) {
     for (auto* scope = symbol.getParentScope(); scope; scope = scope->asSymbol().getParentScope()) {
+        ctx.checkpoint("during active generate selection");
         auto& scopeSymbol = scope->asSymbol();
         if (auto* body = scopeSymbol.as_if<slang::ast::InstanceBodySymbol>()) {
             return body->parentInstance;
@@ -128,16 +134,18 @@ const slang::ast::InstanceSymbol* getEnclosingInstance(const slang::ast::Symbol&
 void setActiveInstanceChain(
     const slang::ast::InstanceSymbol& target,
     std::unordered_map<std::string, hier::QualifiedInstance>& activeInstancesByModule,
-    const SourceManager& sourceManager) {
+    const SourceManager& sourceManager, const lsp::RequestContext& ctx = {}) {
     std::vector<const slang::ast::InstanceSymbol*> chain;
     auto* current = &target;
     while (current) {
+        ctx.checkpoint("during active instance chain");
         chain.push_back(current);
-        current = getEnclosingInstance(*current);
+        current = getEnclosingInstance(*current, ctx);
     }
 
     for (auto* instance : chain | std::views::reverse) {
-        setConnectedInterfaceInstances(*instance, activeInstancesByModule, sourceManager);
+        ctx.checkpoint("during active instance selection");
+        setConnectedInterfaceInstances(*instance, activeInstancesByModule, sourceManager, ctx);
         // Let deeper selections override interface connections discovered on their ancestors.
         activeInstancesByModule[std::string(instance->getDefinition().name)] =
             hier::toQualifiedInstance(*instance, sourceManager);
@@ -146,7 +154,8 @@ void setActiveInstanceChain(
 
 void setActiveGenerateScopes(
     const slang::ast::Symbol& symbol,
-    std::unordered_map<std::string, std::string>& activeGenerateScopesByArray) {
+    std::unordered_map<std::string, std::string>& activeGenerateScopesByArray,
+    const lsp::RequestContext& ctx = {}) {
     auto setActiveGenerateScope = [&](const slang::ast::GenerateBlockSymbol& block) {
         auto* parentScope = block.getParentScope();
         auto* array = parentScope
@@ -160,6 +169,7 @@ void setActiveGenerateScopes(
     if (auto* block = symbol.as_if<slang::ast::GenerateBlockSymbol>())
         setActiveGenerateScope(*block);
     for (auto* scope = symbol.getParentScope(); scope; scope = scope->asSymbol().getParentScope()) {
+        ctx.checkpoint("during active generate selection");
         if (auto* block = scope->asSymbol().as_if<slang::ast::GenerateBlockSymbol>())
             setActiveGenerateScope(*block);
     }
@@ -190,24 +200,29 @@ const slang::ast::InstanceBodySymbol* enclosingInstanceBody(const slang::ast::Sy
 }
 
 std::vector<hier::HierItem_t> getGenerateArrayChildren(
-    const slang::ast::GenerateBlockArraySymbol& array, const SourceManager& sourceManager) {
+    const slang::ast::GenerateBlockArraySymbol& array, const SourceManager& sourceManager,
+    const lsp::RequestContext& ctx = {}) {
     std::vector<hier::HierItem_t> result;
     for (const slang::ast::GenerateBlockSymbol* block : array.entries) {
+        ctx.checkpoint("during generate children enumeration");
         hier::handleBlockScope(result, *block, sourceManager,
-                               fmt::format("[{}]", block->constructIndex));
+                               fmt::format("[{}]", block->constructIndex), ctx);
     }
     return result;
 }
 
 std::vector<hier::HierItem_t> getInstanceArrayChildren(const slang::ast::InstanceArraySymbol& array,
-                                                       const SourceManager& sourceManager) {
+                                                       const SourceManager& sourceManager,
+                                                       const lsp::RequestContext& ctx = {}) {
     std::vector<hier::HierItem_t> result;
 
     int32_t instanceIdx = array.range.left;
     int8_t step = array.range.isDescending() ? -1 : 1;
     for (const slang::ast::Symbol* element : array.elements) {
+        ctx.checkpoint("during instance children enumeration");
         if (auto inst = element->as_if<slang::ast::InstanceSymbol>()) {
-            hier::handleInstance(result, *inst, sourceManager, fmt::format("[{}]", instanceIdx));
+            hier::handleInstance(result, *inst, sourceManager, fmt::format("[{}]", instanceIdx),
+                                 false, ctx);
             instanceIdx += step;
         }
     }
@@ -290,23 +305,26 @@ const slang::ast::GenerateBlockArraySymbol* chooseGenerateArray(
 }
 
 std::vector<hier::HierItem_t> getChildrenForScopeSymbol(const slang::ast::Symbol& sym,
-                                                        const SourceManager& sourceManager) {
+                                                        const SourceManager& sourceManager,
+                                                        const lsp::RequestContext& ctx = {}) {
     switch (sym.kind) {
         case slang::ast::SymbolKind::Instance:
-            return hier::getScopeChildren(sym.as<slang::ast::InstanceSymbol>().body, sourceManager);
+            return hier::getScopeChildren(sym.as<slang::ast::InstanceSymbol>().body, sourceManager,
+                                          ctx);
         case slang::ast::SymbolKind::InstanceArray:
             return getInstanceArrayChildren(sym.as<slang::ast::InstanceArraySymbol>(),
-                                            sourceManager);
+                                            sourceManager, ctx);
         case slang::ast::SymbolKind::InterfacePort:
             return hier::getInterfacePortChildren(sym.as<slang::ast::InterfacePortSymbol>(),
-                                                  sourceManager);
+                                                  sourceManager, ctx);
         case slang::ast::SymbolKind::GenerateBlock:
-            return hier::getScopeChildren(sym.as<slang::ast::GenerateBlockSymbol>(), sourceManager);
+            return hier::getScopeChildren(sym.as<slang::ast::GenerateBlockSymbol>(), sourceManager,
+                                          ctx);
         case slang::ast::SymbolKind::GenerateBlockArray:
             return getGenerateArrayChildren(sym.as<slang::ast::GenerateBlockArraySymbol>(),
-                                            sourceManager);
+                                            sourceManager, ctx);
         case slang::ast::SymbolKind::Package:
-            return hier::getScopeChildren(sym.as<slang::ast::PackageSymbol>(), sourceManager);
+            return hier::getScopeChildren(sym.as<slang::ast::PackageSymbol>(), sourceManager, ctx);
         default:
             return {};
     }
@@ -343,15 +361,17 @@ std::vector<const slang::ast::Symbol*> lookupScopeChain(slang::ast::Compilation&
 
 std::optional<std::vector<hier::HierItem_t>> tryGetScopeChildren(
     slang::ast::Compilation& compilation, const SourceManager& sourceManager,
-    std::string_view hierPath) {
+    std::string_view hierPath, const lsp::RequestContext& ctx = {}) {
     if (hierPath.empty()) {
         std::vector<hier::HierItem_t> result;
         auto& root = compilation.getRoot();
         for (auto& inst : root.topInstances) {
+            ctx.checkpoint("during hierarchy root enumeration");
             INFO("Adding top instance {}", inst->name);
-            hier::handleInstance(result, *inst, sourceManager, true);
+            hier::handleInstance(result, *inst, sourceManager, true, ctx);
         }
         for (auto& pkg : compilation.getPackages()) {
+            ctx.checkpoint("during hierarchy package enumeration");
             hier::handlePackage(result, *pkg, sourceManager);
         }
         return result;
@@ -359,14 +379,14 @@ std::optional<std::vector<hier::HierItem_t>> tryGetScopeChildren(
 
     if (auto* sym = lookupHierSymbol(compilation, hierPath)) {
         if (isHierarchicalScope(*sym)) {
-            return getChildrenForScopeSymbol(*sym, sourceManager);
+            return getChildrenForScopeSymbol(*sym, sourceManager, ctx);
         }
         ERROR("Unknown symbol kind for getScope: {}", toString(sym->kind));
         return std::nullopt;
     }
 
     if (auto* pkg = compilation.getPackage(hierPath)) {
-        return hier::getScopeChildren(*pkg, sourceManager);
+        return hier::getScopeChildren(*pkg, sourceManager, ctx);
     }
 
     ERROR("Failed to find symbol at path {}", hierPath);
@@ -412,8 +432,8 @@ std::optional<lsp::ShowDocumentParams> makeShowDocumentParams(const SourceLocati
 } // namespace
 
 // Resolve through the owning document so edits use current locations without rebuilding others.
-const slang::ast::Symbol* ServerCompilation::toShallowSymbol(
-    const slang::ast::Symbol& symbol) const {
+const slang::ast::Symbol* ServerCompilation::toShallowSymbol(const slang::ast::Symbol& symbol,
+                                                             const lsp::RequestContext& ctx) const {
     using slang::ast::SymbolKind;
 
     // A bare module definition (callers pass inst->getDefinition()) has no place in the instance
@@ -421,7 +441,7 @@ const slang::ast::Symbol* ServerCompilation::toShallowSymbol(
     if (symbol.kind == SymbolKind::Definition) {
         auto docIt = m_moduleToDoc.find(std::string(symbol.name));
         if (docIt != m_moduleToDoc.end()) {
-            auto& shallowComp = *docIt->second->getAnalysis()->getCompilation();
+            auto& shallowComp = *docIt->second->getAnalysis(ctx)->getCompilation();
             if (auto* result = lookupHierSymbol(shallowComp, symbol.name)) {
                 return result;
             }
@@ -440,6 +460,7 @@ const slang::ast::Symbol* ServerCompilation::toShallowSymbol(
     auto fullPath = symbol.getHierarchicalPath();
     for (auto* body = enclosingInstanceBody(symbol); body;
          body = enclosingInstanceBody(*body->parentInstance)) {
+        ctx.checkpoint("during shallow hierarchy owner lookup");
         auto moduleName = std::string(body->getDefinition().name);
         auto docIt = m_moduleToDoc.find(moduleName);
         if (docIt == m_moduleToDoc.end()) {
@@ -456,7 +477,7 @@ const slang::ast::Symbol* ServerCompilation::toShallowSymbol(
         rel.remove_prefix(instPath.size());
         auto path = fmt::format("{}{}", moduleName, rel);
 
-        auto& shallowComp = *docIt->second->getAnalysis()->getCompilation();
+        auto& shallowComp = *docIt->second->getAnalysis(ctx)->getCompilation();
         if (auto* result = lookupHierSymbol(shallowComp, path)) {
             return result;
         }
@@ -470,8 +491,10 @@ ServerCompilation::ServerCompilation(std::vector<std::shared_ptr<SlangDoc>> docu
                                      SourceManager& sourceManager, lsp::LspClient& client,
                                      std::optional<std::string> top,
                                      const ServerCompilation* previous,
-                                     const lsp::RequestContext& ctx) :
-    m_options(std::move(options)), m_top(std::move(top)), m_sourceManager(sourceManager),
+                                     const lsp::RequestContext& ctx, bool disposableRoot,
+                                     std::shared_ptr<const void> sourceOwner) :
+    m_sourceOwner(std::move(sourceOwner)), m_options(std::move(options)),
+    m_disposableRoot(disposableRoot), m_top(std::move(top)), m_sourceManager(sourceManager),
     m_client(client) {
 
     m_documents.reserve(documents.size());
@@ -500,7 +523,7 @@ ServerCompilation::ServerCompilation(std::vector<std::shared_ptr<SlangDoc>> docu
         paths.erase(std::unique(paths.begin(), paths.end()), paths.end());
         for (const auto& path : paths) {
             ctx.checkpoint("during full-model selection restoration");
-            setActiveInstance(path);
+            setActiveInstance(path, ctx);
         }
     }
 }
@@ -579,7 +602,8 @@ void ServerCompilation::refreshImpl(const lsp::RequestContext& ctx, bool complet
     // Existing ActiveDesignContext consumers continue owning the old analysis.
     auto modules = indexModuleDocs(ctx);
     auto analysis = std::make_shared<ServerCompilationAnalysis>(m_documents, m_options,
-                                                                m_sourceManager, ctx);
+                                                                m_sourceManager, ctx,
+                                                                m_disposableRoot, m_sourceOwner);
     if (completeDiagnostics)
         analysis->prepareDisposableDiagnostics(ctx);
     auto activeInstances = syncActiveInstances(*analysis, ctx);
@@ -673,10 +697,12 @@ bool ServerCompilation::containsCurrentSource(const std::filesystem::path& path)
     return found;
 }
 
-std::vector<hier::InstanceSet> ServerCompilation::getScopesByModule() {
-    ensureCurrent();
+std::vector<hier::InstanceSet> ServerCompilation::getScopesByModule(
+    const lsp::RequestContext& ctx) {
+    ensureCurrent(ctx);
     std::vector<hier::InstanceSet> result;
     for (auto& [_name, instances] : m_analysis->instances.moduleToInstances) {
+        ctx.checkpoint("during hierarchy module listing");
         if (instances.size() == 0) {
             continue;
         }
@@ -696,8 +722,8 @@ std::vector<hier::InstanceSet> ServerCompilation::getScopesByModule() {
 }
 
 const std::vector<const slang::ast::InstanceSymbol*>& ServerCompilation::getInstancesOfModule(
-    const std::string& moduleName) const {
-    ensureCurrent();
+    const std::string& moduleName, const lsp::RequestContext& ctx) const {
+    ensureCurrent(ctx);
     static const std::vector<const slang::ast::InstanceSymbol*> empty;
     auto it = m_analysis->instances.moduleToInstances.find(moduleName);
     if (it == m_analysis->instances.moduleToInstances.end()) {
@@ -731,7 +757,7 @@ const slang::ast::InstanceSymbol* ServerCompilation::getActiveInstanceSymbol(
     }
 
     if (!it->second.empty()) {
-        return choosePreferredInstance(it->second);
+        return choosePreferredInstance(it->second, ctx);
     }
 
     return nullptr;
@@ -811,53 +837,64 @@ std::optional<std::string> ServerCompilation::getPreferredSymbolPath(
     return std::nullopt;
 }
 
-bool ServerCompilation::setActiveInstance(const std::string& hierPath) {
-    ensureCurrent();
+bool ServerCompilation::setActiveInstance(const std::string& hierPath,
+                                          const lsp::RequestContext& ctx) {
+    ensureCurrent(ctx);
+    auto preparedGenerate = m_activeGenerateScopesByArray;
+    auto preparedInstances = m_activeInstancesByModule;
+    auto commit = [&] {
+        ctx.checkpoint("before active instance selection commit");
+        m_activeGenerateScopesByArray.swap(preparedGenerate);
+        m_activeInstancesByModule.swap(preparedInstances);
+    };
     auto* sym = lookupHierSymbol(m_analysis->compilation, hierPath);
     if (!sym) {
         return false;
     }
 
-    setActiveGenerateScopes(*sym, m_activeGenerateScopesByArray);
+    setActiveGenerateScopes(*sym, preparedGenerate, ctx);
 
     if (auto* port = sym->as_if<ast::InterfacePortSymbol>()) {
-        if (auto* enclosing = getEnclosingInstance(*port)) {
-            setActiveInstanceChain(*enclosing, m_activeInstancesByModule, m_sourceManager);
+        if (auto* enclosing = getEnclosingInstance(*port, ctx)) {
+            setActiveInstanceChain(*enclosing, preparedInstances, m_sourceManager, ctx);
         }
         auto connection = resolveInterfaceConnection(*port);
         for (auto* connected : connection.sourcePath) {
-            setActiveGenerateScopes(*connected, m_activeGenerateScopesByArray);
+            ctx.checkpoint("during connected interface selection");
+            setActiveGenerateScopes(*connected, preparedGenerate, ctx);
             if (auto* connectedPort = connected->as_if<ast::InterfacePortSymbol>()) {
-                if (auto* enclosing = getEnclosingInstance(*connectedPort)) {
-                    setActiveInstanceChain(*enclosing, m_activeInstancesByModule, m_sourceManager);
+                if (auto* enclosing = getEnclosingInstance(*connectedPort, ctx)) {
+                    setActiveInstanceChain(*enclosing, preparedInstances, m_sourceManager, ctx);
                 }
             }
         }
         if (connection.resolvedEndpoint &&
             std::ranges::find(connection.sourcePath, connection.resolvedEndpoint) ==
                 connection.sourcePath.end()) {
-            setActiveGenerateScopes(*connection.resolvedEndpoint, m_activeGenerateScopesByArray);
+            setActiveGenerateScopes(*connection.resolvedEndpoint, preparedGenerate, ctx);
         }
         sym = connection.resolvedEndpoint;
     }
 
     if (auto* target = sym ? sym->as_if<ast::InstanceSymbol>() : nullptr) {
-        setActiveInstanceChain(*target, m_activeInstancesByModule, m_sourceManager);
+        setActiveInstanceChain(*target, preparedInstances, m_sourceManager, ctx);
+        commit();
         return true;
     }
 
     if (!sym)
         return false;
-    if (auto* enclosing = getEnclosingInstance(*sym)) {
-        setActiveInstanceChain(*enclosing, m_activeInstancesByModule, m_sourceManager);
+    if (auto* enclosing = getEnclosingInstance(*sym, ctx)) {
+        setActiveInstanceChain(*enclosing, preparedInstances, m_sourceManager, ctx);
+        commit();
         return true;
     }
     return false;
 }
 
 std::optional<hier::QualifiedInstance> ServerCompilation::getActiveInstance(
-    const std::string& moduleName) {
-    ensureCurrent();
+    const std::string& moduleName, const lsp::RequestContext& ctx) {
+    ensureCurrent(ctx);
     auto& byModule = m_analysis->instances.moduleToInstances;
     if (byModule.find(moduleName) == byModule.end()) {
         return std::nullopt;
@@ -867,7 +904,7 @@ std::optional<hier::QualifiedInstance> ServerCompilation::getActiveInstance(
     if (auto activeInstance = getActiveInstanceSelection(moduleName)) {
         return activeInstance;
     }
-    if (auto* inst = getActiveInstanceSymbol(moduleName)) {
+    if (auto* inst = getActiveInstanceSymbol(moduleName, ctx)) {
         return hier::toQualifiedInstance(*inst, m_sourceManager);
     }
     return std::nullopt;
@@ -916,7 +953,8 @@ std::vector<hier::HierItem_t> ServerCompilation::getScope(const std::string& hie
         }
     }
     ensureCurrent(ctx);
-    auto scopeChildren = tryGetScopeChildren(m_analysis->compilation, m_sourceManager, hierPath);
+    auto scopeChildren = tryGetScopeChildren(m_analysis->compilation, m_sourceManager, hierPath,
+                                             ctx);
     auto result = scopeChildren.value_or(std::vector<hier::HierItem_t>{});
     if (certificate && m_frozenInstances->selected(hierPath)) {
         const auto payload = rfl::json::write(result);
@@ -946,7 +984,7 @@ std::vector<hier::ScopeStep> ServerCompilation::getScopes(const std::string& hie
     auto& compilation = m_analysis->compilation;
 
     ctx.throwIfCancelled("before resolving root hierarchy scope");
-    auto rootChildren = tryGetScopeChildren(compilation, m_sourceManager, std::string_view{});
+    auto rootChildren = tryGetScopeChildren(compilation, m_sourceManager, std::string_view{}, ctx);
     if (!rootChildren) {
         return result;
     }
@@ -960,7 +998,7 @@ std::vector<hier::ScopeStep> ServerCompilation::getScopes(const std::string& hie
         ctx.throwIfCancelled("while resolving hierarchy scopes");
         result.push_back({
             .path = sym->getHierarchicalPath(),
-            .children = getChildrenForScopeSymbol(*sym, m_sourceManager),
+            .children = getChildrenForScopeSymbol(*sym, m_sourceManager, ctx),
         });
     }
 
@@ -977,19 +1015,22 @@ std::vector<hier::ScopeStep> ServerCompilation::getScopes(const std::string& hie
     return result;
 }
 
-hier::HierarchySearchResult ServerCompilation::searchHierarchy(const std::string& query) {
-    ensureCurrent();
+hier::HierarchySearchResult ServerCompilation::searchHierarchy(const std::string& query,
+                                                               const lsp::RequestContext& ctx) {
+    ensureCurrent(ctx);
     constexpr size_t maxResults = 100;
     hier::HierarchySearchResult result{};
 
     auto& compilation = m_analysis->compilation;
 
     if (!m_hierarchySearchIndexed) {
-        auto roots = tryGetScopeChildren(compilation, m_sourceManager, std::string_view{});
+        std::vector<hier::HierarchySearchItem> prepared;
+        auto roots = tryGetScopeChildren(compilation, m_sourceManager, std::string_view{}, ctx);
         auto collect = [&](auto&& self, const std::vector<hier::HierItem_t>& items,
                            std::string_view parentPath, bool concatenateNames,
                            std::string_view containerName) -> void {
             for (const auto& item : items) {
+                ctx.checkpoint("during hierarchy search index");
                 rfl::visit(
                     [&](const auto& entry) {
                         using Entry = std::decay_t<decltype(entry)>;
@@ -1018,7 +1059,7 @@ hier::HierarchySearchResult ServerCompilation::searchHierarchy(const std::string
                             description = entry.declName;
                         }
 
-                        m_hierarchySearchItems.push_back({
+                        prepared.push_back({
                             .name = std::move(label),
                             .path = path,
                             .kind = entry.kind,
@@ -1055,7 +1096,7 @@ hier::HierarchySearchResult ServerCompilation::searchHierarchy(const std::string
                             else if (entry.hasChildren) {
                                 if (auto* symbol = lookupHierSymbol(compilation, path)) {
                                     auto children = getChildrenForScopeSymbol(*symbol,
-                                                                              m_sourceManager);
+                                                                              m_sourceManager, ctx);
                                     self(self, children, path, false, entry.declName);
                                 }
                             }
@@ -1066,6 +1107,8 @@ hier::HierarchySearchResult ServerCompilation::searchHierarchy(const std::string
         };
         if (roots)
             collect(collect, *roots, std::string_view{}, false, std::string_view{});
+        ctx.checkpoint("before hierarchy search index commit");
+        m_hierarchySearchItems = std::move(prepared);
         m_hierarchySearchIndexed = true;
     }
 
@@ -1092,6 +1135,7 @@ hier::HierarchySearchResult ServerCompilation::searchHierarchy(const std::string
     };
     std::vector<Match> matches;
     for (const auto& item : m_hierarchySearchItems) {
+        ctx.checkpoint("during hierarchy search matching");
         auto lowerLabel = lowercase(item.name);
         auto lowerPath = lowercase(item.path);
         int rank;
@@ -1118,6 +1162,7 @@ hier::HierarchySearchResult ServerCompilation::searchHierarchy(const std::string
             return std::tuple(left.rank, left.item->path.size(), left.item->path) <
                    std::tuple(right.rank, right.item->path.size(), right.item->path);
         });
+    ctx.checkpoint("after hierarchy search ranking");
     result.totalResults = matches.size();
     result.matches.reserve(resultCount);
     for (const auto& match : matches | std::views::take(resultCount))
@@ -1125,8 +1170,9 @@ hier::HierarchySearchResult ServerCompilation::searchHierarchy(const std::string
     return result;
 }
 
-std::optional<lsp::Location> ServerCompilation::getHierLocation(const std::string& hierPath) {
-    ensureCurrent();
+std::optional<lsp::Location> ServerCompilation::getHierLocation(const std::string& hierPath,
+                                                                const lsp::RequestContext& ctx) {
+    ensureCurrent(ctx);
     auto& comp = m_analysis->compilation;
     const slang::ast::Symbol* sym = lookupHierSymbol(comp, hierPath);
 
@@ -1153,7 +1199,7 @@ std::optional<lsp::Location> ServerCompilation::getHierLocation(const std::strin
                 }
                 continue;
             }
-            auto* freshDefSym = toShallowSymbol(inst->getDefinition());
+            auto* freshDefSym = toShallowSymbol(inst->getDefinition(), ctx);
             auto* freshDef = freshDefSym ? freshDefSym->as_if<slang::ast::DefinitionSymbol>()
                                          : nullptr;
             if (!freshDef) {
@@ -1168,7 +1214,7 @@ std::optional<lsp::Location> ServerCompilation::getHierLocation(const std::strin
             if (it == m_documents.end()) {
                 break;
             }
-            auto& shallowComp = *it->second->getAnalysis()->getCompilation();
+            auto& shallowComp = *it->second->getAnalysis(ctx)->getCompilation();
             sym = lookupHierSymbol(shallowComp, modulePath);
             break;
         }
@@ -1181,7 +1227,7 @@ std::optional<lsp::Location> ServerCompilation::getHierLocation(const std::strin
 
     // Re-resolve to an open-document symbol when possible, so we land in a buffer the editor
     // actually has loaded.
-    if (auto* freshSym = toShallowSymbol(*sym)) {
+    if (auto* freshSym = toShallowSymbol(*sym, ctx)) {
         sym = freshSym;
     }
 
@@ -1217,8 +1263,8 @@ std::optional<lsp::Location> ServerCompilation::getHierLocation(const std::strin
 }
 
 std::vector<std::string> ServerCompilation::getInstances(
-    const lsp::TextDocumentPositionParams& params) {
-    ensureCurrent();
+    const lsp::TextDocumentPositionParams& params, const lsp::RequestContext& ctx) {
+    ensureCurrent(ctx);
     auto path = std::string(params.textDocument.uri.getPath());
     auto it = m_documents.find(path);
     if (it == m_documents.end()) {
@@ -1228,7 +1274,7 @@ std::vector<std::string> ServerCompilation::getInstances(
     auto& doc = it->second;
     auto location = toSourceLocation(doc->getBuffer(), params.position, m_sourceManager);
     if (location) {
-        inst::InstanceVisitor visitor(*location);
+        inst::InstanceVisitor visitor(*location, ctx);
         m_analysis->compilation.getRoot().visit(visitor);
         return visitor.getInstances();
     }
@@ -1237,12 +1283,14 @@ std::vector<std::string> ServerCompilation::getInstances(
 }
 
 std::vector<lsp::CallHierarchyItem> ServerCompilation::getDocPrepareCallHierarchy(
-    const lsp::CallHierarchyPrepareParams& params) {
-    ensureCurrent();
-    auto instances = getInstances(lsp::TextDocumentPositionParams{
-        .textDocument = params.textDocument,
-        .position = params.position,
-    });
+    const lsp::CallHierarchyPrepareParams& params, const lsp::RequestContext& ctx) {
+    ensureCurrent(ctx);
+    auto instances = getInstances(
+        lsp::TextDocumentPositionParams{
+            .textDocument = params.textDocument,
+            .position = params.position,
+        },
+        ctx);
     if (instances.empty()) {
         m_client.showWarning("The selected signal is not part of the current design");
         return {};
@@ -1252,7 +1300,7 @@ std::vector<lsp::CallHierarchyItem> ServerCompilation::getDocPrepareCallHierarch
     for (const auto& instance : instances) {
         // TODO -- trace aggregates too
         // TODO -- remove isWcpVariable once not needed here
-        if (!isWcpVariable(instance)) {
+        if (!isWcpVariable(instance, ctx)) {
             continue;
         }
         // TODO: change to doc of actual symbol, not the declToken
@@ -1265,8 +1313,8 @@ std::vector<lsp::CallHierarchyItem> ServerCompilation::getDocPrepareCallHierarch
     return result;
 }
 
-bool ServerCompilation::isWcpVariable(const std::string& path) {
-    ensureCurrent();
+bool ServerCompilation::isWcpVariable(const std::string& path, const lsp::RequestContext& ctx) {
+    ensureCurrent(ctx);
     const auto& root = m_analysis->compilation.getRoot();
     slang::ast::LookupResult result;
     slang::ast::ASTContext context(root, ast::LookupLocation::max);
@@ -1315,8 +1363,8 @@ bool ServerCompilation::isWcpVariable(const std::string& path) {
 }
 
 std::optional<lsp::ShowDocumentParams> ServerCompilation::getHierDocParams(
-    const std::string& path) {
-    ensureCurrent();
+    const std::string& path, const lsp::RequestContext& ctx) {
+    ensureCurrent(ctx);
     // TODO -- structs / nested structs -- currently taken to variable instance, not
     // type definition -- do we want both?
     slang::ast::LookupResult result;
@@ -1328,7 +1376,7 @@ std::optional<lsp::ShowDocumentParams> ServerCompilation::getHierDocParams(
         return std::nullopt;
     }
     auto found = result.found;
-    if (auto freshSym = toShallowSymbol(*found)) {
+    if (auto freshSym = toShallowSymbol(*found, ctx)) {
         found = freshSym;
     }
 
@@ -1347,14 +1395,15 @@ void ServerCompilation::issueDiagnosticsTo(
     m_analysis->issueDiagnosticsTo(diagEngine, ctx, issue);
 }
 
-ConeResult ServerCompilation::getDriverCone(const std::string& path) {
-    ensureCurrent();
-    return {m_analysis->getDriverCone(path), m_sourceManager};
+ConeResult ServerCompilation::getDriverCone(const std::string& path,
+                                            const lsp::RequestContext& ctx) {
+    ensureCurrent(ctx);
+    return {m_analysis->getDriverCone(path, ctx), m_sourceManager};
 }
 
-ConeResult ServerCompilation::getLoadCone(const std::string& path) {
-    ensureCurrent();
-    return {m_analysis->getLoadCone(path), m_sourceManager};
+ConeResult ServerCompilation::getLoadCone(const std::string& path, const lsp::RequestContext& ctx) {
+    ensureCurrent(ctx);
+    return {m_analysis->getLoadCone(path, ctx), m_sourceManager};
 }
 
 } // namespace server

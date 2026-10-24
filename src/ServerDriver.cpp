@@ -77,6 +77,9 @@ ServerDriver::ServerDriver(Indexer& indexer, SlangLspClient& client, const Confi
         sm, client, config.experimentalDiagnosticDeltaPublishing.value())),
     completions(*this, indexer, sm, options), codeActions(*this, sm, indexer), m_indexer(indexer),
     m_config(config), m_workspacePathPrefix(workspaceFolder.value_or("")) {
+    m_sourceRegistry = overlays ? overlays->m_sourceRegistry
+                                : std::make_shared<SourceStorageRegistry>();
+    m_sourceRegistry->track(driver.getSourceManagerObserver());
     m_stagedRetirement = retirementContext != nullptr;
     if (m_stagedRetirement)
         diagClient->disableDestructorPublication();
@@ -631,6 +634,7 @@ void ServerDriver::copyOpenDocumentsFrom(const ServerDriver* oldDriver,
         auto text = docIt->second->getText();
         text.remove_suffix(1);
         openDocument(uri, text, docIt->second->getVersion(), deferConfiguredDiagnostics);
+        docs.at(uri)->inheritCompletionTextIdentity(*docIt->second);
     }
     if (handoff && !m_stagedRetirement)
         diagClient->completePublicationHandoff(*oldDriver->diagClient);
@@ -693,7 +697,8 @@ std::unique_ptr<ServerDriver> ServerDriver::createFromFileLists(
         (newDriver->isFrozenSourcesEnabled() || newDriver->isUvmPrefixCacheEnabled()) && oldDriver
             ? oldDriver->comp.get()
             : nullptr,
-        retirementContext ? *retirementContext : lsp::RequestContext{});
+        retirementContext ? *retirementContext : lsp::RequestContext{},
+        config.experimentalCooperativeAnalysis.value(), newDriver->driver.getSourceOwner());
 
     newDriver->configureFrozenInstances(retirementContext ? *retirementContext
                                                           : lsp::RequestContext{});
@@ -1091,12 +1096,12 @@ void ServerDriver::invalidateAnalysesAndRefreshClient() {
     client.onWorkspaceInlayHintRefresh(std::monostate{});
 }
 
-bool ServerDriver::setActiveInstance(std::string_view hierPath) {
+bool ServerDriver::setActiveInstance(std::string_view hierPath, const lsp::RequestContext& ctx) {
     if (!comp) {
         return false;
     }
 
-    if (!comp->setActiveInstance(std::string(hierPath))) {
+    if (!comp->setActiveInstance(std::string(hierPath), ctx)) {
         return false;
     }
 
@@ -1773,7 +1778,12 @@ std::unique_ptr<ServerDriver> ServerDriver::createFromTop(
         ast::Compilation shallowCompilation;
         shallowCompilation.addSyntaxTree(topTree);
         ctx.checkpoint("before top inference root binding");
-        auto& topInstances = shallowCompilation.getRoot().topInstances;
+        auto& topInstances = (config.experimentalCooperativeAnalysis.value() && ctx
+                                  ? shallowCompilation.getDisposableRoot([&] {
+                                        ctx.checkpoint("during top inference root binding");
+                                    })
+                                  : shallowCompilation.getRoot())
+                                 .topInstances;
         ctx.checkpoint("after top inference root binding");
         if (topInstances.empty()) {
             if (requireValidConfig)
@@ -1799,8 +1809,10 @@ std::unique_ptr<ServerDriver> ServerDriver::createFromTop(
     }
     for (const auto& dependency : documents) {
         if (auto previous = newDriver->docs.find(dependency->getURI());
-            previous != newDriver->docs.end())
+            previous != newDriver->docs.end()) {
             dependency->setVersion(previous->second->getVersion());
+            dependency->inheritCompletionTextIdentity(*previous->second);
+        }
         newDriver->docs[dependency->getURI()] = dependency;
     }
 
@@ -1809,7 +1821,8 @@ std::unique_ptr<ServerDriver> ServerDriver::createFromTop(
         (newDriver->isFrozenSourcesEnabled() || newDriver->isUvmPrefixCacheEnabled()) && oldDriver
             ? oldDriver->comp.get()
             : nullptr,
-        retirementContext ? *retirementContext : lsp::RequestContext{});
+        retirementContext ? *retirementContext : lsp::RequestContext{},
+        config.experimentalCooperativeAnalysis.value(), newDriver->driver.getSourceOwner());
 
     newDriver->configureFrozenInstances(retirementContext ? *retirementContext
                                                           : lsp::RequestContext{});

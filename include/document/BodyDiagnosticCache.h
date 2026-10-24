@@ -22,8 +22,12 @@ struct BodyDiagnosticBaseline {
     std::string text;
     std::shared_ptr<slang::ast::Compilation> owner;
     std::vector<const slang::ast::SubroutineSymbol*> originals;
+    std::unordered_set<const slang::syntax::SyntaxNode*> independentReceiverReads;
     std::array<slang::Diagnostics, 3> diagnostics;
     std::shared_ptr<const struct NativeDiagnosticSnapshot> publication;
+    // owner aliases the completed ServerCompilationAnalysis and pins this manager.
+    const slang::analysis::AnalysisManager* analysis = nullptr;
+    std::vector<const slang::analysis::AnalyzedProcedure*> timingCallers;
     slang::analysis::AnalysisOptions analysisOptions;
     slang::DiagnosticEngine::SettingsSnapshot settings;
 };
@@ -58,11 +62,15 @@ private:
     std::shared_ptr<slang::ast::Compilation> owner, baselineBinding;
     std::vector<const slang::ast::ClassType*> specializations;
     std::vector<const slang::ast::SubroutineSymbol*> originals;
+    std::unordered_set<const slang::syntax::SyntaxNode*> independentReceiverReads;
     std::array<std::unordered_map<URI, slang::Diagnostics>, 3> retained;
     std::unordered_set<URI> affectedUris;
     References references;
     std::vector<std::string> calls;
     std::unordered_set<const slang::syntax::SyntaxNode*> effectSensitiveCalls;
+    // owner aliases the completed ServerCompilationAnalysis and pins this manager.
+    const slang::analysis::AnalysisManager* analysis = nullptr;
+    std::vector<const slang::analysis::AnalyzedProcedure*> timingCallers;
     slang::analysis::AnalysisOptions analysisOptions;
     slang::DiagnosticEngine::SettingsSnapshot settings;
     struct Slice {

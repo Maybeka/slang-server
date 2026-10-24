@@ -1,3 +1,4 @@
+#include <catch2/generators/catch_generators.hpp>
 // SPDX-FileCopyrightText: Hudson River Trading
 // SPDX-License-Identifier: MIT
 
@@ -174,4 +175,44 @@ endmodule
 
     server.checkConeCommand("slang.getDriversWithLocation", "top.undriven", {});
     server.checkConeCommand("slang.getDriversWithLocation", "top.unused", {});
+}
+
+TEST_CASE("Cone cancellation discards partial reference indices and retries",
+          "[hierarchy-cancellation][cone-cancellation]") {
+    const auto boundary = GENERATE("during cone reference indexing",
+                                   "before cone reference index commit",
+                                   "during cone AST traversal", "during cone result conversion");
+    ServerHarness server("");
+    server.loadConfig(Config{.build = "cone_test.f"});
+    server.onInitialized(lsp::InitializedParams{});
+    lsp::RequestContext ctx("workspace/executeCommand", lsp::ID_t{713});
+    bool reached = false;
+    ctx.setCheckpointObserverForTesting([&](std::string_view at) {
+        if (at == boundary) {
+            reached = true;
+            ctx.cancel();
+        }
+    });
+    lsp::ExecuteCommandParams params{.command = "slang.getLoadsWithLocation",
+                                     .arguments = std::vector<lsp::LSPAny>{
+                                         rfl::to_generic(std::string("test.a"))}};
+    CHECK_THROWS_AS(server.executeCommand(params, ctx), lsp::RequestCancelled);
+    REQUIRE(reached);
+    auto retried = server.executeCommand(params);
+    ServerHarness native("");
+    native.loadConfig(Config{.build = "cone_test.f"});
+    native.onInitialized(lsp::InitializedParams{});
+    // Endpoints are a set; independent compilations allocate their symbols in
+    // different orders. Compare every endpoint field without imposing that order.
+    auto normalized = [](const std::optional<lsp::LSPAny>& values) {
+        REQUIRE(values);
+        auto entries = rfl::from_generic<std::vector<server::ConeEntry>>(*values);
+        REQUIRE(entries);
+        std::vector<std::string> result;
+        for (const auto& entry : entries.value())
+            result.push_back(rfl::json::write(entry));
+        std::ranges::sort(result);
+        return result;
+    };
+    CHECK(normalized(retried) == normalized(native.executeCommand(params)));
 }

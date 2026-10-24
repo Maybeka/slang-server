@@ -98,6 +98,73 @@ struct LocalBoundaries : ast::ASTVisitor<LocalBoundaries, ast::VisitFlags::AllGo
         require(false, "hierarchical method references require full diagnostics");
     }
 };
+std::unordered_set<const syntax::SyntaxNode*> independentNativeReceiverReads(
+    const analysis::AnalysisManager& manager, const ast::Compilation& owner,
+    std::span<const ast::SubroutineSymbol* const> edited, SourceManager& sources,
+    const lsp::RequestContext& ctx) {
+    UvmPhaseTrace phases;
+    std::unordered_set<const syntax::SyntaxNode*> result;
+    auto editedSource = [&](const syntax::SyntaxNode& candidate) {
+        for (auto original : edited) {
+            const auto* syntax = original->getSyntax();
+            if (&candidate == syntax)
+                return true;
+            // Multiple include occurrences can have different CST pointers for
+            // the same edited physical method. Neither is an independent peer.
+            const auto first = candidate.getFirstToken().location();
+            const auto last = candidate.getLastToken().range().end();
+            const auto oldFirst = syntax->getFirstToken().location();
+            const auto oldLast = syntax->getLastToken().range().end();
+            if (sources.isFileLoc(first) && sources.isFileLoc(last) &&
+                sources.isFileLoc(oldFirst) && sources.isFileLoc(oldLast) &&
+                first.offset() == oldFirst.offset() && last.offset() == oldLast.offset() &&
+                sources.getFullPath(first.buffer()) == sources.getFullPath(oldFirst.buffer()) &&
+                sources.getFullPath(last.buffer()) == sources.getFullPath(oldLast.buffer()))
+                return true;
+        }
+        return false;
+    };
+    for (auto fn : manager.getAnalyzedSubroutines()) {
+        ctx.checkpoint("independent native receiver reads");
+        const auto* syntax = fn->getSyntax();
+        const auto* parent = fn->getParentScope();
+        const auto* cls = parent ? parent->asSymbol().as_if<ast::ClassType>() : nullptr;
+        if (&fn->getCompilation() != &owner || !syntax || !cls || cls->genericClass ||
+            fn->flags.has(ast::MethodFlags::Static | ast::MethodFlags::Constructor) ||
+            !sources.isFileLoc(syntax->getFirstToken().location()) ||
+            !sources.isFileLoc(syntax->getLastToken().range().end()) || editedSource(*syntax))
+            continue;
+        const auto* procedure = manager.getAnalyzedSubroutine(*fn);
+        if (!procedure)
+            continue;
+        for (auto call : procedure->getCallExpressions()) {
+            ctx.checkpoint("independent native receiver call");
+            if (call->isSystemCall() || !call->thisClass())
+                continue;
+            const auto* target = std::get<const ast::SubroutineSymbol*>(call->subroutine);
+            if (target->flags.has(ast::MethodFlags::Static | ast::MethodFlags::Constructor) ||
+                target->subroutineKind != ast::SubroutineKind::Function)
+                continue;
+            const auto* value = call->thisClass()->getSymbolReference(false);
+            const auto* property = value ? value->as_if<ast::ClassPropertySymbol>() : nullptr;
+            if (!property || property->lifetime != ast::VariableLifetime::Automatic)
+                continue;
+            const auto* declaration = property->getParentScope();
+            const auto* declarationClass = declaration
+                                               ? declaration->asSymbol().as_if<ast::ClassType>()
+                                               : nullptr;
+            const auto* receiverClass =
+                property->getType().getCanonicalType().as_if<ast::ClassType>();
+            if (!declarationClass || declarationClass->genericClass || !receiverClass ||
+                receiverClass->genericClass || &declarationClass->getCompilation() != &owner)
+                continue;
+            if (const auto* node = property->getSyntax())
+                result.insert(node);
+        }
+    }
+    phases.mark("body-independent-receiver-reads");
+    return result;
+}
 std::vector<std::string> rendered(const Diagnostics& diagnostics, SourceManager& sm,
                                   SlangLspClient& client,
                                   const DiagnosticEngine::SettingsSnapshot& settings) {
@@ -165,6 +232,18 @@ std::shared_ptr<const BodyDiagnosticBaseline> BodyDiagnosticCache::capture(
     require(baseline->originals.size() == 1,
             "multiple full-design method contexts require full diagnostics");
 
+    baseline->independentReceiverReads =
+        independentNativeReceiverReads(manager, *owner, baseline->originals, d.sm, ctx);
+
+    // Native coalesces these two diagnostics by location across instances. Keep
+    // the complete timing-only set together; retaining an "unaffected" sibling
+    // could duplicate or suppress a changed caller's diagnostic after coalescing.
+    if (baseline->originals.front()->subroutineKind == ast::SubroutineKind::Task) {
+        baseline->analysis = &manager;
+        baseline->timingCallers = manager.getTaskTimingProcedures(
+            [&] { ctx.checkpoint("task diagnostic caller dependencies"); });
+    }
+
     // replaceBuffer clears the editor BufferID's FileInfo even while old FileData
     // is pinned. Keep one target-file value, not a chain of edited source owners.
     baseline->text = std::string(d.getDocument(uri)->getText());
@@ -220,8 +299,11 @@ BodyDiagnosticCache::BodyDiagnosticCache(ServerDriver& d, const URI& target, siz
     bufferLimit = baseline->bufferLimit;
     settings = baseline->settings;
     analysisOptions = baseline->analysisOptions;
+    analysis = baseline->analysis;
+    timingCallers = baseline->timingCallers;
     owner = baseline->owner;
     originals = baseline->originals;
+    independentReceiverReads = baseline->independentReceiverReads;
     if (lineSensitive) {
         originalTarget = baseline->targetBuffer;
         lineText = baseline->text;
@@ -240,6 +322,10 @@ BodyDiagnosticCache::BodyDiagnosticCache(ServerDriver& d, const URI& target, siz
         return it->second;
     };
     auto local = [&](const Diagnostic& diagnostic) {
+        if ((diagnostic.code == diag::BlockingDelayInTask ||
+             diagnostic.code == diag::AlwaysWithoutTimingControl) &&
+            analysis)
+            return true;
         auto loc = d.sm.getFullyExpandedLoc(diagnostic.location);
         if (targetLocation(loc) && begin <= loc.offset() && loc.offset() < end &&
             !std::ranges::any_of(originals,
@@ -250,6 +336,7 @@ BodyDiagnosticCache::BodyDiagnosticCache(ServerDriver& d, const URI& target, siz
                 return true;
         return false;
     };
+    Diagnostics baselineTimingDiagnostics;
     Diagnostics baselineDiagnostics;
     std::array<Diagnostics, 3> retainedDiagnostics;
     const auto& raw = baseline->publication ? baseline->publication->diagnostics
@@ -262,8 +349,19 @@ BodyDiagnosticCache::BodyDiagnosticCache(ServerDriver& d, const URI& target, siz
             bool belongs = phase == 0
                                ? targetLocation(loc) && begin <= loc.offset() && loc.offset() < end
                                : local(diagnostic);
-            if (belongs)
+            if (belongs) {
                 baselineDiagnostics.push_back(diagnostic);
+                if (analysis && phase == 2 &&
+                    (diagnostic.code == diag::BlockingDelayInTask ||
+                     diagnostic.code == diag::AlwaysWithoutTimingControl)) {
+                    if (baseline->publication) {
+                        for (const auto& route : baseline->publication->routes[phase][index])
+                            affectedUris.insert(d.diagClient->resolvePublicationUri(route));
+                    }
+                    else
+                        baselineTimingDiagnostics.push_back(diagnostic);
+                }
+            }
             else if (baseline->publication) {
                 for (const auto& route : baseline->publication->routes[phase][index])
                     retained[phase][d.diagClient->resolvePublicationUri(route)].push_back(
@@ -272,6 +370,19 @@ BodyDiagnosticCache::BodyDiagnosticCache(ServerDriver& d, const URI& target, siz
             else
                 retainedDiagnostics[phase].push_back(diagnostic);
         }
+    if (!baselineTimingDiagnostics.empty()) {
+        auto collector = std::make_shared<DiagnosticBuckets>(d);
+        DiagnosticEngine engine(d.sm);
+        engine.applySettings(settings);
+        engine.setMappingsFromPragmas();
+        engine.addClient(collector);
+        for (const auto& diagnostic : baselineTimingDiagnostics) {
+            ctx.checkpoint("task diagnostic baseline routes");
+            engine.issue(diagnostic);
+        }
+        for (const auto& [key, _] : collector->buckets[0])
+            affectedUris.insert(key);
+    }
     phases.mark("body-diagnostic-partition");
     auto initial = analyze(tree, ctx);
     auto expected = rendered(baselineDiagnostics, d.sm, d.client, settings);
@@ -484,13 +595,12 @@ BodyDiagnosticCache::Slice BodyDiagnosticCache::analyze(
             require(contained(&driver->getSymbol(), fn),
                     "nonlocal persistent drivers require full diagnostics");
         if (fn->subroutineKind == ast::SubroutineKind::Task) {
-            auto proc = manager.getAnalyzedSubroutine(*fn);
-            require(proc && proc->getTimingControls().empty(),
-                    "task timing changes require caller analysis");
-            for (auto call : proc->getCallExpressions()) {
-                require(call->getSubroutineKind() != ast::SubroutineKind::Task,
-                        "task calls require transitive timing analysis");
-            }
+            require(analysis, "task caller analysis is unavailable");
+            auto diagnostics = analysis->getTaskTimingDiagnostics(
+                timingCallers, *originals.front(), *procedure,
+                [&] { ctx.checkpoint("task diagnostic caller update"); });
+            require(diagnostics.has_value(), "task timing summaries require full analysis");
+            result.diagnostics[2].append_range(*diagnostics);
         }
         for (auto& diagnostic : manager.getDiagnostics())
             if (local(diagnostic))
@@ -526,7 +636,10 @@ void BodyDiagnosticCache::validateSlice(const Slice& slice) const {
             require(!effectSensitiveCalls.contains(node) &&
                         !slice.effectSensitiveCalls.contains(node),
                     "changed package/static/task calls require full effect analysis");
-            std::pair<bool, bool> fixed{};
+            // Completed unrelated native methods provide positive read evidence.
+            // This is independent of the replaced syntax and later navigation;
+            // it proves only the aggregate read bit, never a write or call effect.
+            std::pair<bool, bool> fixed{independentReceiverReads.contains(node), false};
             for (const auto& library : {driver.m_trustedUvm, driver.m_trustedScopes})
                 if (library && library->compilation) {
                     auto usage = library->compilation->getExportedReferenceUsage(*node);

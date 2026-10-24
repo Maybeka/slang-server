@@ -33,7 +33,8 @@ class ServerCompilationAnalysis : public std::enable_shared_from_this<ServerComp
 public:
     ServerCompilationAnalysis(
         const std::unordered_map<std::string, std::shared_ptr<SlangDoc>>& documents, Bag& options,
-        SourceManager& sourceManager, const lsp::RequestContext& ctx = {});
+        SourceManager& sourceManager, const lsp::RequestContext& ctx = {},
+        bool disposableRoot = false, std::shared_ptr<const void> sourceOwner = {});
 
     /// Only called before this analysis escapes from a private model / driver.
     void prepareDisposableDiagnostics(const lsp::RequestContext& ctx);
@@ -52,20 +53,21 @@ public:
 
     /// Get the full-design drivers for a value symbol.
     std::vector<const slang::analysis::ValueDriver*> getDrivers(
-        const slang::ast::ValueSymbol& symbol);
+        const slang::ast::ValueSymbol& symbol, const lsp::RequestContext& ctx = {});
 
     /// Get driver cone leaves for a given RTL path.
-    std::set<ConeLeaf> getDriverCone(const std::string& path);
+    std::set<ConeLeaf> getDriverCone(const std::string& path, const lsp::RequestContext& ctx = {});
 
     /// Get load cone leaves for a given RTL path.
-    std::set<ConeLeaf> getLoadCone(const std::string& path);
+    std::set<ConeLeaf> getLoadCone(const std::string& path, const lsp::RequestContext& ctx = {});
 
     /// Share completed current driver analysis with readonly fixed-source views.
     slang::analysis::AnalysisManager& getAnalysisManager(const lsp::RequestContext& ctx = {});
 
 private:
     /// Resolve an RTL path for cone tracing, throwing if it is not in the compiled design.
-    const slang::ast::Symbol& lookupConeSymbol(const std::string& path);
+    const slang::ast::Symbol& lookupConeSymbol(const std::string& path,
+                                               const lsp::RequestContext& ctx = {});
 
     /// Retained buffer data to prevent deallocation while this compilation exists
     std::vector<std::shared_ptr<void>> m_retainedBuffers;

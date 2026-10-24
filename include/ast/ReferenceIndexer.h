@@ -7,6 +7,7 @@
 //------------------------------------------------------------------------------
 #pragma once
 
+#include "lsp/RequestContext.h"
 #include <type_traits>
 #include <unordered_map>
 
@@ -18,13 +19,22 @@
 #include "slang/ast/symbols/InstanceSymbols.h"
 #include "slang/ast/symbols/MemberSymbols.h"
 #include "slang/ast/symbols/ValueSymbol.h"
+#include "slang/util/ScopeGuard.h"
 
 struct ReferenceIndexer
     : public slang::ast::ASTVisitor<ReferenceIndexer, slang::ast::VisitFlags::AllGood> {
 private:
     const slang::ast::Symbol* currentUse = nullptr;
+    const lsp::RequestContext* context = nullptr;
 
 public:
+    template<typename T>
+    void visit(const T& node) {
+        if (context)
+            context->checkpoint("during cone reference indexing");
+        slang::ast::ASTVisitor<ReferenceIndexer, slang::ast::VisitFlags::AllGood>::visit(node);
+    }
+
     template<typename T>
         requires std::is_base_of_v<slang::ast::ValueExpressionBase, T>
     void handle(const T& symbol) {
@@ -70,7 +80,12 @@ public:
         visitDefault(symbol);
     }
 
-    void reset(const slang::ast::Symbol* root) {
+    void reset(const slang::ast::Symbol* root, const lsp::RequestContext& ctx = {}) {
+        context = &ctx;
+        auto release = slang::ScopeGuard([&] {
+            context = nullptr;
+            currentUse = nullptr;
+        });
         symbolToUses.clear();
         root->visit(*this);
     }

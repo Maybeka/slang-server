@@ -38,10 +38,10 @@ public:
         m_leaves(std::move(leaves)), m_sourceManager(sourceManager) {}
 
     /// Return endpoints with valid declaration locations.
-    std::vector<ConeEntry> getLocations() const;
+    std::vector<ConeEntry> getLocations(const lsp::RequestContext& ctx = {}) const;
 
     /// Return distinct hierarchical paths in the cone.
-    std::vector<std::string> getPaths() const;
+    std::vector<std::string> getPaths(const lsp::RequestContext& ctx = {}) const;
 
 private:
     /// The unique symbol endpoints collected by tracing.

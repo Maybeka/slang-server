@@ -153,3 +153,79 @@ caches publish only complete collections and weak hint ownership does not pin ol
 Completed syntax can remain reusable when its caller is canceled. Full model refresh,
 semantic binding and already-committed selection updates still have separate cancellation
 boundaries. See the [owner cancellation evaluation](../development/owner-cancellation-evaluation.md).
+
+## Source history allowance and accounting
+
+`sourceHistoryMaxMiB` defaults to 64 and accepts 1 through 4096. It controls parsed
+source text, retained source data and location-table growth beyond a generation's
+initial working set. It does not enable any experiment. With cooperative analysis
+or another context-retirement experiment enabled, half the allowance requests
+private background replacement; the full allowance requires synchronous retirement
+at an observed safe boundary. This can add a Native rebuild tail. No fixed input
+or diagnostic settling delay is added.
+
+```json
+{
+  "experimentalCooperativeAnalysis": true,
+  "sourceHistoryMaxMiB": 64
+}
+```
+
+The baseline is established after configuration/build/top/exploration changes,
+not by the first later edit. Notifications and completed foreground requests
+observe growth, including a query that finishes a deferred Native parse. Queries
+are not counted as edits by the test-only generation edit limit. Every successful
+replacement establishes a new initial working set. Lazily allocated metadata also
+counts when materialized; unusually small allowances can cause frequent rebuilds. Current editor text and diagnostic versions
+survive replacement, cancellation and configuration errors.
+
+This allowance is separate from `uvm.semanticMaxMiB`, `frozenSources.maxMiB` and
+process RSS / physical footprint. Fixed providers or live old views can retain
+older source namespaces outside the current generation. A retained Native design
+view now owns its source namespace and library identities independently of the
+driver; releasing the last view releases that lease without retaining a chain of
+old drivers.
+
+The read-only `slang.sourceStorageStatus` command reports retirement activation,
+configured allowance, baseline, soft/hard thresholds and pending maintenance. Its
+`storage.current`, `storage.retained` and `storage.total` give capacity-based source
+allocation charges, including per-manager location tables and immutable-prefix
+tables. Shared FileData and immutable-prefix allocations are deduplicated in the
+total, so current and retained subtotals are not simply additive. These charges do
+not include all compiler AST allocations or the system allocator's retained pages
+and are not a process-memory cap. The registry uses weak observers; a status read
+does not keep unused namespaces alive after returning.
+
+Native 历史回收从第一个补全响应开始携带代际标记，保证第一次回收前返回的项目也能安全解析详情。普通符号按当前名字重新查找；参数化类和虚拟接口使用当前接收对象，保留实际类型参数和 modport。后者只在同一 URI、打开版本和完整文本均相同时跨回收使用原始文档偏移；include 的不同物理编号还须核对文件与完整字节。编辑或重新打开不同文本会使旧位置失效，宏展开及私有方法 slice 不按原始文档偏移复用，方法证书与版本检查仍保留。
+
+跨代际重绑定保留补全项原先选择的符号种类：原先指向 `extern` 方法声明时继续展示该声明和注释，原先指向实现时继续展示实现。不能因名字查找会解引用 prototype 而改变详情内容。
+
+
+### Provisional synchronization and native input admission
+
+With experimental method-body certification enabled, applying an edit checks the
+current context and commits editor text plus a private provisional body slice. It
+no longer repeats the complete file proof during synchronization. Every successful
+local completion, definition, hover, resolve and diagnostic publication retains its
+final complete proof. No successful proof is cached across requests.
+
+Native-only protocol requests, semantic commands and local requests that fall back
+to native analysis admit the certificate inputs before using a filesystem-derived
+view. A declined local diagnostic slice has the same obligation without requiring
+a foreground query. Failed admission reloads privately, preserves current unsaved
+text and fails rather than returning an old cached result when configuration cannot
+be recovered. Status and maintenance commands remain available; hover preview uses
+its own final query proof.
+
+### Independent native receiver reads
+
+A completed native method can prove that an ordinary, nonstatic, nongeneric class
+handle property is independently read as another method call's receiver. The local
+diagnostic cache can then add or remove this property's read without changing its
+aggregate read status. The evidence comes from completed native call records,
+not mutable reference flags that navigation might affect. Methods sharing the
+edited physical syntax, including repeated include contexts, cannot supply that
+evidence. Static, generic, array and virtual-interface receivers do not use this
+proof. This proves only the property's read bit; writes, newly referenced callees,
+specializations, driver/timing effects and all final input checks retain their
+existing guards.

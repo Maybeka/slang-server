@@ -547,3 +547,84 @@ TEST_CASE("Cancelled unshared semantic preparation rebuilds latest input without
     server.m_driver->runPendingDiagnostics();
     CHECK(rfl::json::write(server.client.getDiagnostics(doc.m_uri)) == expectedFixed);
 }
+
+TEST_CASE("Cancelled private root binding retains the previous published design",
+          "[model-cancellation][disposable-root]") {
+    const std::string suffix = "module bound_monitor; endmodule\n"
+                               "bind leaf bound_monitor i_monitor();\n";
+    const auto initial = modelOriginal + suffix;
+    const auto edited = modelEdited + suffix;
+    const auto expected = nativeModelDiagnostics("root_cancel.sv", edited);
+    for (size_t cancelAt : {size_t(1), size_t(4)}) {
+        CAPTURE(cancelAt);
+        ServerHarness server;
+        server.loadConfig(Config{.experimentalCooperativeAnalysis = true});
+        auto doc = server.openFile("root_cancel.sv", initial);
+        server.setTopLevel(std::string(doc.m_uri.getPath()));
+        auto& comp = *server.m_driver->comp;
+        REQUIRE(comp.setActiveInstance("model_top.right"));
+        auto held = comp.createActiveDesignContext({});
+        auto original = held.retainCompilation();
+        auto oldDiagnostics = rfl::json::write(server.client.getDiagnostics(doc.m_uri));
+        auto publications = server.client.diagnosticPublications.size();
+        changeModel(server, doc.m_uri, 2, edited);
+        lsp::RequestContext ctx("textDocument/hover", 391);
+        size_t checkpoints = 0;
+        ctx.setCheckpointObserverForTesting([&](std::string_view name) {
+            if (name == "during private root binding" && ++checkpoints == cancelAt)
+                ctx.cancel();
+        });
+        CHECK_THROWS_AS(comp.createActiveDesignContext({}, ctx), lsp::RequestCancelled);
+        CHECK(checkpoints == cancelAt);
+        CHECK(held.retainCompilation() == original);
+        CHECK(held.getAnalysis().instances.moduleToInstances.at("leaf").size() == 2);
+        CHECK(rfl::json::write(server.client.getDiagnostics(doc.m_uri)) == oldDiagnostics);
+        CHECK(server.client.diagnosticPublications.size() == publications);
+        auto current = comp.createActiveDesignContext({});
+        CHECK(current.retainCompilation() != original);
+        CHECK(current.getAnalysis().instances.moduleToInstances.at("leaf").size() == 2);
+        auto active = comp.getActiveInstance("leaf");
+        REQUIRE(active);
+        CHECK(active->instPath == "model_top.right");
+        server.m_driver->runPendingDiagnostics();
+        CHECK(rfl::json::write(server.client.getDiagnostics(doc.m_uri)) == expected);
+    }
+}
+
+TEST_CASE("A retained native design view owns its source namespace", "[source-owner-lifetime]") {
+    std::shared_ptr<slang::ast::Compilation> retained;
+    std::weak_ptr<const void> sources;
+    const slang::SourceManager* sourceManager = nullptr;
+    {
+        ServerHarness server("comp_repo");
+        server.setBuildFile("cpu_design.f");
+        auto design = server.m_driver->comp->createActiveDesignContext({});
+        retained = design.retainCompilation();
+        sources = server.m_driver->driver.getSourceOwner();
+        sourceManager = &server.m_driver->sm;
+        REQUIRE_FALSE(sources.expired());
+    }
+    REQUIRE_FALSE(sources.expired());
+    CHECK(retained->getSourceManager() == sourceManager);
+    retained.reset();
+    CHECK(sources.expired());
+}
+
+TEST_CASE("Source accounting observes retired views without retaining them",
+          "[source-owner-lifetime][source-storage-accounting]") {
+    ServerHarness server("comp_repo");
+    server.setBuildFile("cpu_design.f");
+    auto old = server.m_driver->comp->createActiveDesignContext({}).retainCompilation();
+    auto before = server.m_driver->sourceStorageUsage();
+    REQUIRE(before.current.managers == 1);
+    server.setBuildFile("cpu_design.f");
+    auto shared = server.m_driver->sourceStorageUsage();
+    CHECK(shared.current.managers == 1);
+    CHECK(shared.retained.managers >= 1);
+    CHECK(shared.total.managers >= 2);
+    old.reset();
+    auto after = server.m_driver->sourceStorageUsage();
+    CHECK(after.current.managers == 1);
+    CHECK(after.retained.managers == 0);
+    CHECK(after.total.managers == 1);
+}

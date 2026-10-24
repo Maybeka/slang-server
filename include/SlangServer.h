@@ -64,12 +64,15 @@ protected:
     uint64_t m_diagnosticJobId = 0;
     uint64_t m_contextEpoch = 0;
     size_t m_contextBudget = 0;
+    size_t m_contextHardBudget = 0;
+    size_t m_contextBaseBytes = 0;
     uint64_t m_contextEdits = 0;
     bool m_contextRetired = false;
     bool m_contextRetirementPending = false;
     MaintenanceRetry m_contextRetry;
     bool retirementIsOnlyBackgroundWork() const;
     void maybeRetireParsedContext(const lsp::RequestContext* retirementContext = nullptr);
+    void resetSourceHistoryBudget(size_t initialBytes);
     std::string m_diagnosticExecutable;
     std::string m_diagnosticFallbackReason;
 
@@ -82,6 +85,7 @@ protected:
     std::string m_methodScopeDecline;
     bool m_methodInputReloadPending = false;
     void recoverMethodInputs(const lsp::RequestContext&);
+    void certifyMethodInputs(const lsp::RequestContext&);
     void discardMethodScope() {
         if (m_methodScope && m_driver && m_methodScope->belongsTo(*m_driver) &&
             m_methodScope->observedInputChange())
@@ -106,15 +110,17 @@ protected:
     void refreshContextFileWatches();
 
     template<typename Params, typename Result>
-    void registerDesignCommand(
-        const std::string& name,
-        const std::function<Result(ServerCompilation&, const Params&)>& func) {
+    void registerDesignCommand(const std::string& name,
+                               const std::function<Result(ServerCompilation&, const Params&,
+                                                          const lsp::RequestContext&)>& func) {
         registerCommand<Params, std::optional<Result>>(
-            name, [this, func](const Params& params) -> std::optional<Result> {
+            name,
+            [this, func](const Params& params,
+                         const lsp::RequestContext& ctx) -> std::optional<Result> {
                 if (!m_driver || !m_driver->comp) {
                     return std::nullopt;
                 }
-                return func(*m_driver->comp, params);
+                return func(*m_driver->comp, params, ctx);
             });
     }
 
@@ -188,15 +194,18 @@ public:
 
     // Returns the instances indexed by module. If just a single instance, is will have it, else
     // it will require another query
-    std::vector<hier::InstanceSet> getScopesByModule(const std::monostate&);
+    std::vector<hier::InstanceSet> getScopesByModule(const std::monostate&,
+                                                     const lsp::RequestContext& ctx = {});
 
     // Returns the instances of a module plus its declaration location
-    std::vector<hier::QualifiedInstance> getInstancesOfModule(const std::string moduleName);
+    std::vector<hier::QualifiedInstance> getInstancesOfModule(const std::string moduleName,
+                                                              const lsp::RequestContext& ctx = {});
 
-    bool setActiveInstance(const std::string& hierPath);
+    bool setActiveInstance(const std::string& hierPath, const lsp::RequestContext& ctx = {});
     bool activateInstance(const SlangLspClient::ActivateInstanceParams& params,
                           const lsp::RequestContext& ctx = {});
-    std::optional<hier::QualifiedInstance> getActiveInstance(const std::string& moduleName);
+    std::optional<hier::QualifiedInstance> getActiveInstance(const std::string& moduleName,
+                                                             const lsp::RequestContext& ctx = {});
 
     // Returns the modules defined in a file.
     std::vector<std::string> getModulesInFile(const std::string path);
@@ -215,18 +224,21 @@ public:
     // Resolve the document location for a hierarchical path. Used by tests; the LSP command
     // is `slang.showHierLocation`, which sends the location to the client via window/showDocument
     // so the language client handles file://-vs-vscode-remote:// URI translation for us.
-    std::optional<lsp::Location> getHierLocation(const std::string& hierPath);
+    std::optional<lsp::Location> getHierLocation(const std::string& hierPath,
+                                                 const lsp::RequestContext& ctx = {});
 
     struct ShowHierLocationArgs {
         std::string hierPath;
         bool takeFocus = false;
     };
-    std::monostate showHierLocation(const ShowHierLocationArgs& args);
+    std::monostate showHierLocation(const ShowHierLocationArgs& args,
+                                    const lsp::RequestContext& ctx = {});
 
     /// Open a source location in the editor, focusing and selecting its range.
     std::monostate showLocation(const lsp::Location& location);
 
-    std::monostate openModuleDefinition(const std::string& moduleName);
+    std::monostate openModuleDefinition(const std::string& moduleName,
+                                        const lsp::RequestContext& ctx = {});
 
     struct ExpandMacroArgs {
         std::string src;
@@ -339,10 +351,10 @@ public:
     ////////////////////////////////////////////////
 
     std::optional<std::vector<lsp::CallHierarchyItem>> getDocPrepareCallHierarchy(
-        const lsp::CallHierarchyPrepareParams&) override;
+        const lsp::CallHierarchyPrepareParams&, lsp::RequestContext ctx = {}) override;
 
     std::optional<std::vector<lsp::CallHierarchyIncomingCall>> getCallHierarchyIncomingCalls(
-        const lsp::CallHierarchyIncomingCallsParams&) override;
+        const lsp::CallHierarchyIncomingCallsParams&, lsp::RequestContext ctx = {}) override;
 
     std::optional<std::vector<lsp::CallHierarchyOutgoingCall>> getCallHierarchyOutgoingCalls(
         const lsp::CallHierarchyOutgoingCallsParams&) override;
@@ -352,7 +364,8 @@ public:
     ////////////////////////////////////////////////
 
     /// Get a list of RTL paths of instances given a text document position
-    std::vector<std::string> getInstances(const lsp::TextDocumentPositionParams&);
+    std::vector<std::string> getInstances(const lsp::TextDocumentPositionParams&,
+                                          const lsp::RequestContext& ctx = {});
 
     /// Add the given variable or scope to the waveform via WCP
     std::monostate addToWaveform(const waves::ItemToWaveform&);

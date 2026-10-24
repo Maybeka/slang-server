@@ -3,10 +3,12 @@
 
 #include "util/Log.h"
 #include "util/Process.h"
+#include "util/SourceHistoryBudget.h"
 #include "utils/ServerHarness.h"
 #include <catch2/generators/catch_generators.hpp>
 #include <cstdio>
 #include <fstream>
+#include <limits>
 #include <rfl/from_generic.hpp>
 #include <rfl/json.hpp>
 
@@ -1524,4 +1526,28 @@ TEST_CASE("UVM prefix reuse requires an explicit configuration opt-in") {
         R"({"experimentalUvmPrefixCache": true})");
     REQUIRE(config);
     CHECK(config->experimentalUvmPrefixCache.value());
+}
+
+TEST_CASE("Source history allowance is configurable without enabling experiments",
+          "[source-history-budget]") {
+    ConfigWorkspace workspace;
+    CHECK(Config{}.sourceHistoryMaxMiB.value() == 64);
+    for (uint32_t limit : {1u, 64u, 4096u}) {
+        workspace.write("server.json", "{\"sourceHistoryMaxMiB\":" + std::to_string(limit) + "}");
+        auto config = Config::fromFiles((workspace.root / "server.json").string(), std::nullopt,
+                                        std::nullopt);
+        REQUIRE(config);
+        CHECK(config->sourceHistoryMaxMiB.value() == limit);
+        CHECK_FALSE(config->experimentalCooperativeAnalysis.value());
+        CHECK_FALSE(config->experimentalUvmSemanticCache.value());
+    }
+    for (const auto& value : {"0", "4097", "-1", "\"unbounded\""}) {
+        workspace.write("server.json", "{\"sourceHistoryMaxMiB\":" + std::string(value) + "}");
+        CHECK_FALSE(Config::fromFiles((workspace.root / "server.json").string(), std::nullopt,
+                                      std::nullopt));
+    }
+    const auto maximum = std::numeric_limits<size_t>::max();
+    auto saturated = server::SourceHistoryBudget::limits(maximum - 1024, 4096);
+    CHECK(saturated.soft == maximum);
+    CHECK(saturated.hard == maximum);
 }

@@ -7,6 +7,7 @@
 //------------------------------------------------------------------------------
 #pragma once
 
+#include "lsp/RequestContext.h"
 #include "util/ScopedRestore.h"
 #include <set>
 #include <type_traits>
@@ -28,7 +29,15 @@ using server::utils::ScopedRestore;
 class InstanceVisitor
     : public slang::ast::ASTVisitor<InstanceVisitor, slang::ast::VisitFlags::AllGood> {
 public:
-    explicit InstanceVisitor(const slang::SourceLocation& location) : location(location) {}
+    explicit InstanceVisitor(const slang::SourceLocation& location,
+                             const lsp::RequestContext& ctx = {}) :
+        location(location), context(ctx) {}
+
+    template<typename T>
+    void visit(const T& node) {
+        context.checkpoint("during instance location traversal");
+        slang::ast::ASTVisitor<InstanceVisitor, slang::ast::VisitFlags::AllGood>::visit(node);
+    }
 
     template<typename T>
         requires(std::is_base_of_v<slang::ast::ValueSymbol, T> ||
@@ -115,6 +124,7 @@ public:
 
 private:
     const slang::SourceLocation location;
+    lsp::RequestContext context;
     std::string access;
 
     std::vector<std::string> instances;

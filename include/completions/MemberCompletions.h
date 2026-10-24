@@ -40,6 +40,8 @@ public:
         lsp::Range replacementRange, const slang::parsing::Token* receiverToken,
         bool followedByCall);
 
+    static void retainReceiverText(lsp::CompletionItem& item, const SlangDoc& doc);
+
     /// Resolve a member completion received through completionItem/resolve.
     static void resolveLogical(CompletionDispatch& dispatch, lsp::CompletionItem& item,
                                const lsp::RequestContext& ctx);
@@ -77,6 +79,7 @@ private:
         bool labelOnly = false;
         std::optional<uint32_t> receiverBufferId;
         std::optional<uint64_t> receiverOffset;
+        std::optional<uint64_t> receiverTextIdentity;
     };
 
     static lsp::CompletionItemKind getCompletionKind(const slang::ast::Symbol& symbol);

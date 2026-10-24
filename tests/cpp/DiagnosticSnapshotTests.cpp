@@ -1544,11 +1544,12 @@ TEST_CASE(
     std::ofstream(root / "top.sv") << original;
     struct Harness : ServerHarness {
         using ServerHarness::ServerHarness;
+        using SlangServer::backgroundGracePeriod;
         using SlangServer::hasBackgroundWork;
         using SlangServer::m_contextBudget;
+        using SlangServer::m_contextHardBudget;
         using SlangServer::m_contextRetirementPending;
         using SlangServer::m_contextRetry;
-        using SlangServer::backgroundGracePeriod;
         using SlangServer::runBackgroundWork;
     };
     Harness server(lsp::InitializeParams{.workspaceFolders = {{lsp::WorkspaceFolder{
@@ -1636,6 +1637,7 @@ TEST_CASE(
     server.m_contextRetry.defer(std::chrono::milliseconds(500),
                                  server::MaintenanceRetry::Clock::now() + std::chrono::hours(1));
     server.m_contextBudget = 1;
+    server.m_contextHardBudget = 1;
     changeWithoutDiagnostics(server, uri, 6, original);
     CHECK_FALSE(server.m_contextRetirementPending);
     CHECK(server.m_driver->completions.getCompletionEpoch() != beforeHardLimit);

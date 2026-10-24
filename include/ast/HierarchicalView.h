@@ -8,6 +8,7 @@
 
 #pragma once
 #include "lsp/LspTypes.h"
+#include "lsp/RequestContext.h"
 #include "util/Converters.h"
 #include "util/Formatting.h"
 #include <fmt/format.h>
@@ -159,13 +160,14 @@ struct InstanceSet {
 };
 
 static std::vector<HierItem_t> getScopeChildren(const slang::ast::Scope& scope,
-                                                const SourceManager& sm);
+                                                const SourceManager& sm,
+                                                const lsp::RequestContext& ctx = {});
 
 static void handleBlockScope(std::vector<HierItem_t>& result,
                              const slang::ast::GenerateBlockSymbol& block, const SourceManager& sm,
-                             std::string&& nameOverride) {
+                             std::string&& nameOverride, const lsp::RequestContext& ctx = {}) {
     // Recurse into subscopes
-    auto children = getScopeChildren(block, sm);
+    auto children = getScopeChildren(block, sm, ctx);
 
     // By default, don't return empty scopes
     if (!children.empty()) {
@@ -180,22 +182,23 @@ static void handleBlockScope(std::vector<HierItem_t>& result,
 }
 
 static void handleBlockScope(std::vector<HierItem_t>& result,
-                             const slang::ast::GenerateBlockSymbol& block,
-                             const SourceManager& sm) {
+                             const slang::ast::GenerateBlockSymbol& block, const SourceManager& sm,
+                             const lsp::RequestContext& ctx = {}) {
     if (block.isUninstantiated) {
         // Don't return uninstantiated blocks
         return;
     }
-    handleBlockScope(result, block, sm, block.getExternalName());
+    handleBlockScope(result, block, sm, block.getExternalName(), ctx);
 }
 
 static void handleBlockScopeArray(std::vector<HierItem_t>& result,
                                   const slang::ast::GenerateBlockArraySymbol& array,
-                                  const SourceManager& sm) {
+                                  const SourceManager& sm, const lsp::RequestContext& ctx = {}) {
     std::vector<HierItem_t> entries;
 
     for (const slang::ast::GenerateBlockSymbol* block : array.entries) {
-        handleBlockScope(entries, *block, sm, fmt::format("[{}]", block->constructIndex));
+        ctx.checkpoint("during generate hierarchy enumeration");
+        handleBlockScope(entries, *block, sm, fmt::format("[{}]", block->constructIndex), ctx);
     }
 
     // Don't return empty arrays
@@ -212,8 +215,10 @@ static void handleBlockScopeArray(std::vector<HierItem_t>& result,
 // Cheap probe for "does this scope have any members the hierarchy view would surface?"
 // Mirrors the kind filter in getScopeChildren but bails on the first hit so we don't
 // pay the cost of constructing the full child list just to know if it's non-empty.
-static bool scopeHasVisibleChildren(const slang::ast::Scope& scope) {
+static bool scopeHasVisibleChildren(const slang::ast::Scope& scope,
+                                    const lsp::RequestContext& ctx = {}) {
     for (auto& sym : scope.members()) {
+        ctx.checkpoint("during hierarchy member enumeration");
         switch (sym.kind) {
             case slang::ast::SymbolKind::Instance:
             case slang::ast::SymbolKind::InstanceArray:
@@ -233,7 +238,8 @@ static bool scopeHasVisibleChildren(const slang::ast::Scope& scope) {
 }
 
 static Instance toInstance(const slang::ast::InstanceSymbol& inst, const SourceManager& sm,
-                           std::string&& nameOverride, bool filled = false) {
+                           std::string&& nameOverride, bool filled = false,
+                           const lsp::RequestContext& ctx = {}) {
     auto sourceRange = inst.getSyntax() ? inst.getSyntax()->sourceRange()
                                         : inst.getDefinition().getSyntax()->sourceRange();
     auto declKind = DeclKind::Module;
@@ -248,8 +254,8 @@ static Instance toInstance(const slang::ast::InstanceSymbol& inst, const SourceM
         default:
             break;
     }
-    auto children = filled ? getScopeChildren(inst.body, sm) : std::vector<HierItem_t>{};
-    bool hasChildren = filled ? !children.empty() : scopeHasVisibleChildren(inst.body);
+    auto children = filled ? getScopeChildren(inst.body, sm, ctx) : std::vector<HierItem_t>{};
+    bool hasChildren = filled ? !children.empty() : scopeHasVisibleChildren(inst.body, ctx);
     return Instance{
         .kind = SlangKind::Instance,
         .instName = nameOverride,
@@ -274,14 +280,15 @@ static Instance toInstance(const slang::ast::InstanceSymbol& inst, const SourceM
 }
 
 static void handleInstance(std::vector<HierItem_t>& result, const slang::ast::InstanceSymbol& inst,
-                           const SourceManager& sm, std::string&& nameOverride,
-                           bool filled = false) {
-    result.push_back(HierItem_t(toInstance(inst, sm, std::move(nameOverride), filled)));
+                           const SourceManager& sm, std::string&& nameOverride, bool filled = false,
+                           const lsp::RequestContext& ctx = {}) {
+    result.push_back(HierItem_t(toInstance(inst, sm, std::move(nameOverride), filled, ctx)));
 }
 
 static void handleInstance(std::vector<HierItem_t>& result, const slang::ast::InstanceSymbol& inst,
-                           const SourceManager& sm, bool filled = false) {
-    handleInstance(result, inst, sm, std::string(inst.name), filled);
+                           const SourceManager& sm, bool filled = false,
+                           const lsp::RequestContext& ctx = {}) {
+    handleInstance(result, inst, sm, std::string(inst.name), filled, ctx);
 }
 
 [[maybe_unused]] static void handlePackage(std::vector<HierItem_t>& result,
@@ -306,7 +313,7 @@ static void handleInstance(std::vector<HierItem_t>& result, const slang::ast::In
 
 static void handleInstanceArray(std::vector<HierItem_t>& result,
                                 const slang::ast::InstanceArraySymbol& array,
-                                const SourceManager& sm) {
+                                const SourceManager& sm, const lsp::RequestContext& ctx = {}) {
     std::vector<HierItem_t> elements;
 
     // Need to handle instance indices manually
@@ -314,8 +321,9 @@ static void handleInstanceArray(std::vector<HierItem_t>& result,
     int8_t step = array.range.isDescending() ? -1 : 1;
 
     for (const slang::ast::Symbol* block : array.elements) {
+        ctx.checkpoint("during instance array enumeration");
         if (auto inst = block->as_if<slang::ast::InstanceSymbol>()) {
-            handleInstance(elements, *inst, sm, fmt::format("[{}]", instanceIdx));
+            handleInstance(elements, *inst, sm, fmt::format("[{}]", instanceIdx), false, ctx);
             instanceIdx += step;
         }
     }
@@ -423,18 +431,19 @@ static const slang::ast::Scope* getInterfacePortScope(const slang::ast::Interfac
 
 static std::vector<HierItem_t> getInterfacePortElementChildren(
     const slang::ast::InterfacePortSymbol& port, const slang::ast::InstanceSymbol* ifaceInst,
-    const SourceManager& sm) {
+    const SourceManager& sm, const lsp::RequestContext& ctx = {}) {
     auto* scope = getInterfacePortScope(port, ifaceInst);
     if (!scope) {
         return {};
     }
-    return getScopeChildren(*scope, sm);
+    return getScopeChildren(*scope, sm, ctx);
 }
 
 static std::string getInterfacePortType(const slang::ast::InterfacePortSymbol& port);
 
 static std::vector<HierItem_t> getInterfacePortChildren(const slang::ast::InterfacePortSymbol& port,
-                                                        const SourceManager& sm) {
+                                                        const SourceManager& sm,
+                                                        const lsp::RequestContext& ctx = {}) {
     auto sourceRange = getSymbolSourceRange(port);
     auto type = getInterfacePortType(port);
     auto [connSym, _modport] = port.getConnection();
@@ -446,12 +455,13 @@ static std::vector<HierItem_t> getInterfacePortChildren(const slang::ast::Interf
 
         auto* connArray = connSym ? connSym->as_if<slang::ast::InstanceArraySymbol>() : nullptr;
         for (size_t i = 0; i < range.width(); i++) {
+            ctx.checkpoint("during interface hierarchy enumeration");
             const slang::ast::InstanceSymbol* ifaceInst = nullptr;
             if (connArray && i < connArray->elements.size()) {
                 ifaceInst = connArray->elements[i]->as_if<slang::ast::InstanceSymbol>();
             }
 
-            auto children = getInterfacePortElementChildren(port, ifaceInst, sm);
+            auto children = getInterfacePortElementChildren(port, ifaceInst, sm, ctx);
             elements.push_back(HierItem_t(Scope{
                 .kind = SlangKind::InterfacePort,
                 .instName = fmt::format("[{}]", index),
@@ -469,7 +479,7 @@ static std::vector<HierItem_t> getInterfacePortChildren(const slang::ast::Interf
     const slang::ast::InstanceSymbol* ifaceInst = connSym
                                                       ? connSym->as_if<slang::ast::InstanceSymbol>()
                                                       : nullptr;
-    return getInterfacePortElementChildren(port, ifaceInst, sm);
+    return getInterfacePortElementChildren(port, ifaceInst, sm, ctx);
 }
 
 static std::string getInterfacePortType(const slang::ast::InterfacePortSymbol& port) {
@@ -488,9 +498,9 @@ static std::string getInterfacePortType(const slang::ast::InterfacePortSymbol& p
 
 static void handleInterfacePort(std::vector<HierItem_t>& result,
                                 const slang::ast::InterfacePortSymbol& port,
-                                const SourceManager& sm) {
+                                const SourceManager& sm, const lsp::RequestContext& ctx = {}) {
     auto sourceRange = getSymbolSourceRange(port);
-    auto children = getInterfacePortChildren(port, sm);
+    auto children = getInterfacePortChildren(port, sm, ctx);
     auto type = getInterfacePortType(port);
     if (auto declaredRange = port.getDeclaredRange(); declaredRange && !declaredRange->empty()) {
         result.push_back(HierItem_t(Scope{
@@ -515,11 +525,13 @@ static void handleInterfacePort(std::vector<HierItem_t>& result,
 }
 
 static std::vector<HierItem_t> getScopeChildren(const slang::ast::Scope& scope,
-                                                const SourceManager& sm) {
+                                                const SourceManager& sm,
+                                                const lsp::RequestContext& ctx) {
     std::vector<HierItem_t> result;
     for (auto& sym : scope.members()) {
+        ctx.checkpoint("during hierarchy member enumeration");
         if (auto inst = sym.as_if<slang::ast::InstanceSymbol>()) {
-            handleInstance(result, *inst, sm);
+            handleInstance(result, *inst, sm, false, ctx);
         }
         else if (auto param = sym.as_if<slang::ast::ParameterSymbol>()) {
             handleParameter(result, *param, sm);
@@ -531,16 +543,16 @@ static std::vector<HierItem_t> getScopeChildren(const slang::ast::Scope& scope,
             handleValue(result, *val, sm);
         }
         else if (auto ifacePort = sym.as_if<slang::ast::InterfacePortSymbol>()) {
-            handleInterfacePort(result, *ifacePort, sm);
+            handleInterfacePort(result, *ifacePort, sm, ctx);
         }
         else if (auto block = sym.as_if<slang::ast::GenerateBlockSymbol>()) {
-            handleBlockScope(result, *block, sm);
+            handleBlockScope(result, *block, sm, ctx);
         }
         else if (auto block = sym.as_if<slang::ast::GenerateBlockArraySymbol>()) {
-            handleBlockScopeArray(result, *block, sm);
+            handleBlockScopeArray(result, *block, sm, ctx);
         }
         else if (auto instArray = sym.as_if<slang::ast::InstanceArraySymbol>()) {
-            handleInstanceArray(result, *instArray, sm);
+            handleInstanceArray(result, *instArray, sm, ctx);
         }
     }
 

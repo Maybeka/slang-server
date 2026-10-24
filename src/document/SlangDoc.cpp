@@ -18,6 +18,7 @@
 #include "util/Logging.h"
 #include "util/SlangExtensions.h"
 #include <algorithm>
+#include <atomic>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
@@ -136,9 +137,26 @@ std::shared_ptr<syntax::SyntaxTree> cachedUvmTree(std::shared_ptr<syntax::Syntax
 }
 } // namespace
 
+namespace {
+std::atomic<uint64_t> completionTextIdentity{1};
+void replaceCompletionSourceBuffer(SourceBuffer& current, SourceBuffer next, uint64_t& identity) {
+    if ((current.data.data() != next.data.data() || current.data.size() != next.data.size()) &&
+        current.data != next.data)
+        identity = completionTextIdentity.fetch_add(1, std::memory_order_relaxed);
+    current = next;
+}
+} // namespace
+
 SlangDoc::SlangDoc(ServerDriver& driver, URI uri, SourceBuffer buffer) :
     m_driver(driver), m_sourceManager(driver.sm), m_options(driver.options), m_uri(uri),
-    m_wsRelativePathOffset(driver.getWsRelativePathOffset(m_uri.getPath())), m_buffer(buffer) {
+    m_wsRelativePathOffset(driver.getWsRelativePathOffset(m_uri.getPath())), m_buffer(buffer),
+    m_completionTextIdentity(completionTextIdentity.fetch_add(1, std::memory_order_relaxed)) {
+}
+
+void SlangDoc::inheritCompletionTextIdentity(const SlangDoc& previous) {
+    if (m_uri == previous.m_uri && m_version && m_version == previous.m_version &&
+        getText() == previous.getText())
+        m_completionTextIdentity = previous.m_completionTextIdentity;
 }
 
 std::optional<SourceLocation> SlangDoc::getLocation(const lsp::Position& position,
@@ -287,7 +305,7 @@ void SlangDoc::adoptNativeCompilationUnit(const SlangDoc& unit) {
     m_uvmPrefixTree = unit.m_uvmPrefixTree;
     m_uvmPrefixDisabled = unit.m_uvmPrefixDisabled;
     m_tree = unit.m_tree;
-    m_buffer = unit.m_buffer;
+    replaceCompletionSourceBuffer(m_buffer, unit.m_buffer, m_completionTextIdentity);
     m_options = unit.m_options;
     m_analysis.reset();
 }
@@ -340,9 +358,12 @@ std::shared_ptr<syntax::SyntaxTree> SlangDoc::getSyntaxTree(const lsp::RequestCo
                 m_buffer.id != context.buffer) {
                 m_analysis.reset();
                 m_tree = tree;
-                m_buffer = SourceBuffer{.data = m_sourceManager.getSourceText(context.buffer),
-                                        .library = m_sourceManager.getLibraryFor(context.buffer),
-                                        .id = context.buffer};
+                replaceCompletionSourceBuffer(
+                    m_buffer,
+                    SourceBuffer{.data = m_sourceManager.getSourceText(context.buffer),
+                                 .library = m_sourceManager.getLibraryFor(context.buffer),
+                                 .id = context.buffer},
+                    m_completionTextIdentity);
                 m_options = tree->options();
                 m_includeCompilation = std::move(compilation);
             }
@@ -360,7 +381,9 @@ std::shared_ptr<syntax::SyntaxTree> SlangDoc::getSyntaxTree(const lsp::RequestCo
             throw std::runtime_error("Native compilation unit requires SourceLoader replay to "
                                      "preserve preprocessing context");
         if (!m_sourceManager.isLatestData(m_buffer.id))
-            m_buffer = m_sourceManager.readSource(m_uri.getPath(), nullptr).value();
+            replaceCompletionSourceBuffer(
+                m_buffer, m_sourceManager.readSource(m_uri.getPath(), nullptr).value(),
+                m_completionTextIdentity);
         ctx.checkpoint("before syntax parsing");
         DisposableParseRequest parseRequest(ctx, m_driver.isCooperativeAnalysisEnabled());
         if (m_nativeCompilationUnit) {
@@ -379,7 +402,7 @@ std::shared_ptr<syntax::SyntaxTree> SlangDoc::getSyntaxTree(const lsp::RequestCo
                                     unit.rootPaths[i].string(), buffer.error().message()));
                 buffers.push_back(*buffer);
                 if (unit.rootPaths[i] == std::filesystem::path(m_uri.getPath()))
-                    m_buffer = *buffer;
+                    replaceCompletionSourceBuffer(m_buffer, *buffer, m_completionTextIdentity);
             }
             std::shared_ptr<syntax::SyntaxTree> tree;
             tree = m_driver.resumeScopeLibrary(unit.rootPaths, buffers, parseOptions,
@@ -708,6 +731,7 @@ void SlangDoc::onChange(const std::vector<lsp::TextDocumentContentChangeEvent>& 
             contentChanges[i]);
     }
     m_buffer = m_sourceManager.replaceBuffer(m_buffer.id, std::move(buffer));
+    m_completionTextIdentity = completionTextIdentity.fetch_add(1, std::memory_order_relaxed);
 
     // Invalidate pointers to old buffer
     m_tree.reset();
@@ -721,6 +745,7 @@ bool SlangDoc::reloadBuffer() {
         return false;
     }
     m_buffer = *result;
+    m_completionTextIdentity = completionTextIdentity.fetch_add(1, std::memory_order_relaxed);
     m_version.reset();
     m_tree.reset();
     m_analysis.reset();

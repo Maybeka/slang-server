@@ -18,6 +18,7 @@
 #include "lsp/RequestContext.h"
 #include "lsp/URI.h"
 #include "util/SourceContextHints.h"
+#include "util/SourceStorageRegistry.h"
 #include <filesystem>
 #include <map>
 #include <memory>
@@ -41,6 +42,7 @@ class ServerDriver {
     friend class MethodScopeOverlay;
     friend class BodyDiagnosticCache;
     std::shared_ptr<driver::Driver> m_driverOwner;
+    std::shared_ptr<SourceStorageRegistry> m_sourceRegistry;
     bool m_stagedRetirement = false;
 
 public:
@@ -81,6 +83,7 @@ public:
 
     /// Release disposable models before constructing a replacement at a quiescent boundary.
     void prepareForContextRetirement();
+    SourceStorageRegistry::Usage sourceStorageUsage() { return m_sourceRegistry->usage(sm); }
 
     bool isUvmPrefixCacheEnabled() const {
         return (m_config.experimentalUvmPrefixCache.value() ||
@@ -173,7 +176,7 @@ public:
     /// Record the active instance for the module reached by `instPath`, then invalidate
     /// every open document's cached analysis so subsequent hovers/gotos see the new
     /// selection. Refreshes client-side code lenses and inlay hints.
-    bool setActiveInstance(std::string_view hierPath);
+    bool setActiveInstance(std::string_view hierPath, const lsp::RequestContext& ctx = {});
 
     /// Load nearest indexed dependencies, recursing through packages and interfaces.
     /// When fullHierarchy is set, also recurse through instantiated modules.
