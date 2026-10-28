@@ -5,6 +5,7 @@
 #include "utils/ClientHarness.h"
 #include <algorithm>
 #include <atomic>
+#include <catch2/generators/catch_generators.hpp>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
@@ -120,6 +121,22 @@ public:
     explicit WatchServer(WatchClient& client) : SlangServer(client) {}
     using SlangServer::m_driver;
     using SlangServer::onForegroundComplete;
+
+    void forceWatchRefresh(bool equivalentSpelling = false) {
+        if (equivalentSpelling) {
+            REQUIRE_FALSE(m_contextWatchPaths.empty());
+            auto& value = m_contextWatchPaths.front();
+            auto spelling = value.native();
+            const auto at = spelling.find_last_of(fs::path::preferred_separator);
+            REQUIRE(at != decltype(spelling)::npos);
+            spelling.insert(at, 1, fs::path::preferred_separator);
+            const fs::path alias(spelling);
+            REQUIRE(alias.native() != value.native());
+            REQUIRE(alias == value);
+            value = alias;
+        }
+        ++m_contextWatchRevision;
+    }
 
     void open(const URI& uri, std::string text, int version = 7) {
         onDocDidOpen({.textDocument = {.uri = uri,
@@ -426,8 +443,12 @@ TEST_CASE("Missing nested hint targets watch an existing ancestor with an exact 
 
 TEST_CASE("Recreated drivers move identical target watches away from deleted parent directories",
           "[context-watches]") {
+    const bool memoize = GENERATE(false, true);
     WatchWorkspace workspace;
-    workspace.write("project/.slang/server.json", "{\"indexingThreads\":1}\n");
+    workspace.write("project/.slang/server.json",
+                    memoize ? "{\"indexingThreads\":1,\"experimentalMethodBodyQueries\":true,"
+                              "\"experimentalMethodBodyCertification\":true}\n"
+                            : "{\"indexingThreads\":1}\n");
     const std::string header =
         "// slang-server: owner \"../external[dir]/nested{level}/owner[1].sv\"\n"
         "class item; int value; endclass\n";
@@ -462,4 +483,108 @@ TEST_CASE("Recreated drivers move identical target watches away from deleted par
         found = true;
     }
     CHECK(found);
+}
+
+TEST_CASE("Unchanged watch paths retain registration for exact and equivalent spellings",
+          "[context-watches][watch-path-compare]") {
+    const bool memoize = GENERATE(false, true);
+    WatchWorkspace workspace;
+    workspace.configure();
+    if (memoize)
+        workspace.write("project/.slang/server.json",
+                        "{\"indexingThreads\":1,\"compilationFilelist\":\"lists/top.arguments\","
+                        "\"experimentalMethodBodyQueries\":true,"
+                        "\"experimentalMethodBodyCertification\":true}\n");
+    WatchClient client;
+    WatchServer server(client);
+    server.getInitialize(workspace.params());
+    server.onInitialized({});
+    const auto requests = client.requests.size();
+    server.forceWatchRefresh();
+    server.onForegroundComplete();
+    CHECK(client.requests.size() == requests);
+    server.forceWatchRefresh(true);
+    server.onForegroundComplete();
+    CHECK(client.requests.size() == requests);
+    CHECK(client.watches(workspace.path("external/owner.sv")));
+}
+
+TEST_CASE("Independent catalogue reads cannot hide newly watched document paths",
+          "[context-watches][watch-catalogue-cache]") {
+    WatchWorkspace workspace;
+    workspace.configure();
+    workspace.write(
+        "project/.slang/server.json",
+        "{\"indexingThreads\":1,\"compilationFilelist\":\"lists/top.arguments\","
+        "\"experimentalMethodBodyQueries\":true,\"experimentalMethodBodyCertification\":true}\n");
+    WatchClient client;
+    WatchServer server(client);
+    server.getInitialize(workspace.params());
+    server.onInitialized({});
+    const auto before = server.m_driver->getContextWatchCatalogue();
+    CHECK(*before == server.m_driver->getContextWatchPaths());
+    const auto requests = client.requests.size();
+    const auto added = workspace.path("external/new_leaf.sv");
+    const std::string source = "package new_leaf; int value; endpackage\n";
+    workspace.write("external/new_leaf.sv", source);
+    // Another reader populates the driver's memo before the server consumes it.
+    // The server must compare against its own last catalogue, not a global hit.
+    server.m_driver->openDocument(URI::fromFile(added), source, 8, true);
+    const auto current = server.m_driver->getContextWatchCatalogue();
+    CHECK(*current == server.m_driver->getContextWatchPaths());
+    CHECK(std::find(current->begin(), current->end(), added) != current->end());
+    CHECK(std::find(before->begin(), before->end(), added) == before->end());
+    server.onForegroundComplete();
+    CHECK(client.watches(added));
+    CHECK(client.requests.size() > requests);
+    const auto stable = client.requests.size();
+    server.forceWatchRefresh();
+    server.onForegroundComplete();
+    CHECK(client.requests.size() == stable);
+}
+
+TEST_CASE("Watch catalogue observes detached buffers and preserves earlier reader values",
+          "[context-watches][watch-catalogue-cache]") {
+    WatchWorkspace workspace;
+    workspace.configure();
+    workspace.write(
+        "project/.slang/server.json",
+        "{\"indexingThreads\":1,\"compilationFilelist\":\"lists/top.arguments\","
+        "\"experimentalMethodBodyQueries\":true,\"experimentalMethodBodyCertification\":true}\n");
+    WatchClient client;
+    WatchServer server(client);
+    server.getInitialize(workspace.params());
+    auto& driver = *server.m_driver;
+    auto original = driver.getContextWatchCatalogue();
+    CHECK(*original == driver.getContextWatchPaths());
+    CHECK(driver.getContextWatchCatalogue() == original);
+
+    const auto added = workspace.uri("external/temporary.sv");
+    const std::string text = "package temporary; int value; endpackage\n";
+    workspace.write("external/temporary.sv", text);
+    driver.openDocument(added, text, 9, true);
+    const auto extended = driver.getContextWatchCatalogue();
+    REQUIRE(*extended == driver.getContextWatchPaths());
+    CHECK(extended != original);
+    CHECK(std::find(extended->begin(), extended->end(), added.getPath()) != extended->end());
+    CHECK(std::find(original->begin(), original->end(), added.getPath()) == original->end());
+
+    auto buffer = driver.getDocument(added)->getBuffer();
+    slang::SmallVector<char> replacement;
+    replacement.append(text.begin(), text.end());
+    replacement.push_back('\0');
+    auto changed = driver.sm.replaceBuffer(buffer, std::move(replacement));
+    REQUIRE(driver.sm.getFullPath(buffer).empty());
+    CHECK(driver.sm.getFullPath(changed.id) == added.getPath());
+    const auto detached = driver.getContextWatchCatalogue();
+    REQUIRE(*detached == driver.getContextWatchPaths());
+    CHECK(std::find(detached->begin(), detached->end(), added.getPath()) == detached->end());
+    CHECK(std::find(extended->begin(), extended->end(), added.getPath()) != extended->end());
+    CHECK(driver.getContextWatchCatalogue() == detached);
+
+    driver.docs.erase(added);
+    const auto removed = driver.getContextWatchCatalogue();
+    CHECK(*removed == driver.getContextWatchPaths());
+    CHECK(*removed == *original);
+    CHECK(driver.getContextWatchCatalogue() == removed);
 }

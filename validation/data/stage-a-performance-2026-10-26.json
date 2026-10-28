@@ -1,0 +1,279 @@
+{
+  "qualified": false,
+  "binarySha256": "f4f426688550d513808533ac4b098af25d3cf961a429d034d198015d67fb711e",
+  "pending": [],
+  "checks": {
+    "warm-final-1-binary": true,
+    "warm-final-1-native612": true,
+    "warm-final-1-cancellations": true,
+    "warm-final-2-binary": true,
+    "warm-final-2-native612": true,
+    "warm-final-2-cancellations": true,
+    "warm-final-3-binary": true,
+    "warm-final-3-native612": true,
+    "warm-final-3-cancellations": true,
+    "warm-final-4-binary": true,
+    "warm-final-4-native612": true,
+    "warm-final-4-cancellations": true,
+    "warm-final-5-binary": true,
+    "warm-final-5-native612": true,
+    "warm-final-5-cancellations": true,
+    "warm-final-6-binary": true,
+    "warm-final-6-native612": true,
+    "warm-final-6-cancellations": true,
+    "first-final-1-binary": true,
+    "first-final-1-native612": true,
+    "first-final-1-cancellations": true,
+    "first-final-2-binary": true,
+    "first-final-2-native612": true,
+    "first-final-2-cancellations": true,
+    "first-final-3-binary": true,
+    "first-final-3-native612": true,
+    "first-final-3-cancellations": true,
+    "memory-final-1008-binary": true,
+    "memory-final-1008-native612": true,
+    "memory-final-1008-cancellations": true,
+    "memory-final-1008-cpuSeconds": true,
+    "memory-final-1008-peakRss": true,
+    "memory-final-1008-peakFootprint": true,
+    "memory-final-1008-hardBound": true,
+    "memory-final-1008-queryBound": true,
+    "memory-final-reverse-binary": true,
+    "memory-final-reverse-native612": true,
+    "memory-final-reverse-cancellations": true,
+    "memory-final-reverse-cpuSeconds": true,
+    "memory-final-reverse-peakRss": true,
+    "memory-final-reverse-peakFootprint": true,
+    "memory-final-reverse-hardBound": true,
+    "memory-final-reverse-queryBound": true,
+    "proof-count-binary": true,
+    "proof-count-native612": true,
+    "proof-count-cancellations": true,
+    "effect-forward-binary": true,
+    "effect-forward-native612": true,
+    "effect-forward-cancellations": true,
+    "effect-forward-cpuSeconds": true,
+    "effect-forward-peakRss": true,
+    "effect-forward-peakFootprint": true,
+    "effect-forward-hardBound": true,
+    "effect-forward-queryBound": true,
+    "effect-reverse-binary": true,
+    "effect-reverse-native612": true,
+    "effect-reverse-cancellations": true,
+    "effect-reverse-cpuSeconds": true,
+    "effect-reverse-peakRss": true,
+    "effect-reverse-peakFootprint": true,
+    "effect-reverse-hardBound": true,
+    "effect-reverse-queryBound": true,
+    "warm-p50": false,
+    "warm-p95": true,
+    "warm-lastDiagnosticMs": true,
+    "first-p50": false,
+    "first-lastDiagnosticMs": false,
+    "proofCount": true,
+    "effect-forward-p50": true,
+    "effect-forward-proceduresReused": true,
+    "effect-forward-renderingsReused": true,
+    "effect-forward-localDiagnostics": true,
+    "effect-forward-p95": true,
+    "effect-forward-lastDiagnostic": true,
+    "effect-reverse-p50": true,
+    "effect-reverse-proceduresReused": true,
+    "effect-reverse-renderingsReused": true,
+    "effect-reverse-localDiagnostics": true,
+    "effect-reverse-p95": true,
+    "effect-reverse-lastDiagnostic": true,
+    "all14": true
+  },
+  "failedChecks": [
+    "warm-p50",
+    "first-p50",
+    "first-lastDiagnosticMs"
+  ],
+  "summary": {
+    "memory-final-1008": {
+      "ratios": {
+        "cpuSeconds": 0.9876182995009464,
+        "peakRss": 0.9490231275527459,
+        "peakFootprint": 0.9405612888032431
+      },
+      "arms": {
+        "baseline": {
+          "p50": 18.267250500000003,
+          "p95": 21.717917,
+          "maximum": 45.247375,
+          "cancelled": 0,
+          "lastDiagnosticMs": 31.196541,
+          "memory": {
+            "peakRss": 1259569152,
+            "peakFootprint": 1102857560,
+            "samples": 4106,
+            "cpuSeconds": 31.045099583
+          }
+        },
+        "candidate": {
+          "p50": 18.927187500000002,
+          "p95": 21.583,
+          "maximum": 37.074417,
+          "cancelled": 0,
+          "lastDiagnosticMs": 28.621375,
+          "memory": {
+            "peakRss": 1195360256,
+            "peakFootprint": 1037305128,
+            "samples": 4385,
+            "cpuSeconds": 30.660708458
+          }
+        }
+      }
+    },
+    "memory-final-reverse": {
+      "ratios": {
+        "cpuSeconds": 1.0016517384607,
+        "peakRss": 0.947183875952885,
+        "peakFootprint": 0.9395775191934801
+      },
+      "arms": {
+        "candidate": {
+          "p50": 19.0046665,
+          "p95": 21.6085,
+          "maximum": 38.781917,
+          "cancelled": 0,
+          "lastDiagnosticMs": 23.449917,
+          "memory": {
+            "peakRss": 1194983424,
+            "peakFootprint": 1036928296,
+            "samples": 4539,
+            "cpuSeconds": 30.804455166
+          }
+        },
+        "baseline": {
+          "p50": 18.628375,
+          "p95": 21.0615,
+          "maximum": 43.270542,
+          "cancelled": 0,
+          "lastDiagnosticMs": 28.667541,
+          "memory": {
+            "peakRss": 1261617152,
+            "peakFootprint": 1103611224,
+            "samples": 4534,
+            "cpuSeconds": 30.753658166
+          }
+        }
+      }
+    },
+    "effect-forward": {
+      "ratios": {
+        "cpuSeconds": 0.7120900098331483,
+        "peakRss": 0.9210944251115212,
+        "peakFootprint": 1.026510369297919
+      },
+      "arms": {
+        "baseline": {
+          "p50": 13.3778755,
+          "p95": 496.852708,
+          "maximum": 496.852708,
+          "cancelled": 2,
+          "lastDiagnosticMs": 1028.068583,
+          "memory": {
+            "peakRss": 1403027456,
+            "peakFootprint": 1105642840,
+            "samples": 310,
+            "cpuSeconds": 5.861325208
+          }
+        },
+        "candidate": {
+          "p50": 10.635167,
+          "p95": 22.122667,
+          "maximum": 64.994041,
+          "cancelled": 0,
+          "lastDiagnosticMs": 61.07625,
+          "memory": {
+            "peakRss": 1292320768,
+            "peakFootprint": 1134953840,
+            "samples": 260,
+            "cpuSeconds": 4.173791125
+          }
+        }
+      }
+    },
+    "effect-reverse": {
+      "ratios": {
+        "cpuSeconds": 0.7104879584611108,
+        "peakRss": 0.9176103859714666,
+        "peakFootprint": 1.0210800303324974
+      },
+      "arms": {
+        "candidate": {
+          "p50": 10.5438755,
+          "p95": 21.204625,
+          "maximum": 65.13675,
+          "cancelled": 0,
+          "lastDiagnosticMs": 59.427209,
+          "memory": {
+            "peakRss": 1287733248,
+            "peakFootprint": 1130104176,
+            "samples": 260,
+            "cpuSeconds": 4.179068916
+          }
+        },
+        "baseline": {
+          "p50": 13.8254165,
+          "p95": 512.288416,
+          "maximum": 512.288416,
+          "cancelled": 2,
+          "lastDiagnosticMs": 1038.3665,
+          "memory": {
+            "peakRss": 1403355136,
+            "peakFootprint": 1106773360,
+            "samples": 321,
+            "cpuSeconds": 5.881970083
+          }
+        }
+      }
+    },
+    "warm": {
+      "baseline": {
+        "p50": 15.8191875,
+        "p95": 20.078854,
+        "lastDiagnosticMs": 30.082396000000003
+      },
+      "candidate": {
+        "p50": 18.95526075,
+        "p95": 21.1023955,
+        "lastDiagnosticMs": 31.942437500000004
+      }
+    },
+    "first": {
+      "baseline": {
+        "p50": 40.515042,
+        "p95": 40.515042,
+        "lastDiagnosticMs": 69.627458
+      },
+      "candidate": {
+        "p50": 58.751709,
+        "p95": 58.751709,
+        "lastDiagnosticMs": 88.640334
+      }
+    },
+    "proofCounts": {
+      "native": 0,
+      "baseline": 28,
+      "candidate": 28
+    }
+  },
+  "scope": "Stage A local semantic coverage fixed14 evaluation only. All five-category goal remains active; no full delivery qualification.",
+  "stage": "A",
+  "status": "fixed14-failed-three-latency-gates",
+  "allFiveComplete": false,
+  "stageAComplete": false,
+  "mainPushed": false,
+  "experimentsDefaultOff": true,
+  "allProcessesTerminal": true,
+  "networkUsed": false,
+  "ratios": {
+    "warmP50": 1.198244900378101,
+    "firstQuery": 1.4501208958391305,
+    "firstDiagnostic": 1.2730657781589554
+  },
+  "evaluationSha256": "a7a3c1ab3d21a2766d92a906277dd2484b271e6de54a7e0010d42e6633bb544c"
+}

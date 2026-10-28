@@ -1,0 +1,383 @@
+{
+  "status": "macro facts activation/retained-namespace fix validated; local admission not yet implemented",
+  "defaultOff": true,
+  "noNewDebounce": true,
+  "networkUsed": false,
+  "mainPushed": false,
+  "proofBudgetMiB": 16,
+  "zeroDisablesRuntimeProof": true,
+  "originalFailure": {
+    "priorFailure": {},
+    "targeted": [
+      {
+        "name": "transition-before.tmp.log",
+        "sha256": "5a5f78fb487e1a1ffe01a42e539c5f3dd8288fdd58b39db0bdb720a486476ccc",
+        "summary": [
+          "test cases:  1 |  0 passed | 1 failed",
+          "assertions: 86 | 80 passed | 6 failed"
+        ],
+        "exitCode": 42
+      },
+      {
+        "name": "transition-after.tmp.log",
+        "sha256": "7fb6336596c9bf5b9fe2fb1453266d267ab486fbbd31d492fd43cbba31da2e44",
+        "summary": [
+          "All tests passed (302 assertions in 2 test cases)"
+        ],
+        "exitCode": 0
+      },
+      {
+        "name": "sdk-after.tmp.log",
+        "sha256": "722976382967d355ae316f72906eae27ba0af57505a8447bee99cacc94e0ab70",
+        "summary": [],
+        "exitCode": 0,
+        "summaryCountCaptured": false
+      }
+    ],
+    "sourceSha256": {
+      "source/src/UvmLibrary.cpp": "6c445939883292ef04e63761e97422d54d157b954e931e49fb9f24f2ee682b8e",
+      "source/tests/cpp/UvmLibraryTests.cpp": "aba18f2ef3a7bcc5b2f1c4b8f08099a8742311c804e0c9f68dc998a46b2b16b2",
+      "source/external/slang/source/syntax/SyntaxTree.cpp": "81118080c2d8c12fb91a63c046cbb41f1015b12a489a295d1acb5829fa79665c",
+      "source/external/slang/include/slang/syntax/ParseArchive.h": "9aa74f14724a0fe77ee8ecf0fec5bf662973ec5b637b73961ac9f95b7a519e9a",
+      "source/external/slang/tests/unittests/parsing/SyntaxPrinterTests.cpp": "18c790f8f2bef3f3bf8ca8435d8b3c6b5491014c43b9d7556958f0485014c290"
+    },
+    "sdkPatchSha256": "1a05468d7545a360d59a24c1c8d39defb55a1e37cf13c6f06a51b074479bbb2d",
+    "fullQualification": false,
+    "compactFactsRetainedAsReusableCache": true,
+    "defaultOff": true
+  },
+  "native": {
+    "exitCode": 0,
+    "summary": "100% tests passed out of 976",
+    "logSha256": "9b6a9fb83b091e2e1f5397e52535365882c4e6aaf37a8a779224e41f97363936",
+    "sourceReceiptSha256": "a7b43995e67adf60d6f15061ef507f26c6ba9aa2d7f2bde71e95ce58b1216c3b",
+    "scope": "Current Native full including SDK; no final performance qualification",
+    "sourceReceipt": "native-code-receipt.json"
+  },
+  "asan": {
+    "status": "completed",
+    "passed": true,
+    "qualification": false,
+    "steps": [
+      {
+        "name": "sdk-full",
+        "exitCode": 0,
+        "summary": [
+          "All tests passed (36963 assertions in 2644 test cases)"
+        ],
+        "logSha256": "4942b73f25d81870a424f0859bb9ab84e840cd6d2c99ace961613ec51da7034c"
+      },
+      {
+        "name": "server-full",
+        "exitCode": 0,
+        "summary": [
+          "All tests passed (177460 assertions in 961 test cases)"
+        ],
+        "logSha256": "f7bcd8b7a4246cca8d60e0e2790514d3c5f8b034adbc1fd361768713a0de2d0b"
+      },
+      {
+        "name": "sdk-integrity",
+        "exitCode": 0,
+        "summary": [
+          "Verified 709 SDK files at 151a801ceaf6faf23d79a42d210ff67e50eb4660 plus restored patch",
+          "Verified catch2: 562 files",
+          "Verified fmt: 142 files",
+          "Verified boost_regex: 380 files",
+          "Verified tomlplusplus: 212 files"
+        ],
+        "logSha256": "08c8fec12d316070e54e19554b6e1202309b0331e8a7c77793f4b889429e5309"
+      }
+    ],
+    "sourceReceiptSha256": "1478baf7fb4c58f50277437f65d59d44496afa8fdcd3ed613ad83ea113fb3857",
+    "detectLeaks": false
+  },
+  "cva": {
+    "purpose": "Current macro-proof optout/optin full612/hover oracle; no local admission or performance claim",
+    "binarySha256": "8d7b9fb5ab533d8bd6275f4b537b3f07ce4b61c375190159e37df584ab641186",
+    "sourceSha256": "6c2ecbefd33ef844ecbbe63d7282d37406714d9c18ef52711337e760141668cb",
+    "arms": [
+      {
+        "macroProof": false,
+        "delta": true,
+        "phases": [
+          {
+            "phase": "original",
+            "version": 1,
+            "hoverHash": "7e075da3d4bd50bd492e8069d51fed3a74fb916c9b7372c0bf4984144291e903",
+            "hoverMs": 161.981791,
+            "frames": 1,
+            "bytes": 44932,
+            "unchangedDiagnosticFrames": 1,
+            "unchangedDiagnosticBytes": 44932,
+            "identicalParamsFrames": 0,
+            "distinctUris": 1,
+            "diagnostics": 64,
+            "firstNotificationMs": 1.779666,
+            "lastNotificationMs": 1.779666,
+            "mapUris": 612,
+            "mapHash": "4974008de55cdd5769f40045ba7845f6d25e031bb554f0f8702bcfaa16e6efe2",
+            "versionOnlyFrames": 1
+          },
+          {
+            "phase": "0",
+            "version": 2,
+            "hoverHash": "7e075da3d4bd50bd492e8069d51fed3a74fb916c9b7372c0bf4984144291e903",
+            "hoverMs": 88.822208,
+            "frames": 1,
+            "bytes": 45551,
+            "unchangedDiagnosticFrames": 0,
+            "unchangedDiagnosticBytes": 0,
+            "identicalParamsFrames": 0,
+            "distinctUris": 1,
+            "diagnostics": 65,
+            "firstNotificationMs": 150.536875,
+            "lastNotificationMs": 150.536875,
+            "mapUris": 612,
+            "mapHash": "dd200e5f9885e86a5000a23ea2205f7a732ea91e6aaa6f98e954ba80340c5ec6",
+            "versionOnlyFrames": 0
+          },
+          {
+            "phase": "00",
+            "version": 3,
+            "hoverHash": "7e075da3d4bd50bd492e8069d51fed3a74fb916c9b7372c0bf4984144291e903",
+            "hoverMs": 40.313709,
+            "frames": 1,
+            "bytes": 45551,
+            "unchangedDiagnosticFrames": 1,
+            "unchangedDiagnosticBytes": 45551,
+            "identicalParamsFrames": 0,
+            "distinctUris": 1,
+            "diagnostics": 65,
+            "firstNotificationMs": 95.269875,
+            "lastNotificationMs": 95.269875,
+            "mapUris": 612,
+            "mapHash": "dd200e5f9885e86a5000a23ea2205f7a732ea91e6aaa6f98e954ba80340c5ec6",
+            "versionOnlyFrames": 1
+          },
+          {
+            "phase": "macro",
+            "version": 4,
+            "hoverHash": "7e075da3d4bd50bd492e8069d51fed3a74fb916c9b7372c0bf4984144291e903",
+            "hoverMs": 540.886125,
+            "frames": 1,
+            "bytes": 45551,
+            "unchangedDiagnosticFrames": 0,
+            "unchangedDiagnosticBytes": 0,
+            "identicalParamsFrames": 0,
+            "distinctUris": 1,
+            "diagnostics": 65,
+            "firstNotificationMs": 1468.852417,
+            "lastNotificationMs": 1468.852417,
+            "mapUris": 612,
+            "mapHash": "bd47f271fda95cff5d900c21f9abef90e83d2a4fa526b09a742453893ec1024a",
+            "versionOnlyFrames": 0
+          },
+          {
+            "phase": "6",
+            "version": 5,
+            "hoverHash": "7e075da3d4bd50bd492e8069d51fed3a74fb916c9b7372c0bf4984144291e903",
+            "hoverMs": 284.674334,
+            "frames": 1,
+            "bytes": 45551,
+            "unchangedDiagnosticFrames": 0,
+            "unchangedDiagnosticBytes": 0,
+            "identicalParamsFrames": 0,
+            "distinctUris": 1,
+            "diagnostics": 65,
+            "firstNotificationMs": 1063.949667,
+            "lastNotificationMs": 1063.949667,
+            "mapUris": 612,
+            "mapHash": "dd200e5f9885e86a5000a23ea2205f7a732ea91e6aaa6f98e954ba80340c5ec6",
+            "versionOnlyFrames": 0
+          }
+        ],
+        "uvmStatus": {
+          "enabled": true,
+          "prepared": true,
+          "generation": 1,
+          "consumers": 1,
+          "namespaceDeclines": 0,
+          "chargedBytes": 100199538,
+          "astBytes": 29039968,
+          "fixedSourceFiles": 374,
+          "diagnosticsShareOwner": true,
+          "shippedPreparse": false,
+          "shippedProfile": "",
+          "projectCacheHit": true,
+          "projectCachePath": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/cva6-uvm-2026-10-21/project/.slang/cache/uvm/16640381767712054115.cst",
+          "syntaxParseMs": 0.0,
+          "archiveWriteMs": 0.0,
+          "archiveLoadMs": 0.0,
+          "reason": "UVM shares the fixed scope semantic owner; charges cover its full closure"
+        },
+        "scopeFrozen": {
+          "prepared": true,
+          "retainedRoots": [
+            "uvmt_cva6_tb.cva6_dut_wrap.cva6_tb_wrapper_i.i_cva6"
+          ]
+        },
+        "exitCode": 0,
+        "stderrSha256": "3dd7869b04dd7ddeb5337e7255ebf3190177b0440d90a5c520f55561e15cbc6f"
+      },
+      {
+        "macroProof": true,
+        "delta": true,
+        "phases": [
+          {
+            "phase": "original",
+            "version": 1,
+            "hoverHash": "7e075da3d4bd50bd492e8069d51fed3a74fb916c9b7372c0bf4984144291e903",
+            "hoverMs": 75.393625,
+            "frames": 1,
+            "bytes": 44932,
+            "unchangedDiagnosticFrames": 1,
+            "unchangedDiagnosticBytes": 44932,
+            "identicalParamsFrames": 0,
+            "distinctUris": 1,
+            "diagnostics": 64,
+            "firstNotificationMs": 1.820208,
+            "lastNotificationMs": 1.820208,
+            "mapUris": 612,
+            "mapHash": "4974008de55cdd5769f40045ba7845f6d25e031bb554f0f8702bcfaa16e6efe2",
+            "versionOnlyFrames": 1
+          },
+          {
+            "phase": "0",
+            "version": 2,
+            "hoverHash": "7e075da3d4bd50bd492e8069d51fed3a74fb916c9b7372c0bf4984144291e903",
+            "hoverMs": 42.310917,
+            "frames": 1,
+            "bytes": 45551,
+            "unchangedDiagnosticFrames": 0,
+            "unchangedDiagnosticBytes": 0,
+            "identicalParamsFrames": 0,
+            "distinctUris": 1,
+            "diagnostics": 65,
+            "firstNotificationMs": 79.711084,
+            "lastNotificationMs": 79.711084,
+            "mapUris": 612,
+            "mapHash": "dd200e5f9885e86a5000a23ea2205f7a732ea91e6aaa6f98e954ba80340c5ec6",
+            "versionOnlyFrames": 0
+          },
+          {
+            "phase": "00",
+            "version": 3,
+            "hoverHash": "7e075da3d4bd50bd492e8069d51fed3a74fb916c9b7372c0bf4984144291e903",
+            "hoverMs": 12.902459,
+            "frames": 1,
+            "bytes": 45551,
+            "unchangedDiagnosticFrames": 1,
+            "unchangedDiagnosticBytes": 45551,
+            "identicalParamsFrames": 0,
+            "distinctUris": 1,
+            "diagnostics": 65,
+            "firstNotificationMs": 19.79875,
+            "lastNotificationMs": 19.79875,
+            "mapUris": 612,
+            "mapHash": "dd200e5f9885e86a5000a23ea2205f7a732ea91e6aaa6f98e954ba80340c5ec6",
+            "versionOnlyFrames": 1
+          },
+          {
+            "phase": "macro",
+            "version": 4,
+            "hoverHash": "7e075da3d4bd50bd492e8069d51fed3a74fb916c9b7372c0bf4984144291e903",
+            "hoverMs": 420.720291,
+            "frames": 1,
+            "bytes": 45551,
+            "unchangedDiagnosticFrames": 0,
+            "unchangedDiagnosticBytes": 0,
+            "identicalParamsFrames": 0,
+            "distinctUris": 1,
+            "diagnostics": 65,
+            "firstNotificationMs": 1192.1515,
+            "lastNotificationMs": 1192.1515,
+            "mapUris": 612,
+            "mapHash": "bd47f271fda95cff5d900c21f9abef90e83d2a4fa526b09a742453893ec1024a",
+            "versionOnlyFrames": 0
+          },
+          {
+            "phase": "6",
+            "version": 5,
+            "hoverHash": "7e075da3d4bd50bd492e8069d51fed3a74fb916c9b7372c0bf4984144291e903",
+            "hoverMs": 278.744458,
+            "frames": 1,
+            "bytes": 45551,
+            "unchangedDiagnosticFrames": 0,
+            "unchangedDiagnosticBytes": 0,
+            "identicalParamsFrames": 0,
+            "distinctUris": 1,
+            "diagnostics": 65,
+            "firstNotificationMs": 1091.993958,
+            "lastNotificationMs": 1091.993958,
+            "mapUris": 612,
+            "mapHash": "dd200e5f9885e86a5000a23ea2205f7a732ea91e6aaa6f98e954ba80340c5ec6",
+            "versionOnlyFrames": 0
+          }
+        ],
+        "uvmStatus": {
+          "enabled": true,
+          "prepared": true,
+          "generation": 1,
+          "consumers": 1,
+          "namespaceDeclines": 0,
+          "chargedBytes": 100317064,
+          "astBytes": 29039968,
+          "fixedSourceFiles": 374,
+          "diagnosticsShareOwner": true,
+          "shippedPreparse": false,
+          "shippedProfile": "",
+          "projectCacheHit": true,
+          "projectCachePath": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/cva6-uvm-2026-10-21/project/.slang/cache/uvm/16640381767712054115.cst",
+          "syntaxParseMs": 0.0,
+          "archiveWriteMs": 0.0,
+          "archiveLoadMs": 0.0,
+          "reason": "UVM shares the fixed scope semantic owner; charges cover its full closure"
+        },
+        "scopeFrozen": {
+          "prepared": true,
+          "retainedRoots": [
+            "uvmt_cva6_tb.cva6_dut_wrap.cva6_tb_wrapper_i.i_cva6"
+          ]
+        },
+        "exitCode": 0,
+        "stderrSha256": "36d5993445db2b3c0160f3ba8627c84d0616c7fd7bd5ce5981d708cbee0cb805"
+      }
+    ],
+    "passed": true
+  },
+  "sourceReceipt": {
+    "sourceSha256": {
+      "source/include/Config.h": "56ab2024ea7bf3d032c78b1803ab40ac23a37c9ace9581220423b04bdc4f5f01",
+      "source/src/ServerDriver.cpp": "06e6d13814729a833ef4539d0df008441f8179f99260439fb5eb273765faa423",
+      "source/include/util/QueryText.h": "1e579c763eb3ca29e85eed77f5adefc6613b99babc1c653f705ebd248cd2c8d2",
+      "source/external/slang/include/slang/driver/Driver.h": "926eb082c891c0dc523e42260eb53b7307ff30be6e7bc59deac4c71e9e67a1ca",
+      "source/external/slang/source/driver/Driver.cpp": "15cdb931cc540345a222908c77074a883631024e75de6ac570cf0765c982d0dd",
+      "source/src/UvmLibrary.cpp": "6c445939883292ef04e63761e97422d54d157b954e931e49fb9f24f2ee682b8e",
+      "source/tests/cpp/UvmLibraryTests.cpp": "aba18f2ef3a7bcc5b2f1c4b8f08099a8742311c804e0c9f68dc998a46b2b16b2",
+      "source/tests/cpp/MethodScopeOverlayTests.cpp": "3fb5c3ae01b617f6e978282bdf927a47b3019c3723fa9bbd8742ad12fd39024a",
+      "source/external/slang/source/syntax/SyntaxTree.cpp": "81118080c2d8c12fb91a63c046cbb41f1015b12a489a295d1acb5829fa79665c",
+      "source/external/slang/include/slang/syntax/ParseArchive.h": "9aa74f14724a0fe77ee8ecf0fec5bf662973ec5b637b73961ac9f95b7a519e9a",
+      "source/external/slang/tests/unittests/parsing/SyntaxPrinterTests.cpp": "18c790f8f2bef3f3bf8ca8435d8b3c6b5491014c43b9d7556958f0485014c290"
+    },
+    "binarySha256": {
+      "build-uvm/bin/slang-server": "8d7b9fb5ab533d8bd6275f4b537b3f07ce4b61c375190159e37df584ab641186",
+      "build-uvm/bin/server_unittests": "e831bbf3355344ef7ab79655fec8e7767439799ce754f784f2d47d4961c7e78c",
+      "build-uvm/bin/diagnostic_test_server": "08fe2bdeb467acad90322447cba10b75b454b113527c65555fef7323c12d25c5",
+      "build-uvm/bin/slang_server_counted": "2465caab5acd719da6854973919e93072d51423c4dad95902c794cfd534d0ef7",
+      "build-uvm/bin/unittests": "d8c4cf0d52ac6789144c1868ee748bc8017f784fb8370a89d633ed04a582c9ab",
+      "untracked/semantic-cancellation-2026-10-23/asan-build/bin/slang-server": "360033214d4b2fbeac033d580d3551400ac451b91806e561546d3ff3317ae319",
+      "untracked/semantic-cancellation-2026-10-23/asan-build/bin/server_unittests": "9de36da1e86b0d1868b410e95ccaf469d1ab8c1b02c1e2094111bc7015b24e65",
+      "untracked/semantic-cancellation-2026-10-23/asan-build/bin/diagnostic_test_server": "0338a3151f69fe0faaf8b00c6a4d471827594d9d54691888b1e129f2d4833b88",
+      "untracked/semantic-cancellation-2026-10-23/asan-build/bin/slang_server_counted": "c5b098ee534d5192a84b8b70e491453125162030896b6a66ecea4f88c2f882a9",
+      "untracked/semantic-cancellation-2026-10-23/asan-build/bin/unittests": "7f1272c4a1d244f3cef8782fed702155a029dad4734cda30f0bc805f99f68ff4"
+    },
+    "sdkPatchSha256": "1a05468d7545a360d59a24c1c8d39defb55a1e37cf13c6f06a51b074479bbb2d",
+    "status": "macro-facts-retention-native-and-asan-validated-local-admission-pending"
+  },
+  "limitations": [
+    "Current full macro directive admission still unchanged; no new edit latency claim",
+    "Serialized optional macro facts are retained once and charged as syntax/library memory; decoded-name proof follows per-unit budget",
+    "Legacy archive without facts cannot supply complete absence proof; preserve native fallback"
+  ],
+  "next": "untracked/stage-bc-macro-influence-2026-10-28/admission-rebased/local-admission-next.json"
+}

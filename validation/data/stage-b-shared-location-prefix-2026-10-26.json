@@ -1,0 +1,75 @@
+{
+  "goalComplete": false,
+  "b1Complete": true,
+  "correctnessQualified": true,
+  "performanceQualified": true,
+  "performanceStarted": true,
+  "nativeBinarySha256": "d88b21b2aebfba6a66e40028e9db2e8ddd93835e2ba058381323aa8ac9ab83bf",
+  "sdkPatchSha256": "d1bd8f1a7f0fe323507c4fd4b987bbfbbd980aa3a606b994f41c7d0e287cc3e9",
+  "tests": {
+    "sdkNativeCases": 2631,
+    "sdkNativeAssertions": 35459,
+    "newSharingCases": 1,
+    "newSharingAssertions": 22,
+    "limitedAccountingCases": 5,
+    "limitedAccountingAssertions": 46,
+    "sdkAsanCases": 2631,
+    "sdkAsanAssertions": 35459,
+    "nativeCTest": 932,
+    "python": 17,
+    "transport": 43,
+    "sdkIntegrityFiles": 709,
+    "serverAsanCases": 917,
+    "serverAsanAssertions": 170716
+  },
+  "filterNote": "The attempted wildcard tag[source-namespace*] matched no cases; namespace.log covers only the other5 selected accounting/transfer cases. Full SDK suite2631 includes all namespace cases; do not describe the limited log as a full namespace suite.",
+  "implementation": "Move captured native location vector into immutable prefix without changing entry/metadata addresses. Namespaces share prefix and append private tail. Prefix mutation materializes private metadata; logical history charges include shared prefix, while physical accumulator deduplicates it. Existing source IDs, exact input/version proofs and default experimental flags preserved.",
+  "profileOnly": {
+    "sameCheckpointScriptAsPrior": true,
+    "after1008PriorLocationAndImmutableBytes": 20117714,
+    "after1008CurrentLocationAndImmutableBytes": 8663533,
+    "priorAllocatorInUseBytes": 853105760,
+    "currentAllocatorInUseBytes": 834931488,
+    "notPerformanceQualification": true,
+    "configurationRestored": true
+  },
+  "nativeAllBuildSession": 68289,
+  "asanBuildSession": 74394,
+  "nativeCvaStatesRequired": 448,
+  "asanCvaStatesRequired": 38,
+  "diagnosticArchivesRequired": 112,
+  "experimentalDefaultEnabled": false,
+  "fixedDebounceAdded": false,
+  "networkUsed": false,
+  "pushedMain": false,
+  "testCorrection": "Initial metadata address test compared temporary vectors returned by value. Corrected to manager-owned getFileName string_view storage; ordinary and Asan full SDK suites rerun and pass. Original failed Asan log retained. Production implementation unchanged by test correction.",
+  "validationPipelineCell": "815",
+  "repairPipelineCell": "820",
+  "validationPipelineComplete": true,
+  "nativeCvaStatesCompleted": 448,
+  "asanCvaStatesCompleted": 38,
+  "nativeDiagnosticArchives": 112,
+  "asanBinarySha256": "2bb32001dffd1048bee4b951e3f452e91a7bcae15dda1414461b238ade83c8c2",
+  "evidenceAuditSha256": "e97d5a25ed7de36682fbfa76dc66a13d7d329fce6dac3bee17920761b0247ca2",
+  "pending": [
+    "B2 natural-budget and repeated-cancellation overlap; quantify eligible cache release without invalidating borrowed Native analysis",
+    "B3 input admission/cancellation and atomic destruction/binding tails",
+    "C remaining first proof/diagnostic service costs",
+    "D full38/4032, other projects, cleanup and main delivery"
+  ],
+  "performanceComplete": true,
+  "b1CompletionAuditSha256": "7e95f8cbd81ff771ca1074e095b8face0d7c0f8b50f30c655c1ef6b5737a40bd",
+  "performanceResults": {
+    "evaluation.json": {
+      "qualified": true,
+      "failedChecks": [],
+      "sha256": "ddae1e1ae019d85121d1ac8e189d4451c78514c5e868f9956a3fb3ae7f176773"
+    },
+    "direct-build-evaluation.json": {
+      "qualified": true,
+      "failedChecks": [],
+      "sha256": "bb9c6e30523c25e44339fb6ab008aa7ab262f1092f6e4b622d5720d9bd9fad15"
+    }
+  },
+  "remainingTailObservation": "Fixed14/main reverse long-run final diagnostic35.270875ms vs31.381792ms; outside original fixed14 long-run predicate, remains a B2/B3 observation."
+}

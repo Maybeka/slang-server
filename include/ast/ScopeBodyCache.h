@@ -11,6 +11,7 @@
 
 namespace server {
 struct TrustedUvmLibrary;
+class SourceStorageRegistry;
 
 /// Independent native owners; never a chain of previous editing generations.
 class ScopeBodyCache : public std::enable_shared_from_this<ScopeBodyCache> {
@@ -23,8 +24,10 @@ public:
         std::vector<std::string> retainedRoots;
     };
     ScopeBodyCache(std::shared_ptr<TrustedUvmLibrary> library, size_t budget,
-                   std::vector<std::string> modules, std::vector<std::string> instances);
-    void install(slang::ast::Compilation& compilation);
+                   std::vector<std::string> modules, std::vector<std::string> instances,
+                   std::shared_ptr<SourceStorageRegistry> sourceRegistry = {});
+    void install(slang::ast::Compilation& compilation,
+                 std::shared_ptr<const void> sourceLibraries = {});
     Stats status() const;
 
 private:
@@ -38,6 +41,7 @@ private:
         size_t bytes;
     };
     std::shared_ptr<TrustedUvmLibrary> library;
+    std::shared_ptr<SourceStorageRegistry> sourceRegistry;
     std::vector<std::string> modules, instances;
     std::list<Group> groups;
     std::vector<Pin> pins;
@@ -46,7 +50,7 @@ private:
     Stats counters;
     bool selected(const slang::ast::InstanceBodySymbol& body) const;
     void lookup(slang::ast::Compilation&, slang::ast::InstanceBodySymbol&);
-    void publish(std::shared_ptr<slang::ast::Compilation>);
+    void publish(std::shared_ptr<slang::ast::Compilation>, std::shared_ptr<const void>);
     std::optional<Group> prepareGroup(std::shared_ptr<slang::ast::Compilation>);
     bool retain(Group, bool compact, size_t protectedGroups = 0);
     bool rejected(std::string_view context);
@@ -58,5 +62,6 @@ private:
 };
 struct ScopeBodyImport {
     std::weak_ptr<ScopeBodyCache> cache;
+    std::shared_ptr<const void> sourceLibraries;
 };
 } // namespace server

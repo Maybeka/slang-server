@@ -10,6 +10,7 @@
 #include "SlangLspClient.h"
 #include "lsp/URI.h"
 #include <functional>
+#include <span>
 #include <utility>
 
 #include "slang/diagnostics/DiagnosticClient.h"
@@ -99,12 +100,25 @@ public:
         m_diagnostics.insert_or_assign(uri, std::move(diagnostics));
         m_dirtyUris.emplace(uri);
     }
+    // Local certified updates need not republish unchanged sibling buckets.
+    // Priority document versions are still published by pushDiags(priorityUri).
+    bool replaceRenderedIfChanged(URI uri, std::vector<lsp::Diagnostic> diagnostics);
+    // Views are borrowed only for this call. Changed payloads are copied before
+    // returning; unchanged buckets do not allocate a second diagnostic vector.
+    bool replaceRenderedViewsIfChanged(URI uri,
+                                       std::span<const lsp::Diagnostic* const> diagnostics);
     // Scoped observers see physical keys only for diagnostics added to an LSP bucket.
     // Returning the previous observer allows exception-safe restoration by the caller.
     using ReportObserver = std::function<void(const URI&)>;
     ReportObserver exchangeReportObserver(ReportObserver observer) {
         return std::exchange(m_reportObserver, std::move(observer));
     }
+    using PhysicalReportObserver = std::function<void(const URI&, lsp::Diagnostic)>;
+    PhysicalReportObserver exchangePhysicalReportObserver(PhysicalReportObserver observer) {
+        return std::exchange(m_physicalReportObserver, std::move(observer));
+    }
+    // Values use physical source URIs. Reapply the current editor aliases.
+    void appendPhysicalRendered(const URI&, lsp::Diagnostic);
     URI resolvePublicationUri(const URI& physical) const { return resolveUri(physical); }
     /// reports from the diagnostic engine
     void report(const slang::ReportedDiagnostic& to_report) override;
@@ -134,6 +148,7 @@ private:
         std::unordered_multimap<size_t, size_t> index;
     };
     ReportObserver m_reportObserver;
+    PhysicalReportObserver m_physicalReportObserver;
     bool m_deltaPublishing;
     struct Publications {
         std::unordered_map<URI, Published> published;

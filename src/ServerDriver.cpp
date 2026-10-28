@@ -12,8 +12,11 @@
 #include "ServerDiagClient.h"
 #include "SystemTaskDocs.h"
 #include "ast/ServerCompilation.h"
+#include "ast/ServerCompilationAnalysis.h"
 #include "ast/TrustedUvmLibrary.h"
 #include "completions/CompletionDispatch.h"
+#include "diagnostics/DiagnosticSnapshotCodec.h"
+#include "document/DocumentEdits.h"
 #include "document/NativeDiagnosticSnapshot.h"
 #include "document/SlangDoc.h"
 #include "lsp/LspTypes.h"
@@ -27,6 +30,9 @@
 #include "util/SlangExtensions.h"
 #include "util/UvmPhaseTrace.h"
 #include <algorithm>
+#include <chrono>
+#include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <memory>
 #include <queue>
@@ -34,6 +40,7 @@
 #include <string_view>
 #include <tuple>
 #include <type_traits>
+#include <utility>
 
 #include "slang/ast/Compilation.h"
 #include "slang/ast/Symbol.h"
@@ -49,7 +56,10 @@
 #include "slang/diagnostics/TextDiagnosticClient.h"
 #include "slang/driver/Driver.h"
 #include "slang/driver/SourceLoader.h"
+#include "slang/parsing/Lexer.h"
+#include "slang/parsing/Parser.h"
 #include "slang/parsing/ParserMetadata.h"
+#include "slang/parsing/Preprocessor.h"
 #include "slang/syntax/AllSyntax.h"
 #include "slang/syntax/SyntaxTree.h"
 #include "slang/syntax/SyntaxVisitor.h"
@@ -58,6 +68,46 @@
 
 namespace server {
 using namespace slang;
+namespace {
+// Attribution only. Tree estimates may overlap through shared namespace views;
+// the source registry separately deduplicates physical source allocations.
+void traceDriverStorage(const char* event, ServerDriver& current, const ServerDriver* previous) {
+    auto path = std::getenv("SLANG_DRIVER_STORAGE_TRACE");
+    if (!path || !*path)
+        return;
+    auto syntaxBytes = [](const ServerDriver& driver) {
+        std::set<const syntax::SyntaxTree*> seen;
+        size_t bytes = 0;
+        auto add = [&](const std::shared_ptr<syntax::SyntaxTree>& tree) {
+            if (tree && seen.insert(tree.get()).second)
+                bytes += tree->getRetainedSyntaxBytes();
+        };
+        for (const auto& tree : driver.driver.syntaxTrees)
+            add(tree);
+        for (const auto& [_, doc] : driver.docs)
+            add(doc->getCachedSyntaxTree());
+        return bytes;
+    };
+    const auto currentSyntax = syntaxBytes(current);
+    const auto previousSyntax = previous ? syntaxBytes(*previous) : 0;
+    const auto storage = current.sourceStorageUsage().total;
+    const auto stamp = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                           std::chrono::system_clock::now().time_since_epoch())
+                           .count();
+    if (auto file = std::fopen(path, "a")) {
+        std::fprintf(
+            file, "%ld\t%lld\t%s\t%p\t%p\t%zu\t%zu\t%zu\t%zu\t%zu\t%zu\t%zu\t%zu\n",
+            long(slang::OS::getpid()), static_cast<long long>(stamp), event,
+            static_cast<void*>(&current), static_cast<const void*>(previous), currentSyntax,
+            previousSyntax, current.sm.getSourceLocationTableBytes() + current.sm.getMemoryUsage(),
+            previous ? previous->sm.getSourceLocationTableBytes() + previous->sm.getMemoryUsage()
+                     : 0,
+            storage.total(), storage.locationTableBytes, storage.immutableTableBytes,
+            storage.managers);
+        std::fclose(file);
+    }
+}
+} // namespace
 
 bool ServerDriver::s_debugHoversEnabled =
 #ifdef SLANG_DEBUG
@@ -70,13 +120,17 @@ ServerDriver::ServerDriver(Indexer& indexer, SlangLspClient& client, const Confi
                            std::vector<std::string> buildfiles,
                            std::optional<std::string_view> workspaceFolder, bool requireValidConfig,
                            const ServerDriver* overlays,
-                           const lsp::RequestContext* retirementContext) :
+                           const lsp::RequestContext* retirementContext,
+                           bool borrowInitialLibraries, const ServerDriver* editorOverlays,
+                           bool reuseInitialSources) :
     m_driverOwner(std::make_shared<driver::Driver>()), sm(m_driverOwner->sourceManager),
     diagEngine(m_driverOwner->diagEngine), client(client), driver(*m_driverOwner),
     diagClient(std::make_shared<ServerDiagClient>(
         sm, client, config.experimentalDiagnosticDeltaPublishing.value())),
     completions(*this, indexer, sm, options), codeActions(*this, sm, indexer), m_indexer(indexer),
     m_config(config), m_workspacePathPrefix(workspaceFolder.value_or("")) {
+    options.set(ParallelDiagnosticOptions{config.experimentalParallelDiagnostics.value(),
+                                          config.parallelDiagnosticThreads.value()});
     m_sourceRegistry = overlays ? overlays->m_sourceRegistry
                                 : std::make_shared<SourceStorageRegistry>();
     m_sourceRegistry->track(driver.getSourceManagerObserver());
@@ -99,10 +153,22 @@ ServerDriver::ServerDriver(Indexer& indexer, SlangLspClient& client, const Confi
         retirementContext->checkpoint("before retirement inputs");
         driver.options.parseCheckpoint = parseRequest.callback();
     }
-    if (overlays && overlays->m_preserveTrustedUvm && overlays->m_trustedScopes &&
-        config.experimentalScopeSemanticCache.value()) {
+    if (overlays && (overlays->m_preserveTrustedUvm || borrowInitialLibraries) &&
+        overlays->m_trustedScopes && config.experimentalScopeSemanticCache.value()) {
         m_trustedScopes = overlays->m_trustedScopes;
         m_scopeBodies = overlays->m_scopeBodies;
+        if (borrowInitialLibraries && m_scopeBodies) {
+            // Exploration can leave independently analyzed RTL fragments and
+            // rejected-context hints. They must not consume the first complete
+            // design's admission budget. Keep fixed nominal semantics, but give
+            // the configured design its own body registry. Existing borrowers
+            // of the exploration registry remain valid.
+            const auto frozen = config.frozenSources.value().value_or(
+                Config::FrozenSourcesConfig{});
+            m_scopeBodies = std::make_shared<ScopeBodyCache>(
+                m_trustedScopes, size_t(frozen.maxMiB.value()) * 1024 * 1024,
+                frozen.modules.value(), frozen.instances.value(), m_sourceRegistry);
+        }
         m_scopeRoots = overlays->m_scopeRoots;
         m_scopeRootCount = overlays->m_scopeRootCount;
         m_scopeInstanceSelections = overlays->m_scopeInstanceSelections;
@@ -110,7 +176,8 @@ ServerDriver::ServerDriver(Indexer& indexer, SlangLspClient& client, const Confi
         if (overlays->m_scopePrefix)
             m_scopePrefix = syntax::SyntaxTree::sharedPrefixView(overlays->m_scopePrefix, sm);
     }
-    if (!m_trustedScopes && overlays && overlays->m_preserveTrustedUvm && overlays->m_trustedUvm &&
+    if (!m_trustedScopes && overlays &&
+        (overlays->m_preserveTrustedUvm || borrowInitialLibraries) && overlays->m_trustedUvm &&
         config.experimentalUvmSemanticCache.value()) {
         m_trustedUvm = overlays->m_trustedUvm;
         sm.inheritImmutablePrefix(m_trustedUvm->sources);
@@ -134,33 +201,58 @@ ServerDriver::ServerDriver(Indexer& indexer, SlangLspClient& client, const Confi
         m_workspacePathPrefix.back() != '\\') {
         m_workspacePathPrefix.push_back(std::filesystem::path::preferred_separator);
     }
-    if (overlays) {
-        for (const auto& uri : overlays->m_openDocs) {
-            auto found = overlays->docs.find(uri);
-            if (found == overlays->docs.end())
+    const auto* inputOverlays = editorOverlays ? editorOverlays : overlays;
+    if (inputOverlays) {
+        for (const auto& uri : inputOverlays->m_openDocs) {
+            auto found = inputOverlays->docs.find(uri);
+            if (found == inputOverlays->docs.end() &&
+                !inputOverlays->m_deferredEditorTexts.contains(uri))
                 continue;
-            auto text = found->second->getText();
+            auto text = inputOverlays->editorText(uri);
             if (!text.empty() && text.back() == '\0')
                 text.remove_suffix(1);
-            auto path = overlays->sm.getFullPath(found->second->getBuffer());
-            if (isFrozenSourcesEnabled()) {
+            auto path = found != inputOverlays->docs.end()
+                            ? inputOverlays->sm.getFullPath(found->second->getBuffer())
+                            : std::filesystem::weakly_canonical(uri.getPath());
+            if (isFrozenSourcesEnabled() || found == inputOverlays->docs.end()) {
                 std::error_code error;
                 auto current = std::filesystem::weakly_canonical(uri.getPath(), error);
                 if (!error)
                     path = current;
                 driver.sourceLoader.addInputOverlay(path);
             }
+            // A newly prepared fixed prefix can already contain this exact
+            // unsaved overlay. Reuse it, or replace only this consumer's buffer;
+            // assigning the same owned path twice is intentionally rejected.
+            if (sm.isCached(path)) {
+                if (auto existing = sm.readSource(path)) {
+                    if (existing->data.size() != text.size() + 1 ||
+                        existing->data.substr(0, text.size()) != text) {
+                        SmallVector<char> buffer;
+                        buffer.insert(buffer.end(), text.begin(), text.end());
+                        buffer.push_back('\0');
+                        sm.replaceBuffer(existing->id, std::move(buffer));
+                    }
+                    continue;
+                }
+            }
             sm.assignText(path.string(), text);
         }
     }
 
-    m_configLoaded = parseAndLoadSources(buildfiles, requireValidConfig);
+    const bool retainedLibraries = overlays && overlays->m_preserveTrustedUvm &&
+                                   (m_trustedUvm || m_trustedScopes);
+    m_configLoaded = parseAndLoadSources(buildfiles, requireValidConfig,
+                                         borrowInitialLibraries || retainedLibraries ? overlays
+                                                                                     : nullptr,
+                                         reuseInitialSources);
     if (retirementContext)
         retirementContext->checkpoint("after retirement inputs");
 }
 
 bool ServerDriver::parseAndLoadSources(const std::vector<std::string>& buildfiles,
-                                       bool requireValidConfig) {
+                                       bool requireValidConfig, const ServerDriver* libraryInputs,
+                                       bool reuseInitialSources) {
     // Resolve configuration paths in the workspace, then restore the caller's
     // cwd before recording immutable source lookups for diagnostics.
     const auto previousDirectory = std::filesystem::current_path();
@@ -203,6 +295,20 @@ bool ServerDriver::parseAndLoadSources(const std::vector<std::string>& buildfile
     }
 
     for (auto& buildfile : buildfiles) {
+        if ((libraryInputs || m_config.experimentalUvmSemanticCache.value() ||
+             m_config.experimentalScopeSemanticCache.value()) &&
+            m_config.compilationFilelist.value()) {
+            // The configured list was just read above. Processing the same list
+            // again would append duplicate -D / include options and make an
+            // unchanged provider appear incompatible with itself. Apply the
+            // same rule to promotion, explicit rebuild and context retirement.
+            const auto configured = std::filesystem::path(m_workspacePathPrefix) /
+                                    *m_config.compilationFilelist.value();
+            const auto requested = std::filesystem::path(m_workspacePathPrefix) / buildfile;
+            std::error_code error;
+            if (std::filesystem::equivalent(configured, requested, error) && !error)
+                continue;
+        }
         bool loaded = driver.processCommandFiles(buildfile, m_config.buildRelativePaths.value(),
                                                  false);
         ok &= loaded;
@@ -237,6 +343,13 @@ bool ServerDriver::parseAndLoadSources(const std::vector<std::string>& buildfile
         }
     }
 
+    // Facts must be requested before the UVM archive is restored; setting this
+    // only with later compilation options would leave the fixed prefix untraced.
+    driver.options.trackMacroAccesses = m_config.experimentalMethodBodyQueries.value() &&
+        m_config.experimentalMethodBodyMacroProof.value() &&
+        m_config.methodBodyMacroProofMaxMiB.value() != 0;
+    driver.options.maxTrackedMacroAccessBytes =
+        uint64_t(m_config.methodBodyMacroProofMaxMiB.value()) * 1024 * 1024;
     ok &= configureUvmLibrary(m_workspacePathPrefix.empty()
                                   ? previousDirectory
                                   : std::filesystem::path(m_workspacePathPrefix),
@@ -244,6 +357,8 @@ bool ServerDriver::parseAndLoadSources(const std::vector<std::string>& buildfile
     if (m_config.uvm.value() && m_config.uvm.value()->useBundled.value() &&
         !driver.precompiledUvm) {
         options = driver.createOptionBag();
+        options.set(ParallelDiagnosticOptions{m_config.experimentalParallelDiagnostics.value(),
+                                              m_config.parallelDiagnosticThreads.value()});
         auto pp = options.getOrDefault<parsing::PreprocessorOptions>();
         pp.precompiledSourceRoot = m_uvmDirectory;
         options.set(pp);
@@ -288,11 +403,55 @@ bool ServerDriver::parseAndLoadSources(const std::vector<std::string>& buildfile
     driver.options.captureUvmPrefix = isUvmPrefixCacheEnabled() || m_captureFrozenNativeSeed;
     driver.options.trackMacroHistory = m_config.experimentalMethodBodyQueries.value();
     options = driver.createOptionBag();
+    options.set(ParallelDiagnosticOptions{m_config.experimentalParallelDiagnostics.value(),
+                                          m_config.parallelDiagnosticThreads.value()});
     if (m_config.experimentalMethodBodyQueries.value()) {
         options.insertOrGet<ast::CompilationOptions>().flags |=
             ast::CompilationFlags::TrackSubroutineBodyDependencies;
     }
     options.set(driver.getAnalysisOptions());
+    if (libraryInputs) {
+        // Both initial promotion and retirement can retain nominal libraries.
+        // Reprocess command files and compare effective options; equal Config
+        // values alone do not prove that a filelist stayed unchanged.
+        auto previous = libraryInputs->driver.createOptionBag();
+        if (m_config.experimentalMethodBodyQueries.value())
+            previous.insertOrGet<ast::CompilationOptions>().flags |=
+                ast::CompilationFlags::TrackSubroutineBodyDependencies;
+        previous.set(libraryInputs->driver.getAnalysisOptions());
+        auto fingerprint = [](const Bag& bag) {
+            // Precompiled syntax is checked by configureUvmLibrary's preparse
+            // key. It is a live owner, not a serializable compiler option.
+            const Bag values{bag.getOrDefault<parsing::LexerOptions>(),
+                             bag.getOrDefault<parsing::PreprocessorOptions>(),
+                             bag.getOrDefault<parsing::ParserOptions>(),
+                             bag.getOrDefault<ast::CompilationOptions>(),
+                             bag.getOrDefault<driver::SourceOptions>(),
+                             bag.getOrDefault<analysis::AnalysisOptions>()};
+            // Scheduling does not alter compiler semantics or fixed-library inputs.
+            // Account for this known server-only option; unknown options still fail closed.
+            if (bag.size() != values.size() + (bag.get<syntax::PrecompiledUvmSyntax>() ? 1 : 0) +
+                                  (bag.get<ParallelDiagnosticOptions>() ? 1 : 0))
+                throw diagnostic_snapshot::CodecError("unsupported initial library option");
+            return rfl::json::write(diagnostic_snapshot::captureOptions(values));
+        };
+        auto commandDefines = [](const driver::Driver& input) {
+            std::map<std::string, std::vector<std::string>> result;
+            for (const auto& [path, metadata] : input.getCommandFileMetadata())
+                result.emplace(path.generic_string(), metadata.defines);
+            return result;
+        };
+        try {
+            if (fingerprint(options) != fingerprint(previous) ||
+                rfl::json::write(sm.getIncludeConfiguration()) !=
+                    rfl::json::write(libraryInputs->sm.getIncludeConfiguration()) ||
+                commandDefines(driver) != commandDefines(libraryInputs->driver))
+                return false;
+        }
+        catch (const diagnostic_snapshot::CodecError&) {
+            return false;
+        }
+    }
     // Native command files can change cwd and install include paths. Only the
     // subsequent source parse belongs to the immutable diagnostic replay graph.
     // Existing editor overlays remain in the cache and their actual reads are recorded.
@@ -301,7 +460,37 @@ bool ServerDriver::parseAndLoadSources(const std::vector<std::string>& buildfile
     sm.setFastCwdSnapshotChecks(m_config.fastCwdSnapshotChecks.value());
     sm.enableSnapshotRecording(true);
     m_configurationInputsFailed = !ok;
-    ok &= driver.parseAllSources();
+    // Only the immediate fixed-provider isolation handoff can borrow this parse.
+    // Effective options were compared above; these are raw reads, never a proof
+    // result. Retirement and explicit reload still construct fresh input evidence.
+    const bool reusedInitial = ok && reuseInitialSources && libraryInputs &&
+                               !libraryInputs->m_nativeInputsFailed &&
+                               driver.tryReuseInitialParsedSources(libraryInputs->driver);
+    traceDriverStorage("before-input-parse", *this, libraryInputs);
+    // Retirement preserves the fixed provider's namespace but must still load
+    // current mutable roots and command files. Offer only the already validated
+    // ordered prefix to the native loader; all other source groups parse normally.
+    auto previousParseOverride = std::move(driver.sourceLoader.singleUnitParseOverride);
+    auto restoreParseOverride = ScopeGuard(
+        [&] { driver.sourceLoader.singleUnitParseOverride = std::move(previousParseOverride); });
+    if (libraryInputs && libraryInputs->m_preserveTrustedUvm && m_trustedScopes && m_scopePrefix &&
+        m_config.experimentalCooperativeAnalysis.value()) {
+        driver.sourceLoader.singleUnitParseOverride = [this](std::span<const SourceBuffer> buffers,
+                                                             const Bag& parseOptions) {
+            std::vector<std::filesystem::path> paths;
+            paths.reserve(buffers.size());
+            for (auto buffer : buffers)
+                paths.push_back(sm.getFullPath(buffer.id));
+            return resumeScopeLibrary(paths, buffers, parseOptions, false);
+        };
+    }
+    if (reusedInitial) {
+        INFO("initial-reuse: shared prepared native syntax for fixed-provider isolation");
+    }
+    else {
+        ok &= driver.parseAllSources();
+    }
+    traceDriverStorage("after-input-parse", *this, libraryInputs);
     if (!m_uvmEntryPath.empty() && !completeUvmLibraryInputs(requireValidConfig)) {
         ok = false;
         m_configurationInputsFailed = true;
@@ -328,6 +517,7 @@ bool ServerDriver::parseAndLoadSources(const std::vector<std::string>& buildfile
         prepareScopeLibrary();
     if (ok && !m_trustedScopes && m_config.experimentalUvmSemanticCache.value())
         prepareTrustedUvmLibrary();
+    traceDriverStorage("after-library-prepare", *this, libraryInputs);
     installConfiguredUnits(driver.syntaxTrees);
     return ok;
 }
@@ -478,15 +668,19 @@ void ServerDriver::analyzeDocument(SlangDoc& doc, const lsp::RequestContext& ctx
     publishInactiveRegions(doc, ctx);
 }
 
-void ServerDriver::onDocDidSave(SlangDoc& doc) {
-    ++m_snapshotRevision;
+void ServerDriver::updateSavedDocumentIndex(SlangDoc& doc, const lsp::RequestContext& ctx) {
     if (hasConfiguredCompilationInputs() || (!comp && hasSourceContextHints())) {
-        auto inputs = doc.getAnalysisInputs();
+        auto inputs = doc.getAnalysisInputs(ctx);
         m_indexer.updateDocument(doc.getURI().getPath(), *inputs.tree, inputs.buffer);
     }
     else
-        m_indexer.updateDocument(doc.getURI().getPath(), *doc.getSyntaxTree(), doc.getBuffer());
-    m_indexer.updateIncludes(*doc.getSyntaxTree());
+        m_indexer.updateDocument(doc.getURI().getPath(), *doc.getSyntaxTree(ctx), doc.getBuffer());
+    m_indexer.updateIncludes(*doc.getSyntaxTree(ctx));
+}
+
+void ServerDriver::onDocDidSave(SlangDoc& doc) {
+    ++m_snapshotRevision;
+    updateSavedDocumentIndex(doc, {});
 
     if (!comp) {
         analyzeDocument(doc);
@@ -562,6 +756,19 @@ void ServerDriver::publishCompilationDiagnostics(const URI* priorityUri,
             ctx->checkpoint("native diagnostic route capture");
         publication->diagnostics[phase].push_back(diagnostic);
         auto& routes = publication->routes[phase].emplace_back();
+        auto& rendered = publication->rendered[phase].emplace_back();
+        auto previousPhysical = diagClient->exchangePhysicalReportObserver(
+            [&](const URI& uri, lsp::Diagnostic value) {
+                if (!rendered.key) {
+                    auto loc = sm.getFullyExpandedLoc(diagnostic.location);
+                    auto position = toPosition(loc, sm);
+                    rendered.key.emplace(sm.getFullPath(loc.buffer()).string(), position.line,
+                                         position.character, diagnostic.code);
+                }
+                rendered.values.push_back({uri, std::move(value)});
+            });
+        auto restorePhysical = ScopeGuard(
+            [&] { diagClient->exchangePhysicalReportObserver(std::move(previousPhysical)); });
         auto previous = diagClient->exchangeReportObserver(
             [&](const URI& uri) { routes.push_back(uri); });
         auto restore = ScopeGuard([&] { diagClient->exchangeReportObserver(std::move(previous)); });
@@ -583,6 +790,7 @@ void ServerDriver::publishCompilationDiagnostics(const URI* priorityUri,
         ctx->throwIfCancelled("before publishing full-design diagnostics");
     cwdPhase.finish();
     update.commit();
+    m_certifiedLocalPublication.reset();
     m_buildSourceUris = std::move(currentSources);
     if (priorityUri)
         diagClient->pushDiags(*priorityUri);
@@ -599,7 +807,56 @@ void ServerDriver::publishCompilationDiagnostics(const URI* priorityUri,
                                                     : "native-diagnostic-routes-disabled");
 }
 
-void ServerDriver::prepareForContextRetirement() {
+void ServerDriver::publishCertifiedLocalDiagnostics(const URI& uri, bool deferTransport) {
+    m_certifiedLocalPublication.reset();
+    if (deferTransport)
+        m_certifiedLocalPublication.emplace(CertifiedLocalPublication{
+            uri, m_snapshotRevision, m_diagnosticGeneration, m_indexer.getRevision(), {}});
+    else
+        diagClient->pushDiags(uri);
+}
+
+void ServerDriver::publishCertifiedLocalInactiveRegions(const URI& uri,
+                                                        std::vector<lsp::Range> regions,
+                                                        bool deferTransport) {
+    if (deferTransport && m_certifiedLocalPublication && m_certifiedLocalPublication->uri == uri)
+        m_certifiedLocalPublication->inactiveRegions = std::move(regions);
+    else
+        client.onTextDocumentInactiveRegions({.uri = uri, .regions = std::move(regions)});
+}
+
+void ServerDriver::flushCertifiedLocalDiagnostics() {
+    if (!m_certifiedLocalPublication)
+        return;
+    const auto& ready = m_certifiedLocalPublication;
+    if (ready->revision != m_snapshotRevision || ready->generation != m_diagnosticGeneration ||
+        ready->indexRevision != m_indexer.getRevision()) {
+        // Direct API callers may edit before flushing. Do not relabel old DTOs.
+        // A successful replacement pass clears this ticket when it commits;
+        // an invalid ticket that survives always needs fresh publication work.
+        m_pendingIncludedDiagnostics.try_emplace(ready->uri, m_diagnosticGeneration);
+        m_certifiedLocalPublication.reset();
+        return;
+    }
+    diagClient->pushDiags(ready->uri);
+    if (ready->inactiveRegions)
+        client.onTextDocumentInactiveRegions(
+            {.uri = ready->uri, .regions = std::move(*ready->inactiveRegions)});
+    m_certifiedLocalPublication.reset();
+}
+
+void ServerDriver::prepareForContextRetirement(bool releaseFullAnalysisCaches) {
+    // Mutable syntax checkpoints are not transferred into the replacement
+    // namespace. Drop this cache's ownership before constructing its candidate;
+    // existing syntax/semantic consumers retain only the trees they still use.
+    m_syntaxPrefix.reset();
+    m_pendingSyntaxPrefix.reset();
+    m_syntaxPrefixBase.reset();
+    m_syntaxPrefixBytes = m_syntaxPrefixRoots = m_pendingSyntaxRoots = 0;
+    m_syntaxDeclinedInputs.clear();
+    m_syntaxDeclinedRoots = 0;
+    // A stale-input refusal survives a cancelled replacement until a fresh
+    // driver commits. Clearing caches must never make that old context usable.
     if (m_frozenSources)
         m_frozenSources->clear("context retirement");
     completions.invalidateParsedLibraryCache();
@@ -607,6 +864,13 @@ void ServerDriver::prepareForContextRetirement() {
         doc->releaseSemanticCaches();
     for (auto& doc : m_configuredUnits)
         doc->releaseSemanticCaches();
+    if (releaseFullAnalysisCaches && isCooperativeAnalysisEnabled() && comp) {
+        // Publication routes can point into the manager and only weakly own its root.
+        m_nativeDiagnosticSnapshot.reset();
+        const bool released = comp->releaseUnsharedModel();
+        UvmPhaseTrace().mark(released ? "replacement-model-released"
+                                      : "replacement-model-retained");
+    }
 }
 
 void ServerDriver::copyOpenDocumentsFrom(const ServerDriver* oldDriver,
@@ -614,6 +878,7 @@ void ServerDriver::copyOpenDocumentsFrom(const ServerDriver* oldDriver,
     if (!oldDriver)
         return;
 
+    m_deferredSaveIndexes = oldDriver->m_deferredSaveIndexes;
     m_includeSelections = oldDriver->m_includeSelections;
     if (m_stagedRetirement)
         m_buildSourceUris = oldDriver->m_buildSourceUris;
@@ -625,19 +890,46 @@ void ServerDriver::copyOpenDocumentsFrom(const ServerDriver* oldDriver,
         oldDriver->diagClient->clearAndPush();
     for (const auto& uri : oldDriver->m_openDocs) {
         auto docIt = oldDriver->docs.find(uri);
-        if (docIt == oldDriver->docs.end()) {
+        if (docIt == oldDriver->docs.end() && !oldDriver->m_deferredEditorTexts.contains(uri)) {
             ERROR("Open Doc {} not found in old driver", uri.getPath());
             continue;
         }
 
         // openDocument expects no \0
-        auto text = docIt->second->getText();
+        auto text = oldDriver->editorText(uri);
         text.remove_suffix(1);
-        openDocument(uri, text, docIt->second->getVersion(), deferConfiguredDiagnostics);
-        docs.at(uri)->inheritCompletionTextIdentity(*docIt->second);
+        openDocument(uri, text, oldDriver->editorVersion(uri), deferConfiguredDiagnostics);
+        if (docIt != oldDriver->docs.end() && !oldDriver->m_deferredEditorTexts.contains(uri))
+            docs.at(uri)->inheritCompletionTextIdentity(*docIt->second);
     }
     if (handoff && !m_stagedRetirement)
         diagClient->completePublicationHandoff(*oldDriver->diagClient);
+}
+
+std::unique_ptr<ServerDriver> ServerDriver::isolateFixedProviderSources(
+    std::unique_ptr<ServerDriver> prepared, const std::vector<std::string>& buildfiles,
+    std::optional<std::string_view> workspaceFolder, const ServerDriver* editorOverlays,
+    bool requireValidConfig, const lsp::RequestContext* retirementContext) {
+    const auto* imports = prepared->options.get<TrustedUvmImport>();
+    if (!imports || !imports->library ||
+        imports->library->sourceOwner != prepared->driver.getSourceOwner())
+        return prepared;
+
+    // Stop the provider namespace before accepting editor generations. The
+    // consumer borrows the completed semantic library and cached syntax prefix;
+    // neither provider binding nor its SourceManager is modified or rebuilt.
+    // Keep editor overlays separate from the temporary library bootstrap driver.
+    prepared->diagClient->disableDestructorPublication();
+    auto consumer = std::make_unique<ServerDriver>(prepared->m_indexer, prepared->client,
+                                                   prepared->m_config, buildfiles, workspaceFolder,
+                                                   requireValidConfig, prepared.get(),
+                                                   retirementContext, true, editorOverlays, true);
+    if (requireValidConfig && !consumer->m_configLoaded)
+        return nullptr;
+    // This is one logical initialization. Borrowing its just-prepared in-memory
+    // prefix is not a project-cache hit on a later server start.
+    consumer->m_uvmProjectCacheHit = prepared->m_uvmProjectCacheHit;
+    return consumer;
 }
 
 std::unique_ptr<ServerDriver> ServerDriver::createForExplore(
@@ -653,6 +945,10 @@ std::unique_ptr<ServerDriver> ServerDriver::createForExplore(
     phases.mark("retirement-construct");
     if (requireValidConfig && !newDriver->m_configLoaded)
         return nullptr;
+    newDriver = isolateFixedProviderSources(std::move(newDriver), {}, workspaceFolder, oldDriver,
+                                            requireValidConfig, retirementContext);
+    if (!newDriver)
+        return nullptr;
     newDriver->copyOpenDocumentsFrom(oldDriver, deferOpenDiagnostics);
     phases.mark("retirement-copy-open");
     return newDriver;
@@ -664,10 +960,40 @@ std::unique_ptr<ServerDriver> ServerDriver::createFromFileLists(
     const ServerDriver* oldDriver, bool requireValidConfig, bool deferOpenDiagnostics,
     const lsp::RequestContext* retirementContext) {
     UvmPhaseTrace phases;
-    auto newDriver = std::make_unique<ServerDriver>(indexer, client, config, std::move(buildfiles),
-                                                    workspaceFolder, requireValidConfig, oldDriver,
-                                                    retirementContext);
+    std::unique_ptr<ServerDriver> newDriver;
+    // Initialization may already have prepared the same fixed libraries. Avoid
+    // building them twice when the client selects that configured filelist. Later
+    // explicit reloads retain their manual-rebuild semantics.
+    if (oldDriver && !oldDriver->comp && oldDriver->m_openDocs.empty() &&
+        oldDriver->m_configLoaded && config.experimentalCooperativeAnalysis.value() &&
+        (oldDriver->m_trustedScopes || oldDriver->m_trustedUvm) && !retirementContext &&
+        buildfiles.size() == 1 && config.compilationFilelist.value() &&
+        rfl::json::write(config) == rfl::json::write(oldDriver->m_config)) {
+        std::error_code error;
+        const auto workspace = std::filesystem::path(workspaceFolder.value_or("."));
+        const auto oldWorkspace = std::filesystem::path(oldDriver->m_workspacePathPrefix);
+        const auto configured = workspace / *config.compilationFilelist.value();
+        const auto requested = std::filesystem::path(buildfiles.front()).is_absolute()
+                                   ? std::filesystem::path(buildfiles.front())
+                                   : workspace / buildfiles.front();
+        if (std::filesystem::equivalent(workspace, oldWorkspace, error) && !error &&
+            std::filesystem::equivalent(configured, requested, error) && !error) {
+            newDriver = std::make_unique<ServerDriver>(indexer, client, config, buildfiles,
+                                                       workspaceFolder, true, oldDriver, nullptr,
+                                                       true);
+            if (!newDriver->m_configLoaded)
+                newDriver.reset();
+        }
+    }
+    if (!newDriver)
+        newDriver = std::make_unique<ServerDriver>(indexer, client, config, buildfiles,
+                                                   workspaceFolder, requireValidConfig, oldDriver,
+                                                   retirementContext);
     if (requireValidConfig && !newDriver->m_configLoaded)
+        return nullptr;
+    newDriver = isolateFixedProviderSources(std::move(newDriver), buildfiles, workspaceFolder,
+                                            oldDriver, requireValidConfig, retirementContext);
+    if (!newDriver)
         return nullptr;
 
     std::vector<std::shared_ptr<SlangDoc>> buildDocuments;
@@ -690,6 +1016,7 @@ std::unique_ptr<ServerDriver> ServerDriver::createFromFileLists(
     if (deferOpenDiagnostics)
         newDriver->copyOpenDocumentsFrom(oldDriver, true);
     phases.mark("retirement-build-inputs");
+    traceDriverStorage("inputs-ready", *newDriver, oldDriver);
     newDriver->m_designUsesConfiguredUnits = true;
     newDriver->comp = std::make_unique<ServerCompilation>(
         std::move(buildDocuments), newDriver->options, newDriver->sm, newDriver->client,
@@ -698,13 +1025,15 @@ std::unique_ptr<ServerDriver> ServerDriver::createFromFileLists(
             ? oldDriver->comp.get()
             : nullptr,
         retirementContext ? *retirementContext : lsp::RequestContext{},
-        config.experimentalCooperativeAnalysis.value(), newDriver->driver.getSourceOwner());
+        config.experimentalCooperativeAnalysis.value(), newDriver->driver.getSourceOwner(),
+        retirementContext && config.experimentalCooperativeAnalysis.value());
 
     newDriver->configureFrozenInstances(retirementContext ? *retirementContext
                                                           : lsp::RequestContext{});
     if (retirementContext)
         retirementContext->checkpoint("after retirement model");
     phases.mark("retirement-build-model");
+    traceDriverStorage("model-ready", *newDriver, oldDriver);
     if (!deferOpenDiagnostics) {
         if (newDriver->isCooperativeAnalysisEnabled())
             newDriver->comp->prepareUnpublishedDiagnostics(
@@ -859,6 +1188,86 @@ bool ServerDriver::isDocumentOpen(const URI& uri) {
     return m_openDocs.find(uri) != m_openDocs.end();
 }
 
+std::string_view ServerDriver::editorText(const URI& uri) const {
+    if (auto pending = m_deferredEditorTexts.find(uri); pending != m_deferredEditorTexts.end())
+        return {pending->second.text.data(), pending->second.text.size()};
+    return docs.at(uri)->getText();
+}
+
+std::optional<int> ServerDriver::editorVersion(const URI& uri) const {
+    if (auto pending = m_deferredEditorTexts.find(uri); pending != m_deferredEditorTexts.end())
+        return pending->second.version;
+    return docs.at(uri)->getVersion();
+}
+
+size_t ServerDriver::deferredEditorBytes() const {
+    size_t total = 0;
+    for (const auto& [_, value] : m_deferredEditorTexts)
+        total += value.text.capacity();
+    return total;
+}
+
+void ServerDriver::deferDocumentOpen(const lsp::DidOpenTextDocumentParams& params) {
+    const auto& document = params.textDocument;
+    SmallVector<char> text;
+    text.append(document.text.begin(), document.text.end());
+    if (text.empty() || text.back() != '\0')
+        text.push_back('\0');
+    const bool alreadyOpen = m_openDocs.contains(document.uri);
+    m_openDocs.insert(document.uri);
+    auto rollback = ScopeGuard([&] {
+        if (!alreadyOpen)
+            m_openDocs.erase(document.uri);
+    });
+    m_deferredEditorTexts.insert_or_assign(document.uri,
+                                           DeferredEditorText{std::move(text), document.version});
+    rollback.release();
+    ++m_snapshotRevision;
+    ++m_diagnosticGeneration;
+    m_certifiedLocalPublication.reset();
+}
+
+void ServerDriver::deferDocumentSave(const lsp::DidSaveTextDocumentParams& params) {
+    const auto& uri = params.textDocument.uri;
+    if (!m_openDocs.contains(uri))
+        return;
+    // A save can repair a missed change notification. Keep its text even while
+    // the configured model cannot be rebuilt; saving itself has no new version.
+    if (params.text) {
+        deferDocumentOpen({.textDocument = {.uri = uri,
+                                            .languageId = "systemverilog",
+                                            .version = editorVersion(uri).value_or(0),
+                                            .text = *params.text}});
+    }
+    m_deferredSaveIndexes.insert(uri);
+}
+
+void ServerDriver::flushDeferredSaveIndexes(const lsp::RequestContext& ctx) {
+    while (!m_deferredSaveIndexes.empty()) {
+        ctx.checkpoint("before deferred saved document indexing");
+        auto uri = *m_deferredSaveIndexes.begin();
+        auto doc = getDocument(uri);
+        if (doc)
+            updateSavedDocumentIndex(*doc, ctx);
+        m_deferredSaveIndexes.erase(uri);
+    }
+}
+
+void ServerDriver::deferDocumentChanges(const lsp::DidChangeTextDocumentParams& params) {
+    const auto& uri = params.textDocument.uri;
+    if (!m_openDocs.contains(uri) || (!docs.contains(uri) && !m_deferredEditorTexts.contains(uri)))
+        throw std::runtime_error("Cannot defer edits for an unopened document");
+    if (auto previous = editorVersion(uri); previous && params.textDocument.version <= *previous)
+        throw std::runtime_error("Deferred editor version must advance");
+    auto next = applyDocumentChanges(editorText(uri), params.contentChanges,
+                                     client.capabilities.utf8Positions);
+    m_deferredEditorTexts.insert_or_assign(uri, DeferredEditorText{std::move(next),
+                                                                   params.textDocument.version});
+    ++m_snapshotRevision;
+    ++m_diagnosticGeneration;
+    m_certifiedLocalPublication.reset();
+}
+
 void ServerDriver::onDocDidChange(const lsp::DidChangeTextDocumentParams& params,
                                   const lsp::RequestContext& ctx) {
     ++m_snapshotRevision;
@@ -992,6 +1401,9 @@ void ServerDriver::runPendingDiagnostics(const lsp::RequestContext& ctx) {
 void ServerDriver::closeDocument(const URI& uri) {
     completions.invalidateParsedLibraryCache();
     ++m_snapshotRevision;
+    // Closing returns authority to disk even if a replacement cannot currently
+    // load its configuration. Never replay discarded editor text on a retry.
+    m_deferredEditorTexts.erase(uri);
     if (isExplorePreinclude(uri))
         m_publishedPreincludeRevision.reset();
     // Remove from open docs set
@@ -1115,6 +1527,7 @@ bool ServerDriver::setActiveInstance(std::string_view hierPath, const lsp::Reque
 
 std::optional<ServerDriver::PackageIncludeContext> ServerDriver::getIncludeContext(
     const URI& uri, const syntax::SyntaxTree* previous, const lsp::RequestContext& ctx) {
+    UvmPhaseTrace phases;
     ctx.checkpoint("before include owner resolution");
     auto target = docs.find(uri);
     if (target == docs.end())
@@ -1123,6 +1536,7 @@ std::optional<ServerDriver::PackageIncludeContext> ServerDriver::getIncludeConte
     const auto targetPath = sm.getFullPath(targetDoc->getBuffer());
     bool explicitContext = false;
     auto explicitSelection = getExplicitIncludeContext(uri, explicitContext, ctx);
+    phases.mark("owner-explicit-context");
     if (explicitContext)
         return explicitSelection;
     auto findBuffer = [&](const syntax::SyntaxTree& tree) {
@@ -1172,6 +1586,7 @@ std::optional<ServerDriver::PackageIncludeContext> ServerDriver::getIncludeConte
     }
 
     // Explicit full-design mode retains its configured/build contexts.
+    phases.mark("owner-known-candidates");
     if (comp)
         return std::nullopt;
 
@@ -1822,7 +2237,8 @@ std::unique_ptr<ServerDriver> ServerDriver::createFromTop(
             ? oldDriver->comp.get()
             : nullptr,
         retirementContext ? *retirementContext : lsp::RequestContext{},
-        config.experimentalCooperativeAnalysis.value(), newDriver->driver.getSourceOwner());
+        config.experimentalCooperativeAnalysis.value(), newDriver->driver.getSourceOwner(),
+        retirementContext && config.experimentalCooperativeAnalysis.value());
 
     newDriver->configureFrozenInstances(retirementContext ? *retirementContext
                                                           : lsp::RequestContext{});
@@ -2341,12 +2757,13 @@ std::optional<lsp::Location> physicalMemberDeclaration(const ast::Symbol& symbol
 } // namespace
 
 std::optional<std::vector<lsp::DocumentHighlight>> ServerDriver::getDocDocumentHighlight(
-    const URI& uri, const lsp::Position& position) {
+    const URI& uri, const lsp::Position& position, const lsp::RequestContext& ctx) {
+    ctx.checkpoint("before document highlights");
     auto doc = getDocument(uri);
     if (!doc) {
         return std::nullopt;
     }
-    auto analysis = doc->getAnalysis();
+    auto analysis = doc->getAnalysis(ctx);
 
     // Get the symbol at the position
     auto loc = toSourceLocation(analysis->getBuffer(), position, sm);
@@ -2364,7 +2781,7 @@ std::optional<std::vector<lsp::DocumentHighlight>> ServerDriver::getDocDocumentH
 
     // Find all references to the symbol in the current document
     std::vector<lsp::Location> references;
-    analysis->addLocalReferences(references, symbol->location, symbol->name);
+    analysis->addLocalReferences(references, symbol->location, symbol->name, ctx);
     if (auto declaration = physicalMemberDeclaration(*symbol, sm);
         declaration && declaration->uri == uri &&
         std::ranges::none_of(references, [&](const auto& reference) {
@@ -2378,11 +2795,13 @@ std::optional<std::vector<lsp::DocumentHighlight>> ServerDriver::getDocDocumentH
     std::vector<lsp::DocumentHighlight> highlights;
     highlights.reserve(references.size());
     for (auto& ref : references) {
+        ctx.checkpoint("during document highlight collection");
         highlights.push_back(lsp::DocumentHighlight{
             .range = ref.range,
         });
     }
 
+    ctx.checkpoint("before publishing document highlights");
     return highlights;
 }
 
@@ -2447,7 +2866,7 @@ void ServerDriver::addMemberReferences(std::vector<lsp::Location>& references,
         }
 
         auto fileAnalysis = fileDoc->getAnalysis(ctx);
-        fileAnalysis->addLocalReferences(references, targetSymbol.location, targetName);
+        fileAnalysis->addLocalReferences(references, targetSymbol.location, targetName, ctx);
     }
 }
 
@@ -2622,7 +3041,7 @@ std::optional<std::vector<lsp::Location>> ServerDriver::getDocReferences(
         // Add refs in declaration file, and remove declaration if requested
         if (targetDoc) {
             auto targetAnalysis = targetDoc->getAnalysis(ctx);
-            targetAnalysis->addLocalReferences(references, targetSymbol->location, targetName);
+            targetAnalysis->addLocalReferences(references, targetSymbol->location, targetName, ctx);
             if (auto declaration = physicalMemberDeclaration(*targetSymbol, sm)) {
                 declarations.push_back(*declaration);
                 if (includeDeclaration && std::ranges::none_of(references, [&](const auto& r) {
@@ -2692,7 +3111,7 @@ std::optional<std::vector<lsp::Location>> ServerDriver::getDocReferences(
                 }
                 else if (targetLoc.buffer() != target.analysisBuffer) {
                     target.analysis->addLocalReferences(references, targetSymbol->location,
-                                                        targetName);
+                                                        targetName, ctx);
                 }
             }
         }
@@ -2780,9 +3199,10 @@ std::optional<std::vector<lsp::Location>> ServerDriver::getDocReferences(
 
 std::optional<lsp::WorkspaceEdit> ServerDriver::getDocRename(const URI& uri,
                                                              const lsp::Position& position,
-                                                             std::string_view newName) {
+                                                             std::string_view newName,
+                                                             const lsp::RequestContext& ctx) {
     // Reuse getDocReferences to find all locations (including declaration)
-    auto references = getDocReferences(uri, position, /* includeDeclaration */ true);
+    auto references = getDocReferences(uri, position, /* includeDeclaration */ true, ctx);
     if (!references || references->empty()) {
         return std::nullopt;
     }
@@ -2791,6 +3211,7 @@ std::optional<lsp::WorkspaceEdit> ServerDriver::getDocRename(const URI& uri,
     std::unordered_map<std::string, std::vector<lsp::TextEdit>> changes;
 
     for (const auto& loc : *references) {
+        ctx.checkpoint("during rename edit collection");
         lsp::TextEdit edit{
             .range = loc.range,
             .newText = std::string(newName),
@@ -2798,7 +3219,8 @@ std::optional<lsp::WorkspaceEdit> ServerDriver::getDocRename(const URI& uri,
         changes[loc.uri.str()].push_back(edit);
     }
 
-    return lsp::WorkspaceEdit{.changes = changes};
+    ctx.checkpoint("before publishing rename edits");
+    return lsp::WorkspaceEdit{.changes = std::move(changes)};
 }
 
 void ServerDriver::publishInactiveRegions(SlangDoc& doc, const lsp::RequestContext& ctx) {

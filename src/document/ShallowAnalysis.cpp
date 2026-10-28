@@ -21,6 +21,7 @@
 #include "slang/ast/ASTContext.h"
 #include "slang/ast/Compilation.h"
 #include "slang/ast/symbols/BlockSymbols.h"
+#include "slang/ast/symbols/ClassSymbols.h"
 #include "slang/ast/symbols/CompilationUnitSymbols.h"
 #include "slang/ast/symbols/InstanceSymbols.h"
 #include "slang/ast/symbols/MemberSymbols.h"
@@ -91,8 +92,13 @@ static bool sameDeclarationLocation(SourceLocation a, SourceLocation b,
 }
 
 ShallowAnalysis::ShallowAnalysis(BufferID buffer, std::shared_ptr<ShallowCompilation> compilation,
-                                 const lsp::RequestContext& ctx) :
-    syntaxes(*compilation->getSyntaxTree(), buffer),
+                                 const lsp::RequestContext& ctx,
+                                 const ShallowAnalysis* syntaxSource) :
+    syntaxes(syntaxSource && syntaxSource->getBuffer() == buffer &&
+                     syntaxSource->getSyntaxTree() == compilation->getSyntaxTree() &&
+                     &syntaxSource->m_sourceManager == &compilation->getSourceManager()
+                 ? syntaxSource->syntaxes
+                 : SyntaxIndexer(*compilation->getSyntaxTree(), buffer)),
     m_sourceManager(compilation->getSourceManager()), m_buffer(buffer),
     m_shallowCompilation(std::move(compilation)), m_symbolTreeVisitor(m_sourceManager, buffer),
     m_symbolIndexer(buffer) {
@@ -187,12 +193,106 @@ ShallowAnalysis::ShallowAnalysis(
 }
 
 std::vector<const ast::SubroutineSymbol*> ShallowAnalysis::getSubroutines(
-    const syntax::SyntaxNode& syntax) const {
+    const syntax::SyntaxNode& syntax, const lsp::RequestContext& ctx, bool prepareGenericContexts) {
+    // Generic handle declarations are lazy. Symbol-only indexing can encounter
+    // the generic before any concrete type is bound, so no method is indexed.
+    // Bind declaration types only in this edited buffer, then visit existing
+    // specializations of the enclosing generic (including consumer-owned ones).
+    const syntax::SyntaxNode* enclosing = syntax.parent;
+    while (enclosing && enclosing->kind != syntax::SyntaxKind::ClassDeclaration)
+        enclosing = enclosing->parent;
+    std::vector<const ast::GenericClassDefSymbol*> generics;
+    if (auto found = m_symbolIndexer.syntex.find(enclosing); found != m_symbolIndexer.syntex.end())
+        for (const auto* symbol : found->second)
+            if (const auto* generic = symbol->as_if<ast::GenericClassDefSymbol>())
+                generics.push_back(generic);
+    if (prepareGenericContexts && !generics.empty()) {
+        std::unordered_set<const ast::VariableSymbol*> declarations;
+        for (const auto& [_, symbols] : m_symbolIndexer.syntex)
+            for (const auto* symbol : symbols)
+                if (symbol->location.buffer() == m_buffer &&
+                    ast::VariableSymbol::isKind(symbol->kind))
+                    declarations.insert(&symbol->as<ast::VariableSymbol>());
+        for (const auto* declaration : declarations) {
+            ctx.checkpoint("bind generic query context declarations");
+            declaration->getType();
+        }
+        for (const auto* generic : generics) {
+            std::vector<const ast::Type*> specializations;
+            for (const auto& type : generic->specializations())
+                specializations.push_back(&type);
+            for (const auto* type : specializations) {
+                ctx.checkpoint("index generic method contexts");
+                type->visit(m_symbolIndexer);
+            }
+        }
+        for (const auto* type : getCompilation()->getImportedClassSpecializations())
+            if (const auto* cls = type->as_if<ast::ClassType>();
+                cls && std::ranges::find(generics, cls->genericClass) != generics.end()) {
+                ctx.checkpoint("index imported generic method contexts");
+                type->visit(m_symbolIndexer);
+            }
+    }
     std::vector<const ast::SubroutineSymbol*> result;
     for (auto scope : m_symbolIndexer.getScopesForSyntax(syntax))
         if (auto fn = scope->asSymbol().as_if<ast::SubroutineSymbol>();
             fn && fn->getSyntax() == &syntax)
             result.push_back(fn);
+    if (result.empty() && !m_shallowCompilation->getBodyQueryRoots().empty()) {
+        // Completed Native and selected-module views can have separate CST
+        // objects for the same input occurrence. Compare expanded syntax and
+        // physical endpoints, not just text or a coincident source offset.
+        const auto first = m_sourceManager.getFullyExpandedLoc(syntax.getFirstToken().location());
+        const auto last = m_sourceManager.getFullyExpandedLoc(syntax.getLastToken().range().end());
+        size_t visited = 0;
+        auto equal = [&](auto&& self, const syntax::SyntaxNode& a,
+                         const syntax::SyntaxNode& b) -> bool {
+            if ((visited++ & 255u) == 0)
+                ctx.checkpoint("compare completed body query syntax");
+            if (a.kind != b.kind || a.getChildCount() != b.getChildCount())
+                return false;
+            for (uint32_t i = 0; i < a.getChildCount(); ++i) {
+                auto left = a.childNode(i);
+                auto right = b.childNode(i);
+                if (bool(left) != bool(right))
+                    return false;
+                if (left) {
+                    if (!self(self, *left, *right))
+                        return false;
+                }
+                else {
+                    auto lt = a.childToken(i);
+                    auto rt = b.childToken(i);
+                    if (lt.kind != rt.kind || lt.isMissing() != rt.isMissing() ||
+                        lt.rawText() != rt.rawText())
+                        return false;
+                }
+            }
+            return true;
+        };
+        std::unordered_map<const syntax::SyntaxNode*, bool> matches;
+        for (auto fn : m_shallowCompilation->getBodyQueryRoots()) {
+            auto declaration = fn->getSyntax();
+            if (!declaration)
+                continue;
+            auto [entry, inserted] = matches.try_emplace(declaration, false);
+            if (inserted) {
+                const auto begin = m_sourceManager.getFullyExpandedLoc(
+                    declaration->getFirstToken().location());
+                const auto end = m_sourceManager.getFullyExpandedLoc(
+                    declaration->getLastToken().range().end());
+                entry->second = first && last && begin && end && first.offset() == begin.offset() &&
+                                last.offset() == end.offset() &&
+                                m_sourceManager.getFullPath(first.buffer()) ==
+                                    m_sourceManager.getFullPath(begin.buffer()) &&
+                                m_sourceManager.getFullPath(last.buffer()) ==
+                                    m_sourceManager.getFullPath(end.buffer()) &&
+                                equal(equal, syntax, *declaration);
+            }
+            if (entry->second)
+                result.push_back(fn);
+        }
+    }
     return result;
 }
 
@@ -301,8 +401,9 @@ std::optional<std::string> ShallowAnalysis::getDesignInstancePathAtToken(
     return instance ? std::optional(instance->getHierarchicalPath()) : std::nullopt;
 }
 
-std::vector<lsp::DocumentSymbol> ShallowAnalysis::getDocSymbols() {
-    return m_symbolTreeVisitor.getSymbols(m_shallowCompilation->getSyntaxTree(), true, m_buffer);
+std::vector<lsp::DocumentSymbol> ShallowAnalysis::getDocSymbols(const lsp::RequestContext& ctx) {
+    return m_symbolTreeVisitor.getSymbols(m_shallowCompilation->getSyntaxTree(), true, m_buffer,
+                                          ctx);
 }
 
 const parsing::Token* ShallowAnalysis::getTokenAt(SourceLocation loc) const {
@@ -1086,16 +1187,17 @@ const ast::Scope* ShallowAnalysis::getScopeAt(SourceLocation loc) const {
 }
 
 std::vector<lsp::InlayHint> ShallowAnalysis::getInlayHints(lsp::Range range,
-                                                           const Config::InlayHints& config) {
+                                                           const Config::InlayHints& config,
+                                                           const lsp::RequestContext& ctx) {
     // query inlay hints within range
-    InlayHintCollector collector(*this, range, config);
+    InlayHintCollector collector(*this, range, config, ctx);
     collector.collectHints();
     return collector.result;
 }
 
 void ShallowAnalysis::addLocalReferences(std::vector<lsp::Location>& references,
-                                         SourceLocation targetLocation,
-                                         std::string_view targetName) const {
+                                         SourceLocation targetLocation, std::string_view targetName,
+                                         const lsp::RequestContext& ctx) const {
     // Get the token and symbol at the target location (may be in a different buffer)
 
     auto it = syntaxes.collected.begin();
@@ -1104,6 +1206,7 @@ void ShallowAnalysis::addLocalReferences(std::vector<lsp::Location>& references,
     const ast::Symbol* targetSymbol = nullptr;
     // First loop: find the target symbol by matching the token location
     for (; it != end; ++it) {
+        ctx.checkpoint("during local reference token scan");
         const auto* token = *it;
         if (token->valueText() != targetName) {
             continue;
@@ -1127,6 +1230,7 @@ void ShallowAnalysis::addLocalReferences(std::vector<lsp::Location>& references,
     // Second loop: continue from where we left off to find all references
     auto path = m_sourceManager.getFullPath(m_buffer);
     for (; it != end; ++it) {
+        ctx.checkpoint("during local reference token scan");
         const auto* token = *it;
         if (token->valueText() != targetName) {
             continue;
@@ -1146,9 +1250,10 @@ void ShallowAnalysis::addLocalReferences(std::vector<lsp::Location>& references,
     }
 }
 
-std::vector<lsp::DocumentLink> ShallowAnalysis::getDocLinks() const {
+std::vector<lsp::DocumentLink> ShallowAnalysis::getDocLinks(const lsp::RequestContext& ctx) const {
     std::vector<lsp::DocumentLink> links;
     for (auto& inc : m_shallowCompilation->getSyntaxTree()->getIncludeDirectives()) {
+        ctx.checkpoint("during document link collection");
         if (!inc.buffer || inc.syntax->fileName.location().buffer() != m_buffer) {
             continue;
         }
@@ -1157,6 +1262,7 @@ std::vector<lsp::DocumentLink> ShallowAnalysis::getDocLinks() const {
             .target = URI::fromFile(m_sourceManager.getFullPath(inc.buffer.id)),
         });
     }
+    ctx.checkpoint("before publishing document links");
     return links;
 }
 

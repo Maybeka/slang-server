@@ -1,4 +1,5 @@
 #include "lsp/JsonRpcServer.h"
+#include "lsp/LspClient.h"
 #include <catch2/catch_test_macros.hpp>
 #include <cstdio>
 #include <iostream>
@@ -105,6 +106,10 @@ public:
     }
     void cancelQueriesOnEdit(bool enabled) { m_cancelObsoleteDocumentQueries = enabled; }
     size_t documentQueryCount() const { return pendingDocumentQueries.size(); }
+    size_t registrationKeyCount() const {
+        return registeredQueryKeys.size() + registeredChangeKeys.size();
+    }
+    size_t documentChangeCount() const { return pendingDocumentChanges.size(); }
     void start(const lsp::RequestContext& ctx) { startRequest(ctx); }
 
     int contextRequestCalls = 0;
@@ -214,6 +219,88 @@ TEST_CASE("JSON-RPC response ownership preserves exact wire output", "[json-rpc]
     }
 
     CHECK(capture(lsp::RpcRequest{.jsonrpc = "2.0", .method = "notification"}).empty());
+}
+
+TEST_CASE("JSON-RPC borrowed notification envelopes preserve Generic wire bytes",
+          "[json-rpc][serialization]") {
+    for (const auto& json : {std::string{"null"}, std::string{"[]"},
+                            std::string{R"({"nested":[null,true,7,-2,1.25,"λ中文"]})"},
+                            "{\"text\":\"" + std::string(1024 * 1024, 'x') + "\"}"}) {
+        auto params = rfl::json::read<rfl::Generic>(json);
+        REQUIRE(params);
+        const auto before = rfl::json::write(*params);
+        const auto expected = rfl::json::write<rfl::UnderlyingEnums>(
+            lsp::RpcNotification{"2.0", "test/通知", *params});
+        std::ostringstream output;
+        {
+            auto* previous = std::cout.rdbuf(output.rdbuf());
+            slang::ScopeGuard restore([&] { std::cout.rdbuf(previous); });
+            lsp::sendNotification("test/通知", *params);
+        }
+        CHECK(output.str() == "Content-Length: " + std::to_string(expected.size()) +
+                                  "\r\n\r\n" + expected);
+        CHECK(rfl::json::write(*params) == before);
+    }
+}
+
+TEST_CASE("JSON-RPC typed diagnostics preserve payload metadata and virtual dispatch",
+          "[json-rpc][serialization]") {
+    auto data = rfl::json::read<rfl::Generic>(
+        R"({"nested":[null,false,123,0.125,"λ中文🧪"],"owner":{"generation":4}})");
+    REQUIRE(data);
+    lsp::Diagnostic diagnostic{
+        .range = {{2, 3}, {4, 5}},
+        .severity = lsp::DiagnosticSeverity::Warning,
+        .code = 17,
+        .codeDescription = lsp::CodeDescription{.href = URI("https://example.invalid/diagnostic")},
+        .source = "slang",
+        .message = "quote\" slash\\\nUnicode λ中文🧪",
+        .tags = std::vector{lsp::DiagnosticTag::Unnecessary, lsp::DiagnosticTag::Deprecated},
+        .relatedInformation = std::vector<lsp::DiagnosticRelatedInformation>{
+            {.location = {.uri = URI("file:///tmp/definition%20file.sv"),
+                          .range = {{0, 0}, {0, 1}}},
+             .message = "declared here\nλ"}},
+        .data = *data};
+    lsp::LspClient client;
+    for (const auto version : {std::optional<int>{}, std::optional<int>{0},
+                               std::optional<int>{42}}) {
+        for (const size_t count : {size_t{0}, size_t{1}, size_t{65}}) {
+            lsp::PublishDiagnosticsParams params{
+                .uri = URI("file:///tmp/user%20code.sv"),
+                .version = version,
+                .diagnostics = std::vector<lsp::Diagnostic>(count, diagnostic)};
+            if (count > 1)
+                params.diagnostics.back().code = std::string{"string-code"};
+            const auto generic = rfl::to_generic<rfl::UnderlyingEnums>(params);
+            const auto expected = rfl::json::write<rfl::UnderlyingEnums>(
+                lsp::RpcNotification{"2.0", "textDocument/publishDiagnostics", generic});
+            std::ostringstream output;
+            {
+                auto* previous = std::cout.rdbuf(output.rdbuf());
+                slang::ScopeGuard restore([&] { std::cout.rdbuf(previous); });
+                client.onDocPublishDiagnostics(params);
+            }
+            CHECK(output.str() == "Content-Length: " + std::to_string(expected.size()) +
+                                      "\r\n\r\n" + expected);
+            CHECK(rfl::json::write<rfl::UnderlyingEnums>(params) == rfl::json::write(generic));
+        }
+    }
+    struct InterceptingClient : lsp::LspClient {
+        int calls = 0;
+        std::optional<lsp::PublishDiagnosticsParams> seen;
+        void onDocPublishDiagnostics(const lsp::PublishDiagnosticsParams& params) override {
+            ++calls;
+            seen = params;
+        }
+    } intercepting;
+    lsp::LspClient& base = intercepting;
+    lsp::PublishDiagnosticsParams params{.uri = URI("file:///tmp/virtual.sv"),
+                                        .version = 7, .diagnostics = {diagnostic}};
+    base.onDocPublishDiagnostics(params);
+    CHECK(intercepting.calls == 1);
+    REQUIRE(intercepting.seen);
+    CHECK(rfl::json::write<rfl::UnderlyingEnums>(*intercepting.seen) ==
+          rfl::json::write<rfl::UnderlyingEnums>(params));
 }
 
 TEST_CASE("JSON-RPC server separates activity batches and exits when input closes") {
@@ -1194,4 +1281,64 @@ TEST_CASE("New document edits cancel only superseded position queries when enabl
             }
         }
     }
+}
+
+TEST_CASE("Cancellation completion uses registered keys after payload release",
+          "[json-rpc][input-lifetime]") {
+    TestJsonRpcServer server;
+    server.cancelQueriesOnEdit(true);
+    lsp::RpcRequest query{.jsonrpc="2.0",.id=17,.method="textDocument/hover",
+        .params=rfl::to_generic(lsp::TextDocumentPositionParams{
+            .textDocument={.uri=URI("file:///tmp/key.sv")},.position={0,0}})};
+    auto ctx=server.track(query);
+    REQUIRE(server.documentQueryCount()==1);
+    query.params.reset();
+    server.untrack(query,ctx);
+    CHECK(server.documentQueryCount()==0);
+    CHECK(server.registrationKeyCount()==0);
+    lsp::RpcRequest edit{.jsonrpc="2.0",.method="textDocument/didChange",
+        .params=rfl::to_generic(lsp::DidChangeTextDocumentParams{
+            .textDocument={.version=2,.uri=URI("file:///tmp/key.sv")},
+            .contentChanges={lsp::TextDocumentContentChangeWholeDocument{.text=std::string(1024*1024,'x')}}})};
+    auto change=server.track(edit);
+    REQUIRE(server.documentChangeCount()==1);
+    edit.params.reset();
+    server.untrack(edit,change);
+    CHECK(server.documentChangeCount()==0);
+    CHECK(server.registrationKeyCount()==0);
+}
+
+TEST_CASE("Late completion cannot remove newer reused RPC and edit registrations",
+          "[json-rpc][input-lifetime]") {
+    TestJsonRpcServer server;
+    server.cancelQueriesOnEdit(true);
+    auto request=[](std::string uri){return lsp::RpcRequest{.jsonrpc="2.0",.id=23,
+        .method="textDocument/hover",.params=rfl::to_generic(lsp::TextDocumentPositionParams{
+            .textDocument={.uri=URI(std::move(uri))},.position={0,0}})};};
+    auto first=request("file:///tmp/old.sv"),latest=request("file:///tmp/new.sv");
+    auto old=server.track(first),current=server.track(latest);
+    server.untrack(first,old);
+    server.untrack(first,old); // Idempotent late cleanup must preserve the newer context.
+    REQUIRE(server.documentQueryCount()==1);
+    auto edit=[](int version){return lsp::RpcRequest{.jsonrpc="2.0",
+        .method="textDocument/didChange",.params=rfl::to_generic(lsp::DidChangeTextDocumentParams{
+            .textDocument={.version=version,.uri=URI("file:///tmp/new.sv")},
+            .contentChanges={lsp::TextDocumentContentChangeWholeDocument{.text="module m; endmodule"}}})};};
+    auto a=edit(2),b=edit(3),c=edit(4);
+    auto ca=server.track(a);
+    CHECK(current.isContentModified());
+    CHECK_FALSE(old.isCancelled());
+    auto cb=server.track(b);
+    CHECK(ca.isCancelled());
+    server.untrack(a,ca);
+    auto cc=server.track(c);
+    CHECK(cb.isCancelled());
+    CHECK_FALSE(cc.isCancelled());
+    server.untrack(b,cb);
+    CHECK(server.documentChangeCount()==1);
+    server.untrack(latest,current);
+    server.untrack(c,cc);
+    CHECK(server.documentQueryCount()==0);
+    CHECK(server.documentChangeCount()==0);
+    CHECK(server.registrationKeyCount()==0);
 }

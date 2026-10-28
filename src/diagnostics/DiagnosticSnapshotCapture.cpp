@@ -212,6 +212,7 @@ void ServerDriver::commitDiagnosticSnapshot(const DiagnosticSnapshot& snapshot,
     }
     cwdPhase.finish();
     update.commit();
+    m_certifiedLocalPublication.reset();
     m_publishedPreincludeRevision = m_explorePreincludeRevision;
     m_publishedPreincludeUris = m_explorePreincludeUris;
     std::optional<URI> priority;

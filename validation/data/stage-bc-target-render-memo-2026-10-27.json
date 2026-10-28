@@ -1,0 +1,65 @@
+{
+  "candidateSha256": "f887a0b4649d62216a229eedb748ac7638114916cd44804c86b67a4fb614d639",
+  "implementation": "Bounded one-slot retained display memo plus fixed Native primitive/packed type formatter reuse; actual source/bytes and per-publication proof retained",
+  "experimentalDefaults": "all off; no fixed debounce",
+  "targetedTests": {
+    "Native": "39cases20422 +102cases67453",
+    "ASan": "39cases20422 +102cases67453, detect_leaks=0"
+  },
+  "preliminaryPerformance": {
+    "passed": true,
+    "plan": "untracked/stage-bc-target-render-memo-2026-10-27/performance-plan.json",
+    "evaluation": "untracked/stage-bc-target-render-memo-2026-10-27/performance-evaluation.json",
+    "scope": "same CVA6, bothorders/two samebinary controls,48edits per arm; not original20 or overallqualification"
+  },
+  "fullServerValidation": {
+    "ctest": 953,
+    "python": 17,
+    "transport": 43,
+    "asanCases": 938,
+    "asanAssertions": 174582,
+    "registeredNamesIdentical": 939,
+    "wireMatrix": "Native6+ASan6 passed",
+    "cvaScenes": "448Native+38ASan states and112lossless complete612maps audited",
+    "sdk": "freshNative+ASan2635cases35691assertions each,709physicalfiles verified"
+  },
+  "fullValidationStage": "untracked/stage-bc-target-render-validation-2026-10-27",
+  "bcComplete": false,
+  "goalComplete": false,
+  "mainPushed": false,
+  "networkUsed": false,
+  "fullCorrectnessPassed": true,
+  "originalSixPressurePassed": true,
+  "originalSixArrivalAuditPassed": true,
+  "coSixPressure": "completed; owner/arrival andRPC-version mapping passed; pressure per-query absolute transport ordering still needs added instrumentation",
+  "originalTwentyQualified": false,
+  "coPressureAudit": "untracked/stage-bc-target-render-co-pressure-2026-10-27/co-certificate-audit.json",
+  "rapidPressureLimitations": [
+    "Original ranged-forced20ms canceled3baseline ->6candidate; query maximum29.8 ->52.1ms.",
+    "Co ranged-forced20ms canceled3baseline ->5candidate; max34.0 ->53.9ms, p50 7.66 ->8.68ms (~13% vsB2, not a performance acceptance).",
+    "Hard pressure recovery improves in this sample, but does not erase negatives or establish a universal latency guarantee."
+  ],
+  "finalOriginal20": {
+    "fixed14Qualified": false,
+    "direct6Qualified": true,
+    "soleFailedFixed14Check": "warm-p50",
+    "baselineWarmP50Ms": 16.909146,
+    "candidateWarmP50Ms": 18.96797925,
+    "ratio": 1.1217585589479209,
+    "b3LongGatesPassed": true,
+    "sourceAndEvidenceIdentityAtCompletionPassed": true,
+    "auditPath": "untracked/stage-bc-target-render-qualification-2026-10-27/b3-completion-audit.json",
+    "auditSha256": "41b34243da8d17024cb78e243e185f75fe61be1aa1b90f14d308e251d1fdf6c0"
+  },
+  "nextAction": "Localize warm-query regression. Same-binary cache ablation confirms 49/50 suffix replay reuse and exact612 maps, but does not prove regression cause. Preserve original20 failure; no qualification resampling of unchanged candidate.",
+  "postFailureAttribution": {
+    "hoverPhases": "untracked/stage-bc-hover-phase-attribution-2026-10-27/analysis.json",
+    "proofKinds": "untracked/stage-bc-proof-kind-attribution-2026-10-27/analysis.json",
+    "newPrecompiledAbsenceFeasibility": "untracked/stage-bc-precompiled-absence-probe-2026-10-27/decision.json",
+    "feasibilityAccepted": false,
+    "reason": "whole-proof gain3.1-3.6percent below10percent predeclared gate",
+    "productionInstrumentationRemoved": true,
+    "sourceRestoredToF887": true,
+    "timingsNotQualification": true
+  }
+}

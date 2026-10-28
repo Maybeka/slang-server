@@ -294,3 +294,33 @@ TEST_CASE("Document symbols include macro-generated definitions") {
     CHECK(symbols[0].name == "DEFINE");
     CHECK(symbols[1].name == "GENERATED");
 }
+
+TEST_CASE("Cancelled document symbol refresh preserves the prior complete macro mode",
+          "[native-handler-cancellation]") {
+    ServerHarness server;
+    auto document = server.openFile(
+        "symbol_cache_cancel.sv",
+        "`define OUTLINE_DEFINE 7\nmodule outer; class inner; int field; endclass endmodule\n");
+    const auto tree = document.doc->getSyntaxTree();
+    server::SymbolTreeVisitor visitor(server.sourceManager(), document.doc->getBuffer());
+    const auto withoutMacros = visitor.getSymbols(tree, false, document.doc->getBuffer());
+    REQUIRE_FALSE(withoutMacros.empty());
+    lsp::RequestContext ctx("textDocument/documentSymbol", lsp::ID_t{99});
+    int nodes = 0;
+    ctx.setCheckpointObserverForTesting([&](std::string_view phase) {
+        if (phase == "during document symbol traversal" && ++nodes == 6)
+            ctx.cancel();
+    });
+    CHECK_THROWS_AS(visitor.getSymbols(tree, true, document.doc->getBuffer(), ctx),
+                    lsp::RequestCancelled);
+    REQUIRE(nodes == 6);
+    CHECK(rfl::json::write(visitor.getSymbols(tree, false, document.doc->getBuffer())) ==
+          rfl::json::write(withoutMacros));
+    server::SymbolTreeVisitor native(server.sourceManager(), document.doc->getBuffer());
+    const auto withMacros = visitor.getSymbols(tree, true, document.doc->getBuffer());
+    CHECK(rfl::json::write(withMacros) ==
+          rfl::json::write(native.getSymbols(tree, true, document.doc->getBuffer())));
+    CHECK(withMacros.size() == withoutMacros.size() + 1);
+    CHECK(rfl::json::write(visitor.getSymbols(tree, false, document.doc->getBuffer())) ==
+          rfl::json::write(withoutMacros));
+}

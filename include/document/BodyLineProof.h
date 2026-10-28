@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 #include "lsp/RequestContext.h"
+#include <optional>
 
 #include "slang/ast/Compilation.h"
 #include "slang/parsing/Token.h"
@@ -14,8 +15,16 @@ class BodyLineProof {
 public:
     BodyLineProof(slang::SourceManager&, const slang::ast::Compilation&,
                   const slang::ast::SubroutineSymbol&, slang::BufferID original, size_t editedEnd,
-                  std::string_view baseline, std::string path, const lsp::RequestContext&);
-    void validate(std::string_view current, size_t newEnd, const lsp::RequestContext&) const;
+                  std::string_view baseline, std::string path, const lsp::RequestContext&,
+                  size_t syntaxCacheBudget = 0);
+    // rawEndLine is the current parsed body's raw end coordinate. Only pure
+    // suffix expansion syntax is reused; semantic dependencies are checked anew.
+    void validate(std::string_view current, size_t newEnd, const lsp::RequestContext&,
+                  std::optional<size_t> rawEndLine = {}) const;
+    bool canReuseSyntax(std::string_view current, size_t newEnd, size_t rawEndLine) const {
+        return cachedSuffix && cachedRawEndLine == rawEndLine && newEnd <= current.size() &&
+               current.substr(newEnd) == *cachedSuffix;
+    }
 
 private:
     struct Neighbour {
@@ -31,6 +40,8 @@ private:
     size_t editedEnd;
     std::string path;
     std::vector<Neighbour> neighbours;
+    std::optional<std::string> cachedSuffix;
+    mutable std::optional<size_t> cachedRawEndLine;
     struct Line {
         size_t offset, target;
         std::string name;

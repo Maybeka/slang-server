@@ -1,0 +1,183 @@
+{
+  "stage": "A",
+  "allFiveComplete": false,
+  "stageAComplete": false,
+  "confirmedDefect": "A class specialization created by navigation after completed diagnostics was borrowed without completing its semantic walk; detached diagnostics omitted readmemh error.",
+  "before": {
+    "log": "before.log",
+    "failedAssertions": 2,
+    "cases": "explicit/default"
+  },
+  "implementation": "Publish class admission only after the complete DiagnosticVisitor finalization, including attributes and transitive generic discovery. Detached default/fixed/retained lookup paths reject uncompleted borrowed classes and instantiate privately; complete classes retain canonical identity.",
+  "targeted": {
+    "passed": true,
+    "cases": 3,
+    "assertions": 729,
+    "log": "targeted-final.log"
+  },
+  "sdkNative": {
+    "passed": true,
+    "cases": 2626,
+    "assertions": 29250,
+    "log": "sdk-native.log"
+  },
+  "sdkRestoration": {
+    "base": "151a801ceaf6faf23d79a42d210ff67e50eb4660",
+    "files": 709,
+    "patchSha256": "77ff170a7c02f82ecd258a88fd5ff97f9980d57b424da713d24408ec1416a854",
+    "cleanOfflineApplyVerified": true,
+    "temporaryTreeRemoved": true,
+    "networkUsed": false
+  },
+  "nativeBuild": "passed",
+  "asan": "SDK and server complete suites passed; leak detection off",
+  "cva6": {
+    "passed": true,
+    "scenes": {
+      "generic-changing": {
+        "passed": true,
+        "states": 28,
+        "report": "generic-changing-automatic-correctness.json",
+        "sha256": "490ab66a8304bb37fab0cf17b797a20fa6e858beb843b5083b9fbe88634cd40b"
+      },
+      "body": {
+        "passed": true,
+        "states": 52,
+        "report": "body-automatic-correctness.json",
+        "sha256": "2a6138e780bbacf9ff64b538e1112cd6b1deb04ccc97de0c4ef8ae8401fba281"
+      },
+      "package": {
+        "passed": true,
+        "states": 52,
+        "report": "package-automatic-correctness.json",
+        "sha256": "f929d8d4425ddd148e2e7625350df5ab016756688c9f8d64a852d2897152fa1c"
+      },
+      "generic": {
+        "passed": true,
+        "states": 52,
+        "report": "generic-automatic-correctness.json",
+        "sha256": "54c03488a5ee69789f9f60dedc97952ce56efd89a7fb7bb008d8b22c4ea7b532"
+      },
+      "effectful": {
+        "passed": true,
+        "states": 52,
+        "report": "effectful-automatic-correctness.json",
+        "sha256": "cc94562966590593e8fad49519e9606c6d0a6594e79fdefade79e360529de857"
+      },
+      "virtual-interface": {
+        "passed": true,
+        "states": 28,
+        "report": "virtual-interface-automatic-correctness.json",
+        "sha256": "3ee087bfd60f83200fcd8a6930226dc6dab84b7678c74f84101413de1363cf20"
+      },
+      "local-types": {
+        "passed": true,
+        "states": 28,
+        "report": "local-types-automatic-correctness.json",
+        "sha256": "16264a516aecfd7f3791ddeaccc9d4ec16d6792916b58639d85de1277a7c72ad"
+      },
+      "local-imports": {
+        "passed": true,
+        "states": 32,
+        "report": "local-imports-automatic-correctness.json",
+        "sha256": "abd4d713f9705ebc818c8af6d0bcec0174d542bbe45634609f11a515f0c46919"
+      }
+    },
+    "nativeStates": 324,
+    "asanCandidateStates": 7,
+    "nativeDiagnosticArchives": 81,
+    "asanOracleRevalidatedAgainstCurrentFreshNative": true,
+    "asanReportSha256": "11fa48e618f3ece0c0866acdfe3ba2f3fd09a960107eccee95ee356c44ebacee",
+    "binarySha256": "00f985d144832fc437b88fb57c1b79d991be8cb3c8bf706c4f5f32519c90d21a"
+  },
+  "performanceQualified": false,
+  "mainPushed": false,
+  "experimentsDefaultOff": true,
+  "networkUsed": false,
+  "binarySha256": "00f985d144832fc437b88fb57c1b79d991be8cb3c8bf706c4f5f32519c90d21a",
+  "ctest": {
+    "passed": true,
+    "tests": 919,
+    "log": "ctest.log"
+  },
+  "python": {
+    "passed": true,
+    "tests": 17,
+    "log": "python.log"
+  },
+  "transport": {
+    "passed": true,
+    "tests": 43,
+    "log": "transport.log"
+  },
+  "sdkAsan": {
+    "passed": true,
+    "cases": 2626,
+    "assertions": 29250,
+    "detectLeaks": false,
+    "log": "sdk-asan.log"
+  },
+  "allOwnedProcessesTerminal": true,
+  "scenes": {
+    "generic-changing": {
+      "passed": true,
+      "states": 28
+    },
+    "body": {
+      "passed": true,
+      "states": 52
+    },
+    "package": {
+      "passed": true,
+      "states": 52
+    },
+    "generic": {
+      "passed": true,
+      "states": 52
+    },
+    "effectful": {
+      "passed": false,
+      "states": 13
+    }
+  },
+  "liveProcesses": {},
+  "terminalProcesses": [
+    13987,
+    20153,
+    67268,
+    97308,
+    5941,
+    93804,
+    38505,
+    6787,
+    85514,
+    1524
+  ],
+  "logSha256": {
+    "before.log": "5218fd91954716892c0127d1aea65bcd31b097653719a21b1bce0a8d9e2e186c",
+    "targeted-final.log": "0dcf54c7d440b31e34f9516faa503d2e9cd3daeb730d93a973c337e8030a9d5d",
+    "sdk-native.log": "c1789e26fcfa53fac7431f7d69af46fbd1a84fdd44427f8f6b9920a010703c6d",
+    "sdk-asan.log": "13e8a5ccd3378437f33e31c48d7e6b1ee0502189491a0322c273e87ae78292e5",
+    "ctest.log": "77a50d99a0e11454a321b2d64e51770e084889b821ff56da95e4f196aec2cf5b",
+    "python.log": "7ec585bed8c21d230180931683f362223d179544f0a1fc052010836261b1f205",
+    "transport.log": "39cb40a04558667a7c56004678b7089e163f8e31236448ae2eb2e6666d74814b",
+    "server-asan.log": "6b734db2957a32c91f4308c9ddb4ba113dc9b4e6ff2938b3b09b0a64bca5504b",
+    "evidence-audit.log": "27d8afb244aefb7f519442a6ac4b80286a1698182130a0f66508e88cc148e00c"
+  },
+  "serverAsan": {
+    "passed": true,
+    "cases": 904,
+    "assertions": 146795,
+    "detectLeaks": false,
+    "log": "server-asan.log"
+  },
+  "remaining": [
+    "Stage A method-local nominal/value generic arguments",
+    "Stage A legal let/checker/assertion closure coverage",
+    "Stage A performance qualification",
+    "B lifecycle, memory and responsiveness",
+    "C first certification",
+    "D full qualification and main delivery"
+  ],
+  "status": "late-class-admission-correctness-checkpoint-passed"
+}

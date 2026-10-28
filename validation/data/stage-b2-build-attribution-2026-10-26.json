@@ -1,0 +1,33 @@
+{
+  "stage": "B2",
+  "complete": false,
+  "goalComplete": false,
+  "qualification": false,
+  "networkUsed": false,
+  "experimentsDefaultOff": true,
+  "productionOptimizationAdded": false,
+  "completedMechanismJobs": 6,
+  "source": "untracked/stage-b2-build-phase-attribution-2026-10-26/storage-analysis.json",
+  "observations": {
+    "candidatePid": 99697,
+    "peakFootprintBytes": 1173996960,
+    "beforeInputParseNearestFootprintMiB": 810.41,
+    "afterInputParseNearestFootprintMiB": 1054.33,
+    "modelReadyNearestFootprintMiB": 1119.61,
+    "sourceStorageAtInputsBytes": 19356010,
+    "sourceStorageAtModelReadyBytes": 19420532
+  },
+  "limits": [
+    "Discrete20ms memory samples; phase matching is approximate.",
+    "Syntax estimates can double-count shared namespace owners.",
+    "Only the forced forward48 scene was UTC-correlated; natural1MiB stress results remain separate.",
+    "No memory optimization or whole-B2 acceptance inferred."
+  ],
+  "nextAction": "Investigate duplicate native compilation-unit parse allocations during candidate retirement before altering transactional old-model lifetime. Fixed prefix resume is currently on SlangDoc reparsing, while retirement replays Driver.parseAllSources; option/macro/source-order and current unsaved text must be preserved.",
+  "evidenceSha256": {
+    "untracked/stage-b2-build-phase-attribution-2026-10-26/plan.json": "56a5dccd5223736fd1e1e8cecff7218b37eba111917e5cf8fb1d8d49fa1839ba",
+    "untracked/stage-b2-build-phase-attribution-2026-10-26/storage-analysis.json": "db48de9685c452cfe2faff23001c1396ed2e66db44ea45b1a449873378f20ddb",
+    "untracked/stage-b2-build-phase-attribution-2026-10-26/forced.json": "9361a1e334ac065694a5dea5f0bcb001b6bbbfa884f783d62d1030ec0743a6cb",
+    "untracked/stage-b2-natural-overlap-2026-10-26/owner-analysis.json": "b419730bbbbfdc86ba5ac74715102e9108e4432281d44403e5bd412f72c6ac9e"
+  }
+}

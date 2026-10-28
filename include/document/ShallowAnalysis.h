@@ -45,7 +45,8 @@ public:
     /// Index the selected source buffer, retaining the compilation that owns its syntax and
     /// symbols.
     ShallowAnalysis(slang::BufferID buffer, std::shared_ptr<ShallowCompilation> compilation,
-                    const lsp::RequestContext& ctx = {});
+                    const lsp::RequestContext& ctx = {},
+                    const ShallowAnalysis* syntaxSource = nullptr);
     /// @brief Constructs a DocumentAnalysis instance with syntax and symbol indexing
     ///
     /// An instance is created on every document open and change.
@@ -66,11 +67,11 @@ public:
     /// @return Tree of LSP document symbols representing the document CST structure
     /// This also provides range info for "sticky scroll", where the open scopes stick at the top of
     /// the editor to provide context
-    std::vector<lsp::DocumentSymbol> getDocSymbols();
+    std::vector<lsp::DocumentSymbol> getDocSymbols(const lsp::RequestContext& ctx = {});
 
     /// @brief Gets document links for include directives, called right after open
     /// @return Vector of LSP document links to included files
-    std::vector<lsp::DocumentLink> getDocLinks() const;
+    std::vector<lsp::DocumentLink> getDocLinks(const lsp::RequestContext& ctx = {}) const;
 
     /// @brief Gets hover information for a symbol at an LSP position
     /// @param position The LSP position to query
@@ -112,7 +113,9 @@ public:
     bool hasValidBuffers() const { return m_shallowCompilation->hasValidBuffers(); }
 
     /// Exact native contexts for a function / task syntax (including specializations).
-    std::vector<const ast::SubroutineSymbol*> getSubroutines(const syntax::SyntaxNode&) const;
+    std::vector<const ast::SubroutineSymbol*> getSubroutines(const syntax::SyntaxNode&,
+                                                             const lsp::RequestContext& = {},
+                                                             bool prepareGenericContexts = false);
 
     /// Shared owner of the syntax, symbols, and compilation-wide analysis state.
     const std::shared_ptr<ShallowCompilation>& getShallowCompilation() const {
@@ -208,15 +211,16 @@ public:
     const slang::ast::Scope* getAssignmentPatternCompletionScope(slang::SourceLocation loc) const;
 
     std::vector<lsp::InlayHint> getInlayHints(lsp::Range range,
-                                              const struct Config::InlayHints& config);
+                                              const struct Config::InlayHints& config,
+                                              const lsp::RequestContext& ctx = {});
 
     /// @brief Finds all references to a symbol in this document and adds them to the vector
     /// @param references Vector to append references to
     /// @param targetLocation The source location of the target symbol
     /// @param targetName The name of the symbol to match
     void addLocalReferences(std::vector<lsp::Location>& references,
-                            slang::SourceLocation targetLocation,
-                            std::string_view targetName) const;
+                            slang::SourceLocation targetLocation, std::string_view targetName,
+                            const lsp::RequestContext& ctx = {}) const;
 
     /// @brief Runs analysis on the shallow compilation and returns diagnostics
     /// @return The analysis diagnostics (owned by internal AnalysisManager)

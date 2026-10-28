@@ -1,0 +1,43 @@
+{
+  "phase": "B1",
+  "goalComplete": false,
+  "b1Complete": false,
+  "productionUnchangedSinceQualifiedA": true,
+  "qualifiedABinarySha256": "7b205824339136afbe87069093baae69f0765f3eab1ad98b208f8e236d584abb",
+  "networkUsed": false,
+  "scope": "Source ownership diagnostic probe, not RSS or real-workload performance qualification",
+  "cancelledVariants": 64,
+  "nativeAndAsan": {
+    "testCases": 2,
+    "assertionsEach": 892,
+    "asanLeakDetection": false
+  },
+  "sourceAccountingProbe": {
+    "appendedTextBytes": 0,
+    "originBefore": 2271,
+    "originAfter": 12585479,
+    "bodyCacheBudget": 1048576,
+    "initialProviderRetainsOriginalSourceManagerAfterDriverRetirement": true,
+    "cacheDestructionReleasesAllSources": true,
+    "longPathCharacters": 4194304,
+    "invalidAsTextRetentionMeasurement": true
+  },
+  "observations": [
+    "Cancelled consumer compilation expires",
+    "Completed independent RTL body and its source lease survive cancellation while cached",
+    "Eviction releases unused cancelled source generations",
+    "The initial frozen library also retains the first editing SourceManager, including subsequently appended unrelated source storage"
+  ],
+  "remaining": [
+    "Detach fixed semantic provider source ownership from the initial mutable editing namespace without reparsing or breaking macro/library names",
+    "Validate provider rebuild and retained consumers",
+    "Then qualify current CVA6 memory and input responsiveness; B2/B3/C/D remain open"
+  ],
+  "testSha256": "5283f051d79ca473d795535f3292c26fbf71afa8b67552ccba0442db12647e39",
+  "evidenceSha256": {
+    "native-targeted.log": "5289f0492855f03a684e96634a9bb9dcc26f57989e04de33a4ff1fc3cfbdbb6f",
+    "asan-targeted.log": "1d3052bcb92528aaf678be84050a8b1c694ea59a739849b63c4b6b9918560fcc"
+  },
+  "initialFailureNote": "native.log had one incorrect fixture assumption that the initial source owner was independent of the frozen library; the diagnostic probe records the actual provider/source lease and final release instead. Initial failing source snapshot and log retained.",
+  "probeCorrection": "assignText(path, text) arguments were reversed. Original 12MiB accounting is a long-path probe, not 4MiB text. Logs preserved; corrected actual text baseline and isolation test is pending."
+}

@@ -1,3 +1,4 @@
+#include "util/BodyMacroProof.h"
 // SPDX-License-Identifier: MIT
 #include "document/MethodScopeOverlay.h"
 
@@ -6,10 +7,17 @@
 #include "completions/MemberCompletions.h"
 #include "document/BodyDiagnosticCache.h"
 #include "util/Converters.h"
+#include "util/DirectoryProofPlan.h"
+#include "util/LineIndependentMacros.h"
 #include "util/QueryText.h"
+#include "util/RawBodyDirectives.h"
+#include "util/SourceSyntaxReachability.h"
 #include "util/UvmPhaseTrace.h"
+#include <array>
 #include <atomic>
 #include <cctype>
+#include <chrono>
+#include <cstring>
 #include <fstream>
 #include <regex>
 #include <set>
@@ -17,6 +25,7 @@
 #include <tuple>
 
 #if defined(__APPLE__)
+#    include "util/SourcePathProof.h"
 #    include <cerrno>
 #    include <fcntl.h>
 #    include <sys/param.h>
@@ -83,30 +92,11 @@ void need(bool condition, const char* message) {
     if (!condition)
         throw std::runtime_error(message);
 }
-const std::regex& stateDirectives() {
-    static const std::regex directives(
-        R"(`(define|undef|undefineall|include|begin_keywords|end_keywords|timescale|default_nettype|resetall|line|celldefine|endcelldefine|pragma|unconnected_drive|nounconnected_drive|default_decay_time|default_trireg_strength|delay_mode_distributed|delay_mode_path|delay_mode_unit|delay_mode_zero|uselib)\b)");
-    return directives;
-}
-const std::regex& bodyConditionals() {
-    static const std::regex conditionals(R"(`(ifdef|ifndef|elsif|else|endif)\b)");
-    return conditionals;
-}
 void validateBodyPreprocessing(const std::string& methodText) {
-    need(!std::regex_search(methodText, stateDirectives()), "body changes preprocessing state");
-    size_t depth = 0;
-    for (std::sregex_iterator i(methodText.begin(), methodText.end(), bodyConditionals()), end;
-         i != end; ++i) {
-        auto directive = (*i)[1].str();
-        if (directive == "ifdef" || directive == "ifndef")
-            ++depth;
-        else {
-            need(depth != 0, "body changes enclosing conditional state");
-            if (directive == "endif")
-                --depth;
-        }
-    }
-    need(depth == 0, "body leaves conditional preprocessing state open");
+    const auto directives = inspectRawBodyDirectives(methodText);
+    need(!directives.changesState, "body changes preprocessing state");
+    need(!directives.changesEnclosingConditional, "body changes enclosing conditional state");
+    need(directives.openConditionals == 0, "body leaves conditional preprocessing state open");
 }
 void validateMacroPreprocessing(
     const parsing::MacroRefMetadata& reference,
@@ -141,8 +131,8 @@ void validateMacroPreprocessing(
             expansion += token.rawText();
             expansion += ' ';
         }
-        need(!std::regex_search(expansion, stateDirectives()) &&
-                 !std::regex_search(expansion, bodyConditionals()),
+        const auto directives = inspectRawBodyDirectives(expansion);
+        need(!directives.changesState && !directives.hasConditionals,
              "macro expansion can change surrounding preprocessing state");
         if (!inherited.empty()) {
             need(expansion.find("``") == std::string::npos,
@@ -291,40 +281,150 @@ std::string MethodScopeOverlay::plain(const SlangDoc& document) {
     bytes.remove_suffix(1);
     return std::string(bytes);
 }
-std::optional<std::string> MethodScopeOverlay::read(const std::string& path,
-                                                    [[maybe_unused]] bool fastPath,
-                                                    const lsp::RequestContext& ctx) {
+namespace {
+struct FileInputRead {
+    std::optional<std::string> contents;
+    bool matches = false;
+};
+// Invocation-local path access, never a successful content / version witness.
+// The final descriptor path and absolute leaf metadata are still checked per file.
+class FileProofDirectories {
+public:
+    explicit FileProofDirectories(const DirectoryProofPlan::Session* session = nullptr) :
+        session(session) {}
+    FileProofDirectories(const FileProofDirectories&) = delete;
+    ~FileProofDirectories() { clear(); }
+#if defined(__APPLE__)
+    std::optional<int> openInput(const std::string& path) {
+        if (!enabled)
+            return std::nullopt;
+        const auto slash = path.rfind('/');
+        if (slash == std::string::npos || slash + 1 == path.size())
+            return std::nullopt;
+        const auto leaf = std::string_view(path).substr(slash + 1);
+        if (leaf == "." || leaf == "..")
+            return std::nullopt;
+        const auto directory = std::string_view(path).substr(0, slash ? slash : 1);
+        if (descriptor < 0 || directory != parent) {
+            clear();
+            if (directory != "/" && !exactNormalizedPosixPath(directory, directory))
+                return std::nullopt;
+            parent = directory;
+            if (session) {
+                if (auto borrowed = session->directory(directory)) {
+                    descriptor = *borrowed;
+                    owned = false;
+                }
+            }
+            if (descriptor < 0) {
+                descriptor = ::open(parent.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NONBLOCK);
+                if (descriptor < 0) {
+                    releaseOnExhaustion();
+                    return std::nullopt;
+                }
+                char resolved[MAXPATHLEN];
+                if (::fcntl(descriptor, F_GETPATH, resolved) != 0 ||
+                    std::string_view(resolved) != parent) {
+                    clear();
+                    return std::nullopt;
+                }
+            }
+        }
+        const auto fd = ::openat(descriptor, path.c_str() + slash + 1,
+                                 O_RDONLY | O_CLOEXEC | O_NONBLOCK | O_NOFOLLOW);
+        if (fd >= 0)
+            return fd;
+        releaseOnExhaustion();
+        // A pinned directory may have moved. Never certify a missing input
+        // through its old directory; retry the original absolute path.
+        return std::nullopt;
+    }
+#endif
+
+private:
+    void clear() {
+#if defined(__APPLE__)
+        if (descriptor >= 0 && owned)
+            ::close(descriptor);
+        descriptor = -1;
+        owned = true;
+        parent.clear();
+#endif
+    }
+#if defined(__APPLE__)
+    void releaseOnExhaustion() {
+        if (errno == EMFILE || errno == ENFILE) {
+            clear();
+            enabled = false;
+        }
+    }
+    // Inputs are ordered by physical path, so adjacent files usually share one
+    // parent. Retain at most one directory, regardless of the project size.
+    std::string parent;
+    int descriptor = -1;
+    bool enabled = true;
+    bool owned = true;
+#endif
+    [[maybe_unused]] const DirectoryProofPlan::Session* session;
+};
+
+FileInputRead readCertificateFile(const std::string& path, [[maybe_unused]] bool fastPath,
+                                  const lsp::RequestContext& ctx,
+                                  const std::optional<std::string>* expected = nullptr,
+                                  [[maybe_unused]] FileProofDirectories* directories = nullptr) {
 #if defined(__APPLE__)
     if (fastPath) {
         // The descriptor proves the resolved path of the bytes actually read,
         // avoiding canonical()'s repeated ancestor walks for every project file.
         // This is still a fresh complete content read, not a metadata certificate.
-        const int fd = ::open(path.c_str(), O_RDONLY | O_CLOEXEC | O_NONBLOCK);
+        // A missing leaf cannot be certified through a pinned parent: that
+        // parent may have moved. Go straight to the required absolute lookup
+        // instead of doing an openat that must retry the absolute path anyway.
+        const bool expectedMissing = expected && !expected->has_value();
+        auto relative = directories && !expectedMissing ? directories->openInput(path)
+                                                        : std::nullopt;
+        const int fd = relative ? *relative
+                                : ::open(path.c_str(), O_RDONLY | O_CLOEXEC | O_NONBLOCK);
         if (fd < 0) {
+            if (errno == EMFILE || errno == ENFILE)
+                throw DirectoryProofUnavailable();
             if (errno == ENOENT)
-                return {};
+                return {{}, expected && !expected->has_value()};
             need(false, "unreadable certificate input");
         }
         auto close = ScopeGuard([&] { ::close(fd); });
         struct stat before;
         need(::fstat(fd, &before) == 0 && S_ISREG(before.st_mode), "nonregular certificate input");
         char resolved[MAXPATHLEN];
-        if (::fcntl(fd, F_GETPATH, resolved) == 0) {
-            need(fs::path(resolved) == fs::path(path) &&
-                     fs::absolute(path).lexically_normal() == fs::path(path),
+        if (relative || ::fcntl(fd, F_GETPATH, resolved) == 0) {
+            // Avoid constructing and decomposing the same absolute pathname
+            // repeatedly. The fast predicate implies the original comparison;
+            // all other spellings retain that comparison unchanged.
+            const bool exactPath = relative || exactNormalizedPosixPath(path, resolved);
+            need(exactPath || (fs::path(resolved) == fs::path(path) &&
+                               fs::absolute(path).lexically_normal() == fs::path(path)),
                  "symlink input unsupported");
             need(before.st_size >= 0 && uint64_t(before.st_size) <= std::string().max_size(),
                  "input size unavailable");
-            std::string bytes(size_t(before.st_size), '\0');
+            const auto size = size_t(before.st_size);
+            std::string bytes;
+            if (!expected)
+                bytes.resize(size);
+            bool matches = expected && expected->has_value() && expected->value().size() == size;
+            std::array<char, 64 * 1024> chunk;
             size_t offset = 0;
-            while (offset < bytes.size()) {
+            while (offset < size) {
                 ctx.checkpoint("during method file input read");
-                const auto count = ::read(fd, bytes.data() + offset,
-                                          std::min<size_t>(16 * 1024 * 1024,
-                                                           bytes.size() - offset));
+                auto destination = expected ? chunk.data() : bytes.data() + offset;
+                const auto count = ::read(
+                    fd, destination,
+                    std::min<size_t>(expected ? chunk.size() : 16 * 1024 * 1024, size - offset));
                 if (count < 0 && errno == EINTR)
                     continue;
                 need(count > 0, "input changed or read failed");
+                if (matches &&
+                    std::memcmp(destination, expected->value().data() + offset, size_t(count)) != 0)
+                    matches = false;
                 offset += size_t(count);
             }
             char extra;
@@ -338,9 +438,12 @@ std::optional<std::string> MethodScopeOverlay::read(const std::string& path,
             ctx.checkpoint(path);
             need(::lstat(path.c_str(), &current) == 0 && S_ISREG(current.st_mode) &&
                      sameFileVersion(before, after) && sameFileVersion(after, current) &&
-                     ::fcntl(fd, F_GETPATH, resolved) == 0 && fs::path(resolved) == fs::path(path),
+                     ::fcntl(fd, F_GETPATH, resolved) == 0 &&
+                     (exactPath ? std::string_view(resolved) == path
+                                : fs::path(resolved) == fs::path(path)),
                  "input changed or read failed");
-            return bytes;
+            return {expected ? std::nullopt : std::optional<std::string>(std::move(bytes)),
+                    matches};
         }
         // Unsupported descriptor path queries retain the portable strict proof.
     }
@@ -348,7 +451,7 @@ std::optional<std::string> MethodScopeOverlay::read(const std::string& path,
     std::error_code error;
     auto status = fs::status(path, error);
     if (error == std::errc::no_such_file_or_directory || (!error && !fs::exists(status)))
-        return {};
+        return {{}, expected && !expected->has_value()};
     need(!error && fs::is_regular_file(status), ("nonregular certificate input: " + path).c_str());
     need(fs::canonical(path) == fs::absolute(path).lexically_normal(), "symlink input unsupported");
     // Read into one allocation. Iterator extraction spends most body-query time
@@ -364,7 +467,20 @@ std::optional<std::string> MethodScopeOverlay::read(const std::string& path,
     input.read(bytes.data(), std::streamsize(bytes.size()));
     need(bool(input) && input.peek() == std::char_traits<char>::eof() && !input.bad(),
          "input changed or read failed");
-    return bytes;
+    const bool matches = expected && expected->has_value() && bytes == expected->value();
+    return {std::move(bytes), matches};
+}
+} // namespace
+
+std::optional<std::string> MethodScopeOverlay::read(const std::string& path, bool fastPath,
+                                                    const lsp::RequestContext& ctx) {
+    return readCertificateFile(path, fastPath, ctx).contents;
+}
+
+bool MethodScopeOverlay::readMatches(const std::string& path,
+                                     const std::optional<std::string>& expected, bool fastPath,
+                                     const lsp::RequestContext& ctx) {
+    return readCertificateFile(path, fastPath, ctx, &expected).matches;
 }
 
 MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, const URI& target,
@@ -385,6 +501,7 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
         need(document->hasAnalysis(), "current query context required");
         need(!d.completions.resolveEdits, "deferred callable edits required");
         auto [graph, resolvedAnalysis] = document->getAnalysisAndInputs(ctx);
+        contextPhases.mark("body-context-resolved-inputs");
         analysis = std::move(resolvedAnalysis);
         tree = graph.tree;
         occurrence = graph.buffer;
@@ -395,6 +512,7 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
             for (auto id : candidate->getPreprocessorMetadata().sourceBufferIds)
                 occurrences += d.sm.getFullPath(id) == d.sm.getFullPath(occurrence);
         need(occurrences == 1, "nonunique target occurrence");
+        contextPhases.mark("body-context-unique-occurrence");
     }
     else {
         need(!d.comp && d.hasConfiguredCompilationInputs() && !d.completions.resolveEdits,
@@ -594,7 +712,89 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
          "edit outside function");
     contextPhases.mark("body-context-target");
     if (bodyQueries) {
-        auto contexts = analysis->getSubroutines(*selected);
+        auto contexts = analysis->getSubroutines(*selected, ctx, true);
+        if (!contexts.empty())
+            bodyQueryScopeDisplay = contexts.front()->getLexicalPath();
+        contextPhases.mark("body-context-shallow-methods");
+        try {
+            // A package-only view need not contain a newly referenced package.
+            // Reuse the completed Native namespace instead of elaborating every
+            // consumer or synthesizing a default generic specialization. Capture
+            // requires a current, complete publication and retains its one owner.
+            auto baseline =
+                BodyDiagnosticCache::capture(d, uri, selected->getFirstToken().location().offset(),
+                                             selected->getLastToken().range().end().offset(), ctx);
+            contextPhases.mark("body-context-native-capture");
+            std::vector<const ast::SubroutineSymbol*> nativeContexts;
+            for (auto fn : baseline->originals) {
+                // Distinct trees may represent one source occurrence (module
+                // query overrides do this). Never combine repeated includes.
+                need(fn->getSyntax() == baseline->originals.front()->getSyntax(),
+                     "ambiguous completed query occurrence");
+                if (fn->getParentScope()->asSymbol().kind != ast::SymbolKind::InstanceBody)
+                    nativeContexts.push_back(fn);
+            }
+            // Module queries must preserve the selected actual instance and its
+            // parameter map, even though diagnostics cover all edited instances.
+            for (auto fn : contexts)
+                if (auto symbol = analysis->getDesignSymbol(*fn))
+                    if (auto mapped = symbol->as_if<ast::SubroutineSymbol>();
+                        mapped &&
+                        std::ranges::find(baseline->originals, mapped) !=
+                            baseline->originals.end() &&
+                        std::ranges::find(nativeContexts, mapped) == nativeContexts.end())
+                        nativeContexts.push_back(mapped);
+            if (nativeContexts.empty() && baseline->originals.size() == 1)
+                nativeContexts = baseline->originals;
+            need(!nativeContexts.empty(), "selected Native query context unavailable");
+            contextPhases.mark("body-context-native-contexts");
+            // Include already analyzed peers from this physical source so later
+            // macro-line certification can still find their original identities.
+            std::vector<const ast::SubroutineSymbol*> indexed;
+            const auto nativeOccurrence =
+                d.sm.getFullyExpandedLoc(
+                        baseline->originals.front()->getSyntax()->getFirstToken().location())
+                    .buffer();
+            for (auto fn : baseline->completeAnalysis->getAnalyzedSubroutines()) {
+                ctx.checkpoint("collect completed body query contexts");
+                if (auto syntax = fn->getSyntax();
+                    syntax &&
+                    d.sm.getFullyExpandedLoc(syntax->getFirstToken().location()).buffer() ==
+                        nativeOccurrence)
+                    indexed.push_back(fn);
+            }
+            need(!indexed.empty(), "completed body query index is empty");
+            contextPhases.mark("body-context-native-peers");
+            const bool genericRecovery = contexts.empty();
+            ctx.checkpoint(genericRecovery ? "before completed generic query context indexing"
+                                           : "before completed body query context indexing");
+            auto unit = std::make_shared<ShallowCompilation>(d.sm, tree, baseline->owner, indexed);
+            contextPhases.mark("body-context-native-unit");
+            // Only immutable token/syntax data is copied, and the constructor
+            // checks exact tree and included occurrence identity. Symbols are
+            // indexed afresh against the completed Native compilation.
+            auto completed = std::make_shared<ShallowAnalysis>(occurrence, std::move(unit), ctx,
+                                                               analysis.get());
+            contextPhases.mark("body-context-native-index");
+            const auto indexedContexts = completed->getSubroutines(*selected);
+            for (auto fn : nativeContexts)
+                need(std::ranges::find(indexedContexts, fn) != indexedContexts.end(),
+                     "incomplete completed body query contexts");
+            ctx.checkpoint(genericRecovery ? "after completed generic query context indexing"
+                                           : "after completed body query context indexing");
+            analysis = std::move(completed);
+            contexts = std::move(nativeContexts);
+            diagnosticBaseline = std::move(baseline);
+        }
+        catch (const lsp::RequestCancelled&) {
+            throw;
+        }
+        catch (const std::exception&) {
+            // Query-only or incomplete Native states keep the existing shallow
+            // path; do not construct a full design synchronously to obtain this.
+            if (contexts.empty())
+                throw;
+        }
         need(!contexts.empty(), "unbound function / task context");
         for (auto fn : contexts) {
             need(fn->getCompilation().hasFlag(
@@ -607,6 +807,8 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
         if (generalBody) {
             bodyOwner = analysis;
             bodyOriginals = std::move(contexts);
+            if (bodyQueryScopeDisplay.empty())
+                bodyQueryScopeDisplay = bodyOriginals.front()->getLexicalPath();
             functionBegin = selected->getFirstToken().location().offset();
             functionEnd = selected->getLastToken().range().end().offset();
             bodyBegin = selected->semi.range().end().offset();
@@ -619,7 +821,8 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
             contextPhases.mark("body-context-methods");
             // Removing an existing directive or state-changing macro is just as
             // unsafe as introducing one: the borrowed suffix used its old state.
-            validateBodyPreprocessing(text.substr(functionBegin, functionEnd - functionBegin));
+            if (!config.experimentalMethodBodyMacroProof.value() || !config.methodBodyMacroProofMaxMiB.value())
+                validateBodyPreprocessing(text.substr(functionBegin, functionEnd - functionBegin));
             // Buffer identities and their paths are immutable during this
             // serialized construction. Resolve each physical source once even
             // when a large library contributes many macro expansion references.
@@ -644,11 +847,16 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
             functionName = bodyOriginals.front()->name;
             functionPath = bodyOriginals.front()->getHierarchicalPath();
             bodyBlocked = bodyOriginals;
+            if (diagnosticBaseline)
+                for (auto fn : diagnosticBaseline->originals)
+                    if (std::ranges::find(bodyBlocked, fn) == bodyBlocked.end())
+                        bodyBlocked.push_back(fn);
             bodyBufferLimit = uint32_t(d.sm.getSourceLocationEntryCount());
             // Macro expansions after this method can use __LINE__, including through
             // nested macros or token pasting. Conservatively retain their enclosing
             // methods as dependencies; declaration / signature expansions need a full
             // update whenever the method's line count changes.
+            std::optional<LineIndependentMacros> declarationMacros;
             for (const auto& [usage, expansion] : analysis->syntaxes.macroExpansions) {
                 auto location = d.sm.getFullyExpandedLoc(usage->getFirstToken().location());
                 if (!inOccurrence(location.buffer()) || location.offset() < originalBodyEnd)
@@ -659,7 +867,8 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
                         enclosing = fn;
                         break;
                     }
-                if (enclosing && location.offset() >= enclosing->semi.range().end().offset() &&
+                if (enclosing && enclosing->prototype->keyword.location().buffer() == occurrence &&
+                    location.offset() >= enclosing->semi.range().end().offset() &&
                     location.offset() < enclosing->end.location().offset()) {
                     auto methods = analysis->getSubroutines(*enclosing);
                     if (methods.empty())
@@ -673,8 +882,16 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
                             bodyLineDependents.push_back(method);
                     }
                 }
-                else
-                    bodyLineSensitiveDeclaration = true;
+                else {
+                    if (!declarationMacros)
+                        declarationMacros.emplace(tree->getPreprocessorMetadata(),
+                                                  tree->options()
+                                                      .getOrDefault<parsing::PreprocessorOptions>()
+                                                      .trackMacroHistory,
+                                                  ctx);
+                    if (!declarationMacros->independent(usage->toString(), ctx))
+                        bodyLineSensitiveDeclaration = true;
+                }
             }
             contextPhases.mark("body-context-later-macros");
             phases.mark("body-prepare-context");
@@ -763,6 +980,10 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
                 macroPins = d.sm.retainBuffers(pins);
             }
             phases.mark("body-prepare-macros");
+            if (config.experimentalMethodBodyMacroProof.value() && config.methodBodyMacroProofMaxMiB.value())
+                bodyMacroProof = std::make_unique<BodyMacroProof>(tree,
+                    std::string_view(text).substr(functionBegin, functionEnd - functionBegin),
+                    selected->prototype->keyword.location(), selected->end.location(), bodyMacros);
         }
     }
     if (!generalBody) {
@@ -990,6 +1211,7 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
         diagnostic_snapshot::captureOptions(miniOptions));
     compilationOptions = std::make_unique<diagnostic_snapshot::ReconstructedOptions>(
         diagnostic_snapshot::captureOptions(compilation.getOptions()));
+    std::optional<SourceManager::SourceSnapshotView> sourceWitness;
     if (bodyQueries) {
         // Query certificates do not replay diagnostics or serialize semantic
         // owners. Native diagnostics retain the current UVM / RTL owners.
@@ -999,7 +1221,13 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
             const auto& pp = syntaxTree->getPreprocessorMetadata();
             buffers.insert(buffers.end(), pp.sourceBufferIds.begin(), pp.sourceBufferIds.end());
         }
-        input->sources = d.sm.captureSnapshot(buffers);
+        if (optimizedCertification(config)) {
+            sourceWitness.emplace(d.sm.captureSnapshotView(buffers));
+            input->sources.cwd = sourceWitness->cwd;
+        }
+        else {
+            input->sources = d.sm.captureSnapshot(buffers);
+        }
         frozen.owner = d.m_snapshotOwner;
         d.completions.requireCompletionEpoch();
         frozen.revision = d.completions.getCompletionEpoch();
@@ -1043,6 +1271,16 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
         need(!immutableFiles.contains(d.sm.getFullPath(occurrence).string()),
              "edited method belongs to an immutable library");
     }
+    auto forSourceFiles = [&](auto&& action) {
+        if (sourceWitness) {
+            for (const auto& file : sourceWitness->files)
+                action(file);
+        }
+        else {
+            for (const auto& file : frozen.input->sources.files)
+                action(file);
+        }
+    };
     const bool fastWitnesses = optimizedCertification(config);
     auto readWitness = [fastWitnesses, &ctx](const std::string& path) {
         try {
@@ -1061,10 +1299,11 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
         // Collect unique physical paths before verifying parsed bytes.
         // Capturing is independent of the final witness map.
         std::map<std::string, std::optional<std::string>> pending;
-        for (const auto& file : frozen.input->sources.files)
+        forSourceFiles([&](const auto& file) {
             if (!file.generated && !immutableFiles.contains(file.fullPath) &&
                 !disk.contains(file.fullPath))
                 pending.try_emplace(file.fullPath);
+        });
         if (pending.size() >= 64) {
             std::vector<FileProofInput> inputs;
             inputs.reserve(pending.size());
@@ -1095,11 +1334,11 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
             throw InputsChanged("input changed during certification");
         return it->second;
     };
-    for (auto& file : frozen.input->sources.files) {
+    forSourceFiles([&](const auto& file) {
         if (immutableFiles.contains(file.fullPath))
-            continue;
+            return;
         if (bodyQueries && file.generated)
-            continue; // Immutable generated bytes are retained by the snapshot.
+            return; // Generated inputs are immutable parts of the captured parse context.
         need(!file.generated, "generated input");
         const auto& bytes = witness(file.fullPath);
         if (URI::fromFile(file.fullPath) != uri) {
@@ -1111,9 +1350,11 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
             if (source != file.bytes)
                 throw InputsChanged("source changed before certification");
         }
-    }
+    });
     ctx.checkpoint("method certificate sources ready");
-    for (auto& lookup : frozen.input->sources.lookups) {
+    const auto& sourceLookups = sourceWitness ? sourceWitness->lookups
+                                              : frozen.input->sources.lookups;
+    for (const auto& lookup : sourceLookups) {
         if (immutableFiles.contains(lookup.path))
             continue;
         need(lookup.fileId || lookup.errorValue == int(std::errc::no_such_file_or_directory),
@@ -1121,6 +1362,8 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
         if (bool(witness(lookup.path)) != bool(lookup.fileId))
             throw InputsChanged("lookup changed");
     }
+    // No borrowed source storage survives construction of the physical witnesses.
+    sourceWitness.reset();
     for (auto& [path, _] : d.driver.getCommandFileMetadata()) {
         const auto& bytes = witness(path.string());
         // Real -f/-F files were read through the same SourceManager. Compare
@@ -1151,6 +1394,23 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
     for (auto path : {fs::path(d.m_workspacePathPrefix) / ".slang/server.json",
                       fs::path(d.m_workspacePathPrefix) / ".slang/local/server.json"})
         witness(path.string());
+    if (fastWitnesses) {
+        std::vector<std::string_view> missing;
+        for (const auto& [path, bytes] : disk)
+            if (!bytes)
+                missing.push_back(path);
+        const auto budget = size_t(std::min<uint32_t>(
+            config.methodBodyDirectoryProofCacheKiB.value(), 16384)) * 1024;
+        const auto inputCharge = disk.size() * sizeof(FileProofInput) * 2;
+        if (inputCharge < budget)
+            directoryProofPlan = DirectoryProofPlan::build(missing, budget - inputCharge);
+        if (directoryProofPlan) {
+            plannedProofInputs.reserve(disk.size());
+            for (const auto& [path, bytes] : disk)
+                plannedProofInputs.push_back({&path, &bytes, nullptr,
+                    bytes ? size_t(-1) : directoryProofPlan->group(path)});
+        }
+    }
     configKey = rfl::json::write(config);
     optionsKey = rfl::json::write(diagnostic_snapshot::captureOptions(
         bodyQueries ? Bag{d.options.getOrDefault<ast::CompilationOptions>()} : d.options));
@@ -1191,6 +1451,10 @@ bool MethodScopeOverlay::validContext(const Config& config, const lsp::RequestCo
     if (generalBody)
         for (auto original : bodyBlocked)
             if (original->bodyHasExternalDependents.load(std::memory_order_relaxed))
+                return false;
+    if (generalBody)
+        for (auto syntax : bodyBlockedSyntax)
+            if (bodyOwner->getCompilation()->bodySyntaxHasExternalDependents(*syntax))
                 return false;
     if (bodyQueries && (frozen.revision != driver->completions.getCompletionEpoch() ||
                         immutableUvm.lock() != driver->m_trustedUvm ||
@@ -1239,9 +1503,47 @@ bool MethodScopeOverlay::readProofInputs(std::span<const FileProofInput> inputs,
                                          std::string_view checkpoint,
                                          const lsp::RequestContext& ctx) const {
     ctx.checkpoint("before method input proof");
+    if (directoryProofPlan) {
+        try {
+            DirectoryProofPlan::Session session(*directoryProofPlan, ctx);
+            FileProofDirectories directories(&session);
+            for (const auto& input : inputs) {
+                ctx.checkpoint(checkpoint);
+                if (input.expected && !input.expected->has_value() &&
+                    session.covers(input.directoryGroup))
+                    continue;
+                if (input.expected && !input.captured) {
+                    if (!readCertificateFile(*input.path, true, ctx, input.expected,
+                                             &directories).matches)
+                        return false;
+                }
+                else {
+                    auto bytes = readCertificateFile(*input.path, true, ctx, nullptr,
+                                                      &directories).contents;
+                    if (input.expected && bytes != *input.expected)
+                        return false;
+                    if (input.captured)
+                        *input.captured = std::move(bytes);
+                }
+            }
+            ctx.checkpoint("after batched " + std::string(checkpoint));
+            return session.valid(ctx);
+        }
+        catch (const DirectoryProofUnavailable&) {
+            // The entire optional session (including borrowed access) unwinds
+            // before retrying. No partial success is reused by this attempt.
+            ctx.checkpoint("before serial directory proof retry");
+        }
+    }
+    FileProofDirectories directories;
     for (const auto& input : inputs) {
         ctx.checkpoint(checkpoint);
-        auto bytes = read(*input.path, true, ctx);
+        if (input.expected && !input.captured) {
+            if (!readCertificateFile(*input.path, true, ctx, input.expected, &directories).matches)
+                return false;
+            continue;
+        }
+        auto bytes = readCertificateFile(*input.path, true, ctx, nullptr, &directories).contents;
         if (input.expected && bytes != *input.expected)
             return false;
         if (input.captured)
@@ -1267,10 +1569,15 @@ bool MethodScopeOverlay::valid(const Config& config, const lsp::RequestContext& 
     phases.mark("body-validate-directories");
     if (optimizedCertification(config) && disk.size() >= 64) {
         std::vector<FileProofInput> inputs;
-        inputs.reserve(disk.size());
-        for (const auto& [path, bytes] : disk)
-            inputs.push_back({&path, &bytes, nullptr});
-        if (!readProofInputs(inputs, "method input validation", ctx)) {
+        if (plannedProofInputs.empty()) {
+            inputs.reserve(disk.size());
+            for (const auto& [path, bytes] : disk)
+                inputs.push_back({&path, &bytes, nullptr});
+        }
+        if (!readProofInputs(plannedProofInputs.empty()
+                                 ? std::span<const FileProofInput>(inputs)
+                                 : std::span<const FileProofInput>(plannedProofInputs),
+                             "method input validation", ctx)) {
             inputChanged = true;
             return false;
         }
@@ -1278,7 +1585,7 @@ bool MethodScopeOverlay::valid(const Config& config, const lsp::RequestContext& 
     else {
         for (auto& [path, bytes] : disk) {
             ctx.checkpoint("method input validation");
-            if (read(path, optimizedCertification(config), ctx) != bytes) {
+            if (!readMatches(path, bytes, optimizedCertification(config), ctx)) {
                 inputChanged = true;
                 return false;
             }
@@ -1512,7 +1819,8 @@ bool MethodScopeOverlay::generalApply(const lsp::DidChangeTextDocumentParams& p,
                                       size_t nextFunctionEnd, bool bindOnly) {
     UvmPhaseTrace phases;
     auto methodText = next.substr(functionBegin, nextFunctionEnd - functionBegin);
-    validateBodyPreprocessing(methodText);
+    const bool freshMacroEffects = bodyMacroProof ? bodyMacroProof->validateRaw(methodText) : false;
+    if (!bodyMacroProof) validateBodyPreprocessing(methodText);
     for (auto original : bodyOriginals)
         need(!original->bodyHasExternalDependents.load(std::memory_order_relaxed),
              "method has constant dependencies");
@@ -1542,12 +1850,83 @@ bool MethodScopeOverlay::generalApply(const lsp::DidChangeTextDocumentParams& p,
             driver->sm.addDiagnosticDirective(SourceLocation(source.id, directive.offset),
                                               directive.name, directive.severity, true);
     auto blocked = bodyOriginals;
+    bool generatedMacrosValidated = false;
+    std::vector<const syntax::SyntaxNode*> blockedSyntax;
+    // One edited declaration can have other Native instances or future generic
+    // specializations. Protect the declaration as well as the selected query
+    // symbols, so none of those can evaluate the old body through another path.
+    for (auto original : bodyOriginals)
+        if (auto syntax = original->getSyntax();
+            syntax && std::ranges::find(blockedSyntax, syntax) == blockedSyntax.end())
+            blockedSyntax.push_back(syntax);
     const bool shiftedLines = driver->sm.getRawLineNumber(SourceLocation(source.id, nextBodyEnd)) !=
                               driver->sm.getRawLineNumber(
                                   SourceLocation(BufferID(originalBuffer, "original body lines"),
                                                  originalBodyEnd));
+    if (freshMacroEffects && shiftedLines) bodyMacroProof->validateShiftedLookups(ctx);
     if (shiftedLines) {
-        need(!bodyLineSensitiveDeclaration, "body shifts line-dependent enclosing declarations");
+        if (bodyLineSensitiveDeclaration) {
+            if (!bodyDiagnostics)
+                prepareLocalDiagnostics(config, ctx);
+            need(bool(bodyDiagnostics), "body shifts line-dependent enclosing declarations");
+            auto contexts = bodyDiagnostics->validateGeneratedMacros(next, nextFunctionEnd, ctx);
+            generatedMacrosValidated = true;
+            std::set<const syntax::SyntaxNode*> missingSyntax;
+            std::set<const syntax::SyntaxNode*> witnessedSyntax;
+            for (auto declaration : contexts) {
+                auto matches = bodyOwner->getSubroutines(*declaration);
+                if (matches.empty() && std::ranges::find(bodyMacroSyntaxWitness, declaration) ==
+                                           bodyMacroSyntaxWitness.end())
+                    missingSyntax.insert(declaration);
+                if (!matches.empty() && std::ranges::find(bodyMacroSyntaxWitness, declaration) ==
+                                            bodyMacroSyntaxWitness.end()) {
+                    ctx.checkpoint("generated macro query syntax identity");
+                    for (auto method : matches)
+                        need(method->getSyntax() == declaration,
+                             "generated macro Native declaration identity differs");
+                    witnessedSyntax.insert(declaration);
+                }
+                need(bodyOwner->getCompilation()->hasFlag(
+                         ast::CompilationFlags::TrackSubroutineBodyDependencies) &&
+                         !bodyOwner->getCompilation()->bodySyntaxHasExternalDependents(
+                             *declaration),
+                     "generated macro query syntax has semantic dependents");
+                blockedSyntax.push_back(declaration);
+                for (auto method : matches) {
+                    need(method->getCompilation().hasFlag(
+                             ast::CompilationFlags::TrackSubroutineBodyDependencies) &&
+                             !method->bodyHasExternalDependents.load(std::memory_order_relaxed),
+                         "generated macro query body has semantic dependents");
+                    blocked.push_back(method);
+                }
+            }
+            if (!missingSyntax.empty()) {
+                // Query and native symbols may instantiate at different times.
+                // Verify all still-missing declarations in one pure traversal;
+                // bodyOwner retains this same immutable CST for our lifetime.
+                const auto witnessed = missingSyntax;
+                const SourceSyntaxReachability reachable(
+                    driver->sm, BufferID(originalBuffer, "macro query evidence"));
+                ctx.checkpoint("generated macro query syntax identity walk");
+                auto find = [&](auto&& self, const syntax::SyntaxNode& node) -> void {
+                    ctx.checkpoint("generated macro query syntax identity");
+                    if (reachable.excludes(node))
+                        return;
+                    missingSyntax.erase(&node);
+                    for (uint32_t i = 0; !missingSyntax.empty() && i < node.getChildCount(); ++i)
+                        if (auto child = node.childNode(i))
+                            self(self, *child);
+                };
+                find(find, bodyOwner->getSyntaxTree()->root());
+                need(missingSyntax.empty(), "generated macro query syntax differs");
+                witnessedSyntax.insert(witnessed.begin(), witnessed.end());
+            }
+            if (!witnessedSyntax.empty()) {
+                ctx.checkpoint("before generated macro query syntax witness commit");
+                bodyMacroSyntaxWitness.insert(bodyMacroSyntaxWitness.end(), witnessedSyntax.begin(),
+                                              witnessedSyntax.end());
+            }
+        }
         for (auto method : bodyLineDependents) {
             need(!method->bodyHasExternalDependents.load(std::memory_order_relaxed),
                  "body shifts a method with external semantic dependencies");
@@ -1555,7 +1934,7 @@ bool MethodScopeOverlay::generalApply(const lsp::DidChangeTextDocumentParams& p,
         }
     }
     phases.mark("body-apply-text");
-    ast::BodyQueryEvaluationGuard guard(blocked);
+    ast::BodyQueryEvaluationGuard guard(blocked, blockedSyntax);
     ctx.checkpoint("before method mini parse");
     auto tree = query.parse(treeOptions->bag(), bodyMacros);
     for (const auto& reference : tree->getPreprocessorMetadata().macroRefs)
@@ -1601,12 +1980,15 @@ bool MethodScopeOverlay::generalApply(const lsp::DidChangeTextDocumentParams& p,
     }
     phases.mark("body-apply-bind");
     auto resultingMacros = tree->getDefinedMacros();
-    need(resultingMacros.size() == bodyMacros.size(), "body changes macro environment");
-    for (size_t i = 0; i < resultingMacros.size(); ++i)
-        need(resultingMacros[i] == bodyMacros[i] ||
-                 (resultingMacros[i]->name.valueText() == bodyMacros[i]->name.valueText() &&
-                  resultingMacros[i]->toString() == bodyMacros[i]->toString()),
-             "body changes macro environment");
+    if (bodyMacroProof) bodyMacroProof->validateExit(resultingMacros);
+    else {
+        need(resultingMacros.size() == bodyMacros.size(), "body changes macro environment");
+        for (size_t i = 0; i < resultingMacros.size(); ++i)
+            need(resultingMacros[i] == bodyMacros[i] ||
+                     (resultingMacros[i]->name.valueText() == bodyMacros[i]->name.valueText() &&
+                      resultingMacros[i]->toString() == bodyMacros[i]->toString()),
+                 "body changes macro environment");
+    }
     auto analysis = std::make_shared<ShallowAnalysis>(source.id, unit, ctx);
     phases.mark("body-apply-index");
     // This commits synchronized text and a private provisional slice. Queries,
@@ -1616,9 +1998,14 @@ bool MethodScopeOverlay::generalApply(const lsp::DidChangeTextDocumentParams& p,
     phases.mark("body-apply-revalidate");
     if (!bindOnly)
         commitGeneralText(p, std::move(next), nextBodyEnd, nextFunctionEnd, ctx, synced);
+    if (generatedMacrosValidated)
+        ctx.checkpoint("before current macro proof witness commit");
     miniAnalysis = std::move(analysis);
     miniTree = std::move(tree);
+    if (generatedMacrosValidated)
+        bodyDiagnostics->recordGeneratedMacroValidation(miniTree, nextFunctionEnd);
     bodyBlocked = std::move(blocked);
+    bodyBlockedSyntax = std::move(blockedSyntax);
     return true;
 }
 
@@ -1704,6 +2091,7 @@ const MethodScopeOverlay::DTO& MethodScopeOverlay::completion(size_t context, si
         return methodValues[context][size_t(slot - slots.begin())];
     return lexical[context][index];
 }
+
 std::optional<std::vector<lsp::CompletionItem>> MethodScopeOverlay::complete(
     const lsp::CompletionParams& p, const Config& config, const lsp::RequestContext& ctx) try {
     auto result = completeImpl(p, config, ctx);
@@ -1785,10 +2173,12 @@ std::optional<std::vector<lsp::CompletionItem>> MethodScopeOverlay::completeImpl
             !generalSite(p.position))
             return {};
         ensureGeneralBinding(config, ctx);
-        ast::BodyQueryEvaluationGuard guard(bodyBlocked);
+        ast::BodyQueryEvaluationGuard guard(bodyBlocked, bodyBlockedSyntax);
         BodySourceProjection projection(driver->sm, driver->getDocument(uri)->getBuffer(),
                                         miniAnalysis->getBuffer(), originalBodyEnd, bodyEnd,
-                                        bodyBufferLimit);
+                                        bodyBufferLimit,
+                                        miniAnalysis->getShallowCompilation()->getBodyQueryRoots(),
+                                        bodyQueryScopeDisplay);
         auto doc = driver->getDocument(uri);
         auto location = toSourceLocation(miniAnalysis->getBuffer(), p.position, driver->sm);
         if (!location)
@@ -1855,10 +2245,12 @@ std::optional<std::vector<lsp::LocationLink>> MethodScopeOverlay::defineImpl(
         if (!generalSite(p.position))
             return {};
         ensureGeneralBinding(config, ctx);
-        ast::BodyQueryEvaluationGuard guard(bodyBlocked);
+        ast::BodyQueryEvaluationGuard guard(bodyBlocked, bodyBlockedSyntax);
         BodySourceProjection projection(driver->sm, driver->getDocument(uri)->getBuffer(),
                                         miniAnalysis->getBuffer(), originalBodyEnd, bodyEnd,
-                                        bodyBufferLimit);
+                                        bodyBufferLimit,
+                                        miniAnalysis->getShallowCompilation()->getBodyQueryRoots(),
+                                        bodyQueryScopeDisplay);
         auto info = driver->getDefinitionInfoAt(uri, p.position, ctx, miniAnalysis);
         return info ? info->getDefinitionLspLinks() : std::vector<lsp::LocationLink>{};
     }
@@ -1887,11 +2279,12 @@ std::optional<std::optional<lsp::Hover>> MethodScopeOverlay::hoverImpl(
         !generalSite(position))
         return {};
     ensureGeneralBinding(config, ctx);
-    std::optional<ast::BodyQueryEvaluationGuard> guard(std::in_place, bodyBlocked);
-    std::optional<BodySourceProjection> projection(std::in_place, driver->sm,
-                                                   driver->getDocument(uri)->getBuffer(),
-                                                   miniAnalysis->getBuffer(), originalBodyEnd,
-                                                   bodyEnd, bodyBufferLimit);
+    std::optional<ast::BodyQueryEvaluationGuard> guard(std::in_place, bodyBlocked,
+                                                       bodyBlockedSyntax);
+    std::optional<BodySourceProjection> projection(
+        std::in_place, driver->sm, driver->getDocument(uri)->getBuffer(), miniAnalysis->getBuffer(),
+        originalBodyEnd, bodyEnd, bodyBufferLimit,
+        miniAnalysis->getShallowCompilation()->getBodyQueryRoots(), bodyQueryScopeDisplay);
     auto info = driver->getDefinitionInfoAt(uri, position, ctx, miniAnalysis);
     auto requiresCurrent = [&](const DefinitionInfo::SyntaxTarget& target) {
         if (!target.node)
@@ -2007,10 +2400,11 @@ std::optional<lsp::CompletionItem> MethodScopeOverlay::resolveImpl(
                     }
                 }
             }
-            ast::BodyQueryEvaluationGuard guard(bodyBlocked);
-            BodySourceProjection projection(driver->sm, driver->getDocument(uri)->getBuffer(),
-                                            miniAnalysis->getBuffer(), originalBodyEnd, bodyEnd,
-                                            bodyBufferLimit);
+            ast::BodyQueryEvaluationGuard guard(bodyBlocked, bodyBlockedSyntax);
+            BodySourceProjection projection(
+                driver->sm, driver->getDocument(uri)->getBuffer(), miniAnalysis->getBuffer(),
+                originalBodyEnd, bodyEnd, bodyBufferLimit,
+                miniAnalysis->getShallowCompilation()->getBodyQueryRoots(), bodyQueryScopeDisplay);
             auto out = item;
             out.data = std::move(payload);
             completions::MemberCompletionQuery::resolve(driver->completions, out, ctx,
@@ -2094,7 +2488,8 @@ void MethodScopeOverlay::captureLocalBaseline(const Config& config,
         return;
     diagnosticCaptureVersion = version;
     try {
-        validateBodyPreprocessing(text.substr(functionBegin, functionEnd - functionBegin));
+        if (bodyMacroProof) bodyMacroProof->validateRaw(std::string_view(text).substr(functionBegin, functionEnd - functionBegin));
+        else validateBodyPreprocessing(text.substr(functionBegin, functionEnd - functionBegin));
         UvmPhaseTrace phases;
         diagnosticBaseline = BodyDiagnosticCache::capture(*driver, uri, functionBegin, functionEnd,
                                                           ctx);
@@ -2121,7 +2516,8 @@ void MethodScopeOverlay::prepareLocalDiagnostics(const Config& config,
         const auto baselineEnd = diagnosticBaseline ? diagnosticBaseline->end : functionEnd;
         auto baselineText = diagnosticBaseline ? std::string_view(diagnosticBaseline->text)
                                                : std::string_view(text);
-        validateBodyPreprocessing(
+        if (bodyMacroProof) bodyMacroProof->validateRaw(baselineText.substr(functionBegin, baselineEnd - functionBegin));
+        else validateBodyPreprocessing(
             std::string(baselineText.substr(functionBegin, baselineEnd - functionBegin)));
         std::string padded(baselineText.substr(0, functionBegin));
         for (auto& c : padded)
@@ -2172,12 +2568,28 @@ void MethodScopeOverlay::prepareLocalDiagnostics(const Config& config,
 uint64_t MethodScopeOverlay::localDiagnosticUpdates() const {
     return diagnosticUpdates;
 }
+std::pair<uint64_t, uint64_t> MethodScopeOverlay::localDiagnosticProcedureCounts() const {
+    return bodyDiagnostics
+               ? std::pair{bodyDiagnostics->reusedProcedures, bodyDiagnostics->recomputedProcedures}
+               : std::pair<uint64_t, uint64_t>{};
+}
+std::pair<uint64_t, uint64_t> MethodScopeOverlay::localDiagnosticRenderingCounts() const {
+    return bodyDiagnostics
+               ? std::pair{bodyDiagnostics->reusedRenderings, bodyDiagnostics->freshRenderings}
+               : std::pair<uint64_t, uint64_t>{};
+}
 std::string MethodScopeOverlay::localDiagnosticDecline() const {
     return diagnosticDecline;
 }
 
+std::pair<size_t, size_t> MethodScopeOverlay::localDiagnosticRenderingCacheUsage() const {
+    return bodyDiagnostics ? bodyDiagnostics->targetRenderingCacheUsage()
+                           : std::pair<size_t, size_t>{};
+}
+
 bool MethodScopeOverlay::publishLocalDiagnostics(const Config& config,
-                                                 const lsp::RequestContext& ctx) {
+                                                 const lsp::RequestContext& ctx,
+                                                 bool deferTransport) {
     if (!generalBody || !accepted || !config.experimentalMethodBodyDiagnostics.value() ||
         (!bodyDiagnostics && !optimizedCertification(config)) || !validForWork(config, ctx))
         return false;
@@ -2187,15 +2599,17 @@ bool MethodScopeOverlay::publishLocalDiagnostics(const Config& config,
             prepareLocalDiagnostics(config, ctx);
         if (!bodyDiagnostics)
             return false;
-        bodyDiagnostics->publish(miniTree, functionEnd, ctx, [&] {
-            need(valid(config, ctx), "inputs changed during local diagnostics");
-        });
+        bodyDiagnostics->publish(
+            miniTree, functionEnd, ctx,
+            [&] { need(valid(config, ctx), "inputs changed during local diagnostics"); },
+            deferTransport);
         ++diagnosticUpdates;
         diagnosticDecline.clear();
         if (driver->client.capabilities.inactiveRegionsSupported) {
-            BodySourceProjection projection(driver->sm, driver->getDocument(uri)->getBuffer(),
-                                            miniAnalysis->getBuffer(), originalBodyEnd, bodyEnd,
-                                            bodyBufferLimit);
+            BodySourceProjection projection(
+                driver->sm, driver->getDocument(uri)->getBuffer(), miniAnalysis->getBuffer(),
+                originalBodyEnd, bodyEnd, bodyBufferLimit,
+                miniAnalysis->getShallowCompilation()->getBodyQueryRoots(), bodyQueryScopeDisplay);
             std::vector<lsp::Range> regions;
             for (auto region : bodyOwner->syntaxes.disabledRegions) {
                 auto start = driver->sm.getFullyExpandedLoc(region.start());
@@ -2209,8 +2623,7 @@ bool MethodScopeOverlay::publishLocalDiagnostics(const Config& config,
                 return std::tie(a.start.line, a.start.character) <
                        std::tie(b.start.line, b.start.character);
             });
-            driver->client.onTextDocumentInactiveRegions(
-                {.uri = uri, .regions = std::move(regions)});
+            driver->publishCertifiedLocalInactiveRegions(uri, std::move(regions), deferTransport);
         }
         return true;
     }

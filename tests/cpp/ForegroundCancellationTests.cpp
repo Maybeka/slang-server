@@ -5,6 +5,7 @@
 #include "utils/ServerHarness.h"
 #include <algorithm>
 #include <atomic>
+#include <catch2/generators/catch_generators.hpp>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
@@ -515,4 +516,134 @@ TEST_CASE("Cancelled preinclude parsing preserves overlay aliases and driver rec
     CHECK(rfl::json::write(*hover).find("byte") != std::string::npos);
     change(server, header.m_uri, 3, edited);
     replayAndCommitCurrent(server, header.m_uri, 3);
+}
+
+TEST_CASE("Native document handlers cancel during collection and preserve the latest view",
+          "[foreground-cancellation][native-handler-cancellation]") {
+    struct Case {
+        std::string method;
+        std::string boundary;
+        int checkpointCount = 1;
+    };
+    const std::vector<Case> cases = {
+        {"textDocument/rename", "during local reference token scan"},
+        {"textDocument/rename", "during rename edit collection"},
+        {"textDocument/documentHighlight", "during local reference token scan"},
+        {"textDocument/documentHighlight", "during document highlight collection"},
+        {"textDocument/inlayHint", "during inlay hint collection"},
+        {"textDocument/documentLink", "during document link collection"},
+        {"textDocument/documentSymbol", "during document symbol traversal", 8},
+        {"textDocument/documentSymbol", "before document symbol cache publication"},
+        {"textDocument/documentSymbol", "before publishing document symbols"},
+        {"textDocument/codeAction", "during include code actions"},
+    };
+    const bool supersedingEdit = GENERATE(false, true);
+    for (const auto& test : cases) {
+        DYNAMIC_SECTION(test.method << " cancelled " << test.boundary
+                                    << " by edit=" << supersedingEdit) {
+            CancellationWorkspace workspace;
+            workspace.write("common.svh", "`define ALREADY_DEFINED 1\n");
+            const std::string initial =
+                "`include \"common.svh\"\n`UNKNOWN_ACTION_MACRO\nmodule foreground;\n"
+                "  int old_value;\n"
+                "  function int combine(int lhs, int rhs); return lhs + rhs; endfunction\n"
+                "  initial begin old_value = combine(1, 2); end\nendmodule\n";
+            std::string latest = initial;
+            for (size_t pos = 0; (pos = latest.find("old_value", pos)) != std::string::npos;) {
+                latest.replace(pos, 9, "newest_value");
+                pos += 12;
+            }
+            workspace.write("foreground.sv", initial);
+            CancellationHarness server(workspace.params());
+            if (supersedingEdit) {
+                auto config = server.getConfig();
+                config.experimentalMethodBodyQueries = true;
+                server.loadConfig(config);
+            }
+            auto document = server.openFile("foreground.sv", initial);
+            change(server, document.m_uri, 2, latest);
+            CancellationHarness native(workspace.params());
+            auto nativeDocument = native.openFile("foreground.sv", initial);
+            change(native, nativeDocument.m_uri, 2, latest);
+            const auto use = positionOf(latest, "newest_value =");
+            lsp::RpcRequest request{.jsonrpc = "2.0", .id = 201, .method = test.method};
+            if (test.method == "textDocument/rename") {
+                request.params = rfl::to_generic(
+                    lsp::RenameParams{.textDocument = {.uri = document.m_uri},
+                                      .position = use,
+                                      .newName = "renamed"});
+            }
+            else if (test.method == "textDocument/inlayHint") {
+                request.params = rfl::to_generic(lsp::InlayHintParams{
+                    .textDocument = {.uri = document.m_uri}, .range = {{0, 0}, {6, 9}}});
+            }
+            else if (test.method == "textDocument/codeAction") {
+                request.params = rfl::to_generic(
+                    lsp::CodeActionParams{.textDocument = {.uri = document.m_uri},
+                                          .range = {{1, 3}, {1, 3}},
+                                          .context = {.diagnostics = {}}});
+            }
+            else if (test.method == "textDocument/documentHighlight") {
+                request.params = rfl::to_generic(lsp::DocumentHighlightParams{
+                    .textDocument = {.uri = document.m_uri}, .position = use});
+            }
+            else if (test.method == "textDocument/documentLink") {
+                request.params = rfl::to_generic(
+                    lsp::DocumentLinkParams{.textDocument = {.uri = document.m_uri}});
+            }
+            else {
+                request.params = rfl::to_generic(
+                    lsp::DocumentSymbolParams{.textDocument = {.uri = document.m_uri}});
+            }
+            lsp::RpcRequest incoming{
+                .jsonrpc = "2.0",
+                .method = "textDocument/didChange",
+                .params = rfl::to_generic(lsp::DidChangeTextDocumentParams{
+                    .textDocument = {.version = 3, .uri = document.m_uri},
+                    .contentChanges = {
+                        lsp::TextDocumentContentChangeWholeDocument{.text = latest + "\n"}}})};
+            std::optional<lsp::RequestContext> incomingContext;
+            int hits = 0;
+            auto ctx = server.track(request, [&](std::string_view phase) {
+                if (phase == test.boundary && ++hits == test.checkpointCount) {
+                    if (supersedingEdit)
+                        incomingContext = server.track(incoming);
+                    else
+                        server.cancel(*request.id);
+                }
+            });
+            REQUIRE(ctx.supportsCancellation());
+            const auto cancelled = server.dispatch(request, ctx);
+            if (supersedingEdit) {
+                CHECK(occurrences(cancelled, "Content-Length:") == 1);
+                CHECK(occurrences(cancelled, "\"code\":-32801") == 1);
+                CHECK(cancelled.find("\"result\"") == std::string::npos);
+                REQUIRE(incomingContext);
+                server.dispatch(incoming, *incomingContext);
+                latest += "\n";
+                change(native, nativeDocument.m_uri, 3, latest);
+            }
+            else {
+                checkCancelledWire(cancelled);
+            }
+            REQUIRE(hits == test.checkpointCount);
+            CHECK(document.doc->getVersion() == (supersedingEdit ? 3 : 2));
+            auto text = document.doc->getText();
+            REQUIRE_FALSE(text.empty());
+            REQUIRE(text.back() == '\0');
+            text.remove_suffix(1);
+            CHECK(text == latest);
+            const auto expected = native.dispatch(request);
+            CHECK(expected.find("\"error\"") == std::string::npos);
+            const auto actual = server.dispatch(request);
+            CHECK(actual == expected);
+            // A cancelled private symbol visitor must not leave a dangling child
+            // pointer or a partially cached result on subsequent requests.
+            CHECK(server.dispatch(request) == expected);
+            auto hover = server.getDocHover(
+                {.textDocument = {.uri = document.m_uri}, .position = use});
+            REQUIRE(hover);
+            CHECK(rfl::json::write(*hover).find("newest_value") != std::string::npos);
+        }
+    }
 }

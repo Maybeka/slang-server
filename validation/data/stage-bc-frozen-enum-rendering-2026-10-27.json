@@ -1,0 +1,54 @@
+{
+  "candidateSha256": "e17612702475eeee552408773f2d97c38fdb1bce03470a3b074ce3c5576b252e",
+  "mechanism": "Retained Native enum/typedef formatting reuse requires canonical EnumType parent belonging to the exact current frozen provider; edited-method containment, coordinates, byte/path/EOF/version proof, budgets and cancellation retained",
+  "native": {
+    "ctestPassed": 966,
+    "targetedCases": 2,
+    "targetedAssertions": 214
+  },
+  "asan": {
+    "binarySha256": "09425bafa4b3b0bf078ba1ee162ad4e5a739c7554e3d6f5a503e72df52795574",
+    "testsSha256": "6c4b9114f94074d3c8c6454b5b574304c718561d53b5063170c3f3b2fc2085f0",
+    "cases": 951,
+    "assertions": 176271,
+    "passed": true,
+    "detectLeaks": false
+  },
+  "fullCurrentCorrectness": {
+    "passed": true,
+    "nativeStates": 448,
+    "asanStates": 38,
+    "archives": 112,
+    "registeredTests": 952,
+    "nativeAndAsanWireCases": 6,
+    "sdkNativeAndAsanCases": 2635,
+    "sdkNativeAndAsanAssertions": 35691,
+    "sdkFilesVerified": 709,
+    "evidence": "untracked/stage-bc-frozen-enum-validation-2026-10-27/correctness-runtime.json"
+  },
+  "wholeServerPerformance": "first current co comparison completed, failed four gates; no unchanged candidate resampling",
+  "bcComplete": false,
+  "goalComplete": false,
+  "networkUsed": false,
+  "pushedMain": false,
+  "experimentsDefaultOff": true,
+  "attribution": {
+    "preparationMedianMs": 0.918,
+    "analyzeAndValidateMedianMs": 0.503,
+    "orderingAndRenderingMedianMs": 0.298,
+    "destructorMedianMs": 0.023,
+    "qualification": false,
+    "evidence": "untracked/stage-bc-co-preparation-lifetime-2026-10-27/analysis.json"
+  },
+  "census": "12 retained frozenRTL EnumType mismatches,5 fresh body diagnostics,1 retained boundary diagnostic; no independent oracle, no qualification",
+  "evidenceDirectory": "untracked/stage-bc-frozen-enum-rendering-2026-10-27",
+  "reuseEffect": {
+    "previousReused": 47,
+    "currentReused": 59,
+    "previousFresh": 18,
+    "currentFresh": 6,
+    "nativeBodyOraclePassed": true,
+    "performanceQualified": false
+  },
+  "performanceEvidence": "untracked/stage-bc-frozen-enum-co-performance-2026-10-27/performance-evaluation.json"
+}

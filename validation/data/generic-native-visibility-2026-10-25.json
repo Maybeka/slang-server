@@ -1,0 +1,42 @@
+{
+  "stage": "A",
+  "status": "partial-regression-fix-real-scene-still-fails",
+  "binarySha256": "17c27ec9253bbe9458a7603c460e3d4fcbf2200cadf7c8d4994c4fb800e035c5",
+  "sdkRestoration": {
+    "base": "151a801ceaf6faf23d79a42d210ff67e50eb4660",
+    "files": 709,
+    "patchSha256": "4c3e6e19f6b7b8dd8e794869cd3f19388e29c8eb6e0c648b3507177f320c3a5e",
+    "cleanOfflineApplyVerified": true,
+    "temporaryTreeRemoved": true,
+    "networkUsed": false
+  },
+  "sdkNative": {
+    "cases": 2623,
+    "assertions": 29100,
+    "passed": true
+  },
+  "serverNative": {
+    "cases": 903,
+    "assertions": 146713,
+    "passed": true
+  },
+  "targeted": {
+    "cases": 4,
+    "assertions": 1248,
+    "passed": true
+  },
+  "realGenericScene": {
+    "passed": false,
+    "mode": "candidate",
+    "version": 2,
+    "hoverEqual": true,
+    "missingDiagnostic": "uvml_mem.sv:107 $readmemh associative array non-integral index error"
+  },
+  "asanCurrentCandidate": false,
+  "ctestCurrentCandidate": false,
+  "priorSevenCVACurrentCandidate": false,
+  "performanceQualified": false,
+  "mainPushed": false,
+  "allFiveComplete": false,
+  "allOwnedProcessesTerminal": true
+}

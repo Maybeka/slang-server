@@ -1,0 +1,162 @@
+{
+  "qualification": false,
+  "binarySha256": "5a99fbe5d1012e36496ed9eb3aff70db66656d712b5fe514631e9b4b37a6c58b",
+  "sourceSha256": {
+    "source/src/ServerDriver.cpp": "ea110471040451c9313dfecbb14c3762cccfad0dbcf134d731b7b3ffd6d060b3",
+    "source/src/ServerDiagClient.cpp": "fe98906afb41021b5de9ecc1ba7bca2e265cb86e8ec5316aeb8b829a9aba21f1",
+    "source/src/ast/ServerCompilationAnalysis.cpp": "a1d839dcb23253a6dfac035eb9651d709fd056b0a3119d06a02c1284efd92453"
+  },
+  "temporaryHeaderSha256": "e7840f363c94ed8422dbba4c69b1ce464ba92b15012bdf4c84ee8d582066be41",
+  "networkUsed": false,
+  "complete612MapAndPublicHoverOracle": true,
+  "replaySha256": "05dc0847149148f9ad06a6d5360a85322d0b0416beca582c21dc8806265deeff",
+  "rows": [
+    {
+      "arm": "native",
+      "completed": true,
+      "totalNs": 150957625,
+      "retrievalNs": 208,
+      "semanticIssueNs": 60956500,
+      "driverIssueNs": 12045792,
+      "semanticCount": 18682,
+      "driverCount": 5048,
+      "reportCount": 23940,
+      "reportNs": 58702946,
+      "mapNs": 18363746,
+      "notesNs": 17073986,
+      "physicalNs": 0
+    },
+    {
+      "arm": "native",
+      "completed": true,
+      "totalNs": 539416125,
+      "retrievalNs": 208,
+      "semanticIssueNs": 61213584,
+      "driverIssueNs": 13220708,
+      "semanticCount": 18683,
+      "driverCount": 5048,
+      "reportCount": 23941,
+      "reportNs": 60756896,
+      "mapNs": 15920619,
+      "notesNs": 19513373,
+      "physicalNs": 0
+    },
+    {
+      "arm": "native",
+      "completed": true,
+      "totalNs": 525783750,
+      "retrievalNs": 250,
+      "semanticIssueNs": 61059000,
+      "driverIssueNs": 13076167,
+      "semanticCount": 18683,
+      "driverCount": 5048,
+      "reportCount": 23941,
+      "reportNs": 60289256,
+      "mapNs": 15954339,
+      "notesNs": 19585573,
+      "physicalNs": 0
+    },
+    {
+      "arm": "native",
+      "completed": true,
+      "totalNs": 527428792,
+      "retrievalNs": 208,
+      "semanticIssueNs": 60981333,
+      "driverIssueNs": 13020500,
+      "semanticCount": 18683,
+      "driverCount": 5048,
+      "reportCount": 23941,
+      "reportNs": 60173019,
+      "mapNs": 15912010,
+      "notesNs": 19598336,
+      "physicalNs": 0
+    },
+    {
+      "arm": "native",
+      "completed": true,
+      "totalNs": 542962959,
+      "retrievalNs": 250,
+      "semanticIssueNs": 62053542,
+      "driverIssueNs": 13044042,
+      "semanticCount": 18683,
+      "driverCount": 5048,
+      "reportCount": 23941,
+      "reportNs": 61067676,
+      "mapNs": 16458936,
+      "notesNs": 19762998,
+      "physicalNs": 0
+    },
+    {
+      "arm": "candidate",
+      "completed": true,
+      "totalNs": 174462833,
+      "retrievalNs": 125,
+      "semanticIssueNs": 70343583,
+      "driverIssueNs": 15209250,
+      "semanticCount": 18682,
+      "driverCount": 5048,
+      "reportCount": 23940,
+      "reportNs": 69283837,
+      "mapNs": 17593568,
+      "notesNs": 17080479,
+      "physicalNs": 10012380
+    },
+    {
+      "arm": "candidate",
+      "completed": true,
+      "totalNs": 583367709,
+      "retrievalNs": 250,
+      "semanticIssueNs": 74927875,
+      "driverIssueNs": 17161417,
+      "semanticCount": 18683,
+      "driverCount": 5048,
+      "reportCount": 23941,
+      "reportNs": 75229045,
+      "mapNs": 16250269,
+      "notesNs": 20355248,
+      "physicalNs": 10405191
+    }
+  ],
+  "summary": {
+    "native": {
+      "passes": 5,
+      "median": {
+        "totalNs": 527428792,
+        "retrievalNs": 208,
+        "semanticIssueNs": 61059000,
+        "driverIssueNs": 13044042,
+        "semanticCount": 18683,
+        "driverCount": 5048,
+        "reportCount": 23941,
+        "reportNs": 60289256,
+        "mapNs": 15954339,
+        "notesNs": 19585573,
+        "physicalNs": 0
+      }
+    },
+    "candidate": {
+      "passes": 2,
+      "median": {
+        "totalNs": 378915271.0,
+        "retrievalNs": 187.5,
+        "semanticIssueNs": 72635729.0,
+        "driverIssueNs": 16185333.5,
+        "semanticCount": 18682.5,
+        "driverCount": 5048.0,
+        "reportCount": 23940.5,
+        "reportNs": 72256441.0,
+        "mapNs": 16921918.5,
+        "notesNs": 18717863.5,
+        "physicalNs": 10208785.5
+      }
+    }
+  },
+  "timingCaveat": "Selected client/report timers add observer overhead. Report includes map/notes/physical; semantic/driver issue include report. Phase medians cannot be added to reconstruct a critical path. No speedup or final qualification inferred.",
+  "conclusion": "Cached semantic retrieval takes under1 microsecond; full pass processes about23940 reports, with client conversion the majority of issue time. Current snapshot physical copying adds about10ms. Next investigate bounded publication-local conversion reuse, rather than another semantic result cache or CSR micro-timer optimization.",
+  "restoration": {
+    "restoredNativeSha256": "276f15897dfb26e48cff9e7a7579cd2565ec5b7e712701167d6ddc0adf6a80bd",
+    "sourcesRestored": true,
+    "restoreBuildLogSha256": "648e4ecae1f0fe8575f1a0279ea90fe571f4e9952ba48b7b9e862e8340a8bb48",
+    "ASanUnchanged": true
+  }
+}

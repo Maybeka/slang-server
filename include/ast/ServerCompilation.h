@@ -51,7 +51,8 @@ public:
                       std::optional<std::string> top = std::nullopt,
                       const ServerCompilation* previous = nullptr,
                       const lsp::RequestContext& ctx = {}, bool disposableRoot = false,
-                      std::shared_ptr<const void> sourceOwner = {});
+                      std::shared_ptr<const void> sourceOwner = {},
+                      bool deferInitialModel = false);
 
     ~ServerCompilation() = default;
 
@@ -59,6 +60,12 @@ public:
     void refresh(const lsp::RequestContext& ctx = {});
     /// Prepare complete semantics/dataflow privately before publishing a current model.
     void prepareDiagnostics(const lsp::RequestContext& ctx);
+    /// Preserve the root and selections while releasing unborrowed derived analysis.
+    /// The driver must discard cached diagnostic routes before calling this.
+    bool releaseUnsharedAnalysisCaches();
+    /// Retain value-only lookup hints and selections, then release an unborrowed root.
+    /// Diagnostic routes must already have been discarded by the driver.
+    bool releaseUnsharedModel();
     /// Current syntax only, without committing a root model for diagnostic discovery.
     std::vector<std::shared_ptr<syntax::SyntaxTree>> getCurrentSyntaxTrees(
         const lsp::RequestContext& ctx);
@@ -169,6 +176,7 @@ private:
     void refreshImpl(const lsp::RequestContext& ctx, bool completeDiagnostics);
     /// Lazy semantic state is shared by hierarchy and per-document consumers.
     void ensureCurrent(const lsp::RequestContext& ctx = {}) const;
+    std::vector<std::string> m_initialSelectionPaths;
     bool m_dirty = false;
     bool m_refreshing = false;
     std::unique_ptr<FrozenInstanceCache> m_frozenInstances;
@@ -220,6 +228,8 @@ private:
     /// The analysis state, rebuilt on refresh(). Shared by shallow compilations that are using it
     /// for params while we may be rebuilding a new one.
     std::shared_ptr<ServerCompilationAnalysis> m_analysis;
+    /// Syntax discovery may consult the previous model while rebuilding a released root.
+    std::unordered_map<std::string, std::string> m_releasedSymbolPaths;
 
     /// Active instance and generate scope selection by module name for this compilation.
     std::unordered_map<std::string, hier::QualifiedInstance> m_activeInstancesByModule;

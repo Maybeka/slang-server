@@ -1,0 +1,428 @@
+{
+  "passed": false,
+  "checks": {
+    "package-forward-completed": true,
+    "package-forward-native612": true,
+    "package-forward-local": true,
+    "package-forward-latest": true,
+    "package-forward-p50": false,
+    "package-forward-first-query": true,
+    "package-forward-multiline-query": false,
+    "package-forward-p95": true,
+    "package-forward-diagnostic": true,
+    "package-forward-cpuSeconds": true,
+    "package-forward-peakRss": true,
+    "package-forward-peakFootprint": true,
+    "package-forward-storage": true,
+    "generic-forward-completed": true,
+    "generic-forward-native612": true,
+    "generic-forward-local": true,
+    "generic-forward-latest": true,
+    "generic-forward-first-multiline-completed": true,
+    "generic-forward-p50": true,
+    "generic-forward-first-query": true,
+    "generic-forward-multiline-query": false,
+    "generic-forward-p95": true,
+    "generic-forward-diagnostic": true,
+    "generic-forward-cpuSeconds": true,
+    "generic-forward-peakRss": true,
+    "generic-forward-peakFootprint": true,
+    "generic-forward-storage": true,
+    "generic-reverse-completed": true,
+    "generic-reverse-native612": true,
+    "generic-reverse-local": true,
+    "generic-reverse-latest": true,
+    "generic-reverse-first-multiline-completed": true,
+    "generic-reverse-p50": true,
+    "generic-reverse-first-query": true,
+    "generic-reverse-multiline-query": false,
+    "generic-reverse-p95": true,
+    "generic-reverse-diagnostic": true,
+    "generic-reverse-cpuSeconds": true,
+    "generic-reverse-peakRss": true,
+    "generic-reverse-peakFootprint": true,
+    "generic-reverse-storage": true
+  },
+  "failedChecks": [
+    "package-forward-p50",
+    "package-forward-multiline-query",
+    "generic-forward-multiline-query",
+    "generic-reverse-multiline-query"
+  ],
+  "summary": {
+    "package-forward": {
+      "ratios": {
+        "cpuSeconds": 0.9739825007498776,
+        "peakRss": 0.9968955856742636,
+        "peakFootprint": 1.000150186598616
+      },
+      "arms": {
+        "baseline": {
+          "p50": 17.823542,
+          "p95": 30.56225,
+          "maximum": 31.36775,
+          "cancelled": 0,
+          "lastDiagnosticMs": 28.564458,
+          "status": {
+            "active": true,
+            "accepted": 12,
+            "decline": "",
+            "version": 13,
+            "localDiagnosticUpdates": 12,
+            "localDiagnosticDecline": "",
+            "certificateRenewals": 0,
+            "retainedHandles": 0,
+            "sourceMemory": {
+              "dataBytes": 10043059,
+              "queryBytes": 5512,
+              "queryBuffers": 2,
+              "retainedNameBytes": 101398,
+              "indexBytes": 24700
+            },
+            "sources": []
+          },
+          "memory": {
+            "peakRss": 1298300928,
+            "peakFootprint": 1090749784,
+            "samples": 312,
+            "cpuSeconds": 4.211937625
+          }
+        },
+        "candidate": {
+          "p50": 20.774083,
+          "p95": 32.865,
+          "maximum": 34.401625,
+          "cancelled": 0,
+          "lastDiagnosticMs": 20.414375,
+          "status": {
+            "active": true,
+            "accepted": 12,
+            "decline": "",
+            "version": 13,
+            "localDiagnosticUpdates": 12,
+            "localDiagnosticDecline": "",
+            "certificateRenewals": 0,
+            "retainedHandles": 0,
+            "sourceMemory": {
+              "dataBytes": 10043059,
+              "queryBytes": 5512,
+              "queryBuffers": 2,
+              "retainedNameBytes": 101398,
+              "indexBytes": 24700
+            },
+            "sources": []
+          },
+          "memory": {
+            "peakRss": 1294270464,
+            "peakFootprint": 1090913600,
+            "samples": 312,
+            "cpuSeconds": 4.102353541
+          }
+        }
+      },
+      "sourceStorage": {
+        "storage": {
+          "current": {
+            "source": {
+              "dataBytes": 10043059,
+              "queryBytes": 5512,
+              "queryBuffers": 2,
+              "retainedNameBytes": 101398,
+              "indexBytes": 24700
+            },
+            "managers": 1,
+            "locationTableBytes": 7340365,
+            "immutableTableBytes": 3506495
+          },
+          "retained": {
+            "source": {
+              "dataBytes": 0,
+              "queryBytes": 0,
+              "queryBuffers": 0,
+              "retainedNameBytes": 0,
+              "indexBytes": 0
+            },
+            "managers": 0,
+            "locationTableBytes": 0,
+            "immutableTableBytes": 0
+          },
+          "total": {
+            "source": {
+              "dataBytes": 10043059,
+              "queryBytes": 5512,
+              "queryBuffers": 2,
+              "retainedNameBytes": 101398,
+              "indexBytes": 24700
+            },
+            "managers": 1,
+            "locationTableBytes": 7340365,
+            "immutableTableBytes": 3506495
+          }
+        },
+        "retirementEnabled": true,
+        "historyMaxMiB": 64,
+        "historyBaseBytes": 13680262,
+        "historySoftLimitBytes": 47234694,
+        "historyHardLimitBytes": 80789126,
+        "retirementPending": false
+      }
+    },
+    "generic-forward": {
+      "ratios": {
+        "cpuSeconds": 0.9792526518300736,
+        "peakRss": 0.9984064954281595,
+        "peakFootprint": 1.0007808413144643
+      },
+      "arms": {
+        "baseline": {
+          "p50": 19.6141035,
+          "p95": 27.20675,
+          "maximum": 33.562584,
+          "cancelled": 0,
+          "lastDiagnosticMs": 27.653334,
+          "status": {
+            "active": true,
+            "accepted": 12,
+            "decline": "",
+            "version": 13,
+            "localDiagnosticUpdates": 12,
+            "localDiagnosticDecline": "",
+            "certificateRenewals": 0,
+            "retainedHandles": 0,
+            "sourceMemory": {
+              "dataBytes": 10045695,
+              "queryBytes": 6580,
+              "queryBuffers": 2,
+              "retainedNameBytes": 101635,
+              "indexBytes": 24700
+            },
+            "sources": []
+          },
+          "memory": {
+            "peakRss": 1295499264,
+            "peakFootprint": 1091028336,
+            "samples": 315,
+            "cpuSeconds": 4.235095458
+          }
+        },
+        "candidate": {
+          "p50": 21.250625,
+          "p95": 24.808125,
+          "maximum": 37.210625,
+          "cancelled": 0,
+          "lastDiagnosticMs": 20.753125,
+          "status": {
+            "active": true,
+            "accepted": 12,
+            "decline": "",
+            "version": 13,
+            "localDiagnosticUpdates": 12,
+            "localDiagnosticDecline": "",
+            "certificateRenewals": 0,
+            "retainedHandles": 0,
+            "sourceMemory": {
+              "dataBytes": 10045695,
+              "queryBytes": 6580,
+              "queryBuffers": 2,
+              "retainedNameBytes": 101635,
+              "indexBytes": 24700
+            },
+            "sources": []
+          },
+          "memory": {
+            "peakRss": 1293434880,
+            "peakFootprint": 1091880256,
+            "samples": 307,
+            "cpuSeconds": 4.147228458
+          }
+        }
+      },
+      "sourceStorage": {
+        "storage": {
+          "current": {
+            "source": {
+              "dataBytes": 10045695,
+              "queryBytes": 6580,
+              "queryBuffers": 2,
+              "retainedNameBytes": 101635,
+              "indexBytes": 24700
+            },
+            "managers": 1,
+            "locationTableBytes": 7340365,
+            "immutableTableBytes": 3506495
+          },
+          "retained": {
+            "source": {
+              "dataBytes": 0,
+              "queryBytes": 0,
+              "queryBuffers": 0,
+              "retainedNameBytes": 0,
+              "indexBytes": 0
+            },
+            "managers": 0,
+            "locationTableBytes": 0,
+            "immutableTableBytes": 0
+          },
+          "total": {
+            "source": {
+              "dataBytes": 10045695,
+              "queryBytes": 6580,
+              "queryBuffers": 2,
+              "retainedNameBytes": 101635,
+              "indexBytes": 24700
+            },
+            "managers": 1,
+            "locationTableBytes": 7340365,
+            "immutableTableBytes": 3506495
+          }
+        },
+        "retirementEnabled": true,
+        "historyMaxMiB": 64,
+        "historyBaseBytes": 13680262,
+        "historySoftLimitBytes": 47234694,
+        "historyHardLimitBytes": 80789126,
+        "retirementPending": false
+      }
+    },
+    "generic-reverse": {
+      "ratios": {
+        "cpuSeconds": 0.9830751813646524,
+        "peakRss": 0.9996328091367216,
+        "peakFootprint": 1.0015784028533834
+      },
+      "arms": {
+        "baseline": {
+          "p50": 19.8672915,
+          "p95": 25.650959,
+          "maximum": 32.083,
+          "cancelled": 0,
+          "lastDiagnosticMs": 26.384375,
+          "status": {
+            "active": true,
+            "accepted": 12,
+            "decline": "",
+            "version": 13,
+            "localDiagnosticUpdates": 12,
+            "localDiagnosticDecline": "",
+            "certificateRenewals": 0,
+            "retainedHandles": 0,
+            "sourceMemory": {
+              "dataBytes": 10045695,
+              "queryBytes": 6580,
+              "queryBuffers": 2,
+              "retainedNameBytes": 101635,
+              "indexBytes": 24700
+            },
+            "sources": []
+          },
+          "memory": {
+            "peakRss": 1293975552,
+            "peakFootprint": 1089881456,
+            "samples": 310,
+            "cpuSeconds": 4.212620208
+          }
+        },
+        "candidate": {
+          "p50": 20.860062499999998,
+          "p95": 25.514666,
+          "maximum": 44.12775,
+          "cancelled": 0,
+          "lastDiagnosticMs": 20.571333,
+          "status": {
+            "active": true,
+            "accepted": 12,
+            "decline": "",
+            "version": 13,
+            "localDiagnosticUpdates": 12,
+            "localDiagnosticDecline": "",
+            "certificateRenewals": 0,
+            "retainedHandles": 0,
+            "sourceMemory": {
+              "dataBytes": 10045695,
+              "queryBytes": 6580,
+              "queryBuffers": 2,
+              "retainedNameBytes": 101635,
+              "indexBytes": 24700
+            },
+            "sources": []
+          },
+          "memory": {
+            "peakRss": 1293500416,
+            "peakFootprint": 1091601728,
+            "samples": 307,
+            "cpuSeconds": 4.141322375
+          }
+        }
+      },
+      "sourceStorage": {
+        "storage": {
+          "current": {
+            "source": {
+              "dataBytes": 10045695,
+              "queryBytes": 6580,
+              "queryBuffers": 2,
+              "retainedNameBytes": 101635,
+              "indexBytes": 24700
+            },
+            "managers": 1,
+            "locationTableBytes": 7340365,
+            "immutableTableBytes": 3506495
+          },
+          "retained": {
+            "source": {
+              "dataBytes": 0,
+              "queryBytes": 0,
+              "queryBuffers": 0,
+              "retainedNameBytes": 0,
+              "indexBytes": 0
+            },
+            "managers": 0,
+            "locationTableBytes": 0,
+            "immutableTableBytes": 0
+          },
+          "total": {
+            "source": {
+              "dataBytes": 10045695,
+              "queryBytes": 6580,
+              "queryBuffers": 2,
+              "retainedNameBytes": 101635,
+              "indexBytes": 24700
+            },
+            "managers": 1,
+            "locationTableBytes": 7340365,
+            "immutableTableBytes": 3506495
+          }
+        },
+        "retirementEnabled": true,
+        "historyMaxMiB": 64,
+        "historyBaseBytes": 13680262,
+        "historySoftLimitBytes": 47234694,
+        "historyHardLimitBytes": 80789126,
+        "retirementPending": false
+      }
+    }
+  },
+  "scope": "Joint query/local diagnostic complete certification; optional phase trace unset. One unchanged-package comparison and two new generic-method comparisons versus immediate ef8a predecessor, with runtime UVM/404-body semantic-freeze assertions. Mechanism/regression evidence only; not full five-category qualification. Generic fixture is added to the real CVA6 package in editor text.",
+  "validation": {
+    "ctest": 888,
+    "python": 17,
+    "transport": 43,
+    "serverAsanCases": 873,
+    "serverAsanAssertions": 118864,
+    "leakDetection": false,
+    "cva6States": 104,
+    "additionalPositiveCases": 14,
+    "additionalKnownNegativeCases": 1,
+    "sdkFilesVerified": 709,
+    "sdkChanged": false
+  },
+  "qualificationPassed": false,
+  "goalComplete": false,
+  "mainPushed": false,
+  "binarySha256": "d271fade18584cbf033821bc006a8645a7e771bd61dbee24f3b8157bfce04f7e",
+  "sourceReceiptSha256": "85d18d1cc3beb4056a0b6ab409cb060e8f318025d845194259ca412cd53043e8",
+  "evidenceDirectory": "untracked/local-publication-cost-2026-10-24",
+  "profileConclusion": "profile-conclusion.json",
+  "startedDate": "2026-10-24",
+  "completedDate": "2026-10-25"
+}

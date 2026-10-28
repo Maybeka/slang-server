@@ -1,0 +1,139 @@
+{
+  "stage": "B2",
+  "complete": true,
+  "goalComplete": false,
+  "candidateSha256": "6532880f5eca9a41ba4c023250d945d3aed6d022558d920428875fdd71f300c5",
+  "sdkPatchSha256": "1c8ec4876276b9fb349a0f090d1758b83825240216e000e5b8ccf9cc76bef2a9",
+  "experimentsDefaultOff": true,
+  "networkUsed": false,
+  "changes": [
+    "Exact fresh raw-path-vector equality memoizes only immutable lexical watch catalogue; observer state tracks its own consumed DTO and changed drivers reanchor",
+    "Prepared cooperative local diagnostics in current driver without reload work bypass old2ms settling window; unprepared/noncooperative paths and retirement retry deadline retained"
+  ],
+  "targetedNative": {
+    "passed": true,
+    "cases": 26,
+    "assertions": 12888
+  },
+  "shortMechanism": {
+    "qualification": false,
+    "passed": true,
+    "arms": {
+      "baseline": {
+        "p50": 20.088250000000002,
+        "p95": 21.355125,
+        "lastDiagnosticMs": 31.017167,
+        "cancelled": 0,
+        "memory": {
+          "peakRss": 883638272,
+          "peakFootprint": 726811728,
+          "samples": 327,
+          "cpuSeconds": 3.191246083
+        },
+        "finalFiles": 612,
+        "catalogueReuses": 0,
+        "watchCollectMedianUs": 1612.0
+      },
+      "candidate": {
+        "p50": 18.869687,
+        "p95": 20.993708,
+        "lastDiagnosticMs": 27.983625,
+        "cancelled": 0,
+        "memory": {
+          "peakRss": 882884608,
+          "peakFootprint": 726008912,
+          "samples": 324,
+          "cpuSeconds": 3.154806541
+        },
+        "finalFiles": 612,
+        "catalogueReuses": 51,
+        "watchCollectMedianUs": 517.5
+      }
+    },
+    "ratios": {
+      "p50": 0.9393395143927419,
+      "p95": 0.9830758658635808,
+      "lastDiagnosticMs": 0.9021979666937344
+    },
+    "memoryRatios": {
+      "peakRss": 0.9991470899078486,
+      "peakFootprint": 0.998895427840427,
+      "cpuSeconds": 0.988581406431138
+    }
+  },
+  "fullCorrectness": {
+    "originalExecSession": 2153,
+    "status": "passed",
+    "runtime": "untracked/stage-b2-local-ready-2026-10-26/correctness-runtime.json",
+    "noOldServerEvidenceInherited": true,
+    "nativePassed": {
+      "ctest": 938,
+      "python": 17,
+      "transport": 43,
+      "sdkIntegrityFiles": 709
+    },
+    "sdkNative": {
+      "cases": 2632,
+      "assertions": 35510
+    },
+    "sdkAsan": {
+      "cases": 2632,
+      "assertions": 35510
+    },
+    "serverAsan": {
+      "cases": 923,
+      "assertions": 171555,
+      "logSha256": "46f68c3b03754b7dad17e83674feb90989bfcf6af5ff1ea28db460300375cedd"
+    },
+    "originalExitCode": 0,
+    "cva": {
+      "nativeStates": 448,
+      "asanCandidateStates": 38,
+      "nativeDiagnosticArchives": 112,
+      "audit": "untracked/stage-b2-local-ready-2026-10-26/evidence-audit.json",
+      "passed": true
+    }
+  },
+  "remaining": [
+    "B3 input acceptance/cancellation/atomic intervals",
+    "C first proof and formatting remaining costs",
+    "D final comprehensive qualification, cleanup and main"
+  ],
+  "pressureDraft": "untracked/stage-b2-local-ready-pressure-2026-10-26/plan.json",
+  "qualificationDraft": "untracked/stage-b2-local-ready-qualification-2026-10-26",
+  "pressure": {
+    "status": "passed",
+    "originalExecSession": 8495,
+    "originalExitCode": 0,
+    "jobs": 4,
+    "ownerBalanced": true,
+    "summary": "untracked/stage-b2-local-ready-pressure-2026-10-26/pressure-summary.json"
+  },
+  "qualificationStatus": "B2 passed complete original fixed14/direct6 and broader plan clauses; current source verified120 files before documentation update",
+  "qualification": {
+    "fixed14OriginalExecSession": 47964,
+    "fixed14ExitCode": 0,
+    "direct6OriginalExecSession": 8361,
+    "direct6ExitCode": 0,
+    "sourceFilesVerified": 120,
+    "audit": "untracked/stage-b2-local-ready-qualification-2026-10-26/b2-completion-audit.json",
+    "ratios": {
+      "memory-final-1008": {
+        "cpuSeconds": 0.9169887131558786,
+        "p50": 0.8134055750173529,
+        "p95": 0.8524595523933038,
+        "lastDiagnosticMs": 0.9140443354030234,
+        "peakRss": 0.7818049547267366,
+        "peakFootprint": 0.7508272219657808
+      },
+      "memory-final-reverse": {
+        "cpuSeconds": 0.9174694331904959,
+        "p50": 0.8092710327695383,
+        "p95": 0.847543800030297,
+        "lastDiagnosticMs": 0.7746743614410255,
+        "peakRss": 0.7785505741906183,
+        "peakFootprint": 0.7469670524162131
+      }
+    }
+  }
+}

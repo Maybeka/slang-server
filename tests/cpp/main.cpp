@@ -54,7 +54,18 @@ int main(int argc, char** argv) {
             [] {
 #ifndef _WIN32
                 if (const char* gate = std::getenv("SLANG_DIAGNOSTIC_TEST_GATE")) {
-                    std::ofstream(std::string(gate) + ".ready") << getpid();
+                    // Existence is the parent's readiness signal. Publish only
+                    // after the PID has been fully written and the stream closed.
+                    const auto ready = std::string(gate) + ".ready";
+                    const auto staged = ready + ".tmp";
+                    {
+                        std::ofstream output(staged);
+                        output << getpid() << '\n';
+                        output.close();
+                        if (!output)
+                            throw std::runtime_error("cannot write diagnostic test readiness");
+                    }
+                    std::filesystem::rename(staged, ready);
                     while (!std::filesystem::exists(std::string(gate) + ".release"))
                         std::this_thread::sleep_for(std::chrono::milliseconds(5));
                 }

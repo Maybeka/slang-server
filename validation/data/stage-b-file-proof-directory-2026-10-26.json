@@ -1,0 +1,76 @@
+{
+  "goalComplete": false,
+  "b1Complete": false,
+  "performanceQualified": false,
+  "performanceStarted": true,
+  "binarySha256": "60f72765376b7c24e3fd6f5d4b151287053e4b09b5969629ca523673fa870ea2",
+  "asanBinarySha256": "157513f882de45ceba489b6ff4fe8db300ef295588b33b019af1f706e1e2d07c",
+  "sdkPatchSha256": "5c94d370933ec33f7d55bf68b2d0e824bbe1ffb203929dcf48dfd760cec128c4",
+  "tests": {
+    "nativeCTest": 931,
+    "serverAsanCases": 916,
+    "serverAsanAssertions": 170694,
+    "fileProofCases": 11,
+    "fileProofAssertions": 11807,
+    "python": 17,
+    "transport": 43,
+    "sdkIntegrityFiles": 709
+  },
+  "sdkEvidenceReuse": {
+    "reason": "Server proof code and tests changed; SDK source, patch, pin and build configuration are unchanged. Full SDK suites are reused, not rerun.",
+    "sdkPatchSha256": "5c94d370933ec33f7d55bf68b2d0e824bbe1ffb203929dcf48dfd760cec128c4",
+    "priorStage": "untracked/stage-b-initial-source-alias-2026-10-26",
+    "files": {
+      "sdk-native.log": "283d8357256400cec42f9bd4154765fab2469dcdf49ad3126f58691d59576993",
+      "sdk-asan.log": "1a6c9d4ed465a0e1ced5bdd746eb73d866a18074b7ce2bf7c64da60c0ebb4699",
+      "sdk-restoration.json": "c390eb3d96fb81edaf8dd3cf7dfc1dd84fe2e52278b224ba01388a6db0c8a12c"
+    }
+  },
+  "priorFailure": "a7b fixed14 passed; direct6 failed only final diagnostic latency in forward1008: 41.981375ms vs31.040125ms. Existing trace shows query file proof 22804us, publication file proof6208us.",
+  "implementation": "A single invocation-local directory descriptor permits openat for adjacent same-directory files. No cross-request certificate is retained. Complete bytes, final descriptor path, absolute leaf metadata and file versions are checked for every file. Missing relative opens retry absolute paths; resource pressure releases the directory first.",
+  "nativeCvaScenesCompleted": [
+    {
+      "scene": "local-generic",
+      "states": 44
+    },
+    {
+      "scene": "local-let",
+      "states": 48
+    },
+    {
+      "scene": "local-value-width",
+      "states": 32
+    }
+  ],
+  "nativeCvaStatesCompleted": 448,
+  "nativeCvaStatesRequired": 448,
+  "asanCvaStatesRequired": 38,
+  "diagnosticArchivesRequired": 112,
+  "validationPipelineCell": "583",
+  "experimentalDefaultEnabled": false,
+  "fixedDebounceAdded": false,
+  "networkUsed": false,
+  "pushedMain": false,
+  "correctnessQualified": true,
+  "asanCvaStatesCompleted": 38,
+  "nativeDiagnosticArchives": 112,
+  "evidenceAuditSha256": "1f0fb42e96621990c7fe38062ed355123c200d0eb200d3ea18fbb68166928d14",
+  "validationPipelineComplete": true,
+  "performanceComplete": true,
+  "performanceResults": {
+    "evaluation.json": {
+      "sha256": "bb03738d02cb2d70c45deca3de5973c8c0f3d4d033e6d36a7232eadda8b5bd79",
+      "qualified": false,
+      "failedChecks": [
+        "memory-final-1008-peakFootprint"
+      ]
+    },
+    "direct-build-evaluation.json": {
+      "sha256": "bdf6e6439664e242537d0e2ae1cf69edadbe1bbbbfe3025b27d2e4757c62a2fe",
+      "qualified": false,
+      "failedChecks": [
+        "direct-memory-forward-peakFootprint"
+      ]
+    }
+  }
+}

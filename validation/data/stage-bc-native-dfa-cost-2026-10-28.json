@@ -1,0 +1,225 @@
+{
+  "stage": "BC native DFA cost attribution",
+  "date": "2026-10-28",
+  "qualification": false,
+  "gitHead": "6eab073",
+  "restoredNativeBinarySha256": "276f15897dfb26e48cff9e7a7579cd2565ec5b7e712701167d6ddc0adf6a80bd",
+  "nativeCompletedFullPasses": 5,
+  "profilingThreads": 1,
+  "foreignOwnerDfaExclusiveMsPerPass": 19.8185478,
+  "currentOwnerDfaExclusiveMsPerPass": 96.9651474,
+  "foreignOwnerFractionOfTimedDfa": 0.1697030374493579,
+  "hotspots": [
+    {
+      "family": "0:0:<nonclass>::rvfi_compare@uvmc_rvfi_scoreboard_utils.sv",
+      "calls": 5,
+      "inclusiveNs": 260545083,
+      "exclusiveNs": 260545083
+    },
+    {
+      "family": "0:0:uvma_rvfi_instr_seq_item_c::rvfi2seq@uvma_rvfi_instr_seq_item.sv",
+      "calls": 5,
+      "inclusiveNs": 68945250,
+      "exclusiveNs": 68945250
+    },
+    {
+      "family": "0:2:<nonclass>::@tc_sram.sv",
+      "calls": 36,
+      "inclusiveNs": 29695415,
+      "exclusiveNs": 29695415
+    },
+    {
+      "family": "1:2:<nonclass>::@cva6_tlb.sv",
+      "calls": 1456,
+      "inclusiveNs": 8228068,
+      "exclusiveNs": 8228068
+    },
+    {
+      "family": "0:0:uvma_axi_transaction_c::__m_uvm_field_automation@uvma_axi_transaction.sv",
+      "calls": 5,
+      "inclusiveNs": 7768208,
+      "exclusiveNs": 7768208
+    },
+    {
+      "family": "1:2:<nonclass>::@lzc.sv",
+      "calls": 4388,
+      "inclusiveNs": 5551918,
+      "exclusiveNs": 5551918
+    },
+    {
+      "family": "1:2:<nonclass>::@csr_regfile.sv",
+      "calls": 484,
+      "inclusiveNs": 5450752,
+      "exclusiveNs": 5450752
+    },
+    {
+      "family": "0:0:uvma_core_cntrl_cfg_c::__m_uvm_field_automation@uvma_core_cntrl_cfg.sv",
+      "calls": 5,
+      "inclusiveNs": 4953167,
+      "exclusiveNs": 4953167
+    },
+    {
+      "family": "0:1:uvm_object_registry::create@uvm_registry.svh",
+      "calls": 995,
+      "inclusiveNs": 3990467,
+      "exclusiveNs": 3990467
+    },
+    {
+      "family": "0:3:<nonclass>::@uvmt_cva6_tb.sv",
+      "calls": 4370,
+      "inclusiveNs": 2699468,
+      "exclusiveNs": 2699468
+    },
+    {
+      "family": "0:0:uvma_rvfi_instr_seq_item_c::__m_uvm_field_automation@uvma_rvfi_instr_seq_item.sv",
+      "calls": 5,
+      "inclusiveNs": 2416041,
+      "exclusiveNs": 2416041
+    },
+    {
+      "family": "0:1:uvm_config_db::set@uvm_config_db.svh",
+      "calls": 175,
+      "inclusiveNs": 2329707,
+      "exclusiveNs": 2329707
+    },
+    {
+      "family": "0:2:<nonclass>::@cva6_tlb.sv",
+      "calls": 364,
+      "inclusiveNs": 2136110,
+      "exclusiveNs": 2136110
+    },
+    {
+      "family": "1:2:<nonclass>::@cva6_shared_tlb.sv",
+      "calls": 292,
+      "inclusiveNs": 2059752,
+      "exclusiveNs": 2059752
+    },
+    {
+      "family": "0:2:<nonclass>::@cva6_rvfi.sv",
+      "calls": 1615,
+      "inclusiveNs": 1959034,
+      "exclusiveNs": 1959034
+    },
+    {
+      "family": "0:0:uvml_logs_mon_trn_logger_c::__m_uvm_field_automation@uvml_logs_mon_trn_logger.sv",
+      "calls": 20,
+      "inclusiveNs": 1850751,
+      "exclusiveNs": 1850751
+    },
+    {
+      "family": "1:2:<nonclass>::@decoder.sv",
+      "calls": 36,
+      "inclusiveNs": 1829876,
+      "exclusiveNs": 1829876
+    },
+    {
+      "family": "0:0:uvma_isacov_instr_c::__m_uvm_field_automation@uvma_isacov_instr.sv",
+      "calls": 5,
+      "inclusiveNs": 1804499,
+      "exclusiveNs": 1804499
+    },
+    {
+      "family": "1:2:<nonclass>::@ariane_regfile_ff.sv",
+      "calls": 36,
+      "inclusiveNs": 1593748,
+      "exclusiveNs": 1593748
+    },
+    {
+      "family": "0:1:uvm_component_registry::create@uvm_registry.svh",
+      "calls": 395,
+      "inclusiveNs": 1556292,
+      "exclusiveNs": 1556292
+    }
+  ],
+  "functionFindings": {
+    "rvfi_compareNativeMsPerCall": 52.1090166,
+    "rvfi2seqNativeMsPerCall": 13.78905,
+    "source": "core-v-verif shared verification support functions, not UVM generic specialization main cost",
+    "loop": "Both iterate CSR_MAX_SIZE; precise native loop unrolling walks4096 CSR entries",
+    "next": "Profile/optimize repeated state merges/copies or iteration-invariant evaluation without lowering loop budget, dropping branches or changing diagnostic precision"
+  },
+  "correctness": "Each temporary census replay compared public hover and complete612URI final diagnostics against Native and preserved post-idle maps; local native slice admission still observed. No qualification inference from instrumented timings.",
+  "decisions": [
+    "No foreign-only DFA cache prototype based on these data:19.82ms average below predeclared20ms prerequisite; preserve that decision",
+    "UVM generic class families are not the dominant cost in this scene",
+    "Prioritize exact native analysis of4096-entry CSR loops in rvfi_compare and rvfi2seq, preserving iteration count and diagnostics",
+    "Native procedure-reuse eligibility kept intact; no custom DFA provider used",
+    "All temporary native profiler code removed; SDK709/dependency1296 byte integrity verified; Native binary returned exactly276f",
+    "Original20 supplemental reverse1008 p50 failure remains unresolved and D remains unstarted"
+  ],
+  "limitations": [
+    "Owner counts are not time shares",
+    "Exclusive elapsed sums are per-thread profiling measures, not CPU time",
+    "First full model has a different import distribution;19.82ms is whole declared Native scene average",
+    "Source/family names do not certify closed semantic dependencies",
+    "Do not change maxLoopAnalysisSteps to obtain apparent savings"
+  ],
+  "profilerIdentity": {
+    "plan.json": {
+      "qualification": false,
+      "purpose": "Measure native DefaultDFA work by semantic ownership while keeping native procedure reuse eligibility unchanged",
+      "sampling": "One original macro12 warm independent100ms replay, three arms current Native,baseline276f,instrumented candidate. No qualification or repeated rounds.",
+      "probe": "Temporary SDK implementation-only timing around native run, inclusive and exclusive per-thread nested time, current/foreign owner and top/nested procedure buckets; aborts separate; no source/AST retained by recorder",
+      "defaultBehaviour": "No custom DFA provider, no cache/reuse safety changes; temporary instrumentation removed after capture",
+      "sourceBeforeSha256": "a3248ee963e21647a598ee9b94115080eb0df0c362781143b7396a6b49e64d72",
+      "harnessSha256": "ed7ffd112c78d0a977bec882b5769798f7d95d980ea91a7d5109f06907406f85",
+      "constraints": [
+        "Complete final612URI diagnostic and hover oracle",
+        "Procedure count alone not time share",
+        "Exclusive timed wall sums across threads not CPU time",
+        "No new cache implementation unless material native DFA work is found",
+        "Original failed reverse1008 p50 remains failed; D unstarted"
+      ],
+      "networkUsed": false,
+      "perArmCensusPaths": true,
+      "probeBinarySha256": "5ae9d0c71c33111eda16990497174f9a1af8f95559c8260557ebeb41af24cdcd",
+      "probeSdkSourceSha256": "87d1ab2da935877f46b2c990781b199fcd9cec41bab172885b23e6aeaeb2126b",
+      "costInterpretationGate": "Use Native-only arm full dataflow completion count as denominator; if average foreign-owner exclusive native DFA work is under20ms/full pass, do not prototype a summary cache from these observations. Above20ms is necessary only; closure/memory/diagnostic safety still required."
+    },
+    "source-category-plan.json": {
+      "qualification": false,
+      "priorCostResult": "ownership-cost-result.json",
+      "priorNecessaryGate": "Foreign-only summary cache not implemented: declared average19.82ms<20ms; no remeasurement to overturn this gate",
+      "newQuestion": "Which lexical source and generic class families dominate the current-owner96.97ms/full pass?",
+      "method": "Extend temporary native timer with ownership/source/generic/nested buckets and class-family totals; one structural macro replay once, not a performance acceptance run",
+      "sourceCategories": [
+        "other",
+        "configured UVM distribution",
+        "CVA6 tree excluding verification",
+        "CVA6 verification tree"
+      ],
+      "limits": [
+        "Lexical source is not a semantic dependency or reuse certificate",
+        "Timing excludes key preparation, observer may perturb scheduling; no numeric qualification inference",
+        "Generic family aggregation cannot certify all specializations",
+        "Keep custom-provider safety and local slice eligibility unchanged"
+      ],
+      "nextDecision": "Only implement reuse after actual dominant work and fixed type/dependency closure demonstrated",
+      "networkUsed": false,
+      "binarySha256": "70c0823e32c39cbcecbf78410837efc13ac00ffbf2f074dd98c81d06dafe6bc8",
+      "sdkProbeSha256": "7a843469be6810fbf40740e99a2c5ebb514f67d7cf3df4ce3a7de748b79971a6"
+    },
+    "procedure-plan.json": {
+      "qualification": false,
+      "precedingResult": "source-category-result.json",
+      "question": "Name exact native DFA-heavy nonclass procedures and RVFI methods; source-category data contradicts UVM-generic main-cost hypothesis",
+      "method": "One further mechanism replay with function/source names added to aggregate keys; no acceptance comparison or gate remeasurement",
+      "constraints": [
+        "Keep native procedure-reuse eligibility",
+        "Complete612 Native diagnostic and hover oracle",
+        "Do not infer semantic freeze eligibility from source path",
+        "Restore temporary SDK instrumentation after capture"
+      ],
+      "binarySha256": "290d1e626e3eb4de2669549a1f459d2132eec769e3f0273f957fa417f163598a",
+      "sdkSourceSha256": "bfec5b62009eaaccd639ab0378bdaa67a369c39046c1e53017aae1cb6b99697f",
+      "networkUsed": false
+    }
+  },
+  "localDataReceipts": {
+    "untracked/stage-bc-native-dfa-cost-2026-10-28/ownership-cost-result.json": "e77259f720063112b659533e7baa51334782297a769a51a7a4187e477c703381",
+    "untracked/stage-bc-native-dfa-cost-2026-10-28/source-category-result.json": "f736c09e327656360e52b37e8cd8440534e49bc73ca7e8a46e9de295fd704ea3",
+    "untracked/stage-bc-native-dfa-cost-2026-10-28/procedure-result.json": "0b8b26688ccd7f377646c19789ba907509cba32be688fdf969a754988b5c6dcb",
+    "untracked/stage-bc-native-dfa-cost-2026-10-28/restoration.json": "634dad0c984c8b0d2e1def5852e7b0033819751d45e6677bf0f567ab1b4472c6"
+  },
+  "networkUsed": false
+}

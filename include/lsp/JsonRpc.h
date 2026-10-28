@@ -14,6 +14,7 @@
 #include <optional>
 #include <rfl/json.hpp> // IWYU pragma: keep
 #include <string>
+#include <string_view>
 #include <variant>
 
 namespace lsp {
@@ -61,15 +62,31 @@ void sendMessage(const T& message) {
     std::cout.flush();
 }
 
-inline void sendNotification(const std::string& method, const rfl::Generic& params) {
-    sendMessage(RpcNotification{
+namespace detail {
+// The envelope exists only during synchronous serialization. Reflection writes
+// the pointed-to parameters directly; no parameter tree or owner is retained.
+template<typename Params>
+struct RpcNotificationView {
+    std::string_view jsonrpc;
+    std::string_view method;
+    const Params* params;
+};
+} // namespace detail
+
+template<typename Params>
+void sendTypedNotification(std::string_view method, const Params& params) {
+    sendMessage(detail::RpcNotificationView<Params>{
         .jsonrpc = "2.0",
         .method = method,
-        .params = params,
+        .params = &params,
     });
     std::cerr << "---> " << method;
     // std::cerr << ": " << rfl::json::write(params) << std::endl;
     std::cerr << std::endl;
+}
+
+inline void sendNotification(const std::string& method, const rfl::Generic& params) {
+    sendTypedNotification(method, params);
 }
 
 inline void sendRequest(const std::string& method, const rfl::Generic& params) {

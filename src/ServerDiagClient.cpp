@@ -317,7 +317,7 @@ void ServerDiagClient::report(const slang::ReportedDiagnostic& diag) {
         if (note.location == SourceLocation::NoLocation) {
             if (note.code.showNoteWithNoLocation()) {
                 related.emplace_back(lsp::DiagnosticRelatedInformation{
-                    .location = *mainLoc,
+                    .location = {physicalUri, mainLoc->range},
                     .message = engine->formatMessage(note),
                 });
             }
@@ -333,6 +333,12 @@ void ServerDiagClient::report(const slang::ReportedDiagnostic& diag) {
         }
     }
 
+    std::vector<URI> physicalRelated;
+    if (m_physicalReportObserver) {
+        physicalRelated.reserve(related.size());
+        for (const auto& information : related)
+            physicalRelated.push_back(information.location.uri);
+    }
     for (auto& information : related)
         information.location.uri = resolveUri(information.location.uri);
     m_diagnostics[uri].push_back(lsp::Diagnostic{
@@ -353,8 +359,61 @@ void ServerDiagClient::report(const slang::ReportedDiagnostic& diag) {
             m_diagnostics[uri].back().tags = {lsp::DiagnosticTag::Unnecessary};
         }
     }
+    if (m_physicalReportObserver) {
+        auto physical = m_diagnostics[uri].back();
+        if (physical.relatedInformation)
+            for (size_t i = 0; i < physicalRelated.size(); ++i)
+                (*physical.relatedInformation)[i].location.uri = physicalRelated[i];
+        m_physicalReportObserver(physicalUri, std::move(physical));
+    }
     if (m_reportObserver)
         m_reportObserver(physicalUri);
+}
+
+void ServerDiagClient::appendPhysicalRendered(const URI& physical, lsp::Diagnostic value) {
+    const auto uri = resolveUri(physical);
+    if (value.relatedInformation)
+        for (auto& information : *value.relatedInformation)
+            information.location.uri = resolveUri(information.location.uri);
+    if (m_update)
+        m_update->remember(uri);
+    m_versions.erase(uri);
+    m_dirtyUris.emplace(uri);
+    m_diagnostics[uri].push_back(std::move(value));
+    if (m_reportObserver)
+        m_reportObserver(physical);
+}
+
+bool ServerDiagClient::replaceRenderedIfChanged(URI uri, std::vector<lsp::Diagnostic> diagnostics) {
+    uri = resolveUri(uri);
+    auto current = m_diagnostics.find(uri);
+    if (current != m_diagnostics.end() &&
+        std::ranges::equal(current->second, diagnostics, sameDiagnostic))
+        return false;
+    if (m_update)
+        m_update->remember(uri);
+    m_diagnostics.insert_or_assign(uri, std::move(diagnostics));
+    m_dirtyUris.emplace(uri);
+    return true;
+}
+
+bool ServerDiagClient::replaceRenderedViewsIfChanged(
+    URI uri, std::span<const lsp::Diagnostic* const> diagnostics) {
+    uri = resolveUri(uri);
+    auto current = m_diagnostics.find(uri);
+    if (current != m_diagnostics.end() &&
+        std::ranges::equal(current->second, diagnostics,
+                           [](const auto& a, const auto* b) { return sameDiagnostic(a, *b); }))
+        return false;
+    std::vector<lsp::Diagnostic> owned;
+    owned.reserve(diagnostics.size());
+    for (const auto* diagnostic : diagnostics)
+        owned.push_back(*diagnostic);
+    if (m_update)
+        m_update->remember(uri);
+    m_diagnostics.insert_or_assign(uri, std::move(owned));
+    m_dirtyUris.emplace(uri);
+    return true;
 }
 
 void ServerDiagClient::clear(URI uri) {
@@ -405,13 +464,17 @@ void ServerDiagClient::publish(const URI& uri, const std::vector<lsp::Diagnostic
                 return;
         }
     }
-    m_client.onDocPublishDiagnostics(
-        lsp::PublishDiagnosticsParams{.uri = uri, .version = version, .diagnostics = diagnostics});
+    lsp::PublishDiagnosticsParams params{
+        .uri = uri, .version = version, .diagnostics = diagnostics};
+    m_client.onDocPublishDiagnostics(params);
     if (m_deltaPublishing) {
-        Published published{version, diagnostics, {}};
-        published.index.reserve(diagnostics.size());
-        for (size_t i = 0; i < diagnostics.size(); ++i)
-            published.index.emplace(diagnosticHash(diagnostics[i]), i);
+        // The virtual callback consumed this owning snapshot synchronously.
+        // Retain that exact sent payload instead of copying the current bucket
+        // a second time for the delta ledger.
+        Published published{version, std::move(params.diagnostics), {}};
+        published.index.reserve(published.diagnostics.size());
+        for (size_t i = 0; i < published.diagnostics.size(); ++i)
+            published.index.emplace(diagnosticHash(published.diagnostics[i]), i);
         m_publications->published.insert_or_assign(uri, std::move(published));
     }
     if (diagnostics.empty())

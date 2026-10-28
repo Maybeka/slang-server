@@ -598,12 +598,12 @@ void renderSymbolValue(markup::Paragraph& infoPg, const ast::Symbol& symbol,
 }
 
 void renderSymbolHeader(markup::Paragraph& infoPg, const ast::Symbol& symbol,
-                        std::string_view kindOverride = {}) {
+                        const SourceManager& sm, std::string_view kindOverride = {}) {
     // <Kind/Type> <Name> in <Scope>
     renderSymbolHeaderName(infoPg, symbol, kindOverride);
 
     auto& parentSym = symbol.getParentScope()->asSymbol();
-    auto lexicalPath = parentSym.getLexicalPath();
+    auto lexicalPath = bodyQueryLexicalPath(parentSym, sm);
     if (parentSym.isType()) {
         const auto& type = parentSym.as<ast::Type>();
         auto scope = type.getParentScope();
@@ -672,7 +672,7 @@ RenderedSymbolHover renderSymbolHover(const DefinitionInfo::SymbolTarget& target
     RenderedSymbolHover result;
     if (!label.empty())
         result.header.appendBold(label);
-    renderSymbolHeader(result.header, *target.symbol);
+    renderSymbolHeader(result.header, *target.symbol, sm);
 
     // Show design info for iface ports
     if (auto* ifacePort = target.renderInterfaceConnection
@@ -791,7 +791,7 @@ std::optional<lsp::MarkupContent> renderElaboratedParameterSummary(
     // in which we will both render the genvar (showing all values) and the internal parameter
     // symbol
     auto kindOverride = !genvar && isGenvar ? "Genvar" : "";
-    renderSymbolHeader(header, genvar ? *genvar->symbol : *parameters.front()->symbol,
+    renderSymbolHeader(header, genvar ? *genvar->symbol : *parameters.front()->symbol, sm,
                        kindOverride);
     renderSymbolType(header, *parameters.front()->symbol, sm);
     if (values.size() == 1) {

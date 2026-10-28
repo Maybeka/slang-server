@@ -37,8 +37,9 @@ static SourceLocation getArgumentHintLoc(const ArgumentSyntax& syntax,
 }
 
 InlayHintCollector::InlayHintCollector(const ShallowAnalysis& analysis, lsp::Range range,
-                                       const Config::InlayHints& config) :
-    m_analysis(analysis), m_range(range), m_portTypes(config.portTypes.value()),
+                                       const Config::InlayHints& config,
+                                       const lsp::RequestContext& ctx) :
+    m_analysis(analysis), m_ctx(ctx), m_range(range), m_portTypes(config.portTypes.value()),
     m_assignmentPatternTypes(config.assignmentPatternTypes.value()),
     m_activeParameterValues(config.activeParameterValues.value()),
     m_orderedInstanceNames(config.orderedInstanceNames.value()),
@@ -51,6 +52,8 @@ void InlayHintCollector::handle(const ParameterDeclarationSyntax& syntax) {
         return;
 
     for (auto* declarator : syntax.declarators) {
+
+        m_ctx.checkpoint("during inlay hint collection");
         auto* shallowSymbol = m_analysis.getSymbolAtToken(&declarator->name);
         auto* designSymbol = shallowSymbol ? m_analysis.getDesignSymbol(*shallowSymbol) : nullptr;
         auto* parameter = designSymbol ? designSymbol->as_if<ast::ParameterSymbol>() : nullptr;
@@ -88,6 +91,7 @@ void InlayHintCollector::handle(const HierarchyInstantiationSyntax& syntax) {
         size_t paramIndex = 0;
         size_t paramCount = std::min(syntax.parameters->parameters.size(), def.parameters.size());
         for (size_t i = 0; i < paramCount; i++) {
+            m_ctx.checkpoint("during inlay hint collection");
             auto paramSyntax = syntax.parameters->parameters[i];
             if (paramSyntax->kind == SyntaxKind::OrderedParamAssignment) {
                 if (paramIndex >= def.parameters.size()) {
@@ -109,6 +113,7 @@ void InlayHintCollector::handle(const HierarchyInstantiationSyntax& syntax) {
     // Use one of the bodies if valid
     const slang::ast::InstanceSymbol* inst = nullptr;
     for (auto instanceSyntax : syntax.instances) {
+        m_ctx.checkpoint("during inlay hint collection");
         if (!instanceSyntax->decl) {
             continue;
         }
@@ -130,6 +135,8 @@ void InlayHintCollector::handle(const HierarchyInstantiationSyntax& syntax) {
     auto ports = inst->body.getPortList();
 
     for (auto instanceSyntax : syntax.instances) {
+
+        m_ctx.checkpoint("during inlay hint collection");
         if (instanceSyntax->kind != SyntaxKind::HierarchicalInstance) {
             continue;
         }
@@ -142,6 +149,7 @@ void InlayHintCollector::handle(const HierarchyInstantiationSyntax& syntax) {
         size_t portIndex = 0;
         size_t lastPortLine = -1;
         for (auto portSyntax : hierInstSyntax.connections) {
+            m_ctx.checkpoint("during inlay hint collection");
             switch (portSyntax->kind) {
                 case SyntaxKind::OrderedPortConnection: {
                     if (!m_orderedInstanceNames) {
@@ -227,6 +235,8 @@ void InlayHintCollector::handle(const HierarchyInstantiationSyntax& syntax) {
                     }
 
                     for (auto portSym : ports) {
+
+                        m_ctx.checkpoint("during inlay hint collection");
                         label += portSym->name;
                         replaceText += fmt::format(".{}", portSym->name);
 
@@ -273,6 +283,7 @@ void InlayHintCollector::handle(const HierarchyInstantiationSyntax& syntax) {
 
         // align named port hints
         for (auto& hint : namedPortHints) {
+            m_ctx.checkpoint("during inlay hint collection");
             auto labelStr = rfl::get<std::string>(hint.label);
             hint.label = labelStr + std::string(maxLabelLen - labelStr.size(), ' ');
 
@@ -308,6 +319,7 @@ void InlayHintCollector::handle(const MacroUsageSyntax& syntax) {
     // Iterate through minimum of actual and formal arguments
     size_t numArgs = std::min(syntax.args->args.size(), def->formalArguments->args.size());
     for (size_t i = 0; i < numArgs; i++) {
+        m_ctx.checkpoint("during inlay hint collection");
         auto argLoc = m_analysis.m_sourceManager.getFullyOriginalLoc(
             syntax.args->args[i]->getFirstToken().location());
         result.push_back(lsp::InlayHint{
@@ -341,6 +353,7 @@ void InlayHintCollector::handle(const InvocationExpressionSyntax& syntax) {
     // Iterate through minimum of actual and formal arguments
     size_t numArgs = std::min(syntax.arguments->parameters.size(), argNames.size());
     for (size_t i = 0; i < numArgs; i++) {
+        m_ctx.checkpoint("during inlay hint collection");
         auto arg = syntax.arguments->parameters[i];
         if (arg->kind != slang::syntax::SyntaxKind::OrderedArgument) {
             break;
@@ -373,6 +386,7 @@ void InlayHintCollector::handle(const ClassNameSyntax& syntax) {
     }
     size_t paramIndex = 0;
     for (auto paramSyntax : syntax.parameters->parameters) {
+        m_ctx.checkpoint("during inlay hint collection");
         if (paramSyntax->kind != SyntaxKind::OrderedParamAssignment) {
             continue;
         }
@@ -461,6 +475,7 @@ void InlayHintCollector::collectHints() {
 
     // Expand start backward to include nodes that begin before the range but extend into it
     while (start != m_analysis.syntaxes.collectedHints.begin()) {
+        m_ctx.checkpoint("during inlay hint range search");
         auto prev = std::prev(start);
         if (prev->second->sourceRange().end().offset() <= slangStart->offset()) {
             break;
@@ -469,6 +484,8 @@ void InlayHintCollector::collectHints() {
     }
 
     for (auto it = start; it != end; ++it) {
+
+        m_ctx.checkpoint("during inlay hint collection");
         switch (it->second->kind) {
             case syntax::SyntaxKind::ParameterDeclaration:
                 handle(it->second->as<ParameterDeclarationSyntax>());

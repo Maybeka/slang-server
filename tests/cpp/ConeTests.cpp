@@ -2,8 +2,129 @@
 // SPDX-FileCopyrightText: Hudson River Trading
 // SPDX-License-Identifier: MIT
 
+#include "ast/ServerCompilation.h"
+#include "ast/ServerCompilationAnalysis.h"
 #include "lsp/LspTypes.h"
 #include "utils/ServerHarness.h"
+#include <array>
+
+TEST_CASE("Replacement cache release preserves borrowed models and reconstructs native results",
+          "[model-cache-release]") {
+    ServerHarness server("");
+    Config config{.build = "cone_test.f"};
+    config.experimentalCooperativeAnalysis = true;
+    server.loadConfig(config);
+    auto& driver = *server.m_driver;
+    REQUIRE(driver.comp);
+    auto& model = *driver.comp;
+    REQUIRE(driver.setActiveInstance("test.the_sub_2"));
+    const auto drivers = model.getDriverCone("test.the_sub_2.x").getPaths();
+    const auto loads = model.getLoadCone("test.a").getPaths();
+    REQUIRE_FALSE(drivers.empty());
+    REQUIRE_FALSE(loads.empty());
+    auto collectDiagnostics = [&] {
+        std::vector<std::pair<slang::SourceLocation, std::string>> result;
+        model.issueDiagnosticsTo(driver.diagEngine, {}, [&](size_t, const auto& diagnostic) {
+            result.emplace_back(diagnostic.location, driver.diagEngine.formatMessage(diagnostic));
+        });
+        return result;
+    };
+    const auto diagnostics = collectDiagnostics();
+
+    const std::array<std::string_view, 1> names{"sub"};
+    auto borrowed = std::make_optional(model.createActiveDesignContext(names));
+    auto* root = &borrowed->getAnalysis().compilation;
+    auto* manager = &borrowed->getAnalysis().getAnalysisManager();
+    driver.prepareForContextRetirement(true);
+    REQUIRE_FALSE(model.releaseUnsharedAnalysisCaches());
+    CHECK(&borrowed->getAnalysis().getAnalysisManager() == manager);
+    CHECK(model.getDriverCone("test.the_sub_2.x").getPaths() == drivers);
+    borrowed.reset();
+
+    REQUIRE(model.releaseUnsharedAnalysisCaches());
+    CHECK_FALSE(model.releaseUnsharedAnalysisCaches());
+    {
+        auto context = model.createActiveDesignContext(names);
+        CHECK(&context.getAnalysis().compilation == root);
+        CHECK_FALSE(context.getAnalysis().diagnosticsReady());
+    }
+    // Keeping the old model after a replacement failure must still support
+    // diagnostics, cone indexes and the user's selected instance.
+    CHECK(model.getDriverCone("test.the_sub_2.x").getPaths() == drivers);
+    CHECK(model.getLoadCone("test.a").getPaths() == loads);
+    CHECK(collectDiagnostics() == diagnostics);
+    auto active = model.getActiveInstanceSymbol("sub");
+    REQUIRE(active);
+    auto context = model.createActiveDesignContext(names);
+    CHECK(context.getBoundInstance("sub") == active);
+    CHECK(context.getAnalysis().diagnosticsReady());
+}
+
+TEST_CASE("Replacement analysis cache release remains disabled by default",
+          "[model-cache-release]") {
+    ServerHarness server("");
+    server.loadConfig(Config{.build = "cone_test.f"});
+    auto& driver = *server.m_driver;
+    REQUIRE(driver.comp);
+    const std::array<std::string_view, 1> names{"sub"};
+    {
+        auto context = driver.comp->createActiveDesignContext(names);
+        (void)context.getAnalysis().getAnalysisManager();
+    }
+    driver.prepareForContextRetirement(true);
+    auto context = driver.comp->createActiveDesignContext(names);
+    CHECK(context.getAnalysis().diagnosticsReady());
+}
+
+TEST_CASE("Released complete models recover after cancelled reconstruction",
+          "[model-cache-release][model-root-release]") {
+    const auto cancellationPhase = GENERATE("during full-model module indexing",
+                                           "before full-model publication");
+    ServerHarness server("");
+    Config config{.build = "cone_test.f"};
+    config.experimentalCooperativeAnalysis = true;
+    server.loadConfig(config);
+    auto& driver = *server.m_driver;
+    REQUIRE(driver.comp);
+    auto& model = *driver.comp;
+    REQUIRE(driver.setActiveInstance("test.the_sub_2"));
+    auto sortedPaths = [](auto paths) {
+        std::ranges::sort(paths);
+        return paths;
+    };
+    const auto drivers = sortedPaths(model.getDriverCone("test.the_sub_2.x").getPaths());
+    const auto loads = sortedPaths(model.getLoadCone("test.a").getPaths());
+    const auto preferred = model.getPreferredSymbolPath("sub");
+    REQUIRE(preferred);
+    const std::array<std::string_view, 1> names{"sub"};
+    auto borrowed = std::make_optional(model.createActiveDesignContext(names));
+    auto old = borrowed->getAnalysis().weak_from_this();
+    driver.prepareForContextRetirement(true);
+    CHECK_FALSE(old.expired());
+    borrowed.reset();
+    driver.prepareForContextRetirement(true);
+    CHECK(old.expired());
+
+    lsp::RequestContext ctx("released-root-rebuild", 1);
+    bool checkedHint = false;
+    ctx.setCheckpointObserverForTesting([&](std::string_view phase) {
+        if (phase == cancellationPhase) {
+            checkedHint = true;
+            CHECK(model.getPreferredSymbolPath("sub") == preferred);
+            CHECK_FALSE(model.getPreferredSymbolPath("missing_definition"));
+            ctx.cancel();
+        }
+    });
+    CHECK_THROWS_AS(model.getScopesByModule(ctx), lsp::RequestCancelled);
+    CHECK(checkedHint);
+    CHECK(old.expired());
+    CHECK(sortedPaths(model.getDriverCone("test.the_sub_2.x").getPaths()) == drivers);
+    CHECK(sortedPaths(model.getLoadCone("test.a").getPaths()) == loads);
+    CHECK(model.getPreferredSymbolPath("sub") == preferred);
+    auto context = model.createActiveDesignContext(names);
+    REQUIRE(context.getBoundInstance("sub"));
+    CHECK(context.getBoundInstance("sub")->getHierarchicalPath() == "test.the_sub_2");
+}
 
 TEST_CASE("Cone Tracing") {
     ServerHarness server("");

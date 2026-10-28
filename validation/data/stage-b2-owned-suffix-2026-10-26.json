@@ -1,0 +1,91 @@
+{
+  "stage": "B2",
+  "complete": false,
+  "goalComplete": false,
+  "candidateSha256": "bbe08be2e6b7fa02f575d070d9b9c7ab20bc3fbaae75f094be184476579565aa",
+  "sdkPatchSha256": "1c8ec4876276b9fb349a0f090d1758b83825240216e000e5b8ccf9cc76bef2a9",
+  "experimentsDefaultOff": true,
+  "networkUsed": false,
+  "optimization": "Consume uniquely owned raw parsed suffix: reuse its compilation-unit root and transfer its arena; shared suffixes and borrowed/composed views retain cloning. Existing immutable prefix and physical proof rules preserved.",
+  "newRegression": {
+    "cases": 1,
+    "assertions": 51,
+    "passed": true,
+    "covers": [
+      "Exclusive parsed root/node identity reuse",
+      "Shared suffix immutable fallback",
+      "Borrowed declaration-view fallback",
+      "Enum preview semantic diagnostics match Native",
+      "Timescale/nettype metadata parity",
+      "Macro reference identity and source owner lifetime"
+    ]
+  },
+  "sdkNative": {
+    "cases": 2632,
+    "assertions": 35510,
+    "passed": true
+  },
+  "shortCvaMechanism": {
+    "passed": true,
+    "qualification": false,
+    "warmAllocatorInUseBytes": 731108272,
+    "afterEditsAllocatorInUseBytes": 730032048,
+    "final612UriAndHoverOraclePassed": true,
+    "baselineComparisonIsSeparateInstrumentedCensus": true
+  },
+  "fullCorrectness": {
+    "status": "passed",
+    "originalExecSession": 32537,
+    "nativeStates": 448,
+    "asanStates": 38,
+    "losslessNativeDiagnosticMaps": 112,
+    "evidenceAuditSha256": "dc1d1e1c7840426be9467a419b05e6ca151f0edee6397c52892edf10c5f9917d",
+    "runtimeSha256": "d092dedb2cb643b5bffb174e5301d029fc62da16cf616ba102d03ded7aad1555",
+    "stateFile": "untracked/stage-b2-owned-suffix-2026-10-26/correctness-runtime.json"
+  },
+  "qualification": false,
+  "previousCandidate0cdRemainsFailed": true,
+  "remaining": [
+    "Attribute final diagnostic tail regression without resampling qualification or changing gates",
+    "B2 completion audit after a changed candidate passes original gates",
+    "B3/C/D including unused artifact cleanup and main delivery"
+  ],
+  "nativeCtest": {
+    "cases": 934,
+    "passed": true
+  },
+  "python": {
+    "tests": 17,
+    "passed": true
+  },
+  "transport": {
+    "tests": 43,
+    "passed": true
+  },
+  "pressureDraft": "untracked/stage-b2-owned-suffix-pressure-2026-10-26/plan.json",
+  "performanceDrafts": "untracked/stage-b2-owned-suffix-qualification-2026-10-26",
+  "sdkAsan": {
+    "cases": 2632,
+    "assertions": 35510,
+    "passed": true
+  },
+  "serverAsan": {
+    "cases": 919,
+    "assertions": 170782,
+    "passed": true
+  },
+  "correctnessQualified": true,
+  "pressure": {
+    "status": "passed",
+    "originalExecSession": 56265,
+    "summary": "untracked/stage-b2-owned-suffix-pressure-2026-10-26/pressure-summary.json",
+    "summarySha256": "8e5a676ee97dd268d6b3bdcee3755dd86976d9d6265bfe58bf36cf2a984d8653",
+    "qualification": false
+  },
+  "performanceQualificationState": "all20 completed; fixed14 passed; direct6 failed one original diagnostic tail gate",
+  "qualificationOutcome": "untracked/stage-b2-owned-suffix-qualification-2026-10-26/qualification-outcome.json",
+  "failedChecks": [
+    "direct-memory-forward-lastDiagnosticMs"
+  ],
+  "diagnosticTailAttribution": "untracked/stage-b2-diagnostic-tail-2026-10-26/original-phase-analysis.json"
+}

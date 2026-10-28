@@ -2,7 +2,9 @@
 #include "document/BodyLineProof.h"
 
 #include "util/DisposableParseRequest.h"
+#include "util/LineIndependentMacros.h"
 #include "util/QueryText.h"
+#include "util/UvmPhaseTrace.h"
 #include <algorithm>
 #include <limits>
 #include <map>
@@ -110,7 +112,7 @@ size_t lineOffset(std::string_view text, size_t line) {
 BodyLineProof::BodyLineProof(SourceManager& sm, const ast::Compilation& owner,
                              const ast::SubroutineSymbol& edited, BufferID original,
                              size_t editedEnd, std::string_view baseline, std::string path,
-                             const lsp::RequestContext& ctx) :
+                             const lsp::RequestContext& ctx, size_t syntaxCacheBudget) :
     sources(sm), original(original), editedEnd(editedEnd), path(std::move(path)) {
     struct Candidate {
         const ast::SubroutineSymbol* symbol;
@@ -120,31 +122,42 @@ BodyLineProof::BodyLineProof(SourceManager& sm, const ast::Compilation& owner,
     };
     std::vector<Candidate> candidates;
     auto parent = edited.getParentScope();
-    need(parent && parent->asSymbol().kind == ast::SymbolKind::ClassType,
-         "later macros require a retained class context");
+    need(parent, "later macros require a retained lexical context");
+    // A package function can precede classes containing runtime line macros.
+    // Include later lexical classes, rather than only siblings in one class.
+    while (parent->asSymbol().kind == ast::SymbolKind::ClassType &&
+           parent->asSymbol().getParentScope())
+        parent = parent->asSymbol().getParentScope();
     std::set<const ast::SubroutineSymbol*> seen;
-    for (const auto& member : parent->members()) {
-        ctx.checkpoint("later macro native contexts");
-        auto fn = member.as_if<ast::SubroutineSymbol>();
-        if (auto prototype = member.as_if<ast::MethodPrototypeSymbol>())
-            fn = prototype->getSubroutine();
-        if (!fn || !seen.insert(fn).second)
-            continue;
-        auto syntax = fn->getSyntax() ? fn->getSyntax()->as_if<syntax::FunctionDeclarationSyntax>()
-                                      : nullptr;
-        if (!syntax || syntax->getFirstToken().location().buffer() != original)
-            continue;
-        auto first = syntax->getFirstToken().location();
-        if (first.offset() < editedEnd)
-            continue;
-        need(fn->getParentScope() == parent, "later macro context differs from original class");
-        candidates.push_back({fn, syntax, first.offset(), syntax->semi.range().end().offset(),
-                              syntax->getLastToken().range().end().offset()});
-    }
+    auto collect = [&](auto&& self, const ast::Scope& scope) -> void {
+        for (const auto& member : scope.members()) {
+            if (auto cls = member.as_if<ast::ClassType>()) {
+                self(self, *cls);
+                continue;
+            }
+            ctx.checkpoint("later macro native contexts");
+            auto fn = member.as_if<ast::SubroutineSymbol>();
+            if (auto prototype = member.as_if<ast::MethodPrototypeSymbol>())
+                fn = prototype->getSubroutine();
+            if (!fn || !seen.insert(fn).second)
+                continue;
+            auto syntax = fn->getSyntax()
+                              ? fn->getSyntax()->as_if<syntax::FunctionDeclarationSyntax>()
+                              : nullptr;
+            if (!syntax || syntax->getFirstToken().location().buffer() != original)
+                continue;
+            auto first = syntax->getFirstToken().location();
+            if (first.offset() < editedEnd)
+                continue;
+            candidates.push_back({fn, syntax, first.offset(), syntax->semi.range().end().offset(),
+                                  syntax->getLastToken().range().end().offset()});
+        }
+    };
+    collect(collect, *parent);
     // Intrinsic macros do not appear in macroRefs. Locate every following
     // method by its entry journal, and inspect raw intrinsic uses outside bodies.
     static const std::regex intrinsic(R"(`__(LINE|FILE)__\b)");
-    const std::string suffix(baseline.substr(editedEnd));
+    std::string suffix(baseline.substr(editedEnd));
     for (std::sregex_iterator it(suffix.begin(), suffix.end(), intrinsic), last; it != last; ++it) {
         const auto offset = editedEnd + size_t(it->position());
         need(std::ranges::any_of(candidates,
@@ -152,6 +165,7 @@ BodyLineProof::BodyLineProof(SourceManager& sm, const ast::Compilation& owner,
              "line shift affects intrinsic outside retained method bodies");
     }
     for (const auto& tree : owner.getSyntaxTrees()) {
+        std::optional<LineIndependentMacros> declarationMacros;
         for (const auto& entry : tree->getPreprocessorMetadata().subroutineEntries)
             for (auto& c : candidates)
                 if (entry.location == c.syntax->prototype->keyword.location()) {
@@ -168,8 +182,17 @@ BodyLineProof::BodyLineProof(SourceManager& sm, const ast::Compilation& owner,
             auto found = std::ranges::find_if(candidates, [&](auto& c) {
                 return c.body <= loc.offset() && loc.offset() < c.end;
             });
-            need(found != candidates.end(),
-                 "line shift affects declarations or other class contexts");
+            if (found == candidates.end()) {
+                if (!declarationMacros)
+                    declarationMacros.emplace(tree->getPreprocessorMetadata(),
+                                              tree->options()
+                                                  .getOrDefault<parsing::PreprocessorOptions>()
+                                                  .trackMacroHistory,
+                                              ctx);
+                need(declarationMacros->independent(ref.syntax->toString(), ctx),
+                     "line shift affects declarations or other class contexts");
+                continue;
+            }
             need(!found->tree || found->tree == tree.get(), "ambiguous later macro source context");
             found->tree = tree.get();
             preprocessing(ref);
@@ -294,10 +317,26 @@ BodyLineProof::BodyLineProof(SourceManager& sm, const ast::Compilation& owner,
                          std::string(line.name), uint8_t(line.level)});
     auto directives = sm.getDiagnosticDirectives(original);
     pragmas.assign(directives.begin(), directives.end());
+    if (syntaxCacheBudget && !neighbours.empty() && suffix.size() <= syntaxCacheBudget)
+        cachedSuffix.emplace(std::move(suffix));
 }
 
 void BodyLineProof::validate(std::string_view current, size_t newEnd,
-                             const lsp::RequestContext& ctx) const {
+                             const lsp::RequestContext& ctx,
+                             std::optional<size_t> rawEndLine) const {
+    UvmPhaseTrace phases;
+    const bool sameSuffix = cachedSuffix && newEnd <= current.size() &&
+                            current.substr(newEnd) == *cachedSuffix;
+    if (sameSuffix && rawEndLine && cachedRawEndLine == rawEndLine) {
+        for (const auto& n : neighbours) {
+            ctx.checkpoint("before later macro proof");
+            need(!n.symbol->bodyHasExternalDependents.load(std::memory_order_relaxed),
+                 "later macro method acquired external dependents");
+        }
+        ctx.checkpoint("reuse later macro syntax proof");
+        phases.mark("body-line-syntax-reuse");
+        return;
+    }
     const auto delta = int64_t(newEnd) - int64_t(editedEnd);
     for (const auto& n : neighbours) {
         ctx.checkpoint("before later macro proof");
@@ -382,5 +421,10 @@ void BodyLineProof::validate(std::string_view current, size_t newEnd,
         }
         ctx.checkpoint("after later macro proof");
     }
+    if (sameSuffix && rawEndLine) {
+        ctx.checkpoint("before later macro syntax cache commit");
+        cachedRawEndLine = rawEndLine;
+    }
+    phases.mark("body-line-syntax-replay");
 }
 } // namespace server

@@ -14,6 +14,8 @@
 namespace server {
 
 class BodyDiagnosticCache;
+class BodyMacroProof;
+class DirectoryProofPlan;
 struct BodyDiagnosticBaseline;
 
 /// Opt-in local function/task queries retaining one original lexical context.
@@ -53,8 +55,15 @@ public:
     std::optional<ServerDriver::DiagnosticSnapshot> diagnostics(const Config&,
                                                                 const lsp::RequestContext&) const;
     bool isBodyQuery() const { return bodyQueries; }
-    bool publishLocalDiagnostics(const Config&, const lsp::RequestContext&);
+    bool hasPreparedLocalDiagnostics() const {
+        return bodyQueries && accepted && bodyDiagnostics && diagnosticDecline.empty();
+    }
+    bool publishLocalDiagnostics(const Config&, const lsp::RequestContext&,
+                                 bool deferTransport = false);
     uint64_t localDiagnosticUpdates() const;
+    std::pair<uint64_t, uint64_t> localDiagnosticProcedureCounts() const;
+    std::pair<uint64_t, uint64_t> localDiagnosticRenderingCounts() const;
+    std::pair<size_t, size_t> localDiagnosticRenderingCacheUsage() const;
     std::string localDiagnosticDecline() const;
     Statistics statistics() const {
         return {accepted != 0, accepted, version, renewals, handles.size()};
@@ -111,9 +120,14 @@ private:
     int bodyKeywordVersion = 0;
     std::vector<std::shared_ptr<void>> macroPins;
     std::shared_ptr<ShallowAnalysis> bodyOwner;
+    std::string bodyQueryScopeDisplay;
     std::vector<const slang::ast::SubroutineSymbol*> bodyOriginals;
     std::vector<const slang::ast::SubroutineSymbol*> bodyLineDependents, bodyBlocked;
+    std::vector<const slang::syntax::SyntaxNode*> bodyBlockedSyntax;
+    // Static membership in bodyOwner's retained CST, never physical-input admission.
+    std::vector<const slang::syntax::SyntaxNode*> bodyMacroSyntaxWitness;
     bool bodyLineSensitiveDeclaration = false;
+    std::unique_ptr<BodyMacroProof> bodyMacroProof;
     uint32_t bodyBufferLimit = 0;
     std::unique_ptr<slang::BumpAllocator> macroArena;
     std::vector<const slang::syntax::DefineDirectiveSyntax*> bodyMacros;
@@ -137,11 +151,15 @@ private:
     std::vector<uint32_t> handles;
     std::vector<std::string> outerNames;
     std::map<std::string, std::optional<std::string>> disk;
+    std::unique_ptr<DirectoryProofPlan> directoryProofPlan;
     struct FileProofInput {
         const std::string* path;
         const std::optional<std::string>* expected = nullptr;
         std::optional<std::string>* captured = nullptr;
+        size_t directoryGroup = size_t(-1);
     };
+    // Pointers into the immutable disk map above; no successful proof is kept.
+    std::vector<FileProofInput> plannedProofInputs;
     bool readProofInputs(std::span<const FileProofInput>, std::string_view checkpoint,
                          const lsp::RequestContext&) const;
     std::map<std::string, std::vector<std::string>> directories;
@@ -162,6 +180,8 @@ private:
 
     static std::optional<std::string> read(const std::string&, bool fastPath = false,
                                            const lsp::RequestContext& ctx = {});
+    static bool readMatches(const std::string&, const std::optional<std::string>&, bool fastPath,
+                            const lsp::RequestContext&);
     static std::string plain(const SlangDoc&);
     static void require(bool, const char*);
     const DTO& completion(size_t context, size_t index) const;

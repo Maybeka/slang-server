@@ -1,0 +1,108 @@
+{
+  "stage": "B3",
+  "complete": false,
+  "goalComplete": false,
+  "candidateSha256": "e48a5b57c17338d45334a2e96efa178f1fec831843f93fd90dce793872534388",
+  "lastAcceptedB2": "6532880f5eca9a41ba4c023250d945d3aed6d022558d920428875fdd71f300c5",
+  "change": "Existing SlangDoc synchronization now calls shared transactional applyDocumentChanges without SourceManager allocation inside helper; foundation for bounded deferred text admission",
+  "performanceOptimizationQualified": false,
+  "deferredAdmissionImplemented": false,
+  "targeted": {
+    "cases": 3,
+    "assertions": 24,
+    "passed": true
+  },
+  "ctest": {
+    "count": 941,
+    "passed": true,
+    "originalExecSession": 86234
+  },
+  "python": {
+    "count": 17,
+    "passed": true,
+    "initialWrongCwdFailureLogRetained": true
+  },
+  "realCvaRanged": {
+    "originalExecSession": 41217,
+    "originalExitCode": 0,
+    "jobs": {
+      "ranged-forced-20ms": {
+        "reportSha256": "5066dbabc035ed415be130874a26ec498cdcb384bb3c658e78393691e1c46986",
+        "passed": true,
+        "rows": {
+          "native": {
+            "p50": 2148.073646,
+            "p95": 3630.112875,
+            "maximum": 3957.39625,
+            "lastDiagnosticMs": 4396.647667,
+            "cancelled": 0,
+            "finalFiles": 612,
+            "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799"
+          },
+          "baseline": {
+            "p50": 6.302542,
+            "p95": 7.507375,
+            "maximum": 25.704834,
+            "lastDiagnosticMs": 13.45075,
+            "cancelled": 3,
+            "finalFiles": 612,
+            "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799"
+          },
+          "candidate": {
+            "p50": 6.290916,
+            "p95": 7.210333,
+            "maximum": 42.875,
+            "lastDiagnosticMs": 13.259959,
+            "cancelled": 5,
+            "finalFiles": 612,
+            "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799"
+          }
+        }
+      },
+      "ranged-hard-20ms": {
+        "reportSha256": "021757681e0d70ad01f580591b149805e0b827c038867e4fad0e452fb65cef8d",
+        "passed": true,
+        "rows": {
+          "native": {
+            "p50": 6625.819917000001,
+            "p95": 11765.573916,
+            "maximum": 12913.080209,
+            "lastDiagnosticMs": 13630.35,
+            "cancelled": 0,
+            "finalFiles": 612,
+            "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799"
+          },
+          "baseline": {
+            "p50": 6.382958,
+            "p95": 8.540167,
+            "maximum": 593.41675,
+            "lastDiagnosticMs": 1363.209667,
+            "cancelled": 205,
+            "finalFiles": 612,
+            "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799"
+          },
+          "candidate": {
+            "p50": 6.401375,
+            "p95": 9.269125,
+            "maximum": 668.971458,
+            "lastDiagnosticMs": 1425.900958,
+            "cancelled": 204,
+            "finalFiles": 612,
+            "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799"
+          }
+        }
+      }
+    }
+  },
+  "asanForNewHelper": "pending before final B3 qualification; no old server suite inherited",
+  "sdkUnchanged": true,
+  "experimentsDefaultOff": true,
+  "newFixedDebounce": false,
+  "networkUsed": false,
+  "next": [
+    "Per-open-document latest owned text/version pending buffer outside old SourceManager",
+    "Construct cancellable replacement using exact pending editor snapshots",
+    "Guard semantic/diagnostic admission and save/close/reload interactions",
+    "Deterministic cancellation/budget/Unicode tests then full Native/ASan/CVA/performance qualification"
+  ]
+}

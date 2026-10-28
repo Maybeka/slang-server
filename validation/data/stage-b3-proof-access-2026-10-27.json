@@ -1,0 +1,432 @@
+{
+  "stage": "B3 bounded file access, acceptance prerequisite",
+  "status": "rejected after complete original20 qualification: direct-retire-reverse p50/p95 failed; safe access-only reuse not measurably beneficial after effective permission check",
+  "goalComplete": false,
+  "b3Complete": false,
+  "binarySha256": "0992c2ad7925d6b6e851fd22813c3969a985713c874c47f064ebbded5cc2e403",
+  "sdkPatchSha256": "3c3eac535b958aa818c1a5220348fbdf9ce246803309934dbb276bde0b2f46c8",
+  "implementation": {
+    "accessOnly": true,
+    "completeByteEofVersionPathProofsPreserved": true,
+    "effectivePermissionRechecked": true,
+    "perInvocationParentNamespacePinPreserved": true,
+    "driverWideSharedBudget": true,
+    "defaultHandleLimit": 256,
+    "disableWithZero": true,
+    "hardHandleLimit": 4096,
+    "processAllowanceFraction": 0.5,
+    "newAdmissionsRollbackOnCancellation": true,
+    "unusedAndRetiredHandlesClose": true,
+    "descriptorExhaustionRetriesWithoutAdmission": true,
+    "inputReloadDiscardsOldAccess": true,
+    "successfulProofCachedAcrossRequests": false,
+    "semanticOwnerRetainedByAccessPool": false
+  },
+  "verified": {
+    "targetedCases": 20,
+    "targetedAssertions": 13331,
+    "ctest": 948,
+    "python": 17,
+    "transport": 43,
+    "asanServerCases": 933,
+    "asanServerAssertions": 172938,
+    "wireNativeScenarios": 6,
+    "wireAsanScenarios": 6,
+    "registeredNameAudit": {
+      "passed": true,
+      "registeredTests": 934,
+      "nativeNamesSha256": "3bd6bb44b10c0dad5cc46572549f745ff19cf6100d0d75f77b75b99dd6444d6b",
+      "asanNamesSha256": "3bd6bb44b10c0dad5cc46572549f745ff19cf6100d0d75f77b75b99dd6444d6b"
+    },
+    "sdkUnchanged709Files": true,
+    "sdkEvidenceInheritedFromIdenticalCodeAndBinaries": "untracked/stage-b3-private-bind-cancellation-2026-10-27",
+    "nativeCvaStates": 448,
+    "asanCvaStates": 38,
+    "nativeDiagnosticArchives": 112,
+    "lifecyclePressureJobs": 6
+  },
+  "prototypePerformanceOnly": {
+    "phaseProofMs": [
+      8.65,
+      6.261
+    ],
+    "cpuSeconds": [
+      3.387383,
+      3.19342125
+    ],
+    "queryP50Ms": [
+      15.5576875,
+      14.898
+    ],
+    "queryP95Ms": [
+      17.370666,
+      18.597083
+    ],
+    "note": "Pre-permission-fix prototype; not final candidate qualification"
+  },
+  "originalD85QualificationStillFailed": true,
+  "pending": [
+    "New unchanged14+direct6 gates after complete correctness"
+  ],
+  "constraints": {
+    "experimentsDefaultOff": true,
+    "fixedDebounceAdded": false,
+    "networkUsed": false,
+    "pushedMain": false
+  },
+  "evidenceSha256": {
+    "untracked/stage-b3-proof-access-validation-2026-10-27/receipt.json": "aaabf371f9dae9a7459f3ecce5f53e04ee9f7191087ebebac37226dd486d76eb",
+    "untracked/stage-b3-proof-access-validation-2026-10-27/targeted.log": "eec213b0b36bef3f9354f933c1838b1d8a24f1b4c8599169d123976e093e242f",
+    "untracked/stage-b3-proof-access-validation-2026-10-27/ctest.log": "939edd12e42d1df5c6bf24836165c973449f3687476f2ab04aabc3b133aab61b",
+    "untracked/stage-b3-proof-access-validation-2026-10-27/python.log": "150a7b5e248c508dfc975a165c70e24441285400026dc04e20b54a2ba061ec26",
+    "untracked/stage-b3-proof-access-validation-2026-10-27/transport.log": "c77bea0528b0adf92526532fff5489accf73e3923f90d36409b1a76a16153d09",
+    "untracked/stage-b3-proof-access-validation-2026-10-27/server-asan.log": "62aa13cbc0068dc9d5f23cd4812c3dd77a0f68e3edbe493953c01068eef1a3c0",
+    "untracked/stage-b3-proof-access-validation-2026-10-27/notification-wire-native-complete.json": "c93b2d80d0d5450aa02b6f31e2e2bcf6caeef90933a5291073af26c3682f5cae",
+    "untracked/stage-b3-proof-access-validation-2026-10-27/notification-wire-asan-matrix.json": "02ed28f3debe1fc4658f818a6a86b29c0f71776ad923c3ab787679386b2b9f23",
+    "untracked/stage-b3-proof-access-validation-2026-10-27/test-discovery-audit.json": "93553757b915695914e14c292dc4246c3e093e8c315e767cf633821e28b8f061",
+    "untracked/stage-b3-proof-access-validation-2026-10-27/correctness-runtime.json": "8e387640f456c5083edf6c1ed0d7bdb5edd4ded52270c2aa3de528757d8f8ce4",
+    "untracked/stage-b3-proof-access-validation-2026-10-27/evidence-audit.json": "f50a3b309882749b43751202a870a79e538ad55942430adf889560c295b6b0bd",
+    "untracked/stage-b3-proof-access-pressure-2026-10-27/plan.json": "6935bd2f35327be3cc59ef7c3b3f6ac06c149bcb56dce4b0d5315b6eebbe901f",
+    "untracked/stage-b3-proof-access-pressure-2026-10-27/runtime.json": "75fcee46e6224d52f231ded01bdd7979ed9163d6eccefc0b967fbba2c1cc58b7",
+    "untracked/stage-b3-proof-access-pressure-2026-10-27/owner-analysis.json": "3fe1b1272ff2f0ccf1aea92b77df4625329c0356e9a81c8ee08bb055a48e80b2",
+    "untracked/stage-b3-proof-access-pressure-2026-10-27/arrival-audit.json": "2df547fa0f4af99c0f1348b872ec55b166a2f899270db3cc21a58a068f20aa74",
+    "untracked/stage-b3-proof-access-pressure-2026-10-27/access-budget-audit.json": "4cc538c6ea73df1b9a8c32ed9e7366be9a4edb1724ee657d647ae9ab7de58e4c"
+  },
+  "pressureAgainstB2": {
+    "natural-forward": {
+      "allQueryP95Ms": [
+        421.206666,
+        106.101709
+      ],
+      "successfulQueryP95Ms": [
+        16.907458,
+        16.963541
+      ],
+      "successfulQueryMaximumMs": [
+        392.52775,
+        574.48825
+      ],
+      "cancelled": [
+        204,
+        204
+      ],
+      "cancelledQueryP95Ms": [
+        422.846959,
+        107.590458
+      ],
+      "lastDiagnosticMs": [
+        1165.887583,
+        931.92525
+      ],
+      "memoryRatios": {
+        "cpuSeconds": 0.9943995015681605,
+        "peakRss": 0.9959948678826548,
+        "peakFootprint": 0.9991713295261131
+      },
+      "candidateRootQuantumUs": 5828,
+      "finalAccessBudget": {
+        "capacity": 0,
+        "handles": 0,
+        "sourceReportSha256": "d713cbf310e6aefe86311a5e288523474bd0105ae7b9eafc31632df253a3abb2"
+      }
+    },
+    "natural-reverse": {
+      "allQueryP95Ms": [
+        424.468375,
+        107.208542
+      ],
+      "successfulQueryP95Ms": [
+        16.40125,
+        15.943542
+      ],
+      "successfulQueryMaximumMs": [
+        690.952542,
+        575.949708
+      ],
+      "cancelled": [
+        204,
+        204
+      ],
+      "cancelledQueryP95Ms": [
+        427.107625,
+        108.747208
+      ],
+      "lastDiagnosticMs": [
+        1473.565625,
+        931.221042
+      ],
+      "memoryRatios": {
+        "cpuSeconds": 0.9613532583844688,
+        "peakRss": 0.9941159164460135,
+        "peakFootprint": 0.9980509144733343
+      },
+      "candidateRootQuantumUs": 5702,
+      "finalAccessBudget": {
+        "capacity": 0,
+        "handles": 0,
+        "sourceReportSha256": "acdd7c1a06925fd4b1ea47d063d746364183ec34cbf0110e744fc8ae917ed25c"
+      }
+    },
+    "forced-forward": {
+      "allQueryP95Ms": [
+        16.282459,
+        16.416
+      ],
+      "successfulQueryP95Ms": [
+        16.282459,
+        16.416
+      ],
+      "successfulQueryMaximumMs": [
+        20.390625,
+        17.294292
+      ],
+      "cancelled": [
+        0,
+        0
+      ],
+      "cancelledQueryP95Ms": [
+        null,
+        null
+      ],
+      "lastDiagnosticMs": [
+        26.755125,
+        28.476417
+      ],
+      "memoryRatios": {
+        "cpuSeconds": 1.0161104502529454,
+        "peakRss": 0.9990644889195613,
+        "peakFootprint": 0.9886533131836266
+      },
+      "candidateRootQuantumUs": 5474,
+      "finalAccessBudget": {
+        "capacity": 0,
+        "handles": 0,
+        "sourceReportSha256": "3e917b2fc9a5a70cb5154dadda729777d94b59443ab3156e88cce43e3c01e0f0"
+      }
+    },
+    "forced-reverse": {
+      "allQueryP95Ms": [
+        16.361833,
+        16.602833
+      ],
+      "successfulQueryP95Ms": [
+        16.361833,
+        16.602833
+      ],
+      "successfulQueryMaximumMs": [
+        18.759375,
+        17.445625
+      ],
+      "cancelled": [
+        0,
+        0
+      ],
+      "cancelledQueryP95Ms": [
+        null,
+        null
+      ],
+      "lastDiagnosticMs": [
+        30.023166,
+        27.631917
+      ],
+      "memoryRatios": {
+        "cpuSeconds": 1.0118356694220452,
+        "peakRss": 0.9983154154798003,
+        "peakFootprint": 0.9889106710841468
+      },
+      "candidateRootQuantumUs": 5844,
+      "finalAccessBudget": {
+        "capacity": 0,
+        "handles": 0,
+        "sourceReportSha256": "c7521280cd7cb56f8dac0543349d896a412d9b0b915892827422314b96f0440c"
+      }
+    },
+    "ranged-forced-20ms": {
+      "allQueryP95Ms": [
+        8.3525,
+        22.77675
+      ],
+      "successfulQueryP95Ms": [
+        7.883875,
+        8.795709
+      ],
+      "successfulQueryMaximumMs": [
+        23.664083,
+        118.900375
+      ],
+      "cancelled": [
+        3,
+        5
+      ],
+      "cancelledQueryP95Ms": [
+        24.522042,
+        57.867417
+      ],
+      "lastDiagnosticMs": [
+        14.121958,
+        14.933958
+      ],
+      "memoryRatios": {
+        "cpuSeconds": 1.0208566298257313,
+        "peakRss": 1.0042304685703776,
+        "peakFootprint": 0.9995507400977766
+      },
+      "candidateRootQuantumUs": 5501,
+      "finalAccessBudget": {
+        "capacity": 0,
+        "handles": 0,
+        "sourceReportSha256": "d308939b8941d2eb3030074c3a16853ba0f01838470fac6394bff0513160d49e"
+      }
+    },
+    "ranged-hard-20ms": {
+      "allQueryP95Ms": [
+        384.802333,
+        46.3865
+      ],
+      "successfulQueryP95Ms": [
+        8.319583,
+        10.796792
+      ],
+      "successfulQueryMaximumMs": [
+        696.652666,
+        599.403292
+      ],
+      "cancelled": [
+        205,
+        205
+      ],
+      "cancelledQueryP95Ms": [
+        406.265917,
+        47.291875
+      ],
+      "lastDiagnosticMs": [
+        1475.826666,
+        955.84075
+      ],
+      "memoryRatios": {
+        "cpuSeconds": 0.9567489006914317,
+        "peakRss": 0.991652812413411,
+        "peakFootprint": 0.9943628527118277
+      },
+      "candidateRootQuantumUs": 5971,
+      "finalAccessBudget": {
+        "capacity": 0,
+        "handles": 0,
+        "sourceReportSha256": "b143da232242c7a225da17654b3e17f9151c0dd2db5c3e5aa8a30c1352b12be7"
+      }
+    }
+  },
+  "limitations": [
+    "20ms forced retirement has5 vs3 cancellations, successful p95 8.80 vs7.88ms and maximum119ms; not a universal zero-stall guarantee",
+    "Hard1MiB source history still has a cold model recovery path",
+    "All6 final observed access counts are0/0 after idle retirement; active capacity and rollback verified separately by Native/ASan unit cases; no active budget claim from those final zeros"
+  ],
+  "implementationRetained": false,
+  "qualification": {
+    "b3Complete": false,
+    "goalComplete": false,
+    "candidateSha256": "0992c2ad7925d6b6e851fd22813c3969a985713c874c47f064ebbded5cc2e403",
+    "checks": {
+      "fixed14": true,
+      "direct6": false,
+      "memory-final-1008-cpuSeconds": true,
+      "memory-final-1008-p50": true,
+      "memory-final-1008-p95": true,
+      "memory-final-1008-lastDiagnosticMs": true,
+      "memory-final-1008-peakRss": true,
+      "memory-final-1008-peakFootprint": true,
+      "memory-final-reverse-cpuSeconds": true,
+      "memory-final-reverse-p50": true,
+      "memory-final-reverse-p95": true,
+      "memory-final-reverse-lastDiagnosticMs": true,
+      "memory-final-reverse-peakRss": true,
+      "memory-final-reverse-peakFootprint": true,
+      "correctness": true,
+      "all6Pressure": true,
+      "ownersBalanced": true,
+      "arrivalAudit": true,
+      "testDiscovery": true,
+      "wireMatrices": true,
+      "privateBindCancellationRegression": true,
+      "sameRootSdk": true,
+      "accessRegression": true,
+      "accessBudgets": true,
+      "privateRootObservedImprovement": true,
+      "rapidColdRecoveryBoundaryRecorded": true,
+      "boundEvidence": true,
+      "sourceIdentity": true,
+      "sdkPhysicalIdentity": true,
+      "sdkExecutableIdentity": true,
+      "candidateIdentity": true
+    },
+    "failedChecks": [
+      "direct6"
+    ],
+    "ratios": {
+      "memory-final-1008": {
+        "cpuSeconds": 0.8578975009881818,
+        "p50": 0.7499807511459416,
+        "p95": 0.8343930550072367,
+        "lastDiagnosticMs": 0.8304931368141476,
+        "peakRss": 0.7736933843232134,
+        "peakFootprint": 0.7414788706562233
+      },
+      "memory-final-reverse": {
+        "cpuSeconds": 1.0433699031108896,
+        "p50": 0.9450290374879574,
+        "p95": 1.0389715628812888,
+        "lastDiagnosticMs": 0.8751040410992279,
+        "peakRss": 0.7727986706995703,
+        "peakFootprint": 0.740420822600497
+      }
+    },
+    "scope": "B3 input/cancellation/lifecycle stage only; overall five-category goal remains incomplete",
+    "requirementsSha256": "73e33f83b3c9380b48b152259a61147e847db38c0df5fe566e725c27172df681",
+    "auditScriptSha256": "45aad416ed393ac1bd45f6706c3f78301e26eb78fd64395bacd73d29a62841aa",
+    "evidenceSha256": {
+      "evaluation.json": "10d2980ea6c72d4242ecc476957064e69779bf5b9697d42afff99baae3ca039f",
+      "direct-build-evaluation.json": "bf5a9ee5ce97fe1f2de99ff979d4d29e76585b17a1323ed18286b8723347dff9",
+      "code-receipt.json": "73a9e3a5e0982b282eb0b0abe3310f981651be523ec142e4e50427a88e06b487"
+    }
+  },
+  "decision": {
+    "candidate0992Qualification": "failed: direct-retire-reverse p50 and p95",
+    "qualificationSourceIdentity137": true,
+    "all20Completed": true,
+    "completeProofMicroMs": {
+      "fresh": 6.081,
+      "pooled": 6.394,
+      "pooledEffectivePermissionMs": 2.6147185
+    },
+    "decision": "Remove access-only pool, its option and status fields; permission recheck offsets openat savings; retain complete fresh byte/EOF/path/version proofs, parent namespace guard and permission regression. Existing B3 private cancellation/lifecycle changes retained.",
+    "qualificationRemainsFailed": true,
+    "unchangedCandidateResampled": false,
+    "sourceRestoredFrom": "untracked/stage-b3-proof-access-pool-2026-10-27/before",
+    "sdkChanged": false,
+    "goalComplete": false
+  },
+  "postRejection": {
+    "productionBinaryAfterRemoval": "d85d4e4430653161124352a9c47c7fa6775fd89c70ebdfc696568d473d91720e",
+    "buildPassed": true,
+    "batchedRegression": {
+      "cases": 14,
+      "assertions": 12577,
+      "passed": true
+    },
+    "pathRegression": {
+      "cases": 1,
+      "assertions": 17,
+      "passed": true
+    },
+    "relativeNegativeProofProbeRejected": {
+      "ordinaryMs": 5.2155,
+      "relativeMs": [
+        5.8125,
+        5.787
+      ],
+      "productionImplemented": false
+    },
+    "executionCounterAttribution": "untracked/stage-b3-retirement-query-attribution-2026-10-27/execution-counter-analysis.json",
+    "qualificationFailurePreserved": true
+  }
+}

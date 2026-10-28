@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 #include "diagnostics/DiagnosticSnapshotCodec.h"
+#include "ast/ServerCompilationAnalysis.h"
 
 #include <algorithm>
 #include <array>
@@ -634,6 +635,11 @@ OwnedOptions captureOptions(const slang::Bag& options, const Limits& limits) {
         result.source = OwnedSourceOptions{input->numThreads, input->singleUnit, input->onlyLint,
                                            input->librariesInheritMacros};
     }
+    // This server-only setting controls the foreground owner's scheduling, not
+    // compiler semantics. Private diagnostic children remain serial and do not
+    // inherit another pool. All unknown option types still fail closed.
+    if (options.get<server::ParallelDiagnosticOptions>())
+        ++count;
     if (count != options.size())
         fail("unrecognized Bag option type");
     validateOptions(result, limits);

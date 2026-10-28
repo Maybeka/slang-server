@@ -1,0 +1,183 @@
+{
+  "stage": "B3",
+  "complete": false,
+  "goalComplete": false,
+  "productionChanged": false,
+  "sameBinaryRepeatNotQualification": true,
+  "originalExecSession": 97715,
+  "originalExitCode": 0,
+  "jobs": {
+    "ranged-forced-20ms": {
+      "passed": true,
+      "reportSha256": "c5a73b46ab0672ab0a33dc9e45f36d2ea08887a3a7eee1d26b6319e01ea345ca",
+      "rows": {
+        "native": {
+          "p50": 2160.770479,
+          "p95": 3655.276583,
+          "maximum": 3987.200083,
+          "lastDiagnosticMs": 4431.176416,
+          "cancelled": 0,
+          "finalFiles": 612,
+          "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+          "memory": {
+            "peakRss": 1396277248,
+            "peakFootprint": 1022084560,
+            "samples": 345,
+            "cpuSeconds": 8.571843791
+          },
+          "publications": {
+            "count": 4,
+            "monotonic": true,
+            "duplicates": 0,
+            "lastVersion": 15
+          },
+          "generations": {
+            "retired": 1
+          }
+        },
+        "baseline": {
+          "p50": 6.384334,
+          "p95": 7.413792,
+          "maximum": 23.099542,
+          "lastDiagnosticMs": 13.405542,
+          "cancelled": 3,
+          "finalFiles": 612,
+          "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+          "memory": {
+            "peakRss": 1065615360,
+            "peakFootprint": 908444896,
+            "samples": 200,
+            "cpuSeconds": 3.7734045
+          },
+          "publications": {
+            "count": 96,
+            "monotonic": true,
+            "duplicates": 0,
+            "lastVersion": 99
+          },
+          "generations": {
+            "replacement-cancelled": 1,
+            "retired": 1
+          }
+        },
+        "candidate": {
+          "p50": 6.437458,
+          "p95": 7.568167,
+          "maximum": 9.036542,
+          "lastDiagnosticMs": 13.902625,
+          "cancelled": 5,
+          "finalFiles": 612,
+          "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+          "memory": {
+            "peakRss": 1065762816,
+            "peakFootprint": 908575944,
+            "samples": 199,
+            "cpuSeconds": 3.802875708
+          },
+          "publications": {
+            "count": 92,
+            "monotonic": true,
+            "duplicates": 0,
+            "lastVersion": 99
+          },
+          "generations": {
+            "replacement-cancelled": 2,
+            "retired": 1
+          }
+        }
+      }
+    },
+    "ranged-hard-20ms": {
+      "passed": true,
+      "reportSha256": "6deb4c4462295acb9235a36391e822772f3466ece7f0a36545a88c6630111cc0",
+      "rows": {
+        "native": {
+          "p50": 6668.952021,
+          "p95": 11879.861542,
+          "maximum": 13036.398542,
+          "lastDiagnosticMs": 13756.176917,
+          "cancelled": 0,
+          "finalFiles": 612,
+          "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+          "memory": {
+            "peakRss": 1066467328,
+            "peakFootprint": 818119808,
+            "samples": 692,
+            "cpuSeconds": 18.000097291
+          },
+          "publications": {
+            "count": 15,
+            "monotonic": true,
+            "duplicates": 0,
+            "lastVersion": 15
+          },
+          "generations": {
+            "retired": 14
+          }
+        },
+        "baseline": {
+          "p50": 6.508125,
+          "p95": 9.265209,
+          "maximum": 617.410667,
+          "lastDiagnosticMs": 1383.862625,
+          "cancelled": 205,
+          "finalFiles": 612,
+          "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+          "memory": {
+            "peakRss": 944488448,
+            "peakFootprint": 728990800,
+            "samples": 446,
+            "cpuSeconds": 9.8051
+          },
+          "publications": {
+            "count": 176,
+            "monotonic": true,
+            "duplicates": 0,
+            "lastVersion": 387
+          },
+          "generations": {
+            "replacement-cancelled": 9,
+            "retired": 8
+          }
+        },
+        "candidate": {
+          "p50": 6.4575205,
+          "p95": 7.191,
+          "maximum": 549.089667,
+          "lastDiagnosticMs": 1315.602333,
+          "cancelled": 206,
+          "finalFiles": 612,
+          "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+          "memory": {
+            "peakRss": 946503680,
+            "peakFootprint": 728712272,
+            "samples": 447,
+            "cpuSeconds": 9.574741916
+          },
+          "publications": {
+            "count": 179,
+            "monotonic": true,
+            "duplicates": 0,
+            "lastVersion": 387
+          },
+          "generations": {
+            "replacement-cancelled": 1,
+            "retired": 8
+          }
+        }
+      }
+    }
+  },
+  "networkUsed": false,
+  "ownerBalanced": true,
+  "findings": [
+    "Ranged sequence final hover/all612 URI diagnostics equal Native, post-idle stable, target diagnostic versions monotonic with no duplicate same-version content",
+    "20ms/1MiB stress still has205-206 cancelled queries,549-617ms maximum query and1316-1384ms final diagnostic; B3 is not complete",
+    "Hard-pressure foreground-source-accounting contains420-421ms block and retirement-load-publish up to424-434ms; phase maxima also include startup and cannot all be attributed to retirements"
+  ],
+  "remaining": [
+    "Measure true enqueue-to-dispatch and cancellation atomic intervals around hard pressure",
+    "Avoid blocking hard retirement while preserving bounded source growth, current text and publication version proofs",
+    "Add deterministic ranged cancellation regression and complete Native/ASan/CVA verification after production changes"
+  ]
+}

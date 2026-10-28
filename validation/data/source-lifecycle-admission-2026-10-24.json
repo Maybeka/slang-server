@@ -904,7 +904,16 @@
     },
     "goal": "Five-category goal active. Qualification of this candidate does not close remaining implementation categories."
   },
-  "gates": null,
+  "gates": {
+    "warmMedianP50MaxRatio": 1.1,
+    "warmMedianP95MaxRatio": 1.1,
+    "firstQueryAndDiagnosticMaxRatio": 1.1,
+    "cpuMaxRatio": 1.1,
+    "rssFootprintMaxRatio": 1.05,
+    "additionalProjectWarmQueryDiagnosticMaxRatio": 1.1,
+    "proofCountMaxRatio": 0.75,
+    "proofCountMinimumSaved": 12
+  },
   "tests": {
     "ctest": 863,
     "asanServerCases": 848,

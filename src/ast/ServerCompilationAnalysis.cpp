@@ -1,3 +1,8 @@
+#include <algorithm>
+#include <atomic>
+#include <cstdio>
+#include <cstdlib>
+#include <thread>
 //------------------------------------------------------------------------------
 // ServerCompilationAnalysis.cpp
 // Implementation of server compilation analysis class
@@ -10,6 +15,7 @@
 
 #include "ast/TrustedUvmLibrary.h"
 #include "util/Logging.h"
+#include "util/ModelOwnerTrace.h"
 #include "util/UvmPhaseTrace.h"
 #include <algorithm>
 #include <chrono>
@@ -73,7 +79,18 @@ ServerCompilationAnalysis::ServerCompilationAnalysis(
     SourceManager& sourceManager, const lsp::RequestContext& ctx, bool allowDisposableRoot,
     std::shared_ptr<const void> sourceOwner) :
     compilation(options),
-    m_analysisOptions(options.getOrDefault<slang::analysis::AnalysisOptions>()) {
+    m_analysisOptions(options.getOrDefault<slang::analysis::AnalysisOptions>()),
+    m_parallelOptions(options.getOrDefault<ParallelDiagnosticOptions>()) {
+    if (compilation.hasFlag(ast::CompilationFlags::TrackSubroutineBodyDependencies) ||
+        (m_parallelOptions.enabled && m_parallelOptions.workers > 1))
+        m_analysisOptions.flags |= slang::analysis::AnalysisFlags::RetainProcedureSummaries;
+    traceModelOwner("full-start", &compilation);
+    bool completed = false;
+    auto traceFailure = slang::ScopeGuard([&] {
+        if (!completed && modelOwnerTraceEnabled())
+            traceModelOwner("full-abort", &compilation, nullptr,
+                            compilation.getTotalBytesAllocated());
+    });
     UvmPhaseTrace phases;
     std::vector<BufferID> bufferIds;
     std::vector<std::shared_ptr<syntax::SyntaxTree>> trees;
@@ -83,6 +100,9 @@ ServerCompilationAnalysis::ServerCompilationAnalysis(
         trees.push_back(doc->getSyntaxTree(ctx));
     }
     phases.mark("model-syntax-discovery");
+    if (modelOwnerTraceEnabled())
+        traceModelOwner("full-syntax-discovered", &compilation, nullptr,
+                        compilation.getTotalBytesAllocated());
     ctx.checkpoint("before full-model library import");
     const bool trusted = importTrustedUvm(compilation, sourceManager, options, trees);
     // Native models need the same namespace lifetime guarantee as imported views.
@@ -91,6 +111,9 @@ ServerCompilationAnalysis::ServerCompilationAnalysis(
         compilation.retainSourceOwner(std::move(sourceOwner));
     ctx.checkpoint("after full-model library import");
     phases.mark("model-library-import");
+    if (modelOwnerTraceEnabled())
+        traceModelOwner("full-library-imported", &compilation, nullptr,
+                        compilation.getTotalBytesAllocated());
     std::unordered_set<BufferID> seenBuffers;
 
     for (auto& tree : trees) {
@@ -105,6 +128,9 @@ ServerCompilationAnalysis::ServerCompilationAnalysis(
     }
 
     phases.mark("model-syntax-installation");
+    if (modelOwnerTraceEnabled())
+        traceModelOwner("full-syntax-installed", &compilation, nullptr,
+                        compilation.getTotalBytesAllocated());
     // Retain buffer data to prevent deallocation while this compilation exists
     m_retainedBuffers = sourceManager.retainBuffers(bufferIds);
 
@@ -121,12 +147,34 @@ ServerCompilationAnalysis::ServerCompilationAnalysis(
     rootTrace.finish(true);
     ctx.checkpoint("after full-model root binding");
     phases.mark("model-root-binding");
+    if (modelOwnerTraceEnabled())
+        traceModelOwner("full-root-bound", &compilation, nullptr,
+                        compilation.getTotalBytesAllocated());
     instances.reset(&root, [&] { ctx.checkpoint("during full-model instance indexing"); });
     ctx.checkpoint("after full-model instance indexing");
     phases.mark("model-instance-indexing");
 
     // symbol references are not indexed until cone tracing is requested
     m_references.reset();
+    completed = true;
+    if (modelOwnerTraceEnabled())
+        traceModelOwner("full-ready", &compilation, nullptr, compilation.getTotalBytesAllocated());
+}
+
+ServerCompilationAnalysis::~ServerCompilationAnalysis() {
+    if (modelOwnerTraceEnabled())
+        traceModelOwner("full-release", &compilation, nullptr, compilation.getTotalBytesAllocated(),
+                        analysisMemoryBytes());
+}
+
+bool ServerCompilationAnalysis::releaseRecomputableCaches() {
+    const bool released = m_driverAnalysis || m_intrinsicAnalysis || m_analysisQueries || m_references.has_value();
+    // Queries and reference indexes contain pointers into the manager.
+    m_references.reset();
+    m_analysisQueries.reset();
+    m_driverAnalysis.reset();
+    m_intrinsicAnalysis.reset();
+    return released;
 }
 
 void ServerCompilationAnalysis::prepareDisposableDiagnostics(const lsp::RequestContext& ctx) {
@@ -142,6 +190,18 @@ void ServerCompilationAnalysis::prepareDisposableDiagnostics(const lsp::RequestC
     phases.mark("private-full-dataflow");
 }
 
+size_t ServerCompilationAnalysis::analysisMemoryBytes() const {
+    // Replay stats exclude borrowed summaries. Account for both retained owners.
+    return (m_driverAnalysis ? m_driverAnalysis->getStats().memoryUsage : 0) +
+           (m_intrinsicAnalysis ? m_intrinsicAnalysis->getStats().memoryUsage : 0);
+}
+
+slang::analysis::AnalysisManager& ServerCompilationAnalysis::getProcedureReuseBaseline(
+    const lsp::RequestContext& ctx) {
+    auto& serial = getAnalysisManager(ctx);
+    return m_intrinsicAnalysis ? *m_intrinsicAnalysis : serial;
+}
+
 slang::analysis::AnalysisManager& ServerCompilationAnalysis::getAnalysisManager(
     const lsp::RequestContext& ctx) {
     if (!m_driverAnalysis) {
@@ -155,31 +215,100 @@ slang::analysis::AnalysisManager& ServerCompilationAnalysis::getAnalysisManager(
         ctx.throwIfCancelled("before full-design dataflow");
         // Analyze a private candidate. Cancellation must neither cache a partial
         // manager nor leave the shared compilation frozen for foreground queries.
-        auto analysis = std::make_unique<slang::analysis::AnalysisManager>(m_analysisOptions);
+        m_parallelStats = {};
+        std::shared_ptr<slang::ThreadPool> pool;
+#if defined(SLANG_USE_THREADS)
+        m_parallelStats.observerSerial = ctx.hasCheckpointObserver();
+        if (m_parallelOptions.enabled && m_parallelOptions.workers > 1 &&
+            !compilation.hasFatalErrors() && !ctx.hasCheckpointObserver() && !BS::this_thread::get_index()) {
+            const auto count = std::min(m_parallelOptions.workers, uint32_t(8));
+            pool = std::make_shared<slang::ThreadPool>(count);
+            m_parallelStats.workers = count;
+            m_parallelStats.attempted = true;
+        }
+#endif
+        const char* trace = std::getenv("SLANG_PARALLEL_DIAGNOSTIC_TRACE");
+        auto event = [trace](const char* name, size_t workers) {
+            if (trace)
+                if (auto* file = std::fopen(trace, "a")) {
+                    std::fprintf(file, "%s\t%zu\n", name, workers);
+                    std::fclose(file);
+                }
+        };
         auto active = std::make_shared<std::optional<lsp::RequestContext>>();
         auto releaseRequest = slang::ScopeGuard([&] { active->reset(); });
-        if (ctx) {
-            active->emplace(ctx);
-            analysis->addListener([active](const slang::analysis::AnalyzedProcedure&) {
-                if (*active)
-                    (*active)->checkpoint("after diagnostic procedure");
-            });
-            analysis->addListener([active](const slang::analysis::AnalyzedScope&) {
-                if (*active)
-                    (*active)->checkpoint("after diagnostic scope");
-            });
-            analysis->addListener([active](const slang::analysis::AnalyzedAssertion&) {
-                if (*active)
-                    (*active)->checkpoint("after diagnostic assertion");
-            });
-        }
+        if (ctx) active->emplace(ctx);
+        const auto caller = std::this_thread::get_id();
+        auto workerNoted = std::make_shared<std::atomic_bool>(false);
+        auto makeManager = [&](std::shared_ptr<slang::ThreadPool> workers) {
+            auto result = std::make_unique<slang::analysis::AnalysisManager>(m_analysisOptions,
+                                                                           workers);
+            if (ctx) {
+                if (workers || compilation.hasFlag(ast::CompilationFlags::TrackSubroutineBodyDependencies))
+                    result->setCheckpoint([active, caller, workerNoted, event, workers] {
+                        if (workers && std::this_thread::get_id() != caller &&
+                            !workerNoted->exchange(true, std::memory_order_relaxed))
+                            event("worker-active", uint32_t(workers->get_thread_count()));
+                        if (*active) (*active)->checkpoint("during diagnostic procedure");
+                    });
+                result->addListener([active](const slang::analysis::AnalyzedProcedure&) {
+                    if (*active) (*active)->checkpoint("after diagnostic procedure");
+                });
+                result->addListener([active](const slang::analysis::AnalyzedScope&) {
+                    if (*active) (*active)->checkpoint("after diagnostic scope");
+                });
+                result->addListener([active](const slang::analysis::AnalyzedAssertion&) {
+                    if (*active) (*active)->checkpoint("after diagnostic assertion");
+                });
+            }
+            return result;
+        };
+        auto analysis = makeManager(pool);
+        std::shared_ptr<slang::analysis::AnalysisManager> intrinsic;
         compilation.freeze();
         {
-            auto unfreeze = slang::ScopeGuard([&] { compilation.unfreeze(); });
-            analysis->analyze(compilation);
+            auto unfreeze = slang::ScopeGuard([&] {
+                compilation.unfreeze();
+                event("unfrozen", m_parallelStats.workers);
+            });
+            {
+                // analyze() can throw while still launching tasks, before its
+                // ordinary wait(). Never thaw or clear request state first.
+                auto drain = slang::ScopeGuard([&] {
+                    if (pool) pool->wait();
+                    event("drained", m_parallelStats.workers);
+                });
+                event("start", m_parallelStats.workers);
+                analysis->analyze(compilation);
+            }
+            ctx.throwIfCancelled("after full-design dataflow");
+            if (pool) {
+                // Parallel registration is allowed only in the private summary
+                // pass. Replay all Native scopes / ports / drivers serially using
+                // unchanged intrinsic summaries; contextual checks remain fresh.
+                intrinsic = std::move(analysis);
+                analysis = makeManager(nullptr);
+                ctx.throwIfCancelled("before serial driver diagnostic replay");
+                analysis->setProcedureReuse(intrinsic);
+                m_parallelStats.serialReplay = true;
+                event("serial-replay", m_parallelStats.workers);
+                analysis->analyze(compilation);
+                const auto [reused, recomputed] = analysis->getProcedureReuseCounts();
+                m_parallelStats.proceduresReused = reused;
+                m_parallelStats.proceduresRecomputed = recomputed;
+                event("procedures-reused", reused);
+                event("procedures-recomputed", recomputed);
+                m_parallelStats.kept = true;
+                event("parallel-summary-kept", m_parallelStats.workers);
+            }
         }
         ctx.throwIfCancelled("after full-design dataflow");
+        m_intrinsicAnalysis = std::move(intrinsic);
         m_driverAnalysis = std::move(analysis);
+        if (modelOwnerTraceEnabled())
+            traceModelOwner("full-dataflow", &compilation, nullptr,
+                            compilation.getTotalBytesAllocated(),
+                            analysisMemoryBytes(), weak_from_this().use_count());
     }
     return *m_driverAnalysis;
 }

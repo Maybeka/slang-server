@@ -1,0 +1,282 @@
+{
+  "qualified": false,
+  "binarySha256": "b15491def2fb69b056b3d905c9c78ac6fdcd361b8b1406ecef3b94a2fc865fd1",
+  "pending": [],
+  "checks": {
+    "warm-final-1-binary": true,
+    "warm-final-1-native612": true,
+    "warm-final-1-cancellations": true,
+    "warm-final-2-binary": true,
+    "warm-final-2-native612": true,
+    "warm-final-2-cancellations": true,
+    "warm-final-3-binary": true,
+    "warm-final-3-native612": true,
+    "warm-final-3-cancellations": true,
+    "warm-final-4-binary": true,
+    "warm-final-4-native612": true,
+    "warm-final-4-cancellations": true,
+    "warm-final-5-binary": true,
+    "warm-final-5-native612": true,
+    "warm-final-5-cancellations": true,
+    "warm-final-6-binary": true,
+    "warm-final-6-native612": true,
+    "warm-final-6-cancellations": true,
+    "first-final-1-binary": true,
+    "first-final-1-native612": true,
+    "first-final-1-cancellations": true,
+    "first-final-2-binary": true,
+    "first-final-2-native612": true,
+    "first-final-2-cancellations": true,
+    "first-final-3-binary": true,
+    "first-final-3-native612": true,
+    "first-final-3-cancellations": true,
+    "memory-final-1008-binary": true,
+    "memory-final-1008-native612": true,
+    "memory-final-1008-cancellations": true,
+    "memory-final-1008-cpuSeconds": true,
+    "memory-final-1008-peakRss": true,
+    "memory-final-1008-peakFootprint": true,
+    "memory-final-1008-hardBound": true,
+    "memory-final-1008-queryBound": true,
+    "memory-final-reverse-binary": true,
+    "memory-final-reverse-native612": true,
+    "memory-final-reverse-cancellations": true,
+    "memory-final-reverse-cpuSeconds": true,
+    "memory-final-reverse-peakRss": true,
+    "memory-final-reverse-peakFootprint": false,
+    "memory-final-reverse-hardBound": true,
+    "memory-final-reverse-queryBound": true,
+    "proof-count-binary": true,
+    "proof-count-native612": true,
+    "proof-count-cancellations": true,
+    "effect-forward-binary": true,
+    "effect-forward-native612": true,
+    "effect-forward-cancellations": true,
+    "effect-forward-cpuSeconds": true,
+    "effect-forward-peakRss": true,
+    "effect-forward-peakFootprint": true,
+    "effect-forward-hardBound": true,
+    "effect-forward-queryBound": true,
+    "effect-reverse-binary": true,
+    "effect-reverse-native612": true,
+    "effect-reverse-cancellations": true,
+    "effect-reverse-cpuSeconds": true,
+    "effect-reverse-peakRss": true,
+    "effect-reverse-peakFootprint": true,
+    "effect-reverse-hardBound": true,
+    "effect-reverse-queryBound": true,
+    "warm-p50": true,
+    "warm-p95": true,
+    "warm-lastDiagnosticMs": true,
+    "first-p50": true,
+    "first-lastDiagnosticMs": true,
+    "proofCount": true,
+    "effect-forward-p50": true,
+    "effect-forward-proceduresReused": true,
+    "effect-forward-renderingsReused": true,
+    "effect-forward-localDiagnostics": true,
+    "effect-forward-p95": true,
+    "effect-forward-lastDiagnostic": true,
+    "effect-reverse-p50": true,
+    "effect-reverse-proceduresReused": true,
+    "effect-reverse-renderingsReused": true,
+    "effect-reverse-localDiagnostics": true,
+    "effect-reverse-p95": true,
+    "effect-reverse-lastDiagnostic": true,
+    "all14": true
+  },
+  "failedChecks": [
+    "memory-final-reverse-peakFootprint"
+  ],
+  "summary": {
+    "memory-final-1008": {
+      "ratios": {
+        "cpuSeconds": 0.9696441141158071,
+        "peakRss": 0.9385431391111515,
+        "peakFootprint": 0.9287639415038108
+      },
+      "arms": {
+        "baseline": {
+          "p50": 19.277479,
+          "p95": 20.624708,
+          "maximum": 28.021791,
+          "cancelled": 0,
+          "lastDiagnosticMs": 31.06375,
+          "memory": {
+            "peakRss": 1263386624,
+            "peakFootprint": 1106511192,
+            "samples": 3710,
+            "cpuSeconds": 33.089521875
+          }
+        },
+        "candidate": {
+          "p50": 17.9893955,
+          "p95": 19.66975,
+          "maximum": 25.042584,
+          "cancelled": 0,
+          "lastDiagnosticMs": 31.207042,
+          "memory": {
+            "peakRss": 1185742848,
+            "peakFootprint": 1027687696,
+            "samples": 3697,
+            "cpuSeconds": 32.085060125
+          }
+        }
+      }
+    },
+    "memory-final-reverse": {
+      "ratios": {
+        "cpuSeconds": 0.96069865499794,
+        "peakRss": 0.9378399075840764,
+        "peakFootprint": 1.0581869844072593
+      },
+      "arms": {
+        "candidate": {
+          "p50": 18.236542,
+          "p95": 20.69925,
+          "maximum": 87.267625,
+          "cancelled": 2,
+          "lastDiagnosticMs": 29.565917,
+          "memory": {
+            "peakRss": 1183809536,
+            "peakFootprint": 1169786152,
+            "samples": 3710,
+            "cpuSeconds": 32.4326195
+          }
+        },
+        "baseline": {
+          "p50": 19.665458,
+          "p95": 21.762792,
+          "maximum": 44.787,
+          "cancelled": 1,
+          "lastDiagnosticMs": 32.499458,
+          "memory": {
+            "peakRss": 1262272512,
+            "peakFootprint": 1105462616,
+            "samples": 3707,
+            "cpuSeconds": 33.759409708
+          }
+        }
+      }
+    },
+    "effect-forward": {
+      "ratios": {
+        "cpuSeconds": 0.6924612950799612,
+        "peakRss": 0.9112079830718176,
+        "peakFootprint": 1.0278982579988143
+      },
+      "arms": {
+        "baseline": {
+          "p50": 11.159021,
+          "p95": 439.322083,
+          "maximum": 439.322083,
+          "cancelled": 2,
+          "lastDiagnosticMs": 913.83675,
+          "memory": {
+            "peakRss": 1416937472,
+            "peakFootprint": 1102906712,
+            "samples": 273,
+            "cpuSeconds": 5.374566458
+          }
+        },
+        "candidate": {
+          "p50": 10.188146,
+          "p95": 19.363209,
+          "maximum": 30.363,
+          "cancelled": 0,
+          "lastDiagnosticMs": 51.387459,
+          "memory": {
+            "peakRss": 1291124736,
+            "peakFootprint": 1133675888,
+            "samples": 232,
+            "cpuSeconds": 3.72167925
+          }
+        }
+      }
+    },
+    "effect-reverse": {
+      "ratios": {
+        "cpuSeconds": 0.6855530417324089,
+        "peakRss": 0.90341525325949,
+        "peakFootprint": 1.0178399439209074
+      },
+      "arms": {
+        "candidate": {
+          "p50": 10.363667,
+          "p95": 22.93575,
+          "maximum": 32.123084,
+          "cancelled": 0,
+          "lastDiagnosticMs": 57.675625,
+          "memory": {
+            "peakRss": 1282850816,
+            "peakFootprint": 1125467504,
+            "samples": 230,
+            "cpuSeconds": 3.748171791
+          }
+        },
+        "baseline": {
+          "p50": 11.531854500000001,
+          "p95": 437.127292,
+          "maximum": 437.127292,
+          "cancelled": 2,
+          "lastDiagnosticMs": 924.36275,
+          "memory": {
+            "peakRss": 1420001280,
+            "peakFootprint": 1105741144,
+            "samples": 278,
+            "cpuSeconds": 5.4673695
+          }
+        }
+      }
+    },
+    "warm": {
+      "baseline": {
+        "p50": 14.55930175,
+        "p95": 15.106708,
+        "lastDiagnosticMs": 27.320354000000002
+      },
+      "candidate": {
+        "p50": 12.70862525,
+        "p95": 13.462833499999999,
+        "lastDiagnosticMs": 25.6343335
+      }
+    },
+    "first": {
+      "baseline": {
+        "p50": 40.6985,
+        "p95": 40.6985,
+        "lastDiagnosticMs": 69.047667
+      },
+      "candidate": {
+        "p50": 42.602208,
+        "p95": 42.602208,
+        "lastDiagnosticMs": 72.301083
+      }
+    },
+    "proofCounts": {
+      "native": 0,
+      "baseline": 28,
+      "candidate": 28
+    }
+  },
+  "scope": "Multiple-context local diagnostics and stable module-instance ordering evaluation only. All five categories remain unfinished; no full38 delivery qualification.",
+  "validation": {
+    "ctest": 910,
+    "python": 17,
+    "transport": 43,
+    "serverAsan": {
+      "cases": 895,
+      "assertions": 123222,
+      "leaksEnabled": false
+    },
+    "sdkNativeAndAsan": {
+      "cases": 2614,
+      "assertions": 26686,
+      "leaksEnabled": false
+    },
+    "cvaStates": 208,
+    "nativeUrisPerState": 612,
+    "sdkIntegrityFiles": 709,
+    "multipleContextRepeatPasses": 20
+  }
+}

@@ -1,0 +1,281 @@
+{
+  "stage": "B3 thread execution attribution",
+  "b3Complete": false,
+  "goalComplete": false,
+  "productionChanged": false,
+  "productionBinarySha256": "d85d4e4430653161124352a9c47c7fa6775fd89c70ebdfc696568d473d91720e",
+  "threadProbe": {
+    "source": "untracked/stage-b3-thread-execution-2026-10-27/analysis.json",
+    "busyThreadCpuShareAbout": 0.93,
+    "v1Failure": "Incorrect libproc flavor15 for listed thread handles; fixed to flavor5 after own/child process preflight",
+    "v2All612Correct": true
+  },
+  "qosMechanism": {
+    "qualification": false,
+    "decision": "Reject coarse USER_INITIATED worker mechanism: no stable end-to-end benefit in both orders; production source restored before samples, no scoped QoS implementation adopted.",
+    "sourceRestored": true,
+    "rows": [
+      {
+        "direction": "forward",
+        "arms": [
+          {
+            "label": "baseline",
+            "p50": 15.699479,
+            "p95": 17.529208,
+            "lastDiagnosticMs": 27.621833,
+            "cpuSeconds": 3.854177916,
+            "medianQueryCpuMs": 15.8916875,
+            "medianInstructions": 113817958.5,
+            "medianCyclesPerCpuUs": 2016.3016520970373,
+            "passed612": true
+          },
+          {
+            "label": "candidate",
+            "p50": 15.734083,
+            "p95": 18.849042,
+            "lastDiagnosticMs": 26.361209,
+            "cpuSeconds": 3.881968833,
+            "medianQueryCpuMs": 15.9155,
+            "medianInstructions": 113778135.5,
+            "medianCyclesPerCpuUs": 1943.1054816298465,
+            "passed612": true
+          },
+          {
+            "label": "control",
+            "p50": 15.684146,
+            "p95": 19.037417,
+            "lastDiagnosticMs": 27.028333,
+            "cpuSeconds": 3.863364583,
+            "medianQueryCpuMs": 15.802333,
+            "medianInstructions": 113796054.0,
+            "medianCyclesPerCpuUs": 1922.7288207142851,
+            "passed612": true
+          }
+        ]
+      },
+      {
+        "direction": "reverse",
+        "arms": [
+          {
+            "label": "control",
+            "p50": 15.8223755,
+            "p95": 17.274541,
+            "lastDiagnosticMs": 28.530584,
+            "cpuSeconds": 3.872611416,
+            "medianQueryCpuMs": 15.832083,
+            "medianInstructions": 113029693.5,
+            "medianCyclesPerCpuUs": 1880.5560981873043,
+            "passed612": true
+          },
+          {
+            "label": "candidate",
+            "p50": 15.491167,
+            "p95": 17.210709,
+            "lastDiagnosticMs": 27.786,
+            "cpuSeconds": 3.828025625,
+            "medianQueryCpuMs": 15.689708,
+            "medianInstructions": 113792711.0,
+            "medianCyclesPerCpuUs": 1988.0486756852133,
+            "passed612": true
+          },
+          {
+            "label": "baseline",
+            "p50": 15.634895499999999,
+            "p95": 17.088042,
+            "lastDiagnosticMs": 28.346625,
+            "cpuSeconds": 3.864895125,
+            "medianQueryCpuMs": 15.821541,
+            "medianInstructions": 113824464.0,
+            "medianCyclesPerCpuUs": 1953.6410327749186,
+            "passed612": true
+          }
+        ]
+      }
+    ],
+    "sourceSha256": "efccaa512052e41f356de67a023bc931c468197151763c54fb2feebac484e4cc"
+  },
+  "qualificationFailuresPreserved": true,
+  "observationCostMatrixPending": false,
+  "officialReference": "https://developer.apple.com/library/archive/documentation/Performance/Conceptual/power_efficiency_guidelines_osx/PrioritizeWorkAtTheTaskLevel.html",
+  "networkScope": "Official Apple documentation only; no source/test/dependency download",
+  "next": "Inspect first source snapshot construction before immutable library filtering; quantify copied bytes and consumers before implementation; retain all original proof, cancellation and correctness constraints",
+  "observationCost": {
+    "qualification": false,
+    "sameBinaryAllArms": true,
+    "noSourceOrSchedulingChange": true,
+    "directions": [
+      {
+        "direction": "forward",
+        "arms": [
+          {
+            "label": "baseline",
+            "traced": false,
+            "p50": 12.0094375,
+            "p95": 16.942875,
+            "lastDiagnosticMs": 20.777042,
+            "medianCpuMs": 12.0829175,
+            "medianUserMs": 1.927104,
+            "medianSystemMs": 10.106417,
+            "medianInstructions": 136279117.5,
+            "medianCycles": 46778802.0,
+            "medianCyclesPerCpuUs": 3911.4447301570535,
+            "medianDiskWriteBytes": 0.0,
+            "all612Correct": true
+          },
+          {
+            "label": "candidate",
+            "traced": true,
+            "p50": 13.5867295,
+            "p95": 18.024125,
+            "lastDiagnosticMs": 24.866833,
+            "medianCpuMs": 13.700334,
+            "medianUserMs": 2.0216665000000003,
+            "medianSystemMs": 11.701771,
+            "medianInstructions": 155321867.5,
+            "medianCycles": 53441780.5,
+            "medianCyclesPerCpuUs": 3907.034380907095,
+            "medianDiskWriteBytes": 294912.0,
+            "all612Correct": true
+          },
+          {
+            "label": "control",
+            "traced": false,
+            "p50": 10.5532295,
+            "p95": 15.010334,
+            "lastDiagnosticMs": 18.918583,
+            "medianCpuMs": 10.7270205,
+            "medianUserMs": 1.96875,
+            "medianSystemMs": 8.750625,
+            "medianInstructions": 144015374.5,
+            "medianCycles": 41986435.5,
+            "medianCyclesPerCpuUs": 3911.7140951800466,
+            "medianDiskWriteBytes": 0.0,
+            "all612Correct": true
+          }
+        ]
+      },
+      {
+        "direction": "reverse",
+        "arms": [
+          {
+            "label": "control",
+            "traced": false,
+            "p50": 11.641207999999999,
+            "p95": 14.06025,
+            "lastDiagnosticMs": 21.212458,
+            "medianCpuMs": 11.725312500000001,
+            "medianUserMs": 2.063688,
+            "medianSystemMs": 9.8548335,
+            "medianInstructions": 143969490.0,
+            "medianCycles": 46066358.0,
+            "medianCyclesPerCpuUs": 3910.112888991852,
+            "medianDiskWriteBytes": 0.0,
+            "all612Correct": true
+          },
+          {
+            "label": "candidate",
+            "traced": true,
+            "p50": 12.4787495,
+            "p95": 15.625291,
+            "lastDiagnosticMs": 30.874208,
+            "medianCpuMs": 12.426166,
+            "medianUserMs": 1.997875,
+            "medianSystemMs": 10.432708,
+            "medianInstructions": 150212980.0,
+            "medianCycles": 48186750.0,
+            "medianCyclesPerCpuUs": 3902.4736337183194,
+            "medianDiskWriteBytes": 284672.0,
+            "all612Correct": true
+          },
+          {
+            "label": "baseline",
+            "traced": false,
+            "p50": 10.0718955,
+            "p95": 11.636708,
+            "lastDiagnosticMs": 16.8525,
+            "medianCpuMs": 10.2245005,
+            "medianUserMs": 1.8834165,
+            "medianSystemMs": 8.337104,
+            "medianInstructions": 123960427.5,
+            "medianCycles": 40182630.5,
+            "medianCyclesPerCpuUs": 3930.4103270984706,
+            "medianDiskWriteBytes": 0.0,
+            "all612Correct": true
+          }
+        ]
+      }
+    ],
+    "interpretation": "Tracing adds CPU/instructions and I/O, but raw response spread also exists between untraced controls. Attribution only; no formal failure waived and no production performance claim."
+  },
+  "requestBoundaryAttribution": {
+    "attributionOnly": true,
+    "all612Correct": true,
+    "candidatePid": 89884,
+    "phasesMs": {
+      "foreground-method-input-check": {
+        "count": 108,
+        "p50": 0.0,
+        "p95": 0.0,
+        "max": 0.0,
+        "sum": 0.0
+      },
+      "foreground-frozen-input-check": {
+        "count": 108,
+        "p50": 0.0,
+        "p95": 0.0,
+        "max": 0.002,
+        "sum": 0.002
+      },
+      "body-validate-files": {
+        "count": 100,
+        "p50": 8.6165,
+        "p95": 11.395,
+        "max": 15.447,
+        "sum": 934.639
+      },
+      "body-apply-parse": {
+        "count": 50,
+        "p50": 0.934,
+        "p95": 1.152,
+        "max": 1.288,
+        "sum": 45.022999999999996
+      },
+      "body-apply-bind": {
+        "count": 50,
+        "p50": 0.138,
+        "p95": 0.194,
+        "max": 0.405,
+        "sum": 7.47
+      },
+      "body-apply-text": {
+        "count": 50,
+        "p50": 0.1875,
+        "p95": 0.28,
+        "max": 0.304,
+        "sum": 9.607
+      },
+      "body-validate-context": {
+        "count": 300,
+        "p50": 0.033,
+        "p95": 0.079,
+        "max": 0.212,
+        "sum": 12.454
+      },
+      "body-validate-directories": {
+        "count": 100,
+        "p50": 0.147,
+        "p95": 0.219,
+        "max": 0.33,
+        "sum": 16.364
+      }
+    },
+    "conclusion": "The frozen-input entry check is negligible in this configured CVA scene; no measured duplicate expensive frozen proof. Preserve existing proof and investigate the actual body/foreground service path."
+  },
+  "routeUpdate": {
+    "route": "A -> accepted B1/B2 -> combined BC (original B3+C) -> D",
+    "reason": "B3 remaining query gates depend on C input-proof/service cost; combine dependent items rather than repeatedly crossing categories",
+    "originalGatesPreserved": true,
+    "oldFailuresPreserved": true,
+    "b3Accepted": false
+  }
+}

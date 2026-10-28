@@ -1,0 +1,133 @@
+{
+  "stage": "A",
+  "status": "generic-closure-correctness-checkpoint-passed",
+  "allFiveComplete": false,
+  "stageAComplete": false,
+  "binarySha256": "58058e566c6758809c3a97618aa5b1605e4420841ba7f85f949d38d45d537a09",
+  "sdk": {
+    "base": "151a801ceaf6faf23d79a42d210ff67e50eb4660",
+    "files": 709,
+    "patchSha256": "b6ed3e9609a3634ff5dfd6228aaf8cfb5968e519642321176cd99bff25723f54",
+    "cleanOfflineApplyVerified": true,
+    "temporaryTreeRemoved": true,
+    "networkUsed": false
+  },
+  "mainCommit": "6eab073a06584c31c5a05e5fd7be00ca2af90dd2",
+  "tests": {
+    "sdkNative": {
+      "passed": true,
+      "summary": "29130 assertions in 2625 test cases",
+      "log": "sdk-native.log",
+      "sha256": "0dcf2fda3ec4c522b484cb5176fa0ac26462cd3aca60d3c25bdae13adb9bc989"
+    },
+    "sdkAsan": {
+      "passed": true,
+      "summary": "29130 assertions in 2625 test cases",
+      "log": "sdk-asan.log",
+      "sha256": "7976ebfdcbd5bb0e1b5c9e770c7b5ac147ea6ca6dfabb70c3221b1cc806e2473"
+    },
+    "serverAsan": {
+      "passed": true,
+      "summary": "146795 assertions in 904 test cases",
+      "log": "server-asan-final.log",
+      "sha256": "f67e997941b474e09d9a8af49e0e5e58d65edb20900c7b448e797b39a50f971f"
+    },
+    "nativeCtest": {
+      "passed": true,
+      "summary": "100% tests passed out of 919",
+      "log": "ctest-final.log",
+      "sha256": "39646b367e0c69ebd589b356bc2e961e49a01a0e404fabc70c7be566c2fff0ca"
+    },
+    "python": {
+      "passed": true,
+      "summary": "17 passed",
+      "log": "python.log",
+      "sha256": "7b5296cb7e92977e0f3a81c80d8d236b6302bdce66c0b532285fe48ee6665f5a"
+    },
+    "transport": {
+      "passed": true,
+      "summary": "RESULT 43 passed, 0 failed",
+      "log": "transport.log",
+      "sha256": "3e788ce7be1558ccdb8dd8be04aee9b783d59d72475549ee5802ef73b2e2a827"
+    },
+    "serverQueryBeforeDiagnostics": {
+      "passed": true,
+      "summary": "82 assertions in 1 test case",
+      "log": "server-lifetime-native.log",
+      "sha256": "48263de9ce9bf7f80a020426fabf343b45b3183e74bf9e86b3df862682854403"
+    }
+  },
+  "cva6": {
+    "passed": true,
+    "scenes": {
+      "generic-changing": {
+        "passed": true,
+        "states": 28,
+        "report": "generic-changing-automatic-correctness.json",
+        "sha256": "330fe5bbc432cfbc59bb1a243fe140b86d55cd7b263591de02c4dd99d50f7a94"
+      },
+      "body": {
+        "passed": true,
+        "states": 52,
+        "report": "body-automatic-correctness.json",
+        "sha256": "ebcfeab7155f4ac33625e247af375173ed1a671a57079b9bd5e7cf0ee2a8f057"
+      },
+      "package": {
+        "passed": true,
+        "states": 52,
+        "report": "package-automatic-correctness.json",
+        "sha256": "6bcc16795cd5b34cbab6f2e95b2393e89fa07ac84f39f4cde18a4636e2aacac3"
+      },
+      "generic": {
+        "passed": true,
+        "states": 52,
+        "report": "generic-automatic-correctness.json",
+        "sha256": "b0c5a4112a9ea1e35d0b536c1429dbdd592dc28474249ec1536a2d86a8984769"
+      },
+      "effectful": {
+        "passed": true,
+        "states": 52,
+        "report": "effectful-automatic-correctness.json",
+        "sha256": "7e6c3a8a39334ca4bc1d7349d868215b6f88f1c8ce1d00834a4a648d91c67618"
+      },
+      "virtual-interface": {
+        "passed": true,
+        "states": 28,
+        "report": "virtual-interface-automatic-correctness.json",
+        "sha256": "4500891f6e783cd1cb80dd74c99459c6a36255117dc5f8da566677e9634b030e"
+      },
+      "local-types": {
+        "passed": true,
+        "states": 28,
+        "report": "local-types-automatic-correctness.json",
+        "sha256": "18b18f477861a85a914a1d02a0fc42acbeff543b6ee18f1b22716ff071fe45b6"
+      },
+      "local-imports": {
+        "passed": true,
+        "states": 32,
+        "report": "local-imports-automatic-correctness.json",
+        "sha256": "9dde185fbbfa604d649a09bedb0478d3b42a30a5e4cf4c4982f48d721f733aff"
+      }
+    },
+    "nativeStates": 324,
+    "asanCandidateStates": 7,
+    "nativeDiagnosticArchives": 81,
+    "asanOracleRevalidatedAgainstCurrentFreshNative": true,
+    "asanReportSha256": "c7973d8af06cef5f8229788cdebc53ff6a8f489726aabb6a86c5e8409db40fa2",
+    "binarySha256": "58058e566c6758809c3a97618aa5b1605e4420841ba7f85f949d38d45d537a09"
+  },
+  "asanLeakDetection": false,
+  "performanceQualified": false,
+  "mainPushed": false,
+  "experimentsDefaultOff": true,
+  "networkUsed": false,
+  "allOwnedProcessesTerminal": true,
+  "remaining": [
+    "Prove admission of late unelaborated Native specialization cache entries",
+    "Legal method-local nominal/value generic arguments and remaining dependency closures",
+    "Stage A performance qualification",
+    "B lifecycle, memory and responsiveness",
+    "C first certification",
+    "D full performance gates and main delivery"
+  ]
+}

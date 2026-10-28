@@ -1,0 +1,185 @@
+{
+  "goalComplete": false,
+  "deliveryQualified": false,
+  "mechanismEvaluation": {
+    "qualified": false,
+    "binarySha256": "3950110063a4ba4f9d76abaf2d9707f194319ed5d2c801df19b84e0cd009141f",
+    "pending": [],
+    "checks": {
+      "warm-final-1-binary": true,
+      "warm-final-1-native612": true,
+      "warm-final-1-cancellations": true,
+      "warm-final-2-binary": true,
+      "warm-final-2-native612": true,
+      "warm-final-2-cancellations": true,
+      "warm-final-3-binary": true,
+      "warm-final-3-native612": true,
+      "warm-final-3-cancellations": true,
+      "warm-final-4-binary": true,
+      "warm-final-4-native612": true,
+      "warm-final-4-cancellations": true,
+      "warm-final-5-binary": true,
+      "warm-final-5-native612": true,
+      "warm-final-5-cancellations": true,
+      "warm-final-6-binary": true,
+      "warm-final-6-native612": true,
+      "warm-final-6-cancellations": true,
+      "first-final-1-binary": true,
+      "first-final-1-native612": true,
+      "first-final-1-cancellations": true,
+      "first-final-2-binary": true,
+      "first-final-2-native612": true,
+      "first-final-2-cancellations": true,
+      "first-final-3-binary": true,
+      "first-final-3-native612": true,
+      "first-final-3-cancellations": true,
+      "memory-final-1008-binary": true,
+      "memory-final-1008-native612": true,
+      "memory-final-1008-cancellations": true,
+      "memory-final-1008-cpuSeconds": true,
+      "memory-final-1008-peakRss": true,
+      "memory-final-1008-peakFootprint": true,
+      "memory-final-1008-hardBound": true,
+      "memory-final-1008-queryBound": true,
+      "memory-final-reverse-binary": true,
+      "memory-final-reverse-native612": true,
+      "memory-final-reverse-cancellations": true,
+      "memory-final-reverse-cpuSeconds": true,
+      "memory-final-reverse-peakRss": true,
+      "memory-final-reverse-peakFootprint": true,
+      "memory-final-reverse-hardBound": true,
+      "memory-final-reverse-queryBound": true,
+      "proof-count-binary": true,
+      "proof-count-native612": true,
+      "proof-count-cancellations": true,
+      "warm-p50": false,
+      "warm-p95": true,
+      "first-p50": true,
+      "first-lastDiagnosticMs": true,
+      "proofCount": true,
+      "all12": true
+    },
+    "failedChecks": [
+      "warm-p50"
+    ],
+    "summary": {
+      "memory-final-1008": {
+        "ratios": {
+          "cpuSeconds": 0.9925362595991775,
+          "peakRss": 0.9166093155523237,
+          "peakFootprint": 0.9043164187167156
+        },
+        "arms": {
+          "baseline": {
+            "p50": 20.025104499999998,
+            "p95": 22.828542,
+            "maximum": 24.739791,
+            "cancelled": 0,
+            "lastDiagnosticMs": 28.484584,
+            "memory": {
+              "peakRss": 1261748224,
+              "peakFootprint": 1104954712,
+              "samples": 4016,
+              "cpuSeconds": 30.9486805
+            }
+          },
+          "candidate": {
+            "p50": 20.397520999999998,
+            "p95": 21.812333,
+            "maximum": 29.483917,
+            "cancelled": 0,
+            "lastDiagnosticMs": 32.941875,
+            "memory": {
+              "peakRss": 1156530176,
+              "peakFootprint": 999228688,
+              "samples": 4006,
+              "cpuSeconds": 30.717687583
+            }
+          }
+        }
+      },
+      "memory-final-reverse": {
+        "ratios": {
+          "cpuSeconds": 0.918860203861992,
+          "peakRss": 0.9142541723488539,
+          "peakFootprint": 0.9016909494792413
+        },
+        "arms": {
+          "candidate": {
+            "p50": 16.6482085,
+            "p95": 21.708292,
+            "maximum": 23.574459,
+            "cancelled": 0,
+            "lastDiagnosticMs": 27.468708,
+            "memory": {
+              "peakRss": 1153318912,
+              "peakFootprint": 996017424,
+              "samples": 3956,
+              "cpuSeconds": 28.652509
+            }
+          },
+          "baseline": {
+            "p50": 19.8944585,
+            "p95": 22.851208,
+            "maximum": 28.238708,
+            "cancelled": 0,
+            "lastDiagnosticMs": 31.667917,
+            "memory": {
+              "peakRss": 1261486080,
+              "peakFootprint": 1104610648,
+              "samples": 4007,
+              "cpuSeconds": 31.182664
+            }
+          }
+        }
+      },
+      "warm": {
+        "baseline": {
+          "p50": 16.19968725,
+          "p95": 21.632582999999997,
+          "lastDiagnosticMs": 31.2183125
+        },
+        "candidate": {
+          "p50": 19.59139575,
+          "p95": 20.815208,
+          "lastDiagnosticMs": 30.780562
+        }
+      },
+      "first": {
+        "baseline": {
+          "p50": 37.821291,
+          "p95": 37.821291,
+          "lastDiagnosticMs": 65.466416
+        },
+        "candidate": {
+          "p50": 33.636541,
+          "p95": 33.636541,
+          "lastDiagnosticMs": 60.542791
+        }
+      },
+      "proofCounts": {
+        "native": 0,
+        "baseline": 28,
+        "candidate": 28
+      }
+    },
+    "scope": "C2 mechanism only. All five-category goal remains active; no full delivery qualification."
+  },
+  "tests": {
+    "ctest": 893,
+    "python": 17,
+    "transport": 43,
+    "asanServerCases": 878,
+    "asanServerAssertions": 119709,
+    "asanLeakDetection": false,
+    "sdkRestorationFilesVerified": 709,
+    "sdkChangedThisStep": false,
+    "cvaStates": 104
+  },
+  "limitations": [
+    "Warm p50 gate failed; do not resample unchanged implementation",
+    "General caller/initializer closure, virtual interfaces/multiple contexts remain unimplemented",
+    "Hard synchronous retirement, provider histories and further peak memory work remain",
+    "Full delivery fixed38 must pass before main push"
+  ]
+}

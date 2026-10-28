@@ -24,12 +24,13 @@ CodeActionDispatch::CodeActionDispatch(ServerDriver& driver, SourceManager& sm,
 }
 
 std::vector<rfl::Variant<lsp::Command, lsp::CodeAction>> CodeActionDispatch::getCodeActions(
-    const lsp::CodeActionParams& params) {
+    const lsp::CodeActionParams& params, const lsp::RequestContext& requestCtx) {
+    requestCtx.checkpoint("before code actions");
     auto doc = m_driver.getDocument(params.textDocument.uri);
     if (!doc)
         return {};
 
-    auto analysis = doc->getAnalysis();
+    auto analysis = doc->getAnalysis(requestCtx);
 
     // Find the token and syntax at the cursor position
     const parsing::Token* token = nullptr;
@@ -52,6 +53,7 @@ std::vector<rfl::Variant<lsp::Command, lsp::CodeAction>> CodeActionDispatch::get
         .token = token,
         .syntax = syntax,
         .diagnostics = params.context.diagnostics,
+        .requestCtx = requestCtx,
     };
 
     std::vector<rfl::Variant<lsp::Command, lsp::CodeAction>> results;
@@ -81,6 +83,7 @@ std::vector<rfl::Variant<lsp::Command, lsp::CodeAction>> CodeActionDispatch::get
     //     // e.g. if (code == "some-warning") addSomeFixAction(results, ctx, diag);
     // }
 
+    requestCtx.checkpoint("before publishing code actions");
     return results;
 }
 

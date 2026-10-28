@@ -1,0 +1,44 @@
+{
+  "stage": "A",
+  "candidateSha256": "4681577c9caac554049ef91bdb1ab029cb99ea6bebac9743b17183470db30175",
+  "status": "failed-real-generic-scene",
+  "nativeSDK": {
+    "cases": 2622,
+    "assertions": 29094,
+    "passed": true
+  },
+  "nativeServer": {
+    "cases": 903,
+    "assertions": 146713,
+    "passed": true
+  },
+  "asanSDK": {
+    "cases": 2622,
+    "assertions": 29094,
+    "passed": true,
+    "leaks": false
+  },
+  "asanServer": {
+    "cases": 903,
+    "assertions": 146713,
+    "passed": true,
+    "leaks": false
+  },
+  "ctest": 918,
+  "python": 17,
+  "transport": 43,
+  "priorCVAScenes": {
+    "passed": true,
+    "states": 296
+  },
+  "newGenericScene": {
+    "passed": false,
+    "mode": "candidate",
+    "version": 2,
+    "missingDiagnostic": "uvml_mem.sv:107: $readmemh cannot be called with an associative array with non-integral index type",
+    "hoverEqual": true
+  },
+  "performanceQualified": false,
+  "mainPushed": false,
+  "allFiveComplete": false
+}

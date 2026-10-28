@@ -1,0 +1,179 @@
+{
+  "stage": "A",
+  "status": "private-let-correctness-checkpoint-passed",
+  "stageAComplete": false,
+  "allFiveComplete": false,
+  "binarySha256": "f4f426688550d513808533ac4b098af25d3cf961a429d034d198015d67fb711e",
+  "sdk": {
+    "base": "151a801ceaf6faf23d79a42d210ff67e50eb4660",
+    "files": 709,
+    "patchSha256": "50bb01239c09becff26c5f5b27d196263fb804582ca42a04cacbf822851bb625",
+    "cleanOfflineApplyVerified": true,
+    "temporaryTreeRemoved": true,
+    "networkUsed": false
+  },
+  "changes": [
+    "Allow method-local let through the existing private body semantic/reference/class closure",
+    "Check owned local let ports and default instances during detached forceElaborate without traversing design instances",
+    "Attribute local let default bindings to their lexical subroutine; retain outside-method declarations as fixed uses"
+  ],
+  "tests": {
+    "targeted": {
+      "passed": true,
+      "cases": 2,
+      "assertions": 15847,
+      "log": "after.log"
+    },
+    "sdkNative": {
+      "passed": true,
+      "cases": 2626,
+      "assertions": 29250,
+      "log": "sdk-native.log"
+    },
+    "sdkAsan": {
+      "passed": true,
+      "cases": 2626,
+      "assertions": 29250,
+      "detectLeaks": false,
+      "log": "sdk-asan.log"
+    },
+    "ctest": {
+      "passed": true,
+      "tests": 924,
+      "log": "ctest.log"
+    },
+    "serverAsan": {
+      "passed": true,
+      "cases": 909,
+      "assertions": 169537,
+      "detectLeaks": false,
+      "log": "server-asan.log"
+    },
+    "python": {
+      "passed": true,
+      "tests": 17,
+      "log": "python.log"
+    },
+    "transport": {
+      "passed": true,
+      "tests": 43,
+      "log": "transport.log"
+    }
+  },
+  "before": {
+    "letGuardFailures": 864,
+    "withoutGuardDiagnosticFailures": 324,
+    "expectAlreadyPassedAssertions": 247,
+    "logs": [
+      "before-let.log",
+      "without-guard.log",
+      "before-expect.log"
+    ]
+  },
+  "legalityAudit": "../body-declaration-audit-2026-10-26/native-legality.json",
+  "cva6": {
+    "passed": true,
+    "scenes": {
+      "generic-changing": {
+        "passed": true,
+        "states": 28,
+        "report": "generic-changing-automatic-correctness.json",
+        "sha256": "38336b76a7273cf90f23163928109d9fabf9e84b9ac514e2a5436771d44e69c6"
+      },
+      "body": {
+        "passed": true,
+        "states": 52,
+        "report": "body-automatic-correctness.json",
+        "sha256": "13c09ecaf27d2a199b2e1477d889139bbc9d9bbb32add4c2c37942211cbb257a"
+      },
+      "package": {
+        "passed": true,
+        "states": 52,
+        "report": "package-automatic-correctness.json",
+        "sha256": "9c9491ee7f01295d58295310324e30ed1205673fef59fcdf16a9c55716f9b6c5"
+      },
+      "generic": {
+        "passed": true,
+        "states": 52,
+        "report": "generic-automatic-correctness.json",
+        "sha256": "72d4d5c42c0f652261c35cae902d951b4857feaeb3ee2d14a1b753f8442aadd6"
+      },
+      "effectful": {
+        "passed": true,
+        "states": 52,
+        "report": "effectful-automatic-correctness.json",
+        "sha256": "92f681279d885680304e323b6724572d497d9563a7a7a9ba15add4f62d39e60e"
+      },
+      "virtual-interface": {
+        "passed": true,
+        "states": 28,
+        "report": "virtual-interface-automatic-correctness.json",
+        "sha256": "036b64682627087ea9b92709982ccbed5609e2c1eb41ff622ae2eb2fb9a1762e"
+      },
+      "local-types": {
+        "passed": true,
+        "states": 28,
+        "report": "local-types-automatic-correctness.json",
+        "sha256": "251639233f91f4feb6663058629d541d204cfafd1a4c3d9e4fd0cd131d28444d"
+      },
+      "local-imports": {
+        "passed": true,
+        "states": 32,
+        "report": "local-imports-automatic-correctness.json",
+        "sha256": "5c18b47d96caa93e43967ecabf44a7f497addddb32e28b08dd757a45e3e87c79"
+      },
+      "local-generic": {
+        "passed": true,
+        "states": 44,
+        "report": "local-generic-automatic-correctness.json",
+        "sha256": "36b6880e1efba7aef93f9be2d770ce7dc6cf15356699185566182cbe71fa3e9e"
+      },
+      "local-value-width": {
+        "passed": true,
+        "states": 32,
+        "report": "local-value-width-automatic-correctness.json",
+        "sha256": "be7af83a1dfcf61090d81bbc859b9a8bdb1ebe5b438d2a08756337a9e468ac77"
+      },
+      "local-let": {
+        "passed": true,
+        "states": 48,
+        "report": "local-let-automatic-correctness.json",
+        "sha256": "944684dc24937f81748963a4d5971aadbab46a1a5d4f713ea622a73b06b9b7ae"
+      }
+    },
+    "nativeStates": 448,
+    "asanCandidateStates": 38,
+    "nativeDiagnosticArchives": 112,
+    "asanOracleRevalidatedAgainstCurrentFreshNative": true,
+    "asanReportSha256": "39ad92a3cec490147da53c409420e5d988e7cb93dc004ccb23bd7cfe00691845",
+    "binarySha256": "f4f426688550d513808533ac4b098af25d3cf961a429d034d198015d67fb711e",
+    "asanLocalGenericReportSha256": "d00f4bcc450cc451e33a7d79a1938bef89a379ef8e840f64d82ca90f06a5e322",
+    "asanValueWidthReportSha256": "77fae187150edba42073141d796a8e8bf3ebabbc540a81bc227653baa4a91146",
+    "asanLetReportSha256": "1b09a7cd8ef9d36f4f5cae844d0d0529d668418dd6864f9a4fb68a02eafb90c3"
+  },
+  "liveProcesses": {},
+  "allOwnedProcessesTerminal": true,
+  "mainCommit": "6eab073a06584c31c5a05e5fd7be00ca2af90dd2",
+  "experimentsDefaultOff": true,
+  "networkUsed": false,
+  "performanceQualified": false,
+  "mainPushed": false,
+  "remaining": [
+    "Explicit external elaboration/fatal/error-limit support-boundary audit and fixed Stage A performance qualification",
+    "B lifecycle/memory/responsiveness",
+    "C first certification",
+    "D full38/4032 qualification and main delivery"
+  ],
+  "logs": {
+    "before-let.log": "ed06f95bc60605afe8e1ad55d2254cff7d9fe4b88da0aa58b3555b7f2148f3cb",
+    "without-guard.log": "efbb91f2f949035fe15f83fd3804a952d75438de9bcfd81f6eadfe91d986500e",
+    "before-expect.log": "95d3d3310a8d5576059348f9bd399661fccf0c85448881c54072571c354da0ba",
+    "after.log": "0fcd20e27d4b2d0db0534a89b879a3ada039a3a669b6fce91607558528a7904a",
+    "sdk-native.log": "0cbb6966462353014930c335219951f2c8fb2df1ab665742041eb7c12dc3f883",
+    "sdk-asan.log": "0ff263cafea116fbbac8399321b92faf2a4727e8eb564b5d4cfe9d2c6da8fb08",
+    "ctest.log": "4b726c04d7700bcb12bb80732e54a4b58304197d8c7eb15abf2235bc41b46020",
+    "server-asan.log": "7171fed61f14609f8729b9773284edd14373b0a7cdfed2615573224a6ddbcaa4",
+    "python.log": "f8a58269113712a0791e28409a101eb21ca493afb03c9f6ebcaa4804c6573270",
+    "transport.log": "c22a841d9231922c23a2653486e2a683e83659b9c3626375055388e9f41c7667"
+  }
+}

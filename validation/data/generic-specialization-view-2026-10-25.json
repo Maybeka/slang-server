@@ -1,0 +1,132 @@
+{
+  "stage": "A: generic specialization closure",
+  "status": "sdk-view-verified-server-integration-incomplete",
+  "featureComplete": false,
+  "performanceQualified": false,
+  "pushedToMain": false,
+  "binarySha256": "f8db319b2672596c012ddc58d71690d5a28bd32b0ee10595e3dbb93ae54696d1",
+  "sdkBase": "151a801ceaf6faf23d79a42d210ff67e50eb4660",
+  "sdkPatchSha256": "06f91ca965b6113ab61f4e001019810d59d7ac8ef8694d95a773e1056dbdcecb",
+  "tests": {
+    "targetedSdk": {
+      "cases": 5,
+      "assertions": 754,
+      "exitCode": 0
+    },
+    "sdkNative": {
+      "cases": 2618,
+      "assertions": 27412,
+      "exitCode": 0
+    },
+    "sdkAsan": {
+      "cases": 2618,
+      "assertions": 27412,
+      "exitCode": 0,
+      "detectLeaks": false
+    },
+    "serverNative": {
+      "cases": 902,
+      "passed": 901,
+      "failed": 1,
+      "assertions": 145549,
+      "failedAssertions": 68,
+      "exitCode": 42
+    },
+    "serverAsan": {
+      "cases": 902,
+      "passed": 901,
+      "failed": 1,
+      "assertions": 145549,
+      "failedAssertions": 68,
+      "exitCode": 42,
+      "detectLeaks": false
+    },
+    "onlyServerFailure": "new changed-specialization regression: localDiagnosticUpdates; all Native diagnostic and hover comparisons passed",
+    "python": {
+      "passed": 17,
+      "exitCode": 0
+    },
+    "transport": {
+      "passed": 43,
+      "exitCode": 0
+    }
+  },
+  "cva6": {
+    "scenes": 7,
+    "states": 296,
+    "uriCount": 612,
+    "reports": {
+      "body-automatic-correctness.json": {
+        "sha256": "5f54a16d628e314231567e6ea660f314aa5ee47b5fede235f77a9028d8139394",
+        "states": 52,
+        "passed": true
+      },
+      "effectful-automatic-correctness.json": {
+        "sha256": "3573547d005c561253459e12f83d6c7226c0814030c9bfed23fcd4e9c52a2828",
+        "states": 52,
+        "passed": true
+      },
+      "generic-automatic-correctness.json": {
+        "sha256": "27b156ae3a9f5c3f3ef96038da5ba64649020f1f16563267ef2dbe8f694f2fd0",
+        "states": 52,
+        "passed": true
+      },
+      "local-imports-automatic-correctness.json": {
+        "sha256": "2b297064c6965e0241e7be2e63b5e326b0ca5a1ca8a697fe21117d4205094f54",
+        "states": 32,
+        "passed": true
+      },
+      "local-types-automatic-correctness.json": {
+        "sha256": "5f0751d3d79aeda082ab70b50957fe84545b7a54972a5a0096a01df9fb7ee538",
+        "states": 28,
+        "passed": true
+      },
+      "package-automatic-correctness.json": {
+        "sha256": "56e2305d8ab7848d5695cd7f63e320171f908703cdd27a352255f6d392281aa8",
+        "states": 52,
+        "passed": true
+      },
+      "virtual-interface-automatic-correctness.json": {
+        "sha256": "56cfb9694f56cc3e4779f2fd970d387af6a168fc3f3e6b929992b92f398f3f42",
+        "states": 28,
+        "passed": true
+      }
+    },
+    "exactHoverAndDiagnostics": true,
+    "uvmAndWholeDutSharing": true,
+    "purpose": "correctness only"
+  },
+  "sdkRestoration": {
+    "base": "151a801ceaf6faf23d79a42d210ff67e50eb4660",
+    "files": 709,
+    "patchSha256": "06f91ca965b6113ab61f4e001019810d59d7ac8ef8694d95a773e1056dbdcecb",
+    "cleanOfflineApplyVerified": true,
+    "temporaryTreeRemoved": true,
+    "networkUsed": false
+  },
+  "implemented": [
+    "read-only completed Native consumer specialization lookup, including defaults",
+    "complete private specialization semantic binding and transitive class dependencies",
+    "private class analysis view excluding obsolete classes and adding new classes",
+    "full and mini analysis with driver propagation, cancellation and reuse protection"
+  ],
+  "remaining": [
+    "class-owned reference usage exclusion and new Native liveness roots",
+    "raw semantic diagnostic joint coalescing across old and new class views",
+    "first/last real specialization and private invalid placeholders",
+    "wire complete closure into server and lift fingerprint guards only after proof",
+    "new generic-change CVA6 scene and full performance qualification"
+  ],
+  "invariants": {
+    "experimentsDefaultOff": true,
+    "fixedDebounceAdded": false,
+    "networkUsed": false,
+    "executionOrder": [
+      "A",
+      "B",
+      "C",
+      "D"
+    ]
+  },
+  "evidenceDirectory": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/generic-specialization-view-2026-10-25"
+}

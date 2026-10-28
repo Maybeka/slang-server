@@ -1,0 +1,98 @@
+{
+  "candidateSha256": "ef8a1ce63d31ae4d9ba90738be273eb6470ae87149dc033f3722ceac7d9b6713",
+  "baselineSha256": "9bcb0349e935f1bb7dacbbfe271775e4a064e9c695907fe1d2fbb91e61aafe05",
+  "scope": "Two predeclared new-mechanism pairs only. No complete performance qualification or five-category completion claim.",
+  "nativeCtest": 877,
+  "pythonTests": 17,
+  "transportTests": 43,
+  "asanServerCases": 862,
+  "asanServerAssertions": 118331,
+  "leakDetection": false,
+  "correctness": {
+    "arms": 4,
+    "statesPerArm": 13,
+    "uriCount": 612,
+    "allStatesMatch": true,
+    "candidateLocalDiagnosticUpdatesAtFinal": 12
+  },
+  "checks": {
+    "package-forward-completed": true,
+    "package-forward-native612": true,
+    "package-forward-local": true,
+    "package-forward-latest": true,
+    "package-forward-p95": true,
+    "package-forward-diagnostic": true,
+    "package-forward-cpuSeconds": true,
+    "package-forward-peakRss": true,
+    "package-forward-peakFootprint": true,
+    "package-forward-storage": true,
+    "package-reverse-completed": true,
+    "package-reverse-native612": true,
+    "package-reverse-local": true,
+    "package-reverse-latest": true,
+    "package-reverse-p95": true,
+    "package-reverse-diagnostic": true,
+    "package-reverse-cpuSeconds": true,
+    "package-reverse-peakRss": true,
+    "package-reverse-peakFootprint": true,
+    "package-reverse-storage": true
+  },
+  "pairedSummary": {
+    "package-forward": {
+      "ratios": {
+        "cpuSeconds": 0.6965953487333568,
+        "peakRss": 0.9179531959483059,
+        "peakFootprint": 0.9966223933781243
+      },
+      "arms": {
+        "baseline": {
+          "p50": 12.619749500000001,
+          "p95": 476.095375,
+          "cancelled": 2,
+          "lastDiagnosticMs": 983.626,
+          "localDiagnosticUpdates": 0
+        },
+        "candidate": {
+          "p50": 15.619395999999998,
+          "p95": 34.995583,
+          "cancelled": 0,
+          "lastDiagnosticMs": 20.668958,
+          "localDiagnosticUpdates": 11
+        }
+      }
+    },
+    "package-reverse": {
+      "ratios": {
+        "cpuSeconds": 0.6982492064067504,
+        "peakRss": 0.9204895463879037,
+        "peakFootprint": 0.998089912007774
+      },
+      "arms": {
+        "baseline": {
+          "p50": 13.220604,
+          "p95": 479.02725,
+          "cancelled": 2,
+          "lastDiagnosticMs": 985.111375,
+          "localDiagnosticUpdates": 0
+        },
+        "candidate": {
+          "p50": 17.2208335,
+          "p95": 36.456375,
+          "cancelled": 0,
+          "lastDiagnosticMs": 20.77,
+          "localDiagnosticUpdates": 12
+        }
+      }
+    }
+  },
+  "evidence": {
+    "code-receipt.json": "9f90209361b473615f4e408a701d52ca0b31247fe3046f51b57cb6316e6110ca",
+    "package-mechanism-plan.json": "9489c6fd0da68aaf2a2b92a4529725d6dc799ecb408da81cc1a4b3d8f6517581",
+    "package-mechanism-evaluation.json": "d0a1ca2e387d4efdaf9a7353b42804a11a0e39ec850cd2506a763e5c43fa8b0d",
+    "package-automatic-correctness.json": "8a455cfe7ab1081ad302b0f5cc399d5c698ea6c20eddcddfff10007d19c0ba51",
+    "asan-complete.log": "1f8c342f7a0e352e091aeca31523cb2c732a6056d7c7f898e0408bd852faa2da"
+  },
+  "remaining": "No full delivery qualification. Previous long4032 peak-footprint failure remains unresolved; hard-water retirement and general caller/multi-context closures remain in five-category goal.",
+  "evidenceBoundaryCorrection": "Older sequential package correctness enabled mutually exclusive syntax and semantic freezing. Its maps remain output comparison evidence but cannot prove DUT semantic reuse. New104-state runs disable syntax freezing and verify actual UVM/whole-DUT-root semantic sharing.",
+  "correctedBy": "generic-macro-context-2026-10-24.json"
+}

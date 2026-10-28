@@ -44,6 +44,10 @@ class ServerDriver {
     std::shared_ptr<driver::Driver> m_driverOwner;
     std::shared_ptr<SourceStorageRegistry> m_sourceRegistry;
     bool m_stagedRetirement = false;
+    static std::unique_ptr<ServerDriver> isolateFixedProviderSources(
+        std::unique_ptr<ServerDriver> prepared, const std::vector<std::string>& buildfiles,
+        std::optional<std::string_view> workspaceFolder, const ServerDriver* editorOverlays,
+        bool requireValidConfig, const lsp::RequestContext* retirementContext);
 
 public:
     /// Create an explore driver; failed loads return null when requireValidConfig is set.
@@ -82,7 +86,16 @@ public:
     CodeActionDispatch codeActions;
 
     /// Release disposable models before constructing a replacement at a quiescent boundary.
-    void prepareForContextRetirement();
+    void prepareForContextRetirement(bool releaseFullAnalysisCaches = false);
+    /// Latest editor text retained outside the retiring source namespace.
+    void deferDocumentChanges(const lsp::DidChangeTextDocumentParams& params);
+    void deferDocumentOpen(const lsp::DidOpenTextDocumentParams& params);
+    void deferDocumentSave(const lsp::DidSaveTextDocumentParams& params);
+    void flushDeferredSaveIndexes(const lsp::RequestContext& ctx);
+    bool hasDeferredSaveIndexes() const { return !m_deferredSaveIndexes.empty(); }
+    std::string_view editorText(const URI& uri) const;
+    std::optional<int> editorVersion(const URI& uri) const;
+    size_t deferredEditorBytes() const;
     SourceStorageRegistry::Usage sourceStorageUsage() { return m_sourceRegistry->usage(sm); }
 
     bool isUvmPrefixCacheEnabled() const {
@@ -92,9 +105,10 @@ public:
     }
     rfl::Generic trustedUvmStatus() const;
     rfl::Generic scopeLibraryStatus() const;
+    bool hasStaleSyntaxPrefixInputs() const { return m_syntaxInputFailure.has_value(); }
     std::shared_ptr<syntax::SyntaxTree> resumeScopeLibrary(
         std::span<const std::filesystem::path> paths, std::span<const SourceBuffer> buffers,
-        const Bag& options, bool nativeReplay);
+        const Bag& options, bool nativeReplay, const lsp::RequestContext& ctx = {});
     bool isTrustedScopeSource(const std::filesystem::path& path) const;
     void invalidateUvmParseCache();
     bool isTrustedUvmSource(const std::filesystem::path& path) const;
@@ -157,6 +171,13 @@ public:
 
     bool hasPendingDiagnostics() const { return !m_pendingIncludedDiagnostics.empty(); }
     void runPendingDiagnostics(const lsp::RequestContext& ctx = {});
+    // DTOs have already passed their complete proof; only transport waits for
+    // the current query response. No compiler state is retained here.
+    void publishCertifiedLocalDiagnostics(const URI&, bool deferTransport);
+    void publishCertifiedLocalInactiveRegions(const URI&, std::vector<lsp::Range>,
+                                              bool deferTransport);
+    void flushCertifiedLocalDiagnostics();
+    bool hasCertifiedLocalDiagnostics() const { return m_certifiedLocalPublication.has_value(); }
 
     void onDocDidChange(const lsp::DidChangeTextDocumentParams& params,
                         const lsp::RequestContext& ctx = {});
@@ -240,7 +261,7 @@ public:
     bool isPackageOnlyContext(const URI& uri) const;
     /// Query-only package views; full diagnostic snapshot mode remains unchanged.
     bool isPackageQueryContext(const URI& uri) const;
-    void updatePackageContextKind(const URI& uri, const syntax::SyntaxTree& tree);
+    void updatePackageContextKind(const URI& uri, const std::shared_ptr<syntax::SyntaxTree>& tree);
     uint64_t getExplicitContextRevision(const URI& uri) const;
     bool hasConfiguredCompilationInputs() const {
         return m_config.compilationFilelist.value().has_value() ||
@@ -249,6 +270,7 @@ public:
     bool hasSourceContextHints() const { return !m_explicitContexts.empty(); }
     uint64_t getContextInputRevision() const { return m_snapshotRevision; }
     std::vector<std::filesystem::path> getContextWatchPaths() const;
+    std::shared_ptr<const std::vector<std::filesystem::path>> getContextWatchCatalogue() const;
     bool configuredInputLoadFailed() const { return m_nativeInputsFailed; }
     bool isUvmConfigurationInput(const std::filesystem::path& path) const;
     uint64_t getOwnerDiscoveryAttemptCount() const { return m_ownerDiscoveryAttempts; }
@@ -297,7 +319,7 @@ public:
     /// @param position The LSP position to query
     /// @return Optional highlight information, or nullopt if no symbol found
     std::optional<std::vector<lsp::DocumentHighlight>> getDocDocumentHighlight(
-        const URI& uri, const lsp::Position& position);
+        const URI& uri, const lsp::Position& position, const lsp::RequestContext& ctx = {});
 
     /// @brief Gets all references to a symbol in a document
     /// @param uri The URI of the document
@@ -315,7 +337,8 @@ public:
     /// @param newName The new name for the symbol
     /// @return Optional workspace edit with all rename changes, or nullopt if no symbol found
     std::optional<lsp::WorkspaceEdit> getDocRename(const URI& uri, const lsp::Position& position,
-                                                   std::string_view newName);
+                                                   std::string_view newName,
+                                                   const lsp::RequestContext& ctx = {});
 
     static std::unique_ptr<ServerDriver> createFromTop(
         Indexer& indexer, SlangLspClient& client, const Config& config, const URI& topUri,
@@ -334,7 +357,9 @@ public:
                  std::vector<std::string> buildfiles,
                  std::optional<std::string_view> workspaceFolder, bool requireValidConfig = false,
                  const ServerDriver* overlays = nullptr,
-                 const lsp::RequestContext* retirementContext = nullptr);
+                 const lsp::RequestContext* retirementContext = nullptr,
+                 bool borrowInitialLibraries = false, const ServerDriver* editorOverlays = nullptr,
+                 bool reuseInitialSources = false);
 
     size_t getWsRelativePathOffset(std::string_view path) const {
         return path.starts_with(m_workspacePathPrefix) ? m_workspacePathPrefix.size() : 0;
@@ -349,6 +374,9 @@ public:
     static bool s_debugHoversEnabled;
 
 private:
+    std::vector<std::filesystem::path> collectContextWatchPathInputs() const;
+    mutable std::vector<std::filesystem::path> m_contextWatchRawPaths;
+    mutable std::shared_ptr<const std::vector<std::filesystem::path>> m_contextWatchCatalogue;
     SemanticDiagnosticBatch::Statistics m_semanticDiagnosticStatistics;
 
     // This syntax-only probe discovers nested macro headers; no compilation is built.
@@ -388,7 +416,9 @@ private:
     std::string m_workspacePathPrefix;
 
     /// Parse config flags and build files, load sources, create documents
-    bool parseAndLoadSources(const std::vector<std::string>& buildfiles, bool requireValidConfig);
+    bool parseAndLoadSources(const std::vector<std::string>& buildfiles, bool requireValidConfig,
+                             const ServerDriver* libraryInputs = nullptr,
+                             bool reuseInitialSources = false);
 
     /// Drop analysis state derived from the active design and refresh client-side annotations.
     void invalidateAnalysesAndRefreshClient();
@@ -400,6 +430,13 @@ private:
 
     /// Set of URIs for documents that are explicitly opened by the client
     flat_hash_set<URI> m_openDocs;
+    struct DeferredEditorText {
+        SmallVector<char> text;
+        int version;
+    };
+    flat_hash_map<URI, DeferredEditorText> m_deferredEditorTexts;
+    flat_hash_set<URI> m_deferredSaveIndexes;
+    void updateSavedDocumentIndex(SlangDoc& doc, const lsp::RequestContext& ctx);
 
     /// Included-header diagnostics awaiting refresh after an owner edit. Keep these
     /// across superseded didChange notifications until analysis actually completes.
@@ -409,6 +446,12 @@ private:
     uint64_t m_fullDiagnosticGeneration = 0;
     std::shared_ptr<const struct NativeDiagnosticSnapshot> m_nativeDiagnosticSnapshot;
     flat_hash_map<URI, uint64_t> m_pendingIncludedDiagnostics;
+    struct CertifiedLocalPublication {
+        URI uri;
+        uint64_t revision, generation, indexRevision;
+        std::optional<std::vector<lsp::Range>> inactiveRegions;
+    };
+    std::optional<CertifiedLocalPublication> m_certifiedLocalPublication;
 
     enum class OwnerDiscoveryState { None, Unique, Ambiguous, LimitExceeded };
     struct OwnerDiscoveryCache {
@@ -425,6 +468,14 @@ private:
     // Weak keys never retain obsolete parse trees after an edit. Cached names are
     // valid only for the immutable tree identity that produced them.
     using TreeIdentity = std::weak_ptr<syntax::SyntaxTree>;
+    struct PackageContextKind {
+        TreeIdentity tree;
+        std::filesystem::path path;
+        bool fullDesign;
+        bool needsDesign;
+    };
+    // One weak syntax-only classification, never a physical-input certificate.
+    std::optional<PackageContextKind> m_packageContextKind;
     std::map<TreeIdentity, std::vector<std::string>, std::owner_less<TreeIdentity>>
         m_virtualInterfaceReferences;
 
@@ -448,6 +499,16 @@ private:
     std::shared_ptr<struct TrustedUvmLibrary> m_trustedScopes;
     std::shared_ptr<class ScopeBodyCache> m_scopeBodies;
     std::shared_ptr<syntax::SyntaxTree> m_scopePrefix;
+    std::shared_ptr<syntax::SyntaxTree> m_syntaxPrefix;
+    std::shared_ptr<syntax::SyntaxTree> m_pendingSyntaxPrefix;
+    size_t m_pendingSyntaxRoots = 0;
+    std::weak_ptr<syntax::SyntaxTree> m_syntaxPrefixBase;
+    size_t m_syntaxPrefixRoots = 0, m_syntaxDeclinedRoots = 0;
+    std::vector<BufferID> m_syntaxDeclinedInputs;
+    size_t m_syntaxPrefixBytes = 0;
+    uint64_t m_syntaxPrefixCaptures = 0, m_syntaxPrefixHits = 0;
+    uint64_t m_syntaxPrefixRefusals = 0, m_syntaxPrefixWitnessFailures = 0;
+    std::optional<std::string> m_syntaxInputFailure;
     std::vector<std::filesystem::path> m_scopeRoots;
     size_t m_scopeRootCount = 0;
     std::string m_scopeReason;

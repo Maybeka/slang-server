@@ -1,0 +1,261 @@
+{
+  "qualified": true,
+  "binarySha256": "c9c33809af7ef82820f15316806e23983b63cd22db33cc8055b73cbe0844bc12",
+  "pending": [],
+  "checks": {
+    "warm-final-1-binary": true,
+    "warm-final-1-native612": true,
+    "warm-final-1-cancellations": true,
+    "warm-final-2-binary": true,
+    "warm-final-2-native612": true,
+    "warm-final-2-cancellations": true,
+    "warm-final-3-binary": true,
+    "warm-final-3-native612": true,
+    "warm-final-3-cancellations": true,
+    "warm-final-4-binary": true,
+    "warm-final-4-native612": true,
+    "warm-final-4-cancellations": true,
+    "warm-final-5-binary": true,
+    "warm-final-5-native612": true,
+    "warm-final-5-cancellations": true,
+    "warm-final-6-binary": true,
+    "warm-final-6-native612": true,
+    "warm-final-6-cancellations": true,
+    "first-final-1-binary": true,
+    "first-final-1-native612": true,
+    "first-final-1-cancellations": true,
+    "first-final-2-binary": true,
+    "first-final-2-native612": true,
+    "first-final-2-cancellations": true,
+    "first-final-3-binary": true,
+    "first-final-3-native612": true,
+    "first-final-3-cancellations": true,
+    "memory-final-1008-binary": true,
+    "memory-final-1008-native612": true,
+    "memory-final-1008-cancellations": true,
+    "memory-final-1008-cpuSeconds": true,
+    "memory-final-1008-peakRss": true,
+    "memory-final-1008-peakFootprint": true,
+    "memory-final-1008-hardBound": true,
+    "memory-final-1008-queryBound": true,
+    "memory-final-reverse-binary": true,
+    "memory-final-reverse-native612": true,
+    "memory-final-reverse-cancellations": true,
+    "memory-final-reverse-cpuSeconds": true,
+    "memory-final-reverse-peakRss": true,
+    "memory-final-reverse-peakFootprint": true,
+    "memory-final-reverse-hardBound": true,
+    "memory-final-reverse-queryBound": true,
+    "proof-count-binary": true,
+    "proof-count-native612": true,
+    "proof-count-cancellations": true,
+    "effect-forward-binary": true,
+    "effect-forward-native612": true,
+    "effect-forward-cancellations": true,
+    "effect-forward-cpuSeconds": true,
+    "effect-forward-peakRss": true,
+    "effect-forward-peakFootprint": true,
+    "effect-forward-hardBound": true,
+    "effect-forward-queryBound": true,
+    "effect-reverse-binary": true,
+    "effect-reverse-native612": true,
+    "effect-reverse-cancellations": true,
+    "effect-reverse-cpuSeconds": true,
+    "effect-reverse-peakRss": true,
+    "effect-reverse-peakFootprint": true,
+    "effect-reverse-hardBound": true,
+    "effect-reverse-queryBound": true,
+    "warm-p50": true,
+    "warm-p95": true,
+    "warm-lastDiagnosticMs": true,
+    "first-p50": true,
+    "first-lastDiagnosticMs": true,
+    "proofCount": true,
+    "effect-forward-p50": true,
+    "effect-forward-proceduresReused": true,
+    "effect-forward-renderingsReused": true,
+    "effect-forward-localDiagnostics": true,
+    "effect-forward-p95": true,
+    "effect-forward-lastDiagnostic": true,
+    "effect-reverse-p50": true,
+    "effect-reverse-proceduresReused": true,
+    "effect-reverse-renderingsReused": true,
+    "effect-reverse-localDiagnostics": true,
+    "effect-reverse-p95": true,
+    "effect-reverse-lastDiagnostic": true,
+    "all14": true
+  },
+  "failedChecks": [],
+  "summary": {
+    "memory-final-1008": {
+      "ratios": {
+        "cpuSeconds": 0.96638905819194,
+        "peakRss": 0.9463571688217272,
+        "peakFootprint": 0.9373777538836994
+      },
+      "arms": {
+        "baseline": {
+          "p50": 19.596979,
+          "p95": 21.073833,
+          "maximum": 26.699,
+          "cancelled": 0,
+          "lastDiagnosticMs": 33.462,
+          "memory": {
+            "peakRss": 1262026752,
+            "peakFootprint": 1105397080,
+            "samples": 3600,
+            "cpuSeconds": 33.602290333
+          }
+        },
+        "candidate": {
+          "p50": 18.2360415,
+          "p95": 20.184833,
+          "maximum": 33.260583,
+          "cancelled": 0,
+          "lastDiagnosticMs": 33.081333,
+          "memory": {
+            "peakRss": 1194328064,
+            "peakFootprint": 1036174632,
+            "samples": 3591,
+            "cpuSeconds": 32.472885708
+          }
+        }
+      }
+    },
+    "memory-final-reverse": {
+      "ratios": {
+        "cpuSeconds": 0.9614812731674316,
+        "peakRss": 0.9436795831976554,
+        "peakFootprint": 0.9344543398846615
+      },
+      "arms": {
+        "candidate": {
+          "p50": 18.1453535,
+          "p95": 20.115667,
+          "maximum": 25.833375,
+          "cancelled": 0,
+          "lastDiagnosticMs": 33.356542,
+          "memory": {
+            "peakRss": 1187037184,
+            "peakFootprint": 1028916520,
+            "samples": 3582,
+            "cpuSeconds": 32.320501833
+          }
+        },
+        "baseline": {
+          "p50": 19.577854000000002,
+          "p95": 21.148541,
+          "maximum": 26.504375,
+          "cancelled": 0,
+          "lastDiagnosticMs": 33.804625,
+          "memory": {
+            "peakRss": 1257881600,
+            "peakFootprint": 1101088064,
+            "samples": 3597,
+            "cpuSeconds": 33.615321208
+          }
+        }
+      }
+    },
+    "effect-forward": {
+      "ratios": {
+        "cpuSeconds": 0.6905894726326611,
+        "peakRss": 0.9020065113486804,
+        "peakFootprint": 1.0161799618715446
+      },
+      "arms": {
+        "baseline": {
+          "p50": 10.707979,
+          "p95": 432.893792,
+          "maximum": 432.893792,
+          "cancelled": 2,
+          "lastDiagnosticMs": 896.0485,
+          "memory": {
+            "peakRss": 1419149312,
+            "peakFootprint": 1104758104,
+            "samples": 262,
+            "cpuSeconds": 5.288897291
+          }
+        },
+        "candidate": {
+          "p50": 10.0218545,
+          "p95": 18.479208,
+          "maximum": 30.617333,
+          "cancelled": 0,
+          "lastDiagnosticMs": 50.254,
+          "memory": {
+            "peakRss": 1280081920,
+            "peakFootprint": 1122633048,
+            "samples": 222,
+            "cpuSeconds": 3.652456791
+          }
+        }
+      }
+    },
+    "effect-reverse": {
+      "ratios": {
+        "cpuSeconds": 0.6813519015526728,
+        "peakRss": 0.9103324182795451,
+        "peakFootprint": 1.0297660674034874
+      },
+      "arms": {
+        "candidate": {
+          "p50": 10.162167,
+          "p95": 18.821667,
+          "maximum": 30.356875,
+          "cancelled": 0,
+          "lastDiagnosticMs": 49.493958,
+          "memory": {
+            "peakRss": 1293090816,
+            "peakFootprint": 1135887728,
+            "samples": 218,
+            "cpuSeconds": 3.632423541
+          }
+        },
+        "baseline": {
+          "p50": 10.8390625,
+          "p95": 432.737791,
+          "maximum": 432.737791,
+          "cancelled": 2,
+          "lastDiagnosticMs": 891.702083,
+          "memory": {
+            "peakRss": 1420460032,
+            "peakFootprint": 1103054144,
+            "samples": 263,
+            "cpuSeconds": 5.331200416
+          }
+        }
+      }
+    },
+    "warm": {
+      "baseline": {
+        "p50": 19.18126025,
+        "p95": 19.789229,
+        "lastDiagnosticMs": 33.537729
+      },
+      "candidate": {
+        "p50": 17.44737525,
+        "p95": 19.3593125,
+        "lastDiagnosticMs": 33.135645499999995
+      }
+    },
+    "first": {
+      "baseline": {
+        "p50": 34.5735,
+        "p95": 34.5735,
+        "lastDiagnosticMs": 59.869459
+      },
+      "candidate": {
+        "p50": 32.110083,
+        "p95": 32.110083,
+        "lastDiagnosticMs": 58.11275
+      }
+    },
+    "proofCounts": {
+      "native": 0,
+      "baseline": 28,
+      "candidate": 28
+    }
+  },
+  "scope": "Lazy immutable diagnostic rendering index evaluation only. All five-category goal remains active; no full delivery qualification."
+}

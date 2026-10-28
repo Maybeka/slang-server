@@ -1,0 +1,140 @@
+{
+  "stage": "B3",
+  "complete": false,
+  "goalComplete": false,
+  "candidateSha256": "4e7f70f5abc9457357d52d0e191d68eb897308a7320165516f24cf6ac44f9a18",
+  "implementation": [
+    "Latest versioned text per open document outside retiring SourceManager",
+    "Complete ranged edits retained on cancellation; private candidate consumes exact editor text and versions",
+    "Query/background admission fences pending input; save/close/reopen/build reload tested",
+    "Hard pressure releases unborrowed old semantic caches; live consumers retain ownership",
+    "Pending text bytes reported separately in source storage status"
+  ],
+  "native": {
+    "ctest": 942,
+    "passed": true,
+    "originalExecSession": 87610,
+    "expandedStructuralTargetedAssertions": 378,
+    "relatedTargetedCases": 7,
+    "relatedTargetedAssertions": 658
+  },
+  "mechanismJobs": {
+    "ranged-forced-20ms": {
+      "nativeOraclePassed": true,
+      "rows": {
+        "baseline": {
+          "p50": 6.323583,
+          "p95": 7.274709,
+          "maximum": 23.434125,
+          "lastDiagnosticMs": 13.66125,
+          "cancelled": 3,
+          "memory": {
+            "peakRss": 1069121536,
+            "peakFootprint": 908182728,
+            "samples": 200,
+            "cpuSeconds": 3.791100375
+          }
+        },
+        "candidate": {
+          "p50": 6.3078959999999995,
+          "p95": 7.113416,
+          "maximum": 37.007417,
+          "lastDiagnosticMs": 13.263333,
+          "cancelled": 4,
+          "memory": {
+            "peakRss": 1070399488,
+            "peakFootprint": 910689480,
+            "samples": 199,
+            "cpuSeconds": 3.725893375
+          }
+        }
+      },
+      "ratios": {
+        "p50": 0.9975192861388866,
+        "p95": 0.9778282540236318,
+        "maximum": 1.5792105316498906,
+        "lastDiagnosticMs": 0.9708725775459784
+      },
+      "memoryRatios": {
+        "peakRss": 1.0011953290219757,
+        "peakFootprint": 1.0027601846222294,
+        "cpuSeconds": 0.9827999805993003
+      }
+    },
+    "ranged-hard-20ms": {
+      "nativeOraclePassed": true,
+      "rows": {
+        "baseline": {
+          "p50": 6.331833,
+          "p95": 8.753917,
+          "maximum": 612.671625,
+          "lastDiagnosticMs": 1377.219667,
+          "cancelled": 205,
+          "memory": {
+            "peakRss": 946257920,
+            "peakFootprint": 726565968,
+            "samples": 447,
+            "cpuSeconds": 9.670599
+          }
+        },
+        "candidate": {
+          "p50": 6.318209,
+          "p95": 9.120792,
+          "maximum": 567.202459,
+          "lastDiagnosticMs": 916.447959,
+          "cancelled": 205,
+          "memory": {
+            "peakRss": 940933120,
+            "peakFootprint": 724911184,
+            "samples": 429,
+            "cpuSeconds": 9.163721583
+          }
+        }
+      },
+      "ratios": {
+        "p50": 0.9978483323865303,
+        "p95": 1.0419098102026785,
+        "maximum": 0.9257854221664011,
+        "lastDiagnosticMs": 0.6654333952377401
+      },
+      "memoryRatios": {
+        "peakRss": 0.9943727815773526,
+        "peakFootprint": 0.997722458699029,
+        "cpuSeconds": 0.9475857269027492
+      }
+    }
+  },
+  "correctnessStatus": "Full Native/SDK/ASan/448+38/112 audit scheduled; no inherited new server ASan evidence",
+  "remaining": [
+    "Full current-candidate correctness pipeline",
+    "Repeated cancellation queue/atomic interval audit including multiple open documents and invalid-config recovery",
+    "Original unchanged performance qualification and B3 closure audit",
+    "C first authentication/formatting remaining; D final comprehensive tests cleanup main"
+  ],
+  "experimentsDefaultOff": true,
+  "networkUsed": false,
+  "newFixedDebounce": false,
+  "fullCorrectness": {
+    "originalExecSession": 61120,
+    "status": "original61120 terminal exit0; parent4e7 Native448+ASan38/112 audit passed; server ASan924 omitted3 new standalone tests, current source now includes later c7 close fix",
+    "runtime": "untracked/stage-b3-deferred-release-2026-10-26/correctness-runtime.json",
+    "serverAsanForCurrentCandidate": "pending",
+    "nativeCva448Asan38Archives112": "pending",
+    "originalExitCode": 0,
+    "serverAsanCases": 924,
+    "serverAsanAssertions": 171960,
+    "standaloneAsanDiscoveryGap": 3
+  },
+  "expandedStructuralTargeted": {
+    "passed": true,
+    "assertions": 378,
+    "matrix": "3 cancellation checkpoints x query/save/close/reopen/build reload"
+  },
+  "next": [
+    "Continue original61120 full correctness pipeline; do not restart on observation timeout",
+    "Audit multi-document deferred admission and invalid-config recovery plus cancellation quanta",
+    "Original unchanged performance qualification; account for remaining cold final-query/diagnostic costs before B3 closure",
+    "C remaining first authentication/formatting; D full final qualification cleanup main"
+  ],
+  "knownStructuralFailures": "Invalid-config close/reopen/save captured in close-fence stage; close repaired in c7, reopen/save still pending"
+}

@@ -1,0 +1,100 @@
+{
+  "stage": "B2",
+  "complete": false,
+  "goalComplete": false,
+  "qualification": false,
+  "candidateSha256": "cc66f0d790cc539a2a28d7df929567426ff0f01d524fb7037879a5142edcad3d",
+  "sdkPatchSha256": "54412c3a9200fe4fd7d3da01832c69b27445e54376ec3fb07f8c295ffca986ac",
+  "networkUsed": false,
+  "experimentsDefaultOff": true,
+  "fixedPrefixLoaderReuseImplemented": true,
+  "regression": {
+    "cases": 1,
+    "assertions": 33,
+    "passed": true,
+    "coverage": [
+      "Fixed prefix macro state reaches current mutable text",
+      "File list reordering declines prefix and parses natively",
+      "Unsaved editor content overrides disk on retirement",
+      "Provider identity remains stable",
+      "Old driver destruction does not invalidate the new model",
+      "Transient loader hook cleared after parsing"
+    ]
+  },
+  "cvaMechanism": {
+    "edits": 48,
+    "passed": true,
+    "nativeDiagnosticAndHoverOracle": true,
+    "baselinePeakFootprintBytes": 1175995808,
+    "candidatePeakFootprintBytes": 1077708120,
+    "peakFootprintRatio": 0.9164217360883654,
+    "baselineLastDiagnosticMs": 31.939167,
+    "candidateLastDiagnosticMs": 30.686667,
+    "qualification": false
+  },
+  "cvaRouteApplicability": {
+    "edits": 12,
+    "passed": true,
+    "finalSyntaxResumes": {
+      "native": 1,
+      "baseline": 0,
+      "candidate": 1
+    },
+    "performanceValuesNotEvaluated": true
+  },
+  "fullTests": {
+    "status": "passed",
+    "stateFile": "untracked/stage-b2-native-prefix-2026-10-26/full-tests.json",
+    "nativeCtestCases": 933,
+    "sdkNativeCases": 2631,
+    "sdkNativeAssertions": 35459,
+    "sdkAsanCases": 2631,
+    "sdkAsanAssertions": 35459,
+    "serverAsanCases": 918,
+    "serverAsanAssertions": 170749,
+    "receiptSha256": "1d5e55e8bceeabe026707c621378c941107eda77fed5e88a498562f0de51cc3b"
+  },
+  "remaining": [
+    "Full Native and ASan correctness",
+    "Natural budget pressure and repeated cancellation verification",
+    "Predeclared unchanged performance gates, forward and reverse",
+    "B3/C/D and final main delivery"
+  ],
+  "evidenceSha256": {
+    "untracked/stage-b2-native-prefix-2026-10-26/plan.json": "eb3f3d3ccd1961a39d5d52f4c3308370db48a1ff9441cee352d806e37cb38211",
+    "untracked/stage-b2-native-prefix-2026-10-26/forced.json": "da64b216c276b8c781c757d41765d6885e37eccdf65b393add44235110a4e347",
+    "untracked/stage-b2-native-prefix-2026-10-26/storage-analysis.json": "c84535d6336a42377ee55c551f2cbed04d30aa7b27c2fb8bb278c5f765e9bb6b",
+    "untracked/stage-b2-native-prefix-2026-10-26/prefix-hit-plan.json": "2c58f8a3395df065bd0f83fd8c32068136c0cd4ba271d3e55ae2475836d1ce98",
+    "untracked/stage-b2-native-prefix-2026-10-26/prefix-hit.json": "423d87222efebbe4e535c0c56685f5eedf135343d2cd57f3e06cbe6b04c6c840",
+    "untracked/stage-b2-native-prefix-2026-10-26/regression.log": "fe4be527f6377e20d728868b31c492c9cc95fd775787475e43ac2a5945742d33",
+    "untracked/stage-b2-native-prefix-2026-10-26/sdk-restoration.json": "de226ddb0cb88114eadcfd8a396d1623ba009b14ae5640990139c9bc02f7620c"
+  },
+  "fixedEditBoundary": {
+    "status": "native-passed",
+    "cases": 1,
+    "assertions": 30,
+    "covers": [
+      "Explicit fixed root edit blocks retirement",
+      "Explicit fixed included header edit blocks retirement",
+      "Failed retirement preserves edited source and generation",
+      "Manual rebuild creates new generation and queries successfully"
+    ],
+    "productionChangeRequired": false,
+    "logSha256": "639b6a0b2175aaedf4f434f5d4962e8ab2253ef8f89349a65f79c4dd18175957"
+  },
+  "extendedCorrectness": {
+    "status": "failed",
+    "execSession": 67796,
+    "stateFile": "untracked/stage-b2-native-prefix-2026-10-26/acceptance-correctness.json",
+    "includes": [
+      "Full Native CTest with additional boundary case",
+      "ASan full server with additional boundary case",
+      "448 Native CVA states",
+      "38 ASan CVA states",
+      "112 lossless diagnostic map archives"
+    ],
+    "reason": "Initial full-design promotion entered prefix stitching and whole DUT exceeded existing256MiB admission; only partial roots were retained."
+  },
+  "candidateAccepted": false,
+  "supersededBy": "untracked/stage-b2-retirement-only-prefix-2026-10-26"
+}

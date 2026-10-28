@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: MIT
 #include "ServerDriver.h"
+#include "util/ModelOwnerTrace.h"
+#include "util/SlangExtensions.h"
+#include "util/UvmPhaseTrace.h"
 #include "ast/TrustedUvmLibrary.h"
 #include <algorithm>
 #include <cstdio>
@@ -242,7 +245,7 @@ bool ServerDriver::prepareScopeLibrary() {
     if (m_trustedScopes) {
         options.set(TrustedUvmImport{m_trustedScopes, m_driverOwner->getSourceOwner()});
         if (m_scopeBodies)
-            options.set(ScopeBodyImport{m_scopeBodies});
+            options.set(ScopeBodyImport{m_scopeBodies, driver.sourceLoader.getLibraryOwner()});
         m_scopeReason = "retained fixed package semantic generation";
         return true;
     }
@@ -511,12 +514,15 @@ bool ServerDriver::prepareScopeLibrary() {
     m_scopeRootCount = selective ? 0 : plan.frozenRootCount;
     m_scopePrefix = selective ? nullptr : std::move(prefix);
     m_trustedScopes = std::move(library);
+    if (modelOwnerTraceEnabled())
+        traceModelOwner("scope-provider", m_trustedScopes->compilation.get(), nullptr,
+                        m_trustedScopes->compilation->getTotalBytesAllocated());
     options.set(TrustedUvmImport{m_trustedScopes, m_driverOwner->getSourceOwner()});
     if (!config.modules.value().empty() || !config.instances.value().empty()) {
         m_scopeBodies = std::make_shared<ScopeBodyCache>(
             m_trustedScopes, size_t(config.maxMiB.value()) * 1024 * 1024, config.modules.value(),
-            config.instances.value());
-        options.set(ScopeBodyImport{m_scopeBodies});
+            config.instances.value(), m_sourceRegistry);
+        options.set(ScopeBodyImport{m_scopeBodies, driver.sourceLoader.getLibraryOwner()});
     }
     m_scopeReason =
         m_trustedScopes->definitions.empty()
@@ -534,7 +540,10 @@ bool ServerDriver::prepareScopeLibrary() {
 
 std::shared_ptr<syntax::SyntaxTree> ServerDriver::resumeScopeLibrary(
     std::span<const std::filesystem::path> paths, std::span<const SourceBuffer> buffers,
-    const Bag& parseOptions, bool nativeReplay) {
+    const Bag& parseOptions, bool nativeReplay, const lsp::RequestContext& ctx) {
+    if (m_syntaxInputFailure)
+        throw lsp::RequestFailed("Syntax prefix inputs changed; fresh input context required: " +
+                                 *m_syntaxInputFailure);
     if (m_trustedScopes)
         (void)trustedLibrarySourceContext(URI{});
     if (!m_trustedScopes || !m_scopePrefix || nativeReplay ||
@@ -543,15 +552,181 @@ std::shared_ptr<syntax::SyntaxTree> ServerDriver::resumeScopeLibrary(
     // Dependencies are explicitly fixed. Do not certify file contents per edit.
     if (buffers.size() == m_scopeRootCount)
         return m_scopePrefix;
+    auto prefix = m_scopePrefix;
+    auto rootCount = m_scopeRootCount;
+    size_t captureCount = 0;
+    const auto syntaxBudget = uint64_t(m_config.syntaxPrefixCacheMaxMiB.value()) * 1024 * 1024;
+    const bool probeEnabled = m_config.experimentalSyntaxPrefixCache.value() &&
+                              isCooperativeAnalysisEnabled() && syntaxBudget != 0;
+    const auto baseSyntaxBytes = m_scopePrefix->getRetainedSyntaxBytes();
+    UvmPhaseTrace probe(probeEnabled);
+    auto check = [&] {
+        if (const auto* pp = parseOptions.get<parsing::PreprocessorOptions>();
+            pp && pp->parseCheckpoint)
+            pp->parseCheckpoint();
+    };
+    if (probeEnabled) {
+        if (m_syntaxPrefixBase.lock() != m_scopePrefix) {
+            m_syntaxPrefix.reset();
+            m_syntaxPrefixBytes = 0;
+            m_pendingSyntaxPrefix.reset();
+            m_pendingSyntaxRoots = 0;
+            m_syntaxPrefixRoots = m_syntaxDeclinedRoots = 0;
+            m_syntaxDeclinedInputs.clear();
+            m_syntaxPrefixBase = m_scopePrefix;
+        }
+        if (m_syntaxPrefix && !hasValidBuffers(sm, m_syntaxPrefix)) {
+            m_syntaxPrefix.reset();
+            m_syntaxPrefixBytes = 0;
+            m_syntaxPrefixRoots = 0;
+        }
+        if (m_syntaxPrefix || m_pendingSyntaxPrefix) {
+            std::vector<std::filesystem::path> overlays;
+            for (const auto& uri : m_openDocs)
+                overlays.emplace_back(uri.getPath());
+            if (auto failure = sm.sourceWitnessFailure(overlays, check)) {
+                ++m_syntaxPrefixWitnessFailures;
+                m_syntaxPrefix.reset();
+                m_syntaxPrefixBytes = 0;
+                m_syntaxPrefixRoots = 0;
+                m_pendingSyntaxPrefix.reset();
+                m_pendingSyntaxRoots = 0;
+                m_syntaxDeclinedInputs.clear();
+                m_syntaxDeclinedRoots = 0;
+                m_syntaxInputFailure = std::move(failure);
+                // An ordinary parse through this manager would still consult
+                // stale bytes and failed lookup entries. Refuse this dispatch;
+                // the server's existing input-recovery path creates a fresh
+                // manager and preserves every unsaved editor document.
+                throw lsp::RequestFailed("Syntax prefix inputs changed; fresh input context required: " +
+                                         *m_syntaxInputFailure);
+            }
+            probe.mark("captured-prefix-physical-witness");
+        }
+        if (m_pendingSyntaxPrefix) {
+            check();
+            auto candidate = syntax::SyntaxTree::preparedSourcePrefix(m_pendingSyntaxPrefix);
+            const auto baseBytes = m_scopePrefix->getRetainedSyntaxBytes();
+            const auto bytes = candidate ? candidate->getRetainedSyntaxBytes() : 0;
+            if (candidate && candidate->isPrefixResumeSafe().value_or(false) && bytes >= baseBytes &&
+                bytes - baseBytes <= syntaxBudget) {
+                ctx.checkpoint("before syntax prefix cache commit");
+                check();
+                m_syntaxPrefix = std::move(candidate);
+                m_syntaxPrefixBytes = bytes - baseBytes;
+                m_syntaxPrefixRoots = m_pendingSyntaxRoots;
+                m_syntaxDeclinedInputs.clear();
+                m_syntaxDeclinedRoots = 0;
+            }
+            else {
+                ++m_syntaxPrefixRefusals;
+                m_syntaxPrefixBytes = 0;
+                m_syntaxDeclinedRoots = m_pendingSyntaxRoots;
+                m_syntaxDeclinedInputs.clear();
+                const auto graph = candidate ? candidate->getSourceBufferIds()
+                                             : m_pendingSyntaxPrefix->getSourceBufferIds();
+                for (auto id : graph) {
+                    auto root = id;
+                    while (auto from = sm.getIncludedFrom(root))
+                        root = sm.getFullyExpandedLoc(from).buffer();
+                    auto found = std::ranges::find(paths, sm.getFullPath(root));
+                    if (found != paths.end() && size_t(found - paths.begin()) < m_syntaxDeclinedRoots)
+                        m_syntaxDeclinedInputs.push_back(id);
+                }
+            }
+            m_pendingSyntaxPrefix.reset();
+            m_pendingSyntaxRoots = 0;
+            probe.mark("captured-prefix-delayed-extraction");
+        }
+        if (m_syntaxPrefix) {
+            prefix = m_syntaxPrefix;
+            rootCount = m_syntaxPrefixRoots;
+            ++m_syntaxPrefixHits;
+            probe.mark("captured-prefix-use");
+        }
+        else {
+            size_t earliest = paths.size();
+            bool changed = false;
+            for (const auto& tree : m_currentConfiguredTrees) {
+                for (auto id : tree->getSourceBufferIds()) {
+                    check();
+                    if (sm.isLatestData(id))
+                        continue;
+                    changed = true;
+                    while (auto from = sm.getIncludedFrom(id))
+                        id = sm.getFullyExpandedLoc(from).buffer();
+                    const auto found = std::ranges::find(paths, sm.getFullPath(id));
+                    if (found == paths.end()) {
+                        earliest = 0;
+                        break;
+                    }
+                    earliest = std::min(earliest, size_t(found - paths.begin()));
+                }
+            }
+            // Choosing a capture boundary is only a hint for the required full
+            // parse; it skips no input. Direct root documents can have already
+            // replaced their old native recipe, so the configured-tree registry
+            // alone need not identify their edit. Prefer the earliest open root.
+            std::optional<size_t> openRoot;
+            for (const auto& uri : m_openDocs) {
+                const auto found = std::ranges::find(paths, std::filesystem::path(uri.getPath()));
+                if (found != paths.end()) {
+                    const auto index = size_t(found - paths.begin());
+                    if (index >= rootCount && (!openRoot || index < *openRoot))
+                        openRoot = index;
+                }
+            }
+            if (openRoot) {
+                earliest = *openRoot;
+                changed = true;
+            }
+            const bool refused = earliest == m_syntaxDeclinedRoots &&
+                !m_syntaxDeclinedInputs.empty() &&
+                std::ranges::all_of(m_syntaxDeclinedInputs, [&](auto id) { return sm.isLatestData(id); });
+            if (changed && !refused && earliest > rootCount && earliest < paths.size())
+                captureCount = earliest - rootCount;
+        }
+    }
     auto suffixOptions = parseOptions;
     auto pp = suffixOptions.getOrDefault<parsing::PreprocessorOptions>();
     pp.predefines.clear();
     pp.undefines.clear();
     suffixOptions.set(pp);
-    auto suffix = syntax::SyntaxTree::afterCachedPrefix(m_scopePrefix,
-                                                        buffers.subspan(m_scopeRootCount),
-                                                        suffixOptions);
-    auto tree = syntax::SyntaxTree::withCachedPrefix(m_scopePrefix, suffix);
+    auto suffix = captureCount
+                      ? syntax::SyntaxTree::afterCachedPrefixWithCheckpoint(
+                            prefix, buffers.subspan(rootCount), captureCount, suffixOptions)
+                      : syntax::SyntaxTree::afterCachedPrefix(prefix, buffers.subspan(rootCount),
+                                                             suffixOptions);
+    probe.mark("captured-prefix-required-parse");
+    auto tree = syntax::SyntaxTree::withCachedPrefixOwnedSuffix(prefix, std::move(suffix));
+    probe.mark("captured-prefix-compose");
+    if (captureCount) {
+        check();
+        // This tree is already required by the current analysis. Retain the
+        // capture without walking its prefix while the first query is waiting.
+        const auto retained = tree->getRetainedSyntaxBytes();
+        if (retained >= baseSyntaxBytes && retained - baseSyntaxBytes <= syntaxBudget) {
+            m_pendingSyntaxPrefix = tree;
+            m_pendingSyntaxRoots = rootCount + captureCount;
+            m_syntaxPrefixBytes = retained - baseSyntaxBytes;
+            ++m_syntaxPrefixCaptures;
+            probe.mark("captured-prefix-pending");
+        }
+        else {
+            ++m_syntaxPrefixRefusals;
+            m_syntaxDeclinedRoots = rootCount + captureCount;
+            m_syntaxDeclinedInputs.clear();
+            for (auto id : tree->getSourceBufferIds()) {
+                auto root = id;
+                while (auto from = sm.getIncludedFrom(root))
+                    root = sm.getFullyExpandedLoc(from).buffer();
+                auto found = std::ranges::find(paths, sm.getFullPath(root));
+                if (found != paths.end() && size_t(found - paths.begin()) < m_syntaxDeclinedRoots)
+                    m_syntaxDeclinedInputs.push_back(id);
+            }
+            probe.mark("captured-prefix-budget-refusal");
+        }
+    }
     ++m_scopeResumes;
     return tree;
 }
@@ -562,6 +737,13 @@ bool ServerDriver::isTrustedScopeSource(const std::filesystem::path& path) const
 }
 
 rfl::Generic ServerDriver::scopeLibraryStatus() const {
+    struct SyntaxReplay {
+        bool enabled;
+        uint64_t budgetBytes;
+        size_t chargedBytes, pendingRoots, cachedRoots;
+        uint64_t captures, hits, refusals, witnessFailures;
+        bool reloadPending;
+    };
     struct Status {
         bool enabled, prepared;
         uint64_t generation, consumers, syntaxResumes, namespaceDeclines;
@@ -572,6 +754,7 @@ rfl::Generic ServerDriver::scopeLibraryStatus() const {
         bool instanceBodiesShared;
         ScopeBodyCache::Stats bodies;
         std::string reason;
+        SyntaxReplay syntaxReplay;
     };
     const auto& library = m_trustedScopes;
     const auto bodies = m_scopeBodies ? m_scopeBodies->status() : ScopeBodyCache::Stats{};
@@ -587,6 +770,11 @@ rfl::Generic ServerDriver::scopeLibraryStatus() const {
                library ? library->packages : std::vector<std::string>{},
                library ? library->definitions : std::vector<std::string>{},
                library && library->hasUnitDeclarations, m_scopeInstanceSelections, bodies.hits != 0,
-               bodies, m_scopeReason});
+               bodies, m_scopeReason,
+               SyntaxReplay{m_config.experimentalSyntaxPrefixCache.value(),
+                   uint64_t(m_config.syntaxPrefixCacheMaxMiB.value()) * 1024 * 1024,
+                   m_syntaxPrefixBytes, m_pendingSyntaxRoots, m_syntaxPrefixRoots,
+                   m_syntaxPrefixCaptures, m_syntaxPrefixHits, m_syntaxPrefixRefusals,
+                   m_syntaxPrefixWitnessFailures, hasStaleSyntaxPrefixInputs()}});
 }
 } // namespace server

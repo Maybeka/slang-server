@@ -1,0 +1,459 @@
+{
+  "stage": "B3 private bind traversal cancellation",
+  "status": "qualification failed: direct reverse query/diagnostic/CPU gates; B3 remains incomplete",
+  "goalComplete": false,
+  "binarySha256": "d85d4e4430653161124352a9c47c7fa6775fd89c70ebdfc696568d473d91720e",
+  "sdkPatchSha256": "3c3eac535b958aa818c1a5220348fbdf9ce246803309934dbb276bde0b2f46c8",
+  "implementation": [
+    "Only an unpublished bind/defparam clone temporarily carries the request checkpoint while resolving a bind target",
+    "forceElaborate installs its independent visitor callback only when diagnostics are disabled and the symbol scope belongs to that compilation",
+    "ScopeGuard clears the callback on normal and exceptional exits; ordinary and imported owners retain uninterrupted binding"
+  ],
+  "verified": {
+    "targetedCases": 2,
+    "targetedAssertions": 144,
+    "nativeSdkCases": 2633,
+    "nativeSdkAssertions": 35638,
+    "serverCTest": 942,
+    "python": 17,
+    "transport": 43,
+    "nativeWireScenarios": 6,
+    "offlineSdkFiles": 709,
+    "asanSdkCases": 2633,
+    "asanSdkAssertions": 35638,
+    "asanServerCases": 927,
+    "asanServerAssertions": 172107,
+    "asanWireScenarios": 6,
+    "registeredNativeAndAsanNames": 928,
+    "nativeCvaStates": 448,
+    "asanCvaStates": 38,
+    "nativeDiagnosticArchives": 112,
+    "lifecyclePressureJobs": 6
+  },
+  "pending": [
+    "Resolve direct-memory-reverse query/diagnostic/CPU regressions without relaxing gates",
+    "Qualify changed candidate against original14+6 before closing B3"
+  ],
+  "rootCheckpointProbe": {
+    "purpose": "Nonqualification causal checkpoint probe, same warm48/100ms/64MiB/force8 workload",
+    "passedCompleteNativeOracle": true,
+    "arms": {
+      "native": {
+        "pid": 36991,
+        "rootQuanta": [
+          {
+            "maximumUs": 5519,
+            "checkpoints": 4154
+          },
+          {
+            "maximumUs": 5586,
+            "checkpoints": 4154
+          },
+          {
+            "maximumUs": 5944,
+            "checkpoints": 4154
+          },
+          {
+            "maximumUs": 5922,
+            "checkpoints": 4154
+          }
+        ]
+      },
+      "baseline": {
+        "pid": 37141,
+        "rootQuanta": [
+          {
+            "maximumUs": 63517,
+            "checkpoints": 1022
+          }
+        ]
+      },
+      "candidate": {
+        "pid": 37198,
+        "rootQuanta": [
+          {
+            "maximumUs": 6292,
+            "checkpoints": 4154
+          }
+        ]
+      }
+    },
+    "limitations": [
+      "One profiling run, not formal performance qualification",
+      "Does not measure all shared binding/destruction sections",
+      "ASan/server complete suites and broad CVA verification still pending"
+    ]
+  },
+  "rapidHardProbe": {
+    "passed": true,
+    "qualification": false,
+    "arms": {
+      "native": {
+        "all": {
+          "count": 12,
+          "p95": 6575.257875,
+          "maximum": 6575.257875
+        },
+        "successful": {
+          "count": 12,
+          "p95": 6575.257875,
+          "maximum": 6575.257875
+        },
+        "error": {
+          "count": 0,
+          "p95": null,
+          "maximum": null
+        },
+        "lastDiagnosticMs": 6904.647,
+        "cancelled": 0
+      },
+      "baseline": {
+        "all": {
+          "count": 384,
+          "p95": 59.772375,
+          "maximum": 722.77775
+        },
+        "successful": {
+          "count": 179,
+          "p95": 10.93325,
+          "maximum": 722.77775
+        },
+        "error": {
+          "count": 205,
+          "p95": 62.719209,
+          "maximum": 67.952083
+        },
+        "lastDiagnosticMs": 1087.969292,
+        "cancelled": 205
+      },
+      "candidate": {
+        "all": {
+          "count": 384,
+          "p95": 62.220208,
+          "maximum": 752.844125
+        },
+        "successful": {
+          "count": 179,
+          "p95": 11.7425,
+          "maximum": 752.844125
+        },
+        "error": {
+          "count": 205,
+          "p95": 64.478333,
+          "maximum": 69.169875
+        },
+        "lastDiagnosticMs": 1115.598416,
+        "cancelled": 205
+      }
+    }
+  },
+  "interpretation": "The isolated private-root checkpoint gap decreased. The rapid-hard workload did not establish an overall response benefit; cold recovery remains roughly750ms query/1.1s final diagnostics in this single probe. No universal latency guarantee.",
+  "constraints": {
+    "experimentsDefaultOff": true,
+    "fixedDebounceAdded": false,
+    "completeInputAndVersionProofPreserved": true,
+    "fixedDependenciesAndManualRebuildPreserved": true,
+    "userBudgetContractPreserved": true,
+    "networkUsed": false,
+    "pushedMain": false
+  },
+  "evidence": {
+    "untracked/stage-b3-private-bind-cancellation-2026-10-27/receipt.json": "ff1e68d2a8c1de6417e480aed355b8024d9b65cfaa780c7bb04e61443e29a7ff",
+    "untracked/stage-b3-private-bind-cancellation-2026-10-27/targeted.log": "ee9fe4463045eaf2641cea34373cbdd06d84fd40131eab2abaa8666f418d8be3",
+    "untracked/stage-b3-private-bind-cancellation-2026-10-27/sdk-native.log": "f80efa31b16d3d1e1e667d0165bd2e37019ee3667baccb13170a8d82aef427a9",
+    "untracked/stage-b3-private-bind-cancellation-2026-10-27/ctest.log": "0f396d2509107f6687dfbcbe1e8ef982f73c71039658077a5882f7b8fd953b97",
+    "untracked/stage-b3-private-bind-cancellation-2026-10-27/python.log": "102b5f09729e7de7fca934a8a0c5b0fa261f883f82308146d6aab5a8d721840f",
+    "untracked/stage-b3-private-bind-cancellation-2026-10-27/transport.log": "b450497007c647821857f14e4fa09952207357ebb7a9db175d8b1428293d9f33",
+    "untracked/stage-b3-private-bind-cancellation-2026-10-27/notification-wire-native-complete.json": "436dbd973a2a7315191112a0f08019ac934c3972ee4bb9e5e35852e71dc9d4eb",
+    "untracked/stage-b3-private-bind-cancellation-2026-10-27/sdk-restoration.json": "9b21ae2eb33a67e941d81d041a2beedf183ea9625448cfd2903c431c8961120e",
+    "untracked/stage-b3-private-bind-cancellation-2026-10-27/root-probe-conclusion.json": "63f4b006746346ba1e454951ed084193618664ddf3775edd7c063906d2814a64",
+    "untracked/stage-b3-private-bind-cancellation-2026-10-27/rapid-arrival-summary.json": "b80c8ddbcb17da6d02946fd8509625ae83f66d953f1ae387a4322d88300c1469",
+    "untracked/stage-b3-private-bind-cancellation-2026-10-27/sdk-asan.log": "ad5a6cd0f37fe7d178e91c6a1ae35901263fceaa1098073aac5672c48484e293",
+    "untracked/stage-b3-private-bind-cancellation-2026-10-27/server-asan.log": "2774f3d3a6626d540a72f0e8734aec3158f74c34af0b680c30167d96ce0d9125",
+    "untracked/stage-b3-private-bind-cancellation-2026-10-27/test-discovery-audit.json": "7338fb04870db171cf23373064dc0fce672d0daf094fa133837fd001dfeed3ba",
+    "untracked/stage-b3-private-bind-cancellation-2026-10-27/notification-wire-asan-matrix.json": "697c505a958c2ceffe7ac38f141d044ed287f5311ea2ca8a119ced6c2204083f",
+    "untracked/stage-b3-private-bind-cancellation-2026-10-27/correctness-runtime.json": "dad3d5070a132902fadf85852594bd18e43534319764e603d5496f8a52aeddbb",
+    "untracked/stage-b3-private-bind-cancellation-2026-10-27/evidence-audit.json": "ec5074521a8aa6aa82b6511bc95e626f937a9ba6ac0a8eea2d79795af80dbdbd",
+    "untracked/stage-b3-private-bind-pressure-2026-10-27/plan.json": "8f8ab148cf51836cc47fcbaed8aa708dad56fabca7cd365cae3c57bd0d6e9feb",
+    "untracked/stage-b3-private-bind-pressure-2026-10-27/runtime.json": "242bb86fe227f27369e0459a479c43bc11c295f66170fb5660ff7329cec20a5f",
+    "untracked/stage-b3-private-bind-pressure-2026-10-27/owner-analysis.json": "c7ab573e36649f459536fb3148edd636d16a6e5dc353d2aff26f7d65aae7f444",
+    "untracked/stage-b3-private-bind-pressure-2026-10-27/arrival-audit.json": "25e27eb40a3fd5f7f1f3a0adeac9025f549e3f4c67f49aaf4443f2db9b4b6063"
+  },
+  "lifecyclePressureAgainstAcceptedB2": {
+    "natural-forward": {
+      "allQueryP95Ms": [
+        422.574791,
+        106.519833
+      ],
+      "cancelled": [
+        204,
+        204
+      ],
+      "lastDiagnosticMs": [
+        1469.642959,
+        921.802209
+      ],
+      "successfulQueryMaximumMs": [
+        686.568584,
+        568.599209
+      ],
+      "memoryRatios": {
+        "cpuSeconds": 0.9774132072825785,
+        "peakRss": 0.9890848608752902,
+        "peakFootprint": 0.9969974726459695
+      },
+      "candidateMaximumPrivateRootQuantumUs": 5654
+    },
+    "natural-reverse": {
+      "allQueryP95Ms": [
+        422.057,
+        109.410875
+      ],
+      "cancelled": [
+        204,
+        204
+      ],
+      "lastDiagnosticMs": [
+        1466.083125,
+        929.108958
+      ],
+      "successfulQueryMaximumMs": [
+        691.711791,
+        572.685166
+      ],
+      "memoryRatios": {
+        "cpuSeconds": 0.9872947129304429,
+        "peakRss": 0.9877090329951875,
+        "peakFootprint": 0.9895837832598978
+      },
+      "candidateMaximumPrivateRootQuantumUs": 5707
+    },
+    "forced-forward": {
+      "allQueryP95Ms": [
+        15.675708,
+        16.17875
+      ],
+      "cancelled": [
+        0,
+        0
+      ],
+      "lastDiagnosticMs": [
+        25.846958,
+        25.264792
+      ],
+      "successfulQueryMaximumMs": [
+        16.362416,
+        18.1295
+      ],
+      "memoryRatios": {
+        "cpuSeconds": 0.9932230447685743,
+        "peakRss": 0.9984012789768185,
+        "peakFootprint": 0.9940134959068708
+      },
+      "candidateMaximumPrivateRootQuantumUs": 5482
+    },
+    "forced-reverse": {
+      "allQueryP95Ms": [
+        17.302125,
+        16.528666
+      ],
+      "cancelled": [
+        0,
+        0
+      ],
+      "lastDiagnosticMs": [
+        25.266167,
+        25.924208
+      ],
+      "successfulQueryMaximumMs": [
+        17.879417,
+        18.785542
+      ],
+      "memoryRatios": {
+        "cpuSeconds": 1.0051899341477346,
+        "peakRss": 0.9984663987976566,
+        "peakFootprint": 0.9979682864317205
+      },
+      "candidateMaximumPrivateRootQuantumUs": 5696
+    },
+    "ranged-forced-20ms": {
+      "allQueryP95Ms": [
+        8.407083,
+        8.082709
+      ],
+      "cancelled": [
+        3,
+        5
+      ],
+      "lastDiagnosticMs": [
+        14.21525,
+        13.860334
+      ],
+      "successfulQueryMaximumMs": [
+        25.303625,
+        10.416042
+      ],
+      "memoryRatios": {
+        "cpuSeconds": 1.0012995992621307,
+        "peakRss": 1.0013942300326342,
+        "peakFootprint": 0.9968925995902576
+      },
+      "candidateMaximumPrivateRootQuantumUs": 5088
+    },
+    "ranged-hard-20ms": {
+      "allQueryP95Ms": [
+        383.059209,
+        46.690833
+      ],
+      "cancelled": [
+        205,
+        205
+      ],
+      "lastDiagnosticMs": [
+        1345.222958,
+        949.952083
+      ],
+      "successfulQueryMaximumMs": [
+        560.015125,
+        592.388708
+      ],
+      "memoryRatios": {
+        "cpuSeconds": 0.9605413059150816,
+        "peakRss": 0.9906453009961023,
+        "peakFootprint": 0.998181290280304
+      },
+      "candidateMaximumPrivateRootQuantumUs": 5877
+    }
+  },
+  "qualification": {
+    "fixed14Qualified": true,
+    "direct6Qualified": false,
+    "failedChecks": [
+      "direct-memory-reverse-p50",
+      "direct-memory-reverse-p95",
+      "direct-memory-reverse-lastDiagnosticMs",
+      "direct-memory-reverse-cpuSeconds"
+    ],
+    "reverse": {
+      "ratios": {
+        "startupMs": 0.7141521907780825,
+        "p50": 1.318568272339777,
+        "p95": 1.2098038463639125,
+        "lastDiagnosticMs": 1.2313729666075781
+      },
+      "memoryRatios": {
+        "cpuSeconds": 1.2195472932754714,
+        "peakRss": 0.8856972862195485,
+        "peakFootprint": 0.8656256065632095
+      },
+      "arms": {
+        "candidate": {
+          "startupMs": 1558.354917,
+          "p50": 12.973146,
+          "p95": 16.812292,
+          "lastDiagnosticMs": 24.573125,
+          "cancelled": 0,
+          "memory": {
+            "peakRss": 878018560,
+            "peakFootprint": 721077328,
+            "samples": 3750,
+            "cpuSeconds": 27.265728041
+          }
+        },
+        "baseline": {
+          "startupMs": 2182.104791,
+          "p50": 9.8388125,
+          "p95": 13.896709,
+          "lastDiagnosticMs": 19.955875,
+          "cancelled": 0,
+          "memory": {
+            "peakRss": 991330304,
+            "peakFootprint": 833012936,
+            "samples": 3714,
+            "cpuSeconds": 22.357253541
+          }
+        }
+      },
+      "sourceStorageInformational": {
+        "candidate": {
+          "current": {
+            "source": {
+              "dataBytes": 10088411,
+              "queryBytes": 30046,
+              "queryBuffers": 2,
+              "retainedNameBytes": 22455,
+              "indexBytes": 24700
+            },
+            "managers": 1,
+            "locationTableBytes": 5585159,
+            "immutableTableBytes": 3670127
+          },
+          "retained": {
+            "source": {
+              "dataBytes": 10048066,
+              "queryBytes": 0,
+              "queryBuffers": 0,
+              "retainedNameBytes": 42645,
+              "indexBytes": 47950
+            },
+            "managers": 2,
+            "locationTableBytes": 28783,
+            "immutableTableBytes": 3670127
+          },
+          "total": {
+            "source": {
+              "dataBytes": 10137726,
+              "queryBytes": 30046,
+              "queryBuffers": 2,
+              "retainedNameBytes": 43893,
+              "indexBytes": 72650
+            },
+            "managers": 3,
+            "locationTableBytes": 5613942,
+            "immutableTableBytes": 3670127
+          }
+        },
+        "baseline": {
+          "current": {
+            "source": {
+              "dataBytes": 10032057,
+              "queryBytes": 29742,
+              "queryBuffers": 2,
+              "retainedNameBytes": 43267,
+              "indexBytes": 24700
+            },
+            "managers": 1,
+            "locationTableBytes": 14680397,
+            "immutableTableBytes": 3506439
+          },
+          "retained": {
+            "source": {
+              "dataBytes": 0,
+              "queryBytes": 0,
+              "queryBuffers": 0,
+              "retainedNameBytes": 0,
+              "indexBytes": 0
+            },
+            "managers": 0,
+            "locationTableBytes": 0,
+            "immutableTableBytes": 0
+          },
+          "total": {
+            "source": {
+              "dataBytes": 10032057,
+              "queryBytes": 29742,
+              "queryBuffers": 2,
+              "retainedNameBytes": 43267,
+              "indexBytes": 24700
+            },
+            "managers": 1,
+            "locationTableBytes": 14680397,
+            "immutableTableBytes": 3506439
+          }
+        }
+      }
+    },
+    "completionAuditPath": "untracked/stage-b3-private-bind-qualification-2026-10-27/b3-completion-audit.json",
+    "sourceAndSdkIdentityVerifiedBeforeStatusRefresh": true
+  }
+}

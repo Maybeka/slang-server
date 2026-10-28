@@ -1,0 +1,82 @@
+{
+  "checkpoint": "local-import-closure-2026-10-25",
+  "binarySha256": "30d1f4413dcf4287b20667b41ed8a548c488cefdae326424d71205a8dba5c362",
+  "scope": "Correctness only for local imports/new package-type references and completed Native context selection; Stage A and overall optimization goal remain open.",
+  "experimentsDefaultOff": true,
+  "implemented": [
+    "private explicit/wildcard imports and new qualified package/type references",
+    "completed Native namespace borrowing with physical endpoints and expanded-token CST equivalence; selected module parameter context preserved",
+    "scope display projection retains current Native hover presentation",
+    "early method-declaration reference provenance separates removed typedef uses from fixed signature/default references",
+    "direct and fallback macro syntax witnesses both retain cancellation and physical input proof checks",
+    "declaration guard covers other instances and future generic contexts of the edited method"
+  ],
+  "validation": {
+    "targetedRelatedCases": 8,
+    "targetedRelatedAssertions": 20444,
+    "dualMacroWitnessCases": 2,
+    "dualMacroWitnessAssertions": 227,
+    "ctest": 916,
+    "python": 17,
+    "transport": 43,
+    "serverAsan": {
+      "cases": 901,
+      "assertions": 144349,
+      "detectLeaks": false
+    },
+    "sdkAsan": {
+      "cases": 2615,
+      "assertions": 26818,
+      "detectLeaks": false
+    },
+    "sdkRestorationFiles": 709,
+    "cva6Scenes": [
+      "body",
+      "package",
+      "generic",
+      "effectful",
+      "virtual-interface",
+      "local-types",
+      "local-imports"
+    ],
+    "cva6States": 296,
+    "finalTargetedCases": 10,
+    "finalTargetedAssertions": 20671
+  },
+  "sdk": {
+    "base": "151a801ceaf6faf23d79a42d210ff67e50eb4660",
+    "gitlinkChanged": false,
+    "patchSha256": "0a20b95cb356579bd9628601f6b5ac2f504195c78da3782cb5ab75978949dbc7",
+    "cleanOfflineRestoreVerified": true,
+    "restorationFiles": 709
+  },
+  "cva6": {
+    "scenes": [
+      "body",
+      "package",
+      "generic",
+      "effectful",
+      "virtual-interface",
+      "local-types",
+      "local-imports"
+    ],
+    "states": 296,
+    "historicalUris": 612,
+    "comparison": "Fresh unfrozen Native, frozen Native, historical baseline, candidate; every version hover and full diagnostic map; UVM and entire DUT sharing asserted"
+  },
+  "retainedFailures": [
+    "before.log: 288 failures showing import rejection and namespace/type gaps",
+    "after.log and origin-observation.log: stale unused typedef and module scope/type failures",
+    "sdk-provenance.log: initial test used reserved package name library; corrected fixture",
+    "sdk-early-lookup.log: independent SDK reproduction had 4 provenance failures before Scope origin guard",
+    "sdk-signature-provenance.log: fixture cast warning corrected using struct field; signature uses remain fixed",
+    "ctest.log: two old tests expected a now-eliminated tree walk; adapted to prove Native direct identity and injected-unavailable-view fallback, including cancellation"
+  ],
+  "performanceQualified": false,
+  "mainPushed": false,
+  "goalComplete": false,
+  "remaining": [
+    "Stage A next: changed generic specialization dependencies and remaining legal declaration/elaboration coverage audit",
+    "Stages B/C/D original lifetime, first cost, full performance and delivery gates remain open"
+  ]
+}

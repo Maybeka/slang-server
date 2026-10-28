@@ -1,0 +1,1559 @@
+{
+  "goalComplete": false,
+  "bcAccepted": false,
+  "route": "A accepted / B1,B2 accepted / BC current, original acceptance gates intact / D pending",
+  "watchPrototype": {
+    "sha256": "d3c9941b7d79e48c6feaa74923beafe70cca04b1ff4e10bd224c17a3699e0171",
+    "accepted": false,
+    "evidence": "untracked/stage-bc-watch-buffer-paths-2026-10-27",
+    "evaluation": {
+      "feasibilityPassed": false,
+      "checks": {
+        "forward-watch-25percent": true,
+        "forward-query-p50": true,
+        "forward-612-complete-maps": true,
+        "reverse-watch-25percent": false,
+        "reverse-query-p50": true,
+        "reverse-612-complete-maps": true
+      },
+      "results": {
+        "forward": {
+          "watchCollectMedianUs": {
+            "baseline": 421,
+            "candidate": 266,
+            "ratio": 0.6318289786223278
+          },
+          "queryP50Ms": {
+            "baseline": 16.578353999999997,
+            "candidate": 17.017604499999997,
+            "ratio": 1.0264954228869767
+          },
+          "rows": {
+            "native": {
+              "passed": true,
+              "finalFiles": 612,
+              "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "cancelled": 0,
+              "p50": 3060.8110834999998,
+              "p95": 4993.874708,
+              "maximum": 5412.063958,
+              "lastDiagnosticMs": 5952.13275,
+              "memory": {
+                "peakRss": 1404993536,
+                "peakFootprint": 1027638760,
+                "samples": 528,
+                "cpuSeconds": 12.240769291
+              }
+            },
+            "baseline": {
+              "passed": true,
+              "finalFiles": 612,
+              "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "cancelled": 0,
+              "p50": 16.578353999999997,
+              "p95": 23.421791,
+              "maximum": 69.919333,
+              "lastDiagnosticMs": 30.935666,
+              "memory": {
+                "peakRss": 1067827200,
+                "peakFootprint": 908510456,
+                "samples": 345,
+                "cpuSeconds": 4.860825166
+              }
+            },
+            "candidate": {
+              "passed": true,
+              "finalFiles": 612,
+              "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "cancelled": 0,
+              "p50": 17.017604499999997,
+              "p95": 23.283958,
+              "maximum": 32.60475,
+              "lastDiagnosticMs": 38.306292,
+              "memory": {
+                "peakRss": 1069727744,
+                "peakFootprint": 900760800,
+                "samples": 346,
+                "cpuSeconds": 4.869943791
+              }
+            }
+          }
+        },
+        "reverse": {
+          "watchCollectMedianUs": {
+            "baseline": 371,
+            "candidate": 291,
+            "ratio": 0.784366576819407
+          },
+          "queryP50Ms": {
+            "baseline": 16.9296875,
+            "candidate": 17.1418545,
+            "ratio": 1.0125322455006922
+          },
+          "rows": {
+            "candidate": {
+              "passed": true,
+              "finalFiles": 612,
+              "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "cancelled": 0,
+              "p50": 17.1418545,
+              "p95": 25.632542,
+              "maximum": 33.5995,
+              "lastDiagnosticMs": 42.27725,
+              "memory": {
+                "peakRss": 1073954816,
+                "peakFootprint": 911066336,
+                "samples": 345,
+                "cpuSeconds": 4.861252125
+              }
+            },
+            "baseline": {
+              "passed": true,
+              "finalFiles": 612,
+              "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "cancelled": 0,
+              "p50": 16.9296875,
+              "p95": 26.39575,
+              "maximum": 29.877833,
+              "lastDiagnosticMs": 31.086667,
+              "memory": {
+                "peakRss": 1072775168,
+                "peakFootprint": 909001976,
+                "samples": 348,
+                "cpuSeconds": 4.88828025
+              }
+            },
+            "native": {
+              "passed": true,
+              "finalFiles": 612,
+              "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "cancelled": 0,
+              "p50": 3245.226917,
+              "p95": 5401.480458,
+              "maximum": 5927.52375,
+              "lastDiagnosticMs": 6480.711833,
+              "memory": {
+                "peakRss": 1405517824,
+                "peakFootprint": 1027868136,
+                "samples": 533,
+                "cpuSeconds": 12.843153666
+              }
+            }
+          }
+        }
+      },
+      "candidateSha256": "d3c9941b7d79e48c6feaa74923beafe70cca04b1ff4e10bd224c17a3699e0171",
+      "baselineSha256": "b2549df1a8a83111669914ab9b181068e030728c4b53bc1fd6aca40109e49b88",
+      "scope": "Two-order feasibility only. Original20 qualification gates unchanged. Negative results retained."
+    },
+    "productionRestore": {
+      "accepted": false,
+      "reason": "Predeclared two-order >=25% watch-collect savings not met in reverse order; no end-to-end query improvement; final diagnostics slower in both samples. Revert production prototype; retain detach/earlier-reader regression and full evidence.",
+      "currentNativeBinaryBeforeRestore": "d3c9941b7d79e48c6feaa74923beafe70cca04b1ff4e10bd224c17a3699e0171",
+      "sourceRestorePendingBuild": false,
+      "newUnchangedCandidateSamplesAllowed": false,
+      "restoredProductionBinarySha256": "b2549df1a8a83111669914ab9b181068e030728c4b53bc1fd6aca40109e49b88",
+      "restoreTargetedLogSha256": "2e4a61a282f799618eb24c2b4a287b57d10b1f7417d85c9beb13b8492bd9c53c"
+    },
+    "retainedRegression": "Detached buffer paths, earlier immutable readers, addition/removal;28 targeted cases12995assertions on restored binary"
+  },
+  "negativeStatPrototype": {
+    "accepted": false,
+    "productionChanged": false,
+    "evidence": "untracked/stage-bc-negative-stat-2026-10-27",
+    "evaluation": {
+      "qualification": false,
+      "medianMs": {
+        "0": 5.097,
+        "1": 4.8885,
+        "2": 5.088
+      },
+      "rangeUs": {
+        "0": [
+          5071,
+          7176
+        ],
+        "1": [
+          4871,
+          5495
+        ],
+        "2": [
+          5064,
+          5443
+        ]
+      },
+      "ratios": {
+        "0": 0.9590935844614479,
+        "2": 0.9607900943396226
+      },
+      "all2237InputsMatchEveryRound": true,
+      "networkUsed": false,
+      "feasibilityPassed": false
+    }
+  },
+  "nextCandidate": {
+    "stage": "untracked/stage-bc-query-diagnostic-transaction-2026-10-27",
+    "status": "Configurable syntax memo integrated and targeted correctness passed; same-RPC transaction not implemented. Overall performance remains unqualified.",
+    "nativeBinarySha256": "b7baba86b34e0bdbb128b956ff37e18e4befdc7832192c70bbe4c73de122e3ce",
+    "asanBinarySha256": "fc63f44d7547d53a3c17f674a239ad9d27f5baba7e2e82a358a53a744804abf2",
+    "freshTargeted": "Native andASan each97cases66203assertions +38cases19846assertions without prototype env; budget0/1024 factory buffer-growth assertions pass",
+    "originalProofInvariant": {
+      "passed": true,
+      "checks": {
+        "all612MapsHover": true,
+        "original28ProofCount": true,
+        "sourceIdentity": true,
+        "binaryIdentity": true
+      },
+      "physicalProofEvents": {
+        "native": 0,
+        "baseline": 28,
+        "candidate": 28
+      },
+      "binarySha256": "b7baba86b34e0bdbb128b956ff37e18e4befdc7832192c70bbe4c73de122e3ce",
+      "purpose": "Original proof-count invariant only. All timing observations discarded; not performance qualification.",
+      "coTransactionImplemented": false,
+      "originalFormal20StillFailed": true,
+      "networkUsed": false
+    },
+    "sdkIdentity": {
+      "passed": true,
+      "checks": {
+        "all709PhysicalFiles": true,
+        "patch": true,
+        "sdkExecutablesIdentical": true
+      },
+      "sdkExecutableSha256": {
+        "build-uvm/bin/unittests": "b4aaab81192e67046dc1d04346cefe21c4571435f1c788128531d4f2051ae473",
+        "untracked/semantic-cancellation-2026-10-23/asan-build/bin/unittests": "71b4fd38e63aa42921965b836b8ac74636bb7e769dbf0d5b5f2593f6f25e1226"
+      },
+      "sdkSuitesInherited": true,
+      "evidence": "Unchanged8b06/709 source and identical Native/ASan unittests binaries; inherit fresh2635cases35691assertions from stage-bc-source-witness-validation-2026-10-27. No fresh SDK runs claimed.",
+      "networkUsed": false
+    },
+    "defaultExperimentsOff": true,
+    "syntaxBudgetKiB": {
+      "default": 1024,
+      "zeroDisables": true,
+      "cap": 65536
+    },
+    "crossRequestPhysicalProofCached": false,
+    "completeTestsPending": true,
+    "next": "Separate default-off same-RPC query+diagnostic transaction; preserve original split-mode28 proof gate and alloriginal20 performance gates, add co-specific coverage.",
+    "sdkChanged": false
+  },
+  "mainPushed": false,
+  "networkForSourceTestsDependencies": false,
+  "retainedDiagnosticViews": {
+    "accepted": false,
+    "candidateSha256": "a33b32134519b442c30df6b51475ae0c6e4dde102b04d9f6be70417e78f627fe",
+    "stage": "untracked/stage-bc-retained-diagnostic-views-2026-10-27",
+    "evaluation": {
+      "feasibilityPassed": false,
+      "checks": {
+        "first-forward-612-complete-maps": true,
+        "first-forward-memory-footprint": true,
+        "first-forward-partition-15percent": true,
+        "first-forward-first-diagnostic": true,
+        "first-reverse-612-complete-maps": true,
+        "first-reverse-memory-footprint": true,
+        "first-reverse-partition-15percent": true,
+        "first-reverse-first-diagnostic": true,
+        "steady-forward-612-complete-maps": true,
+        "steady-forward-memory-footprint": false,
+        "steady-forward-steady-query-p50": false,
+        "steady-reverse-612-complete-maps": true,
+        "steady-reverse-memory-footprint": false,
+        "steady-reverse-steady-query-p50": true
+      },
+      "results": {
+        "first-forward": {
+          "phaseMedianUs": {
+            "body-diagnostic-partition": {
+              "baseline": 10565,
+              "candidate": 6787
+            },
+            "body-diagnostic-affected": {
+              "baseline": 3754,
+              "candidate": 3891
+            },
+            "body-context-native-capture": {
+              "baseline": 4521,
+              "candidate": 4656
+            },
+            "body-prepare-witnesses": {
+              "baseline": 12433,
+              "candidate": 12266
+            },
+            "body-validate-files": {
+              "baseline": 7173.0,
+              "candidate": 7302.5
+            }
+          },
+          "rows": {
+            "native": {
+              "passed": true,
+              "finalFiles": 612,
+              "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "cancelled": 0,
+              "p50": 427.605666,
+              "p95": 427.605666,
+              "maximum": 427.605666,
+              "lastDiagnosticMs": 936.945666,
+              "memory": {
+                "peakRss": 1139965952,
+                "peakFootprint": 986826000,
+                "samples": 192,
+                "cpuSeconds": 2.689820083
+              }
+            },
+            "baseline": {
+              "passed": true,
+              "finalFiles": 612,
+              "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "cancelled": 0,
+              "p50": 31.857292,
+              "p95": 31.857292,
+              "maximum": 31.857292,
+              "lastDiagnosticMs": 61.35525,
+              "memory": {
+                "peakRss": 880705536,
+                "peakFootprint": 723485776,
+                "samples": 152,
+                "cpuSeconds": 1.8601515
+              }
+            },
+            "candidate": {
+              "passed": true,
+              "finalFiles": 612,
+              "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "cancelled": 0,
+              "p50": 31.838292,
+              "p95": 31.838292,
+              "maximum": 31.838292,
+              "lastDiagnosticMs": 58.879792,
+              "memory": {
+                "peakRss": 873218048,
+                "peakFootprint": 716293200,
+                "samples": 162,
+                "cpuSeconds": 1.83586825
+              }
+            }
+          }
+        },
+        "first-reverse": {
+          "phaseMedianUs": {
+            "body-diagnostic-partition": {
+              "baseline": 10625,
+              "candidate": 6211
+            },
+            "body-diagnostic-affected": {
+              "baseline": 3970,
+              "candidate": 3863
+            },
+            "body-context-native-capture": {
+              "baseline": 4723,
+              "candidate": 4589
+            },
+            "body-prepare-witnesses": {
+              "baseline": 11533,
+              "candidate": 13997
+            },
+            "body-validate-files": {
+              "baseline": 7197.5,
+              "candidate": 7517.5
+            }
+          },
+          "rows": {
+            "candidate": {
+              "passed": true,
+              "finalFiles": 612,
+              "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "cancelled": 0,
+              "p50": 34.255459,
+              "p95": 34.255459,
+              "maximum": 34.255459,
+              "lastDiagnosticMs": 59.466875,
+              "memory": {
+                "peakRss": 868958208,
+                "peakFootprint": 712197200,
+                "samples": 163,
+                "cpuSeconds": 1.827998958
+              }
+            },
+            "baseline": {
+              "passed": true,
+              "finalFiles": 612,
+              "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "cancelled": 0,
+              "p50": 30.400583,
+              "p95": 30.400583,
+              "maximum": 30.400583,
+              "lastDiagnosticMs": 61.19825,
+              "memory": {
+                "peakRss": 880902144,
+                "peakFootprint": 723633232,
+                "samples": 165,
+                "cpuSeconds": 1.864057583
+              }
+            },
+            "native": {
+              "passed": true,
+              "finalFiles": 612,
+              "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "cancelled": 0,
+              "p50": 429.286666,
+              "p95": 429.286666,
+              "maximum": 429.286666,
+              "lastDiagnosticMs": 1020.696416,
+              "memory": {
+                "peakRss": 1137459200,
+                "peakFootprint": 1061471528,
+                "samples": 241,
+                "cpuSeconds": 3.096731333
+              }
+            }
+          }
+        },
+        "steady-forward": {
+          "phaseMedianUs": {
+            "body-diagnostic-partition": {
+              "baseline": 11399,
+              "candidate": 6040
+            },
+            "body-diagnostic-affected": {
+              "baseline": 4497,
+              "candidate": 3814
+            },
+            "body-context-native-capture": {
+              "baseline": 7280,
+              "candidate": 4441
+            },
+            "body-prepare-witnesses": {
+              "baseline": 14084,
+              "candidate": 10675
+            },
+            "body-validate-files": {
+              "baseline": 8192.0,
+              "candidate": 8483
+            }
+          },
+          "rows": {
+            "native": {
+              "passed": true,
+              "finalFiles": 612,
+              "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "cancelled": 0,
+              "p50": 2928.118083,
+              "p95": 4468.249708,
+              "maximum": 4784.956208,
+              "lastDiagnosticMs": 5356.400958,
+              "memory": {
+                "peakRss": 1402191872,
+                "peakFootprint": 1027900904,
+                "samples": 555,
+                "cpuSeconds": 11.334017625
+              }
+            },
+            "baseline": {
+              "passed": true,
+              "finalFiles": 612,
+              "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "cancelled": 0,
+              "p50": 11.7319375,
+              "p95": 17.74075,
+              "maximum": 19.365542,
+              "lastDiagnosticMs": 23.188541,
+              "memory": {
+                "peakRss": 1066287104,
+                "peakFootprint": 908182776,
+                "samples": 378,
+                "cpuSeconds": 4.295111791
+              }
+            },
+            "candidate": {
+              "passed": true,
+              "finalFiles": 612,
+              "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "cancelled": 3,
+              "p50": 15.831459,
+              "p95": 22.602167,
+              "maximum": 81.357875,
+              "lastDiagnosticMs": 27.978708,
+              "memory": {
+                "peakRss": 1042219008,
+                "peakFootprint": 964969672,
+                "samples": 352,
+                "cpuSeconds": 4.065167416
+              }
+            }
+          }
+        },
+        "steady-reverse": {
+          "phaseMedianUs": {
+            "body-diagnostic-partition": {
+              "baseline": 10557,
+              "candidate": 12190
+            },
+            "body-diagnostic-affected": {
+              "baseline": 3756,
+              "candidate": 4602
+            },
+            "body-context-native-capture": {
+              "baseline": 4672,
+              "candidate": 22147
+            },
+            "body-prepare-witnesses": {
+              "baseline": 11133,
+              "candidate": 25693
+            },
+            "body-validate-files": {
+              "baseline": 7061.0,
+              "candidate": 7418.5
+            }
+          },
+          "rows": {
+            "candidate": {
+              "passed": true,
+              "finalFiles": 612,
+              "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "cancelled": 0,
+              "p50": 17.971791500000002,
+              "p95": 20.692209,
+              "maximum": 20.894958,
+              "lastDiagnosticMs": 26.693583,
+              "memory": {
+                "peakRss": 1012498432,
+                "peakFootprint": 1042564320,
+                "samples": 373,
+                "cpuSeconds": 4.120302125
+              }
+            },
+            "baseline": {
+              "passed": true,
+              "finalFiles": 612,
+              "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "cancelled": 0,
+              "p50": 17.140812500000003,
+              "p95": 19.746042,
+              "maximum": 21.019375,
+              "lastDiagnosticMs": 25.993166,
+              "memory": {
+                "peakRss": 1067057152,
+                "peakFootprint": 908510432,
+                "samples": 366,
+                "cpuSeconds": 4.088902583
+              }
+            },
+            "native": {
+              "passed": true,
+              "finalFiles": 612,
+              "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "cancelled": 0,
+              "p50": 2203.625958,
+              "p95": 3595.826417,
+              "maximum": 3881.887,
+              "lastDiagnosticMs": 4396.786041,
+              "memory": {
+                "peakRss": 1399783424,
+                "peakFootprint": 1025869288,
+                "samples": 466,
+                "cpuSeconds": 9.943808291
+              }
+            }
+          }
+        }
+      },
+      "candidateSha256": "a33b32134519b442c30df6b51475ae0c6e4dde102b04d9f6be70417e78f627fe",
+      "baselineSha256": "b2549df1a8a83111669914ab9b181068e030728c4b53bc1fd6aca40109e49b88",
+      "scope": "Both-order first/steady feasibility only. First phase samples are single observations, not confidence/qualification. Original20 gates unchanged."
+    },
+    "sourceAudit": {
+      "passed": true,
+      "sourceChecks": {
+        "include/document/BodyDiagnosticCache.h": true,
+        "src/document/BodyDiagnosticCache.cpp": true,
+        "tests/cpp/ContextWatchTests.cpp": true
+      },
+      "candidateIdentity": "a33b32134519b442c30df6b51475ae0c6e4dde102b04d9f6be70417e78f627fe",
+      "probeCompleted": true,
+      "failedChecks": [
+        "steady-forward-memory-footprint",
+        "steady-forward-steady-query-p50",
+        "steady-reverse-memory-footprint"
+      ],
+      "inference": "Idle source-manager counts/source bytes and allocator in-use are equal to baseline. This does not prove active peak equivalence or waive failed performance/memory gates. No leak or OS-cause conclusion established.",
+      "decision": "Do not qualify combined view+URI candidate. Split off pointer views to preserve original retained diagnostic storage/allocation shape; evaluate only constructor-local URI resolution dedup as a distinct implementation. No unchanged candidate repeat."
+    },
+    "freshTargeted": "Native94/65675 andASan94/65675 passed; fullcandidatequalificationnotrun",
+    "observation": "Idle allocator-in-use613759728 bytes and identical source-manager counts do not waive active memory peak failures. No OS/leak causal claim."
+  },
+  "uriOnlyCandidate": {
+    "accepted": false,
+    "stage": "untracked/stage-bc-diagnostic-route-resolution-2026-10-27",
+    "evaluation": {
+      "feasibilityPassed": false,
+      "checks": {
+        "first-forward-612-complete-maps": true,
+        "first-forward-memory-footprint": true,
+        "first-forward-partition-15percent": true,
+        "first-forward-first-diagnostic": false,
+        "first-reverse-612-complete-maps": true,
+        "first-reverse-memory-footprint": true,
+        "first-reverse-partition-15percent": true,
+        "first-reverse-first-diagnostic": true,
+        "steady-forward-612-complete-maps": true,
+        "steady-forward-memory-footprint": true,
+        "steady-forward-steady-query-p50": false,
+        "steady-reverse-612-complete-maps": true,
+        "steady-reverse-memory-footprint": true,
+        "steady-reverse-steady-query-p50": true
+      },
+      "results": {
+        "first-forward": {
+          "phaseMedianUs": {
+            "body-diagnostic-partition": {
+              "baseline": 11555,
+              "candidate": 9801
+            },
+            "body-diagnostic-affected": {
+              "baseline": 3945,
+              "candidate": 4227
+            },
+            "body-context-native-capture": {
+              "baseline": 4990,
+              "candidate": 6337
+            },
+            "body-prepare-witnesses": {
+              "baseline": 14395,
+              "candidate": 13740
+            },
+            "body-validate-files": {
+              "baseline": 7436.5,
+              "candidate": 9676.5
+            }
+          },
+          "rows": {
+            "native": {
+              "passed": true,
+              "finalFiles": 612,
+              "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "cancelled": 0,
+              "p50": 443.82175,
+              "p95": 443.82175,
+              "maximum": 443.82175,
+              "lastDiagnosticMs": 1011.696625,
+              "memory": {
+                "peakRss": 1140113408,
+                "peakFootprint": 986449192,
+                "samples": 215,
+                "cpuSeconds": 2.881706208
+              }
+            },
+            "baseline": {
+              "passed": true,
+              "finalFiles": 612,
+              "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "cancelled": 0,
+              "p50": 35.127208,
+              "p95": 35.127208,
+              "maximum": 35.127208,
+              "lastDiagnosticMs": 67.406958,
+              "memory": {
+                "peakRss": 881475584,
+                "peakFootprint": 724075600,
+                "samples": 161,
+                "cpuSeconds": 2.02309375
+              }
+            },
+            "candidate": {
+              "passed": true,
+              "finalFiles": 612,
+              "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "cancelled": 0,
+              "p50": 40.264459,
+              "p95": 40.264459,
+              "maximum": 40.264459,
+              "lastDiagnosticMs": 74.304792,
+              "memory": {
+                "peakRss": 877543424,
+                "peakFootprint": 720553040,
+                "samples": 163,
+                "cpuSeconds": 2.061024166
+              }
+            }
+          }
+        },
+        "first-reverse": {
+          "phaseMedianUs": {
+            "body-diagnostic-partition": {
+              "baseline": 13243,
+              "candidate": 7338
+            },
+            "body-diagnostic-affected": {
+              "baseline": 3907,
+              "candidate": 3816
+            },
+            "body-context-native-capture": {
+              "baseline": 5146,
+              "candidate": 5065
+            },
+            "body-prepare-witnesses": {
+              "baseline": 15363,
+              "candidate": 10820
+            },
+            "body-validate-files": {
+              "baseline": 8471.5,
+              "candidate": 6616.0
+            }
+          },
+          "rows": {
+            "candidate": {
+              "passed": true,
+              "finalFiles": 612,
+              "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "cancelled": 0,
+              "p50": 30.691375,
+              "p95": 30.691375,
+              "maximum": 30.691375,
+              "lastDiagnosticMs": 57.570125,
+              "memory": {
+                "peakRss": 874037248,
+                "peakFootprint": 717096016,
+                "samples": 154,
+                "cpuSeconds": 1.988347
+              }
+            },
+            "baseline": {
+              "passed": true,
+              "finalFiles": 612,
+              "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "cancelled": 0,
+              "p50": 38.872541,
+              "p95": 38.872541,
+              "maximum": 38.872541,
+              "lastDiagnosticMs": 72.787416,
+              "memory": {
+                "peakRss": 878624768,
+                "peakFootprint": 721585232,
+                "samples": 159,
+                "cpuSeconds": 2.060926458
+              }
+            },
+            "native": {
+              "passed": true,
+              "finalFiles": 612,
+              "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "cancelled": 0,
+              "p50": 464.194459,
+              "p95": 464.194459,
+              "maximum": 464.194459,
+              "lastDiagnosticMs": 1020.96275,
+              "memory": {
+                "peakRss": 1140408320,
+                "peakFootprint": 986465576,
+                "samples": 194,
+                "cpuSeconds": 2.934757041
+              }
+            }
+          }
+        },
+        "steady-forward": {
+          "phaseMedianUs": {
+            "body-diagnostic-partition": {
+              "baseline": 11071,
+              "candidate": 8063
+            },
+            "body-diagnostic-affected": {
+              "baseline": 3884,
+              "candidate": 3918
+            },
+            "body-context-native-capture": {
+              "baseline": 4604,
+              "candidate": 5549
+            },
+            "body-prepare-witnesses": {
+              "baseline": 10803,
+              "candidate": 11094
+            },
+            "body-validate-files": {
+              "baseline": 7831.5,
+              "candidate": 10796.0
+            }
+          },
+          "rows": {
+            "native": {
+              "passed": true,
+              "finalFiles": 612,
+              "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "cancelled": 0,
+              "p50": 2252.355146,
+              "p95": 3898.474625,
+              "maximum": 4375.784959,
+              "lastDiagnosticMs": 4891.455917,
+              "memory": {
+                "peakRss": 1397964800,
+                "peakFootprint": 1025852904,
+                "samples": 462,
+                "cpuSeconds": 10.832306458
+              }
+            },
+            "baseline": {
+              "passed": true,
+              "finalFiles": 612,
+              "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "cancelled": 0,
+              "p50": 10.927167,
+              "p95": 13.208125,
+              "maximum": 15.734292,
+              "lastDiagnosticMs": 24.071917,
+              "memory": {
+                "peakRss": 1069383680,
+                "peakFootprint": 907986168,
+                "samples": 316,
+                "cpuSeconds": 3.90384675
+              }
+            },
+            "candidate": {
+              "passed": true,
+              "finalFiles": 612,
+              "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "cancelled": 0,
+              "p50": 14.6115625,
+              "p95": 18.40675,
+              "maximum": 20.32575,
+              "lastDiagnosticMs": 22.92675,
+              "memory": {
+                "peakRss": 1062928384,
+                "peakFootprint": 901989624,
+                "samples": 333,
+                "cpuSeconds": 4.291740875
+              }
+            }
+          }
+        },
+        "steady-reverse": {
+          "phaseMedianUs": {
+            "body-diagnostic-partition": {
+              "baseline": 10336,
+              "candidate": 8519
+            },
+            "body-diagnostic-affected": {
+              "baseline": 3828,
+              "candidate": 3923
+            },
+            "body-context-native-capture": {
+              "baseline": 9024,
+              "candidate": 4738
+            },
+            "body-prepare-witnesses": {
+              "baseline": 14311,
+              "candidate": 15099
+            },
+            "body-validate-files": {
+              "baseline": 10373.5,
+              "candidate": 9636.0
+            }
+          },
+          "rows": {
+            "candidate": {
+              "passed": true,
+              "finalFiles": 612,
+              "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "cancelled": 0,
+              "p50": 13.305312,
+              "p95": 17.168542,
+              "maximum": 18.110584,
+              "lastDiagnosticMs": 21.951125,
+              "memory": {
+                "peakRss": 1063452672,
+                "peakFootprint": 902464712,
+                "samples": 339,
+                "cpuSeconds": 4.515124041
+              }
+            },
+            "baseline": {
+              "passed": true,
+              "finalFiles": 612,
+              "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "cancelled": 0,
+              "p50": 14.601354,
+              "p95": 17.115708,
+              "maximum": 21.738459,
+              "lastDiagnosticMs": 20.53175,
+              "memory": {
+                "peakRss": 1068679168,
+                "peakFootprint": 907740384,
+                "samples": 354,
+                "cpuSeconds": 4.637636333
+              }
+            },
+            "native": {
+              "passed": true,
+              "finalFiles": 612,
+              "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "cancelled": 0,
+              "p50": 2999.325146,
+              "p95": 5033.581083,
+              "maximum": 5499.065458,
+              "lastDiagnosticMs": 6045.948375,
+              "memory": {
+                "peakRss": 1396670464,
+                "peakFootprint": 1026360784,
+                "samples": 522,
+                "cpuSeconds": 12.061391
+              }
+            }
+          }
+        }
+      },
+      "candidateSha256": "b7c35c9a028cedb803741945456e52be2845bcf9060b7350427307be698a47ce",
+      "baselineSha256": "b2549df1a8a83111669914ab9b181068e030728c4b53bc1fd6aca40109e49b88",
+      "scope": "Both-order first/steady feasibility only. First phase samples are single observations, not confidence/qualification. Original20 gates unchanged."
+    },
+    "sourceAudit": {
+      "sourceIdentityPassed": true,
+      "sourceChecks": {
+        "include/document/BodyDiagnosticCache.h": true,
+        "src/document/BodyDiagnosticCache.cpp": true,
+        "tests/cpp/ContextWatchTests.cpp": true
+      },
+      "candidateSha256": "b7c35c9a028cedb803741945456e52be2845bcf9060b7350427307be698a47ce",
+      "feasibilityPassed": false,
+      "failedChecks": [
+        "first-forward-first-diagnostic",
+        "steady-forward-steady-query-p50"
+      ],
+      "productionStatus": "Experimental working candidate only; no qualification or main push. Keep local URI-only optimization pending broader first-witness work; no changed original gates.",
+      "originalAll20StillFailed": true
+    },
+    "freshNativeAsanTargeted": "Each94/65675 passed. Complete correctness not claimed for this candidate."
+  },
+  "proofOriginCensus": {
+    "stage": "untracked/stage-bc-proof-origin-census-2026-10-27",
+    "analysis": {
+      "purpose": "Upper-bound attribution only, not proof provenance or permission to filter",
+      "fixedFiles": 374,
+      "recordedLookups": 2466,
+      "successfulLookups": 475,
+      "negativeLookups": 1991,
+      "headerRequests": 268,
+      "fixedOriginHeaderRequests": 20,
+      "groups": {
+        "editable-only": 1971,
+        "potential-fixed-only": 20
+      },
+      "distinctHeaderNamesByGroup": {
+        "editable-only": [
+          [
+            "uvm_macros.svh",
+            49
+          ],
+          [
+            "uvmt_cva6_vseq_lib.sv",
+            46
+          ],
+          [
+            "uvmt_cva6_firmware_test.sv",
+            44
+          ],
+          [
+            "uvmt_cva6_base_test.sv",
+            43
+          ],
+          [
+            "uvmt_cva6_test_cfg.sv",
+            43
+          ],
+          [
+            "uvme_cvxif_base_vseq.sv",
+            41
+          ],
+          [
+            "uvme_cvxif_vseq.sv",
+            41
+          ],
+          [
+            "uvme_axi_fw_preload_seq.sv",
+            40
+          ]
+        ],
+        "potential-fixed-only": [
+          [
+            "hpdcache_typedef.svh",
+            9
+          ],
+          [
+            "prim_secded_inc.svh",
+            6
+          ],
+          [
+            "registers.svh",
+            3
+          ],
+          [
+            "cvxif_types.svh",
+            1
+          ],
+          [
+            "rvfi_types.svh",
+            1
+          ]
+        ]
+      },
+      "unknownAndSharedCannotBeSkipped": true,
+      "limitations": [
+        "Header requests encode origins, but current snapshot does not record per-lookup origin edges or unattributed direct loader calls. A reconstructed fixed-only path is only a potential upper bound.",
+        "Lexical path normalization used for attribution can merge aliases; a production proof cannot rely on this inference.",
+        "Keep every existing input check. An actual optimization needs explicit provenance recording including every cache hit and a conservative unknown flag.",
+        "Only dependencies of declared fixed scopes may use their manual-rebuild contract. Mutable-origin/shared lookups and current project inputs must retain their complete fresh proofs."
+      ],
+      "runtime": "Single Native/b254/R&D metadata capture; all612 diagnostics and hover match. All timing observations discarded.",
+      "networkUsed": false
+    },
+    "decision": {
+      "binarySha256": "b7c35c9a028cedb803741945456e52be2845bcf9060b7350427307be698a47ce",
+      "sourceInstrumentationRemoved": true,
+      "negativeLookupsFiltered": false,
+      "decision": "Only20 of1991 negative lookups potentially fixed-only; inadequate upside to introduce SDK provenance API/filter. Preserve all physical proofs. Current metadata cannot establish exclusive provenance anyway.",
+      "productionSdkChanged": false
+    }
+  },
+  "negativeParentGuard": {
+    "stage": "untracked/stage-bc-negative-parent-guard-2026-10-27",
+    "accepted": false,
+    "analysis": {
+      "qualification": false,
+      "medianMs": {
+        "0": 5.4565,
+        "1": 5.8825,
+        "2": 5.472
+      },
+      "ratioToOrdinaryControls": {
+        "0": 1.0780720241913315,
+        "2": 1.075018274853801
+      },
+      "all2237InputsPass60Rounds": true,
+      "productionChanged": false,
+      "networkUsed": false,
+      "feasibilityPassed": false
+    },
+    "productionChanged": false
+  },
+  "scopedHoverQos": {
+    "stage": "untracked/stage-bc-scoped-hover-qos-2026-10-27",
+    "accepted": false,
+    "decision": {
+      "accepted": false,
+      "physicalProofsChanged": false,
+      "productionPolicyChanged": false,
+      "failedChecks": [
+        "forward-vs-baseline-p50-10percent",
+        "forward-vs-control-p50-10percent",
+        "reverse-vs-baseline-p50-10percent",
+        "reverse-vs-baseline-lastDiagnostic",
+        "reverse-vs-control-p50-10percent"
+      ],
+      "bothOrdersAll612MapsHoverIdleCorrect": true,
+      "allCandidateOverridesPaired": "51started/51ended in each order; no failures",
+      "reason": "Scoped USER_INTERACTIVE gives no10% query benefit vs both controls. Do not adopt or repeat unchanged.",
+      "sourceIdentityPassedBeforeRestore": true,
+      "restorePending": false,
+      "restoredBinarySha256": "b7c35c9a028cedb803741945456e52be2845bcf9060b7350427307be698a47ce",
+      "temporaryQosHookRemoved": true
+    },
+    "productionPolicyChanged": false
+  },
+  "lineSyntaxMemo": {
+    "stage": "untracked/stage-bc-line-syntax-cache-2026-10-27",
+    "mechanism": "Validated exact suffix+raw-line one-slot memo;97.5% lower line-proof phase,49hits/1replay vs50replays each control",
+    "evaluation": {
+      "mechanismGatePassed": false,
+      "checks": {
+        "forward-same-binary": true,
+        "forward-612-maps": true,
+        "forward-cache-used": true,
+        "forward-vs-baseline-line-proof-75percent": true,
+        "forward-vs-baseline-p50": true,
+        "forward-vs-baseline-p95": false,
+        "forward-vs-baseline-lastDiagnosticMs": false,
+        "forward-vs-baseline-cpuSeconds": true,
+        "forward-vs-baseline-peakRss": true,
+        "forward-vs-baseline-peakFootprint": true,
+        "forward-vs-control-line-proof-75percent": true,
+        "forward-vs-control-p50": true,
+        "forward-vs-control-p95": false,
+        "forward-vs-control-lastDiagnosticMs": false,
+        "forward-vs-control-cpuSeconds": true,
+        "forward-vs-control-peakRss": true,
+        "forward-vs-control-peakFootprint": true,
+        "reverse-same-binary": true,
+        "reverse-612-maps": true,
+        "reverse-cache-used": true,
+        "reverse-vs-baseline-line-proof-75percent": true,
+        "reverse-vs-baseline-p50": true,
+        "reverse-vs-baseline-p95": true,
+        "reverse-vs-baseline-lastDiagnosticMs": true,
+        "reverse-vs-baseline-cpuSeconds": true,
+        "reverse-vs-baseline-peakRss": true,
+        "reverse-vs-baseline-peakFootprint": true,
+        "reverse-vs-control-line-proof-75percent": true,
+        "reverse-vs-control-p50": true,
+        "reverse-vs-control-p95": true,
+        "reverse-vs-control-lastDiagnosticMs": true,
+        "reverse-vs-control-cpuSeconds": true,
+        "reverse-vs-control-peakRss": true,
+        "reverse-vs-control-peakFootprint": true
+      },
+      "results": {
+        "forward": {
+          "rows": {
+            "native": {
+              "binarySha256": "f094883ab226169403cf08465bb95ce503c4d35c4c0f822131486fabfcfa804e",
+              "p50": 2065.3487705000002,
+              "p95": 3433.707417,
+              "maximum": 3739.15275,
+              "lastDiagnosticMs": 4258.61325,
+              "memory": {
+                "peakRss": 1395638272,
+                "peakFootprint": 1022789072,
+                "samples": 427,
+                "cpuSeconds": 9.819854541
+              },
+              "cancelled": 0,
+              "finalFiles": 612,
+              "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "status": {
+                "active": false,
+                "accepted": 0,
+                "decline": "",
+                "version": 0,
+                "localDiagnosticUpdates": 0,
+                "localDiagnosticDecline": "",
+                "localDiagnosticProceduresReused": 0,
+                "localDiagnosticProceduresRecomputed": 0,
+                "localDiagnosticRenderingsReused": 0,
+                "localDiagnosticRenderingsFresh": 0,
+                "certificateRenewals": 0,
+                "retainedHandles": 0,
+                "sourceMemory": {
+                  "dataBytes": 10516697,
+                  "queryBytes": 0,
+                  "queryBuffers": 0,
+                  "retainedNameBytes": 90799,
+                  "indexBytes": 23975
+                },
+                "sources": []
+              }
+            },
+            "baseline": {
+              "binarySha256": "f094883ab226169403cf08465bb95ce503c4d35c4c0f822131486fabfcfa804e",
+              "p50": 9.214604000000001,
+              "p95": 11.3335,
+              "maximum": 12.05675,
+              "lastDiagnosticMs": 18.478833,
+              "memory": {
+                "peakRss": 1067384832,
+                "peakFootprint": 905200840,
+                "samples": 308,
+                "cpuSeconds": 3.722093208
+              },
+              "cancelled": 0,
+              "finalFiles": 612,
+              "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "status": {
+                "active": true,
+                "accepted": 50,
+                "decline": "",
+                "version": 51,
+                "localDiagnosticUpdates": 50,
+                "localDiagnosticDecline": "",
+                "localDiagnosticProceduresReused": 0,
+                "localDiagnosticProceduresRecomputed": 0,
+                "localDiagnosticRenderingsReused": 0,
+                "localDiagnosticRenderingsFresh": 65,
+                "certificateRenewals": 0,
+                "retainedHandles": 0,
+                "sourceMemory": {
+                  "dataBytes": 10088411,
+                  "queryBytes": 30046,
+                  "queryBuffers": 2,
+                  "retainedNameBytes": 22455,
+                  "indexBytes": 24700
+                },
+                "sources": []
+              }
+            },
+            "candidate": {
+              "binarySha256": "f094883ab226169403cf08465bb95ce503c4d35c4c0f822131486fabfcfa804e",
+              "p50": 9.402208,
+              "p95": 19.315333,
+              "maximum": 20.051458,
+              "lastDiagnosticMs": 25.587083,
+              "memory": {
+                "peakRss": 1067220992,
+                "peakFootprint": 905037000,
+                "samples": 312,
+                "cpuSeconds": 3.746578083
+              },
+              "cancelled": 0,
+              "finalFiles": 612,
+              "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "status": {
+                "active": true,
+                "accepted": 50,
+                "decline": "",
+                "version": 51,
+                "localDiagnosticUpdates": 50,
+                "localDiagnosticDecline": "",
+                "localDiagnosticProceduresReused": 0,
+                "localDiagnosticProceduresRecomputed": 0,
+                "localDiagnosticRenderingsReused": 0,
+                "localDiagnosticRenderingsFresh": 65,
+                "certificateRenewals": 0,
+                "retainedHandles": 0,
+                "sourceMemory": {
+                  "dataBytes": 10088411,
+                  "queryBytes": 30046,
+                  "queryBuffers": 2,
+                  "retainedNameBytes": 22455,
+                  "indexBytes": 24700
+                },
+                "sources": []
+              }
+            },
+            "control": {
+              "binarySha256": "f094883ab226169403cf08465bb95ce503c4d35c4c0f822131486fabfcfa804e",
+              "p50": 9.301229500000002,
+              "p95": 12.186875,
+              "maximum": 12.656833,
+              "lastDiagnosticMs": 18.657583,
+              "memory": {
+                "peakRss": 1065418752,
+                "peakFootprint": 902268128,
+                "samples": 313,
+                "cpuSeconds": 3.764769958
+              },
+              "cancelled": 0,
+              "finalFiles": 612,
+              "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "status": {
+                "active": true,
+                "accepted": 50,
+                "decline": "",
+                "version": 51,
+                "localDiagnosticUpdates": 50,
+                "localDiagnosticDecline": "",
+                "localDiagnosticProceduresReused": 0,
+                "localDiagnosticProceduresRecomputed": 0,
+                "localDiagnosticRenderingsReused": 0,
+                "localDiagnosticRenderingsFresh": 65,
+                "certificateRenewals": 0,
+                "retainedHandles": 0,
+                "sourceMemory": {
+                  "dataBytes": 10088411,
+                  "queryBytes": 30046,
+                  "queryBuffers": 2,
+                  "retainedNameBytes": 22455,
+                  "indexBytes": 24700
+                },
+                "sources": []
+              }
+            }
+          },
+          "phaseMediansUs": {
+            "native": {},
+            "baseline": {
+              "local-publish-line-proof": 834.0,
+              "local-publish-analyze": 275.5,
+              "body-validate-files": 6747.5
+            },
+            "candidate": {
+              "local-publish-line-proof": 20.0,
+              "local-publish-analyze": 267.5,
+              "body-validate-files": 6727.0
+            },
+            "control": {
+              "local-publish-line-proof": 804.0,
+              "local-publish-analyze": 264.0,
+              "body-validate-files": 6771.5
+            }
+          },
+          "syntaxEvents": {
+            "native": {
+              "body-line-syntax-reuse": 0,
+              "body-line-syntax-replay": 0
+            },
+            "baseline": {
+              "body-line-syntax-reuse": 0,
+              "body-line-syntax-replay": 50
+            },
+            "candidate": {
+              "body-line-syntax-reuse": 49,
+              "body-line-syntax-replay": 1
+            },
+            "control": {
+              "body-line-syntax-reuse": 0,
+              "body-line-syntax-replay": 50
+            }
+          }
+        },
+        "reverse": {
+          "rows": {
+            "control": {
+              "binarySha256": "f094883ab226169403cf08465bb95ce503c4d35c4c0f822131486fabfcfa804e",
+              "p50": 9.271604499999999,
+              "p95": 12.528,
+              "maximum": 15.69225,
+              "lastDiagnosticMs": 19.898833,
+              "memory": {
+                "peakRss": 1067106304,
+                "peakFootprint": 905200864,
+                "samples": 312,
+                "cpuSeconds": 3.759071583
+              },
+              "cancelled": 0,
+              "finalFiles": 612,
+              "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "status": {
+                "active": true,
+                "accepted": 50,
+                "decline": "",
+                "version": 51,
+                "localDiagnosticUpdates": 50,
+                "localDiagnosticDecline": "",
+                "localDiagnosticProceduresReused": 0,
+                "localDiagnosticProceduresRecomputed": 0,
+                "localDiagnosticRenderingsReused": 0,
+                "localDiagnosticRenderingsFresh": 65,
+                "certificateRenewals": 0,
+                "retainedHandles": 0,
+                "sourceMemory": {
+                  "dataBytes": 10088411,
+                  "queryBytes": 30046,
+                  "queryBuffers": 2,
+                  "retainedNameBytes": 22455,
+                  "indexBytes": 24700
+                },
+                "sources": []
+              }
+            },
+            "candidate": {
+              "binarySha256": "f094883ab226169403cf08465bb95ce503c4d35c4c0f822131486fabfcfa804e",
+              "p50": 9.251896,
+              "p95": 12.132,
+              "maximum": 14.01,
+              "lastDiagnosticMs": 17.138084,
+              "memory": {
+                "peakRss": 1061355520,
+                "peakFootprint": 895485128,
+                "samples": 317,
+                "cpuSeconds": 3.669666458
+              },
+              "cancelled": 0,
+              "finalFiles": 612,
+              "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "status": {
+                "active": true,
+                "accepted": 50,
+                "decline": "",
+                "version": 51,
+                "localDiagnosticUpdates": 50,
+                "localDiagnosticDecline": "",
+                "localDiagnosticProceduresReused": 0,
+                "localDiagnosticProceduresRecomputed": 0,
+                "localDiagnosticRenderingsReused": 0,
+                "localDiagnosticRenderingsFresh": 65,
+                "certificateRenewals": 0,
+                "retainedHandles": 0,
+                "sourceMemory": {
+                  "dataBytes": 10088411,
+                  "queryBytes": 30046,
+                  "queryBuffers": 2,
+                  "retainedNameBytes": 22455,
+                  "indexBytes": 24700
+                },
+                "sources": []
+              }
+            },
+            "baseline": {
+              "binarySha256": "f094883ab226169403cf08465bb95ce503c4d35c4c0f822131486fabfcfa804e",
+              "p50": 9.363021,
+              "p95": 18.226375,
+              "maximum": 18.917458,
+              "lastDiagnosticMs": 18.939084,
+              "memory": {
+                "peakRss": 1064943616,
+                "peakFootprint": 901760200,
+                "samples": 311,
+                "cpuSeconds": 3.762079625
+              },
+              "cancelled": 0,
+              "finalFiles": 612,
+              "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "status": {
+                "active": true,
+                "accepted": 50,
+                "decline": "",
+                "version": 51,
+                "localDiagnosticUpdates": 50,
+                "localDiagnosticDecline": "",
+                "localDiagnosticProceduresReused": 0,
+                "localDiagnosticProceduresRecomputed": 0,
+                "localDiagnosticRenderingsReused": 0,
+                "localDiagnosticRenderingsFresh": 65,
+                "certificateRenewals": 0,
+                "retainedHandles": 0,
+                "sourceMemory": {
+                  "dataBytes": 10088411,
+                  "queryBytes": 30046,
+                  "queryBuffers": 2,
+                  "retainedNameBytes": 22455,
+                  "indexBytes": 24700
+                },
+                "sources": []
+              }
+            },
+            "native": {
+              "binarySha256": "f094883ab226169403cf08465bb95ce503c4d35c4c0f822131486fabfcfa804e",
+              "p50": 2043.3029999999999,
+              "p95": 3394.88175,
+              "maximum": 3700.944583,
+              "lastDiagnosticMs": 4196.308542,
+              "memory": {
+                "peakRss": 1398128640,
+                "peakFootprint": 1024722408,
+                "samples": 400,
+                "cpuSeconds": 9.74921325
+              },
+              "cancelled": 0,
+              "finalFiles": 612,
+              "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+              "status": {
+                "active": false,
+                "accepted": 0,
+                "decline": "",
+                "version": 0,
+                "localDiagnosticUpdates": 0,
+                "localDiagnosticDecline": "",
+                "localDiagnosticProceduresReused": 0,
+                "localDiagnosticProceduresRecomputed": 0,
+                "localDiagnosticRenderingsReused": 0,
+                "localDiagnosticRenderingsFresh": 0,
+                "certificateRenewals": 0,
+                "retainedHandles": 0,
+                "sourceMemory": {
+                  "dataBytes": 10516697,
+                  "queryBytes": 0,
+                  "queryBuffers": 0,
+                  "retainedNameBytes": 90799,
+                  "indexBytes": 23975
+                },
+                "sources": []
+              }
+            }
+          },
+          "phaseMediansUs": {
+            "control": {
+              "local-publish-line-proof": 816.5,
+              "local-publish-analyze": 269.5,
+              "body-validate-files": 6756.0
+            },
+            "candidate": {
+              "local-publish-line-proof": 20.0,
+              "local-publish-analyze": 270.0,
+              "body-validate-files": 6783.5
+            },
+            "baseline": {
+              "local-publish-line-proof": 826.0,
+              "local-publish-analyze": 272.0,
+              "body-validate-files": 6749.0
+            },
+            "native": {}
+          },
+          "syntaxEvents": {
+            "control": {
+              "body-line-syntax-reuse": 0,
+              "body-line-syntax-replay": 50
+            },
+            "candidate": {
+              "body-line-syntax-reuse": 49,
+              "body-line-syntax-replay": 1
+            },
+            "baseline": {
+              "body-line-syntax-reuse": 0,
+              "body-line-syntax-replay": 50
+            },
+            "native": {
+              "body-line-syntax-reuse": 0,
+              "body-line-syntax-replay": 0
+            }
+          }
+        }
+      },
+      "binarySha256": "f094883ab226169403cf08465bb95ce503c4d35c4c0f822131486fabfcfa804e",
+      "scope": "Pure syntax memo feasibility only, same binary two no-cache controls both orders. Complete byte/EOF/path/absence/version proofs still run on every publication. No original20 qualification."
+    },
+    "sourceAudit": {
+      "sourceIdentityPassed": true,
+      "sourceChecks": {
+        "include/document/BodyLineProof.h": true,
+        "src/document/BodyLineProof.cpp": true,
+        "src/document/BodyDiagnosticCache.cpp": true,
+        "tests/cpp/MethodScopeOverlayTests.cpp": true
+      },
+      "binarySha256": "f094883ab226169403cf08465bb95ce503c4d35c4c0f822131486fabfcfa804e",
+      "mechanismValidated": "Both orders49syntax memo hits/1full replay vs50replays each control; line-proof834/804/826/816.5us\u219220us, about97.5% lower. New source-buffer allocation regression and semantic/cancellation/suffix/budget tests pass.",
+      "freshNativeAsanTargeted": "Each97cases65747assertions +38cases19846assertions",
+      "endToEndFeasibilityPassed": false,
+      "failedChecks": [
+        "forward-vs-baseline-p95",
+        "forward-vs-baseline-lastDiagnosticMs",
+        "forward-vs-control-p95",
+        "forward-vs-control-lastDiagnosticMs"
+      ],
+      "decision": "Keep pure syntax mechanism as work in progress, replace temporary env hook with configurable budget under existing default-off flags. Do not claim performance acceptance: forwardp95 and finaldiag failed. Next combine with bounded same-RPC query+diagnostic preparation and one complete final physical proof, then new full qualification. Do not resample unchanged prototype.",
+      "goalComplete": false,
+      "originalFormal20StillFailed": true
+    },
+    "qualified": false
+  }
+}

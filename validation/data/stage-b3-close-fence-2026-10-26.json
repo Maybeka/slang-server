@@ -1,0 +1,46 @@
+{
+  "stage": "B3",
+  "complete": false,
+  "goalComplete": false,
+  "candidateSha256": "c7e483226c18896bcd8fb312cb5abf436f19012039bce63da49a0a8df4182be0",
+  "parentCandidateSha256": "4e7f70f5abc9457357d52d0e191d68eb897308a7320165516f24cf6ac44f9a18",
+  "closedNotificationFix": "Pending close no longer attempts a failing configuration admission before discarding its deferred overlay",
+  "targeted": {
+    "passed": true,
+    "cases": 1,
+    "assertions": 462,
+    "log": "untracked/stage-b3-deferred-release-2026-10-26/close-repair-targeted.log"
+  },
+  "wireHarnessSha256": "e079df31dbe0eca36a1e736355b35111864c3a416e018eb708de9a9a4c74310e",
+  "multiDocumentWirePassed": true,
+  "closeDuringInvalidConfigWirePassed": true,
+  "knownFailures": [
+    "didOpen during invalid configuration is dropped before its latest text/version can replace the deferred overlay",
+    "didSave with corrected full text during invalid configuration is dropped, so repair reuses older deferred text"
+  ],
+  "parentCorrectness": {
+    "originalExecSession": 61120,
+    "originalExitCode": 0,
+    "nativeStates": 448,
+    "asanStates": 38,
+    "nativeArchives": 112,
+    "passedForParentBinaryOnly": true,
+    "serverAsanCases": 924,
+    "serverAsanAssertions": 171960,
+    "missingNewStandaloneDocumentEditsTests": 3
+  },
+  "asanDiscoveryRepair": {
+    "reconfiguredOffline": true,
+    "newDocumentEditsTestsNowInBuildManifest": true,
+    "rebuiltAndRetested": false
+  },
+  "newCandidateFullCorrectness": "pending; parent evidence does not prove current c7 build",
+  "next": [
+    "Unify didOpen/didSave deferred input synchronization without requiring successful configuration analysis",
+    "Preserve new-open URI and version resets; handle includes from newly opened unsaved files in replacement inputs",
+    "Replay deferred save indexing only after latest text admission, without publishing stale diagnostics",
+    "Run invalid-config close/reopen/save and normal multi-document Native/ASan wire oracles",
+    "Complete current candidate Native/ASan test discovery and broad CVA correctness before performance qualification"
+  ],
+  "networkUsed": false
+}

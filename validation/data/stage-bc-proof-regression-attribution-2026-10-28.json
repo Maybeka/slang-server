@@ -1,0 +1,733 @@
+{
+  "status": "Attribution complete; no new production optimization accepted",
+  "initialOrdinaryBodyRegressionStillFailed": true,
+  "parallelSummaryReplayDefaultOff": true,
+  "fileReadAttribution": {
+    "purpose": "Mechanism attribution only, not performance qualification",
+    "passedComplete612AndHover": true,
+    "rows": [
+      {
+        "label": "native",
+        "binarySha256": "a101acd0d39df675c3e9fd6a73d91c8cdbead151032b5ec8654c168a256fbb11",
+        "finalFiles": 612,
+        "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799"
+      },
+      {
+        "label": "baseline",
+        "binarySha256": "a101acd0d39df675c3e9fd6a73d91c8cdbead151032b5ec8654c168a256fbb11",
+        "finalFiles": 612,
+        "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799"
+      },
+      {
+        "label": "candidate",
+        "binarySha256": "a101acd0d39df675c3e9fd6a73d91c8cdbead151032b5ec8654c168a256fbb11",
+        "finalFiles": 612,
+        "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799"
+      }
+    ],
+    "census": {
+      "baseline": {
+        "batches": 29,
+        "identities": [
+          [
+            242,
+            0,
+            0,
+            981937103214146811,
+            242,
+            1842346
+          ],
+          [
+            2237,
+            1993,
+            1844311,
+            7991883730528210997,
+            244,
+            1844311
+          ]
+        ],
+        "modes": {
+          "0": {
+            "count": 8,
+            "phaseMedianUs": 0.0,
+            "batchMedianUs": 8874.083,
+            "processCpuTicksMedian": 8888.5
+          },
+          "1": {
+            "count": 7,
+            "phaseMedianUs": 5336.879,
+            "batchMedianUs": 11769.75,
+            "processCpuTicksMedian": 11794
+          },
+          "2": {
+            "count": 7,
+            "phaseMedianUs": 371.499,
+            "batchMedianUs": 8923.167,
+            "processCpuTicksMedian": 8937
+          },
+          "3": {
+            "count": 7,
+            "phaseMedianUs": 2257.999,
+            "batchMedianUs": 11948.833,
+            "processCpuTicksMedian": 11969
+          }
+        }
+      },
+      "candidate": {
+        "batches": 29,
+        "identities": [
+          [
+            242,
+            0,
+            0,
+            981937103214146811,
+            242,
+            1842346
+          ],
+          [
+            2237,
+            1993,
+            1844384,
+            7991883730528210997,
+            244,
+            1844384
+          ]
+        ],
+        "modes": {
+          "0": {
+            "count": 8,
+            "phaseMedianUs": 0.0,
+            "batchMedianUs": 9033.125,
+            "processCpuTicksMedian": 9047.5
+          },
+          "1": {
+            "count": 7,
+            "phaseMedianUs": 5161.209,
+            "batchMedianUs": 11261.333,
+            "processCpuTicksMedian": 11276
+          },
+          "2": {
+            "count": 7,
+            "phaseMedianUs": 382.374,
+            "batchMedianUs": 8928.958,
+            "processCpuTicksMedian": 8916
+          },
+          "3": {
+            "count": 7,
+            "phaseMedianUs": 2162.204,
+            "batchMedianUs": 11879.416,
+            "processCpuTicksMedian": 11903
+          }
+        }
+      }
+    },
+    "findings": [
+      "Both arms prove2237 ordered inputs:1993 missing,244 present; same ordered path hash7991883730528210997. Present bytes differ73 due explicit scheduling fields in configuration, not extra source content.",
+      "Existing-source witness preparation opens242files/1842346bytes; ordinary content proof reads1844311/1844384bytes. The ~12MiB SourceStorage total is not the amount read by every proof.",
+      "Read+memcmp sampled cost about0.37\u20130.38ms. Metadata/open/path phase about5.2\u20135.3ms; final EOF/version/path phase about2.2ms. Do not sum rotating samples as exact savings.",
+      "The instrumented observation does not reproduce earlier1.2\u20132.2ms proof gap consistently; do not treat that as new passing performance result or assign a cause.",
+      "Rotate mode is coupled to query/background alternation: wall times across modes are not directly comparable; only same-mode directions and coarse cost attribution are useful."
+    ],
+    "next": "Investigate reducing fresh metadata/path syscalls via supported Mac descriptor attributes while preserving final absolute leaf identity, descriptor resolved path and complete byte/EOF/version checks. Do not weaken input proof or claim idle worker cause."
+  },
+  "retainedStateNegativeControl": {
+    "qualification": false,
+    "passed612AndHover": true,
+    "rows": {
+      "native": {
+        "binarySha256": "ffde9f778f8bb6bc7cdd1b989154d6997beab1a0ea0487ac94984a00d6ec719c",
+        "passed": true,
+        "finalFiles": 612,
+        "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "phaseMedianUs": {},
+        "mechanismEvents": [
+          "start\t0",
+          "drained\t0",
+          "unfrozen\t0",
+          "start\t0",
+          "drained\t0",
+          "unfrozen\t0",
+          "start\t0",
+          "drained\t0",
+          "unfrozen\t0",
+          "start\t0",
+          "drained\t0",
+          "unfrozen\t0",
+          "start\t0",
+          "drained\t0",
+          "unfrozen\t0"
+        ]
+      },
+      "baseline": {
+        "binarySha256": "ffde9f778f8bb6bc7cdd1b989154d6997beab1a0ea0487ac94984a00d6ec719c",
+        "passed": true,
+        "finalFiles": 612,
+        "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "phaseMedianUs": {
+          "body-validate-files": 8231.0,
+          "local-publish-input-proof": 8133.0
+        },
+        "mechanismEvents": [
+          "start\t0",
+          "drained\t0",
+          "unfrozen\t0"
+        ]
+      },
+      "serial-one": {
+        "binarySha256": "ffde9f778f8bb6bc7cdd1b989154d6997beab1a0ea0487ac94984a00d6ec719c",
+        "passed": true,
+        "finalFiles": 612,
+        "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "phaseMedianUs": {
+          "body-validate-files": 9319.0,
+          "local-publish-input-proof": 9197.5
+        },
+        "mechanismEvents": [
+          "start\t0",
+          "drained\t0",
+          "unfrozen\t0"
+        ]
+      },
+      "discard": {
+        "binarySha256": "ffde9f778f8bb6bc7cdd1b989154d6997beab1a0ea0487ac94984a00d6ec719c",
+        "passed": true,
+        "finalFiles": 612,
+        "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "phaseMedianUs": {
+          "body-validate-files": 7887.5,
+          "local-publish-input-proof": 7915.0
+        },
+        "mechanismEvents": [
+          "start\t2",
+          "drained\t2",
+          "parallel-discard-control\t2",
+          "serial-replay\t2",
+          "procedures-reused\t0",
+          "procedures-recomputed\t19133",
+          "unfrozen\t2"
+        ]
+      },
+      "candidate": {
+        "binarySha256": "ffde9f778f8bb6bc7cdd1b989154d6997beab1a0ea0487ac94984a00d6ec719c",
+        "passed": true,
+        "finalFiles": 612,
+        "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "phaseMedianUs": {
+          "body-validate-files": 9740.0,
+          "local-publish-input-proof": 8807.0
+        },
+        "mechanismEvents": [
+          "start\t2",
+          "drained\t2",
+          "serial-replay\t2",
+          "procedures-reused\t18698",
+          "procedures-recomputed\t435",
+          "parallel-summary-kept\t2",
+          "unfrozen\t2"
+        ]
+      }
+    },
+    "finding": "Discard control verifiably recomputed19133 procedures with0reused and released parallel manager/pool. Yet opt-in1worker serial also showed slower proof than off baseline despite having no parallel workers or summary owner. Retained parallel state alone is not established as the cause. No gate is waived, no production tuning adopted.",
+    "next": "Read-only per-proof hardware/QoS census to distinguish amount of CPU work from scheduling/frequency. Do not set thread priority without evidence."
+  },
+  "hardwareObservation": {
+    "purpose": "Read-only hardware attribution; not qualification or unchanged sampling to get green",
+    "passedComplete612AndHover": true,
+    "rows": [
+      {
+        "label": "native",
+        "binarySha256": "056bb1ffcf6cfd550c20fc6acb69bf9223336aad11fcf07c3838a1bc3a590cc7",
+        "finalFiles": 612,
+        "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799"
+      },
+      {
+        "label": "baseline",
+        "binarySha256": "056bb1ffcf6cfd550c20fc6acb69bf9223336aad11fcf07c3838a1bc3a590cc7",
+        "finalFiles": 612,
+        "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799"
+      },
+      {
+        "label": "serial-one",
+        "binarySha256": "056bb1ffcf6cfd550c20fc6acb69bf9223336aad11fcf07c3838a1bc3a590cc7",
+        "finalFiles": 612,
+        "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799"
+      },
+      {
+        "label": "discard",
+        "binarySha256": "056bb1ffcf6cfd550c20fc6acb69bf9223336aad11fcf07c3838a1bc3a590cc7",
+        "finalFiles": 612,
+        "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799"
+      },
+      {
+        "label": "candidate",
+        "binarySha256": "056bb1ffcf6cfd550c20fc6acb69bf9223336aad11fcf07c3838a1bc3a590cc7",
+        "finalFiles": 612,
+        "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799"
+      }
+    ],
+    "hardware": {
+      "baseline": {
+        "textDocument/didChange": {
+          "proofs": 1,
+          "wallMedianMs": 5.389417,
+          "cpuMedianMs": 5.394458333333333,
+          "instructionsMedian": 97500328,
+          "cyclesMedian": 23627833,
+          "pInstructionFractionRange": [
+            1.0,
+            1.0
+          ],
+          "requestedQos": [
+            21
+          ],
+          "relativePriority": [
+            0
+          ],
+          "cyclesPerCpuNsMedian": 4.380019557107217,
+          "instructionsPerCycleMedian": 4.126503179534069
+        },
+        "textDocument/hover": {
+          "proofs": 14,
+          "wallMedianMs": 9.7996035,
+          "cpuMedianMs": 9.775958333333334,
+          "instructionsMedian": 72943011.5,
+          "cyclesMedian": 19417184.0,
+          "pInstructionFractionRange": [
+            0.9978321553725038,
+            1.0
+          ],
+          "requestedQos": [
+            21
+          ],
+          "relativePriority": [
+            0
+          ],
+          "cyclesPerCpuNsMedian": 1.972484620749208,
+          "instructionsPerCycleMedian": 3.769992639423349
+        },
+        "background/diagnostics": {
+          "proofs": 14,
+          "wallMedianMs": 7.4539375,
+          "cpuMedianMs": 7.457104166666666,
+          "instructionsMedian": 72867654.0,
+          "cyclesMedian": 18358817.0,
+          "pInstructionFractionRange": [
+            1.0,
+            1.0
+          ],
+          "requestedQos": [
+            21
+          ],
+          "relativePriority": [
+            0
+          ],
+          "cyclesPerCpuNsMedian": 2.4877035853307055,
+          "instructionsPerCycleMedian": 3.975936980095933
+        }
+      },
+      "serial-one": {
+        "textDocument/didChange": {
+          "proofs": 1,
+          "wallMedianMs": 5.158,
+          "cpuMedianMs": 5.163083333333333,
+          "instructionsMedian": 70959103,
+          "cyclesMedian": 22448698,
+          "pInstructionFractionRange": [
+            1.0,
+            1.0
+          ],
+          "requestedQos": [
+            21
+          ],
+          "relativePriority": [
+            0
+          ],
+          "cyclesPerCpuNsMedian": 4.347924786545508,
+          "instructionsPerCycleMedian": 3.1609451470192167
+        },
+        "textDocument/hover": {
+          "proofs": 14,
+          "wallMedianMs": 12.0445625,
+          "cpuMedianMs": 12.03475,
+          "instructionsMedian": 77229877.0,
+          "cyclesMedian": 25144118.0,
+          "pInstructionFractionRange": [
+            0.9998812196470548,
+            1.0
+          ],
+          "requestedQos": [
+            21
+          ],
+          "relativePriority": [
+            0
+          ],
+          "cyclesPerCpuNsMedian": 2.1444438913500123,
+          "instructionsPerCycleMedian": 3.2148864590632202
+        },
+        "background/diagnostics": {
+          "proofs": 14,
+          "wallMedianMs": 8.9463335,
+          "cpuMedianMs": 8.948916666666667,
+          "instructionsMedian": 75817648.0,
+          "cyclesMedian": 23439704.5,
+          "pInstructionFractionRange": [
+            1.0,
+            1.0
+          ],
+          "requestedQos": [
+            21
+          ],
+          "relativePriority": [
+            0
+          ],
+          "cyclesPerCpuNsMedian": 2.7126103234882004,
+          "instructionsPerCycleMedian": 3.213884052664157
+        }
+      },
+      "discard": {
+        "textDocument/didChange": {
+          "proofs": 1,
+          "wallMedianMs": 6.57275,
+          "cpuMedianMs": 6.577541666666667,
+          "instructionsMedian": 99986855,
+          "cyclesMedian": 28508062,
+          "pInstructionFractionRange": [
+            1.0,
+            1.0
+          ],
+          "requestedQos": [
+            21
+          ],
+          "relativePriority": [
+            0
+          ],
+          "cyclesPerCpuNsMedian": 4.334151487701205,
+          "instructionsPerCycleMedian": 3.507318561324863
+        },
+        "textDocument/hover": {
+          "proofs": 14,
+          "wallMedianMs": 12.6554795,
+          "cpuMedianMs": 12.657520833333333,
+          "instructionsMedian": 82070642.0,
+          "cyclesMedian": 28864012.0,
+          "pInstructionFractionRange": [
+            1.0,
+            1.0
+          ],
+          "requestedQos": [
+            21
+          ],
+          "relativePriority": [
+            0
+          ],
+          "cyclesPerCpuNsMedian": 2.256539507784888,
+          "instructionsPerCycleMedian": 2.8599900599543058
+        },
+        "background/diagnostics": {
+          "proofs": 14,
+          "wallMedianMs": 9.9315835,
+          "cpuMedianMs": 9.924458333333332,
+          "instructionsMedian": 80198346.5,
+          "cyclesMedian": 28105010.0,
+          "pInstructionFractionRange": [
+            0.9997496659276375,
+            1.0
+          ],
+          "requestedQos": [
+            21
+          ],
+          "relativePriority": [
+            0
+          ],
+          "cyclesPerCpuNsMedian": 2.812204171341924,
+          "instructionsPerCycleMedian": 2.868559801694172
+        }
+      },
+      "candidate": {
+        "textDocument/didChange": {
+          "proofs": 1,
+          "wallMedianMs": 5.5185,
+          "cpuMedianMs": 5.52425,
+          "instructionsMedian": 75833671,
+          "cyclesMedian": 24187472,
+          "pInstructionFractionRange": [
+            1.0,
+            1.0
+          ],
+          "requestedQos": [
+            21
+          ],
+          "relativePriority": [
+            0
+          ],
+          "cyclesPerCpuNsMedian": 4.378417341720596,
+          "instructionsPerCycleMedian": 3.1352458413181834
+        },
+        "textDocument/hover": {
+          "proofs": 14,
+          "wallMedianMs": 11.3818545,
+          "cpuMedianMs": 11.386770833333332,
+          "instructionsMedian": 77700601.0,
+          "cyclesMedian": 23952467.0,
+          "pInstructionFractionRange": [
+            0.9998061200635204,
+            1.0
+          ],
+          "requestedQos": [
+            21
+          ],
+          "relativePriority": [
+            0
+          ],
+          "cyclesPerCpuNsMedian": 2.059952511882403,
+          "instructionsPerCycleMedian": 3.31037700314857
+        },
+        "background/diagnostics": {
+          "proofs": 14,
+          "wallMedianMs": 8.7624375,
+          "cpuMedianMs": 8.752041666666669,
+          "instructionsMedian": 75516229.0,
+          "cyclesMedian": 22529137.5,
+          "pInstructionFractionRange": [
+            0.9996563900515231,
+            1.0
+          ],
+          "requestedQos": [
+            21
+          ],
+          "relativePriority": [
+            0
+          ],
+          "cyclesPerCpuNsMedian": 2.5878953833228198,
+          "instructionsPerCycleMedian": 3.339035291452686
+        }
+      }
+    },
+    "timebase": {
+      "numer": 125,
+      "denom": 3
+    },
+    "findings": [
+      "All proof samples ran with requested QoS21(DEFAULT), relative priority0 and100% P-core instructions; no evidence for E-core migration or changed requested QoS. No QoS tuning is justified.",
+      "Proof CPU tracks wall time, so the observed millisecond spread is CPU work/efficiency, not a demonstrated wait behind active background tasks.",
+      "Opt-in1worker and discard controls also vary in instructions/cycles despite no retained parallel manager. Extra manager retention has not been established as sole cause.",
+      "Do not replace the failed original feasibility with this observation: original body p50/final diagnostic gates remain failed."
+    ],
+    "next": "Before touching physical proof, count DirectoryProofPlan groups, actual skipped negative candidates and decline reasons.1993 missing candidates are the main unmeasured opportunity; retain exact content/version/path and permissions proof. Kernel packed metadata would touch only244 positive files and is not yet justified."
+  },
+  "directoryCoverage": {
+    "purpose": "Coverage census, not performance qualification",
+    "passedComplete612AndHover": true,
+    "rows": [
+      {
+        "label": "native",
+        "binarySha256": "fff22a9e98b176b8db4eb93b9b9e12905d660dfe46d5b1695f159ff8386d6619",
+        "finalFiles": 612,
+        "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799"
+      },
+      {
+        "label": "baseline",
+        "binarySha256": "fff22a9e98b176b8db4eb93b9b9e12905d660dfe46d5b1695f159ff8386d6619",
+        "finalFiles": 612,
+        "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799"
+      },
+      {
+        "label": "candidate",
+        "binarySha256": "fff22a9e98b176b8db4eb93b9b9e12905d660dfe46d5b1695f159ff8386d6619",
+        "finalFiles": 612,
+        "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799"
+      }
+    ],
+    "coverage": {
+      "baseline": {
+        "build": [
+          [
+            1993,
+            59,
+            1960,
+            33,
+            1960,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        ],
+        "uniqueSessions": [
+          [
+            0,
+            41,
+            0,
+            0,
+            1960,
+            0,
+            0,
+            0,
+            0,
+            41,
+            1960
+          ]
+        ],
+        "sessions": 6
+      },
+      "candidate": {
+        "build": [
+          [
+            1993,
+            59,
+            1960,
+            33,
+            1960,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        ],
+        "uniqueSessions": [
+          [
+            0,
+            41,
+            0,
+            0,
+            1960,
+            0,
+            0,
+            0,
+            0,
+            41,
+            1960
+          ]
+        ],
+        "sessions": 6
+      }
+    },
+    "conclusions": [
+      "1993 negative candidate paths in59 parent groups.41 groups meet existing>=8names threshold; they contain1960 names and all41 are admitted every observed session.",
+      "Coverage1960/1993=98.34%.Only33 names lie below the current threshold. No missing-parent/open/setup/scan failures, no64-group truncation, no budget decline.",
+      "Therefore missing-parent acceleration, density ranking or broader negative-cache admission cannot materially solve this workload; do not implement speculative alternate cache.",
+      "The next candidate should target existing-file fresh metadata/path verification, only244 files. Validate kernel API equivalence and primitive cost before changing the proof. Existing byte/EOF/absolute leaf/FDpath/version checks remain required."
+    ],
+    "oldFeasibilityStillFailed": true
+  },
+  "restoration": {
+    "passed": true,
+    "sourceMatches": {
+      "source/include/Config.h": true,
+      "source/include/lsp/RequestContext.h": true,
+      "source/include/ast/ServerCompilationAnalysis.h": true,
+      "source/src/ast/ServerCompilationAnalysis.cpp": true,
+      "source/src/ServerDriver.cpp": true,
+      "source/tests/cpp/CompilationTests.cpp": true,
+      "source/tests/cpp/UvmLibraryTests.cpp": true,
+      "source/include/document/BodyDiagnosticCache.h": true,
+      "source/src/document/BodyDiagnosticCache.cpp": true,
+      "source/src/diagnostics/DiagnosticSnapshotCodec.cpp": true,
+      "source/tests/cpp/DiagnosticSnapshotTests.cpp": true
+    },
+    "binaryMatches": {
+      "build-uvm/bin/slang-server": true,
+      "build-uvm/bin/server_unittests": true,
+      "build-uvm/bin/diagnostic_test_server": true,
+      "build-uvm/bin/slang_server_counted": true,
+      "untracked/semantic-cancellation-2026-10-23/asan-build/bin/slang-server": true,
+      "untracked/semantic-cancellation-2026-10-23/asan-build/bin/server_unittests": true,
+      "untracked/semantic-cancellation-2026-10-23/asan-build/bin/diagnostic_test_server": true,
+      "untracked/semantic-cancellation-2026-10-23/asan-build/bin/slang_server_counted": true,
+      "untracked/stage-bc-parallel-summary-replay-2026-10-28/tsan-build/bin/slang-server": true,
+      "untracked/stage-bc-parallel-summary-replay-2026-10-28/tsan-build/bin/server_unittests": true
+    },
+    "additionalDirectoryPlanSourceExact": true,
+    "retainedValidation": "Exact unchanged source and all10 Native/ASan/TSan binaries match Native974/ASan959/177142,TSan7/900 and real612 evidence; no redundant tests repeated",
+    "currentPrototype": "Default-off parallel summary replay still unqualified by original failed body gates"
+  },
+  "nextPlan": {
+    "status": "not implemented",
+    "scope": "BC existing-file metadata/path proof; parallel replay stays unqualified, original20 failure and D38 remain pending",
+    "evidence": "Only244 existing inputs/1.84MiB; readcompare~.38ms.1960/1993 negative names alreadycovered, so broader negative caching is not a material route.",
+    "nextAction": "Standalone Mac fgetattrlist compatibility/primitive-cost check before integrating any proof change. Compare complete inode/device/size/nanosecond mtime/ctime/type/resolved path against native fstat+F_GETPATH. If unsupported, mismatch or no material projected saving, reject without integration.",
+    "primaryLocalDocumentation": [
+      "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/share/man/man2/getattrlist.2",
+      "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/sys/attr.h",
+      "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/sys/vnode.h"
+    ],
+    "candidateRequiredAttrs": [
+      "RETURNED_ATTRS first, 4-byte packed fields",
+      "DEVID, OBJTYPE, MODTIME, CHGTIME, FILEID (not deprecated OBJID), FULLPATH, FILE_DATALENGTH (not TOTALSIZE)"
+    ],
+    "safety": [
+      "Only initial regular single-link descriptor eligible: SDK documents fullpath ambiguity on hardlinks; all hardlinks retain exact native proof",
+      "Check actual returned attribute bits, complete buffer and attrreference bounds/NUL/path normalization; errors/truncation/unsupported results use original strict path",
+      "Retain whole content read, explicit EOF, initial descriptor version and absolute leaf identity; final descriptor path must still be observed after absolute leaf metadata, including before-publication mutation callbacks",
+      "Potential closing order: initial fstat -> fullread+EOF -> cancellation/mutation checkpoints -> absolute lstat -> packed final descriptor metadata+path; compare before/current/final exact versions. Do not use a path collected before absolute lstat as final binding proof",
+      "No proof cached across requests; no permission/negative lookup/version witness relaxed; no extra stable dependency assumptions",
+      "A mismatch cannot be accepted from packed metadata. Any fallback must actually perform complete native checks; no duplicate observer callbacks or partial success reused"
+    ],
+    "requiredTests": [
+      "same-size rewrites, grow/shrink and explicit EOF",
+      "leaf replacement and ancestor move+symlink alias before final binding",
+      "hardlinks, Unicode/spaces, permission revocation and unsupported attributes",
+      "actual kernel fast path exercised, exact full612 and hover reference, cancellation and release",
+      "one new declared performance comparison only after material mechanism proof, preserve original gates"
+    ]
+  },
+  "mainPushed": false,
+  "goalComplete": false,
+  "packedDescriptorPrimitive": {
+    "compatible": true,
+    "headerBytes": 88,
+    "returnedBytes": 228,
+    "singleLink": true,
+    "pairsNs": [
+      [
+        648416,
+        2604250
+      ],
+      [
+        646042,
+        2511833
+      ],
+      [
+        594625,
+        2214500
+      ],
+      [
+        503792,
+        2151625
+      ]
+    ],
+    "sink": 290154592000,
+    "accepted": false,
+    "reason": "Single-link kernel metadata fields/path match Native in this one-file ABI probe, but packed descriptor fullpath query is about3.81x slower than fstat+F_GETPATH; reject before server integration",
+    "oldNsPerIteration": 1240.667,
+    "packedNsPerIteration": 4726.333,
+    "ratio": 3.8095097233987847,
+    "projectedSavingPer244InputsMs": -0.850502504,
+    "qualification": false,
+    "sourceSha256": "0d80faf1ebe102e5889797bf3bcb17c77e1c7215cc48968719edb9b6369857fc",
+    "binarySha256": "06d46a42383cfed118ed150e755698efdd34a6c74ed4dcaec6a9c28240ec36e3",
+    "compiler": "/usr/bin/clang++ -std=c++20 -O2",
+    "boundary": "Only one single-link source file tested. No claims of proof safety or general filesystem compatibility; no server changes made."
+  },
+  "nextCandidate": "Directory-batched current leaf metadata (getattrlistbulk), not descriptor fullpath packing. First inspect API and compare primitive cost on actual positive input directories; no integration or performance claim yet."
+}

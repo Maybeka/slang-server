@@ -1,0 +1,87 @@
+{
+  "stage": "B2",
+  "complete": false,
+  "goalComplete": false,
+  "qualification": {
+    "fixed14Qualified": false,
+    "fixed14FailedChecks": [
+      "memory-final-reverse-peakFootprint"
+    ],
+    "direct6Qualified": false,
+    "direct6FailedChecks": [
+      "direct-memory-forward-startupMs"
+    ],
+    "pending": [],
+    "sourceSnapshotFiles": 117,
+    "failedCandidateRetained": true
+  },
+  "candidateSha256": "0cd56617ae68bd00c5cf4f34b893b88b297a4bd043114aa6f569e49f6ecaf434",
+  "sdkPatchSha256": "54412c3a9200fe4fd7d3da01832c69b27445e54376ec3fb07f8c295ffca986ac",
+  "experimentsDefaultOff": true,
+  "networkUsed": false,
+  "productionChange": "Native fixed-prefix hook requires old driver preserveTrustedUvm retirement signal; initial promotion remains native.",
+  "regression": {
+    "cases": 3,
+    "assertions": 83,
+    "passed": true,
+    "logSha256": "c2f82dd39a54e3cb5af4c6bbf4f262813dedc5095e46ea3e57f86531dda20a77"
+  },
+  "nativeCtest": {
+    "cases": 934,
+    "passed": true,
+    "logSha256": "af1b98d5951c33e2a841d1e425fe810abd0ae7e0fb58a3cc1c7fad37d358dbbc"
+  },
+  "python": {
+    "tests": 17,
+    "passed": true,
+    "logSha256": "d6b4a6fd351bfc7e47c022c2e93d2d04445fcab4d7b5b0649fd04527ffd3a3e7"
+  },
+  "inheritedUnchangedSdk": {
+    "source": "untracked/stage-b2-native-prefix-2026-10-26/full-tests.json",
+    "patchSha256": "54412c3a9200fe4fd7d3da01832c69b27445e54376ec3fb07f8c295ffca986ac",
+    "nativeAndAsanCases": 2631,
+    "assertions": 35459
+  },
+  "fullCorrectness": {
+    "status": "passed",
+    "originalExecSession": 29316,
+    "nativeStates": 448,
+    "asanStates": 38,
+    "losslessDiagnosticMaps": 112,
+    "serverAsanCases": 919,
+    "serverAsanAssertions": 170782,
+    "frozenBudgetMiB": 256,
+    "evidenceAudit": "untracked/stage-b2-retirement-only-prefix-2026-10-26/evidence-audit.json",
+    "evidenceAuditSha256": "710cfb438b7db926c4e868a05b39278bc3f907f0602d1a9eee6367f4a9a687c6",
+    "runtimeSha256": "66bbe1a225701408cef4198f509028e23125f6fb48c15c82a92b26ce4b58cae7"
+  },
+  "priorCandidateFailure": {
+    "candidate": "cc66f0d790cc539a2a28d7df929567426ff0f01d524fb7037879a5142edcad3d",
+    "reason": "Whole DUT semantic owner did not fit original256MiB after applying prefix resume to initial promotion; rejected without raising budget.",
+    "evidence": "untracked/stage-b2-native-prefix-2026-10-26/local-let-correctness.log"
+  },
+  "remaining": [
+    "Reduce retained/duplicated heap based on memory census and preserve old failed qualification",
+    "New changed-code full correctness and original performance gates",
+    "B2 completion audit, then B3/C/D including cleanup and main push"
+  ],
+  "correctnessQualified": true,
+  "pressurePlan": "untracked/stage-b2-prefix-pressure-2026-10-26/plan.json",
+  "performanceQualified": false,
+  "pressure": {
+    "status": "passed",
+    "originalExecSession": 45052,
+    "summary": "untracked/stage-b2-prefix-pressure-2026-10-26/pressure-summary.json",
+    "summarySha256": "d771d1907092f519b4f18d1b766985b98db527f42b34945e0fb7958328ce7a16",
+    "qualification": false
+  },
+  "performanceDrafts": "untracked/stage-b2-prefix-qualification-2026-10-26",
+  "performanceQualificationState": "finished; failed original gates",
+  "heapCensus": {
+    "status": "passed-mechanism-only",
+    "originalExecSession": 34153,
+    "analysis": "untracked/stage-b2-heap-census-2026-10-26/heap-analysis.json",
+    "analysisSha256": "b13120940a9715918040bac6e7024c88595709063def7d69fc55bf00ee21fddb",
+    "qualification": false
+  }
+}

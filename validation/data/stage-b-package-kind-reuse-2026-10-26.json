@@ -1,0 +1,79 @@
+{
+  "goalComplete": false,
+  "b1Complete": false,
+  "correctnessQualified": true,
+  "performanceQualified": false,
+  "performanceStarted": true,
+  "nativeBinarySha256": "ea3a693c367e50ea4b06376d0da4b514b5dfdf0a38eabe91ba9fdf7f2b0457a0",
+  "sdkPatchSha256": "ddfa95ad2326e19d5daaa19acb76e1f6243f701b3742ec56a6a225dec83d24d0",
+  "sdkEvidenceReuse": {
+    "reason": "Only server source/header/tests changed. SDK patch, inventory and SDK build configuration unchanged; reuse full SDK evidence rather than rerunning unchanged suites.",
+    "sdkPatchSha256": "ddfa95ad2326e19d5daaa19acb76e1f6243f701b3742ec56a6a225dec83d24d0",
+    "priorStage": "untracked/stage-b-source-table-growth-2026-10-26",
+    "files": {
+      "sdk-native.log": "893f47263c6b82dbece27b3020db36114c24fb73fb0bf7b62bc591aee0d4ebfb",
+      "sdk-asan.log": "7fa7ae2a112fd1e3bdb95de39aca6630b24761987e105fc0113873fc8dbefb10",
+      "sdk-restoration.json": "94ab3a03ccd29a6cadbd276e1c699a81ad5aae7e8fb3ae3b4e3c2a3befeb4b20"
+    }
+  },
+  "tests": {
+    "nativeCTest": 932,
+    "kindRegressionCases": 1,
+    "kindRegressionAssertions": 22,
+    "packageContextCases": 6,
+    "packageContextAssertions": 312,
+    "python": 17,
+    "transport": 43,
+    "sdkIntegrityFiles": 709,
+    "serverAsanCases": 917,
+    "serverAsanAssertions": 170716
+  },
+  "implementation": "One weak syntax classification keyed by SyntaxTree identity, exact target path and full-design mode; active only with cooperative experiment. No physical proof cached. Preserve generic/out-of-block/root-hierarchy classification, recompute on replaced CST or target change. Invocation-local include-owner memoization was rejected after no profiling benefit and removed.",
+  "profileOnly": {
+    "beforeResolvedGraphMicroseconds": 7108,
+    "afterResolvedGraphMicroseconds": 1252,
+    "beforePrepareContextMicroseconds": 13074,
+    "afterPrepareContextMicroseconds": 7155,
+    "complete612DiagnosticsAndHoverMatch": true,
+    "notPerformanceQualification": true
+  },
+  "nativeAllBuildSession": 6973,
+  "asanBuildSession": 40269,
+  "nativeCvaStatesRequired": 448,
+  "asanCvaStatesRequired": 38,
+  "diagnosticArchivesRequired": 112,
+  "experimentalDefaultEnabled": false,
+  "fixedDebounceAdded": false,
+  "networkUsed": false,
+  "pushedMain": false,
+  "validationPipelineCell": "755",
+  "nativeAllBuildComplete": true,
+  "nativeInstallSha256": "ea3a693c367e50ea4b06376d0da4b514b5dfdf0a38eabe91ba9fdf7f2b0457a0",
+  "pending": [
+    "Preserve ea3 failed samples; no unchanged qualification rerun. Focus lifecycle memory pressure and correlated latency.",
+    "Inspect actual retained allocations and compression/reusable-page differences in direct reverse long run",
+    "B1/B remains unqualified; B2/B3/C/D work remains"
+  ],
+  "validationPipelineComplete": true,
+  "nativeCvaStatesCompleted": 448,
+  "asanCvaStatesCompleted": 38,
+  "nativeDiagnosticArchives": 112,
+  "asanBinarySha256": "5849c4a6817d5ff762e48572bf11405ec1ed275f0b53bce4f55e88867b8d627d",
+  "evidenceAuditSha256": "57a33dd35deb9bc545d352a28db92e1e3d9dd34a2ce4165a265026ccff2ef6e6",
+  "performanceComplete": true,
+  "performanceResults": {
+    "evaluation.json": {
+      "qualified": true,
+      "failedChecks": [],
+      "sha256": "5502b0e62f08a6b81c481d0726212862eea19f3bd8966f351a2fd5a88e23035e"
+    },
+    "direct-build-evaluation.json": {
+      "qualified": false,
+      "failedChecks": [
+        "direct-memory-reverse-lastDiagnosticMs",
+        "direct-memory-reverse-peakFootprint"
+      ],
+      "sha256": "c7d039b67c0452cb22ab8b766d44b2d45ee3cdba659a5ad8e1d7ae8898f29549"
+    }
+  }
+}

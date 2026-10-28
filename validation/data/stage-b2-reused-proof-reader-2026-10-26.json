@@ -1,0 +1,80 @@
+{
+  "stage": "B2",
+  "complete": false,
+  "goalComplete": false,
+  "candidateSha256": "28cf028d13db44aa49c78579fead6ed0a734885d1e2626a6f8fd31b890aa8870",
+  "sdkPatchSha256": "1c8ec4876276b9fb349a0f090d1758b83825240216e000e5b8ccf9cc76bef2a9",
+  "experimentsDefaultOff": true,
+  "networkUsed": false,
+  "optimization": "Independent physical input reads: caller plus one context-owned worker, cleared before completion; stop/join owner before semantic teardown. No cross-request proof result cache. Observer-instrumented proofs remain caller-only.",
+  "sourceFiles": {
+    "src/document/MethodScopeOverlay.cpp": "aef59af593b23d2717348202c32bbef07023be9531bc5779962523eb573c92d6",
+    "include/document/MethodScopeOverlay.h": "75a4f4a4e2670c9ffffca34d33f803e3cb1587e4fa138649737fc43ba2b29357",
+    "include/lsp/RequestContext.h": "c5e557073bb6e9a9c6debb46aaf07b9cdf52c4e32ab5fbdfbc13af1713425f52",
+    "tests/cpp/MethodScopeOverlayTests.cpp": "2a95e325101d13995817af95586f8ffd2aeec1c8c1deac9b9f6f44617504bff9"
+  },
+  "targetedNative": {
+    "passed": true,
+    "cases": 13,
+    "assertions": 12483,
+    "newCase": "Concurrent cancellation and retry across0/50/500us, valid completion or cancellation permitted, no input failure/reader lifetime leakage"
+  },
+  "shortMechanism": {
+    "qualification": false,
+    "passed": true,
+    "arms": {
+      "baseline": {
+        "p50": 19.891750000000002,
+        "p95": 21.413416,
+        "lastDiagnosticMs": 29.263583,
+        "cancelled": 0,
+        "memory": {
+          "peakRss": 883228672,
+          "peakFootprint": 726320208,
+          "samples": 366,
+          "cpuSeconds": 3.178206333
+        },
+        "finalFiles": 612,
+        "phaseMedianUs": {
+          "body-validate-files": 6427.0,
+          "local-publish-input-proof": 6439.5
+        }
+      },
+      "candidate": {
+        "p50": 17.086624999999998,
+        "p95": 17.899209,
+        "lastDiagnosticMs": 26.568,
+        "cancelled": 0,
+        "memory": {
+          "peakRss": 888324096,
+          "peakFootprint": 731530344,
+          "samples": 370,
+          "cpuSeconds": 3.564275583
+        },
+        "finalFiles": 612,
+        "phaseMedianUs": {
+          "body-validate-files": 4327.5,
+          "local-publish-input-proof": 4057.5
+        }
+      }
+    },
+    "ratios": {
+      "p50": 0.8589804818580565,
+      "p95": 0.8358876042944291,
+      "lastDiagnosticMs": 0.9078860917338797
+    },
+    "memoryRatios": {
+      "peakRss": 1.0057690880759813,
+      "peakFootprint": 1.0071733320133645,
+      "cpuSeconds": 1.1214739414465826
+    }
+  },
+  "qualification": false,
+  "fullCorrectness": "not started: resolve CPU overhead before expensive qualification",
+  "remaining": [
+    "Design and validate per-request directory absence proof to remove repeated missing-path syscalls without a cross-request cache",
+    "Re-evaluate CPU/latency; retain or revise bounded parallelism from evidence",
+    "Full Native/ASan/CVA and original lifecycle pressure and14+6 gates including existing plan diagnostic limits",
+    "B2 audit before B3/C/D, full delivery and unused artifact cleanup"
+  ]
+}

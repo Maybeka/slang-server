@@ -1,0 +1,42 @@
+{
+  "status": "not-qualified",
+  "activeGoal": "Finish all five categories; goal remains active",
+  "main": "6eab073a06584c31c5a05e5fd7be00ca2af90dd2",
+  "binarySha256": "327454b19cd0238c3b0717dffc2aac357a26c5bb8f9f51d64565a675426bc08b",
+  "experimentalDefaults": "off",
+  "fixedDebounceAdded": false,
+  "implemented": [
+    "Guarded same-config initial nominal-provider reuse",
+    "Read identical configured filelist once during initial reuse attempt",
+    "Independent initial RTL body admission; existing exploration borrowers remain valid"
+  ],
+  "validation": {
+    "nativeCTest": 892,
+    "python": 17,
+    "transport": 43,
+    "serverAsanCases": 877,
+    "serverAsanAssertions": 119332,
+    "asanLeakDetection": false,
+    "targetedLog": "targeted.log",
+    "targetedAsanLog": "targeted-asan.log",
+    "sdkFilesVerified": 709,
+    "sdkRestorationUnchanged": true
+  },
+  "realWorkload": {
+    "v1": "104 CVA6 states and24 response-order checks passed, plus14 positive additional workloads and1 historical encoding negative; actual provider reuse did not apply because duplicated command-file macros changed the key",
+    "v2": "Frozen Native admission preflight fails to retain full DUT root after13 unfrozen oracle states",
+    "v3": "Same full-DUT-root preflight fails; primitive nominal-provider reuse now applies. Existing small RTL regression passes, but real type closure remains unsupported",
+    "reason": "recordInstanceBodyTypeDependency rejects __slang_scope_closed_type_3. The generated root context source equals the old baseline and has no compilation errors. Exact failing nested type relation still unproven; do not attribute failure to budget alone.",
+    "diagnosticTrace": "owner-rejection-probe/failed-server.stderr",
+    "contexts": "owner-rejection-probe/1-candidate-contexts",
+    "performanceSamplesCollected": false
+  },
+  "remaining": {
+    "category1": "Hard-limit synchronous retirement and atomic shared binding tails",
+    "category2": "First source/byte proof and query service/queue regressions",
+    "category3": "General callers/initializers, virtual interfaces and multiple contexts; this cross-provider closed-type relation",
+    "category4": "Provider histories, failed/cancelled owners, overlap; no qualified startup peak benefit yet",
+    "category5": "Full unchanged workload qualification against delivered main, including warm and4032-edit historical failures; then push main"
+  },
+  "nextAction": "Instrument the exact rejected nested type pair (kinds, nominal identities and scopes) in the private scope-cache binding probe. Preserve the guard and current256MiB workload budget. Fix only when its correctness relation is established, then restart actual full-DUT preflight and full test/performance validation. Do not resample unchanged failed performance arms."
+}

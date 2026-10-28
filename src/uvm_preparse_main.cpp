@@ -31,6 +31,7 @@ int main(int argc, char** argv) {
         auto options = defaults.createParseOptionBag();
         auto pp = options.getOrDefault<slang::parsing::PreprocessorOptions>();
         pp.captureUvmPrefix = true;
+        pp.trackMacroAccesses = true;
         pp.uvmPrefixRoot = (root / "uvm_pkg.sv").string();
         if (profile == "no-dpi" || profile == "no-dpi-resource-converter")
             pp.predefines.push_back("UVM_NO_DPI");
@@ -58,7 +59,13 @@ int main(int argc, char** argv) {
                 .str();
         };
         if (print(tree) != print(loaded) ||
-            tree->getDefinedMacros().size() != loaded->getDefinedMacros().size())
+            tree->getDefinedMacros().size() != loaded->getDefinedMacros().size() ||
+            tree->getPreprocessorMetadata().macroAccessNames !=
+                loaded->getPreprocessorMetadata().macroAccessNames ||
+            tree->getPreprocessorMetadata().macroAccessTrackingComplete !=
+                loaded->getPreprocessorMetadata().macroAccessTrackingComplete ||
+            tree->getPreprocessorMetadata().macroAccessEndedAtEof !=
+                loaded->getPreprocessorMetadata().macroAccessEndedAtEof)
             throw std::runtime_error("UVM parse archive round-trip mismatch");
         slang::ast::CompilationOptions co;
         co.flags |= slang::ast::CompilationFlags::PackageAnalysis;

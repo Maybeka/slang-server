@@ -1010,3 +1010,164 @@ TEST_CASE("Staged retirement preserves closed diagnostics through cancellation a
     }
     CHECK(client.getDiagnostics(closed).empty());
 }
+
+TEST_CASE("Certified bucket replacement compares complete payload and preserves priority versions",
+          "[diagnostic-delta][certified-bucket-dirty]") {
+    const bool delta = GENERATE(false, true);
+    const bool borrowed = GENERATE(false, true);
+    const auto field = GENERATE(std::string("range"), std::string("severity"), std::string("code"),
+                                std::string("code-type"), std::string("description"),
+                                std::string("source"), std::string("message"), std::string("tags"),
+                                std::string("related-uri"), std::string("related-range"),
+                                std::string("related-message"), std::string("related-presence"),
+                                std::string("data"));
+    CAPTURE(delta, borrowed, field);
+    slang::SourceManager sources;
+    ClientHarness client;
+    server::ServerDiagClient diagnostics(sources, client, delta);
+    diagnostics.disableDestructorPublication();
+    auto replace = [&](URI uri, std::vector<lsp::Diagnostic> values) {
+        if (!borrowed)
+            return diagnostics.replaceRenderedIfChanged(uri, std::move(values));
+        std::vector<const lsp::Diagnostic*> views;
+        for (const auto& value : values)
+            views.push_back(&value);
+        return diagnostics.replaceRenderedViewsIfChanged(uri, views);
+    };
+    const auto uri = URI::fromFile("/tmp/slang-certified-bucket.sv");
+    lsp::Diagnostic value{.range = {{1, 2}, {1, 5}},
+                          .severity = lsp::DiagnosticSeverity::Error,
+                          .code = rfl::Variant<int, std::string>{1},
+                          .codeDescription = lsp::CodeDescription{uri},
+                          .source = "slang",
+                          .message = "unknown name",
+                          .tags = std::vector{lsp::DiagnosticTag::Unnecessary},
+                          .relatedInformation = std::vector{lsp::DiagnosticRelatedInformation{
+                              .location = {uri, {{0, 0}, {0, 1}}}, .message = "declared here"}},
+                          .data = rfl::Generic{std::string("original")}};
+    diagnostics.setVersion(uri, 1);
+    CHECK(replace(uri, {value}));
+    diagnostics.pushDiags();
+    REQUIRE(client.diagnosticPublications.size() == 1);
+    CHECK_FALSE(replace(uri, {value}));
+    diagnostics.pushDiags();
+    CHECK(client.diagnosticPublications.size() == 1);
+    diagnostics.setVersion(uri, 2);
+    CHECK_FALSE(replace(uri, {value}));
+    diagnostics.pushDiags(uri);
+    CHECK(client.diagnosticPublications.size() == 2);
+    CHECK(client.diagnosticVersions.at(uri) == 2);
+    if (field == "range")
+        ++value.range.start.character;
+    else if (field == "severity")
+        value.severity = lsp::DiagnosticSeverity::Warning;
+    else if (field == "code")
+        value.code = rfl::Variant<int, std::string>{2};
+    else if (field == "code-type")
+        value.code = rfl::Variant<int, std::string>{std::string("1")};
+    else if (field == "description")
+        value.codeDescription->href = URI::fromFile("/tmp/help");
+    else if (field == "source")
+        value.source = "different source";
+    else if (field == "message")
+        value.message = "different name";
+    else if (field == "tags")
+        value.tags.reset();
+    else if (field == "related-uri")
+        value.relatedInformation->front().location.uri = URI::fromFile("/tmp/other");
+    else if (field == "related-range")
+        ++value.relatedInformation->front().location.range.end.character;
+    else if (field == "related-message")
+        value.relatedInformation->front().message = "other declaration";
+    else if (field == "related-presence")
+        value.relatedInformation.reset();
+    else if (field == "data")
+        value.data = rfl::Generic{std::string("changed")};
+    CHECK(replace(uri, {value}));
+    diagnostics.pushDiags();
+    CHECK(client.diagnosticPublications.size() == 3);
+    CHECK(replace(uri, {}));
+    diagnostics.pushDiags();
+    CHECK(client.diagnosticPublications.size() == 4);
+    CHECK(client.getDiagnostics(uri).empty());
+    CHECK_FALSE(replace(uri, {}));
+    diagnostics.pushDiags();
+    CHECK(client.diagnosticPublications.size() == 4);
+}
+
+TEST_CASE("Cancelled certified bucket changes preserve pending siblings and alias clears",
+          "[diagnostic-delta][certified-bucket-dirty]") {
+    const bool borrowed = GENERATE(false, true);
+    CAPTURE(borrowed);
+    slang::SourceManager sources;
+    ClientHarness client;
+    server::ServerDiagClient diagnostics(sources, client);
+    diagnostics.disableDestructorPublication();
+    auto replace = [&](URI uri, std::vector<lsp::Diagnostic> values) {
+        if (!borrowed)
+            return diagnostics.replaceRenderedIfChanged(uri, std::move(values));
+        std::vector<const lsp::Diagnostic*> views;
+        for (const auto& value : values)
+            views.push_back(&value);
+        return diagnostics.replaceRenderedViewsIfChanged(uri, views);
+    };
+    const auto physical = URI::fromFile("/tmp/slang-certified-physical.sv");
+    const auto opened = URI::fromFile("/tmp/slang-certified-alias.sv");
+    diagnostics.setUriResolver([&](const URI& uri) { return uri == physical ? opened : uri; });
+    lsp::Diagnostic original{.range = {{0, 0}, {0, 1}}, .message = "original"};
+    replace(physical, {original});
+    CHECK_FALSE(replace(opened, {original}));
+    diagnostics.pushDiags(); // The original pending update was not discarded.
+    CHECK(client.diagnosticPublications.size() == 1);
+    CHECK(client.diagnosticPublications.back() == opened);
+    {
+        auto update = diagnostics.beginUpdate();
+        CHECK(replace(physical, {}));
+        // Roll back both the candidate payload and its dirty bit.
+    }
+    diagnostics.pushDiags();
+    CHECK(client.diagnosticPublications.size() == 1);
+    CHECK_FALSE(replace(physical, {original}));
+    CHECK(replace(physical, {}));
+    diagnostics.pushDiags();
+    CHECK(client.diagnosticPublications.size() == 2);
+    CHECK(client.getDiagnostics(opened).empty());
+}
+
+TEST_CASE("Physical rendered diagnostics reapply current aliases without mutating the cache",
+          "[diagnostic-delta][formatted-diagnostic-reuse]") {
+    slang::SourceManager sources;
+    ClientHarness client;
+    server::ServerDiagClient diagnostics(sources, client);
+    diagnostics.disableDestructorPublication();
+    const auto physical = URI::fromFile("/tmp/formatted-physical.sv");
+    const auto notePhysical = URI::fromFile("/tmp/formatted-note.sv");
+    auto opened = URI::fromFile("/tmp/formatted-alias-1.sv");
+    auto noteOpened = URI::fromFile("/tmp/formatted-note-alias-1.sv");
+    diagnostics.setUriResolver([&](const URI& value) {
+        return value == physical ? opened : value == notePhysical ? noteOpened : value;
+    });
+    lsp::Diagnostic cached{.range = {{2, 3}, {2, 6}},
+                           .severity = lsp::DiagnosticSeverity::Warning,
+                           .message = "cached warning",
+                           .relatedInformation = std::vector{lsp::DiagnosticRelatedInformation{
+                               .location = {notePhysical, {{4, 1}, {4, 3}}},
+                               .message = "declared here"}}};
+    diagnostics.appendPhysicalRendered(physical, cached);
+    diagnostics.setVersion(opened, 1);
+    diagnostics.pushDiags();
+    CHECK(client.getDiagnostics(opened).front().relatedInformation->front().location.uri ==
+          noteOpened);
+    const auto oldOpened = opened;
+    diagnostics.clear(oldOpened);
+    opened = URI::fromFile("/tmp/formatted-alias-2.sv");
+    noteOpened = URI::fromFile("/tmp/formatted-note-alias-2.sv");
+    diagnostics.appendPhysicalRendered(physical, cached);
+    diagnostics.setVersion(opened, 2);
+    diagnostics.pushDiags(opened);
+    CHECK(client.getDiagnostics(oldOpened).empty());
+    CHECK(client.diagnosticVersions.at(opened) == 2);
+    CHECK(client.getDiagnostics(opened).front().relatedInformation->front().location.uri ==
+          noteOpened);
+    CHECK(cached.relatedInformation->front().location.uri == notePhysical);
+}

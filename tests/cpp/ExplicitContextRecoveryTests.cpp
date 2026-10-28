@@ -403,3 +403,39 @@ TEST_CASE("Ordinary flag errors do not opt an unconfigured document into explici
     CHECK_FALSE(server.m_driver->hasExplicitContextError(header.m_uri));
     CHECK(header.doc->getAnalysis());
 }
+
+TEST_CASE("Watch paths union shared included views and discover later includes",
+          "[explicit-context][context-recovery][context-watch-paths]") {
+    ContextRecoveryWorkspace workspace;
+    const std::string first = "class First; int value; endclass\n";
+    const std::string second = "class Second; int value; endclass\n";
+    workspace.write("first.svh", first);
+    workspace.write("second.svh", second);
+    workspace.write("later.svh", "class Later; int value; endclass\n");
+    workspace.write("owner.sv", "package p;\n`include \"first.svh\"\n"
+                                "`include \"second.svh\"\nendpackage\n");
+    workspace.write("inputs.commands", "+incdir+.\nowner.sv\n");
+    workspace.configure("inputs.commands", "--single-unit --threads 1");
+    ServerHarness server(workspace.params());
+    auto a = server.openFile("first.svh", first);
+    auto b = server.openFile("second.svh", second);
+    a.doc->getAnalysis();
+    b.doc->getAnalysis();
+    auto before = server.m_driver->getContextWatchPaths();
+    for (const auto* name : {"inputs.commands", "owner.sv", "first.svh", "second.svh"})
+        CHECK(std::ranges::find(before, workspace.path(name)) != before.end());
+    CHECK(std::ranges::find(before, workspace.path("later.svh")) == before.end());
+    CHECK(std::ranges::is_sorted(before));
+    CHECK(std::adjacent_find(before.begin(), before.end()) == before.end());
+    changeWithoutDiagnostics(server, a, 2, first + "// ordinary body-independent text\n");
+    a.doc->getAnalysis();
+    CHECK(server.m_driver->getContextWatchPaths() == before);
+    changeWithoutDiagnostics(server, a, 3, first + "`include \"later.svh\"\n");
+    a.doc->getAnalysis();
+    const auto after = server.m_driver->getContextWatchPaths();
+    CHECK(std::ranges::find(after, workspace.path("later.svh")) != after.end());
+    for (const auto& path : before)
+        CHECK(std::ranges::find(after, path) != after.end());
+    CHECK(std::ranges::is_sorted(after));
+    CHECK(std::adjacent_find(after.begin(), after.end()) == after.end());
+}

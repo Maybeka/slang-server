@@ -1,0 +1,75 @@
+{
+  "stage": "B3",
+  "complete": false,
+  "goalComplete": false,
+  "originalExecSession": 30173,
+  "originalExitCode": 0,
+  "candidateSha256": "6532880f5eca9a41ba4c023250d945d3aed6d022558d920428875fdd71f300c5",
+  "sameBinaryArms": true,
+  "qualification": false,
+  "reportSha256": "3c02fa2a6f1f7302ed7b7c163c600adaec7f78a2edc74b6f320e77239330741d",
+  "rows": {
+    "native": {
+      "p50": 2160.1093335,
+      "p95": 3662.443958,
+      "maximum": 3994.689459,
+      "lastDiagnosticMs": 4440.270917,
+      "cancelled": 0,
+      "finalFiles": 612,
+      "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+      "memory": {
+        "peakRss": 1395490816,
+        "peakFootprint": 1022707152,
+        "samples": 346,
+        "cpuSeconds": 8.611092916
+      },
+      "generations": {
+        "retired": 1
+      }
+    },
+    "baseline": {
+      "p50": 6.618646,
+      "p95": 7.42175,
+      "maximum": 8.947875,
+      "lastDiagnosticMs": 13.731083,
+      "cancelled": 2,
+      "finalFiles": 612,
+      "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+      "memory": {
+        "peakRss": 1068630016,
+        "peakFootprint": 911443168,
+        "samples": 202,
+        "cpuSeconds": 3.81295775
+      },
+      "generations": {
+        "replacement-cancelled": 1,
+        "retired": 1
+      }
+    },
+    "candidate": {
+      "p50": 6.692667,
+      "p95": 7.401916,
+      "maximum": 12.148125,
+      "lastDiagnosticMs": 13.878792,
+      "cancelled": 2,
+      "finalFiles": 612,
+      "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+      "memory": {
+        "peakRss": 1065533440,
+        "peakFootprint": 908346592,
+        "samples": 201,
+        "cpuSeconds": 3.823886625
+      },
+      "generations": {
+        "replacement-cancelled": 1,
+        "retired": 1
+      }
+    }
+  },
+  "remaining": [
+    "Partial ranged edits through cancellation with complete final Native oracle",
+    "Per-version diagnostic publication audit and queue/atomic interval attribution",
+    "Repeated cancellation and hard budget stress",
+    "Implement demonstrated bottlenecks then complete appropriate Native/ASan/CVA correctness and performance checks"
+  ]
+}

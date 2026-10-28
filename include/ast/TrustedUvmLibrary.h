@@ -40,7 +40,9 @@ struct TrustedUvmLibrary {
 
 struct TrustedUvmImport {
     std::shared_ptr<TrustedUvmLibrary> library;
-    std::shared_ptr<const void> sourceOwner;
+    // Option bags / retained syntax are templates, not editing-generation owners.
+    // Semantic consumers acquire their lease when binding the template.
+    std::weak_ptr<const void> sourceOwner;
     bool enabled = true;
 };
 
@@ -61,8 +63,8 @@ inline bool importTrustedUvm(
         ++setting->library->namespaceDeclines;
         return false;
     }
-    if (setting->sourceOwner)
-        compilation.retainSourceOwner(setting->sourceOwner);
+    if (auto owner = setting->sourceOwner.lock())
+        compilation.retainSourceOwner(std::move(owner));
     for (const auto& name : setting->library->packages)
         compilation.importPackage(setting->library->compilation, name, sources);
     for (const auto& name : setting->library->definitions)
@@ -71,7 +73,7 @@ inline bool importTrustedUvm(
         compilation.importCompilationUnitDeclarations(setting->library->compilation, sources);
     if (auto bodies = options.get<ScopeBodyImport>())
         if (auto cache = bodies->cache.lock())
-            cache->install(compilation);
+            cache->install(compilation, bodies->sourceLibraries);
     ++setting->library->consumers;
     return true;
 }

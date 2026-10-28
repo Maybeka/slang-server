@@ -1,0 +1,278 @@
+{
+  "goalComplete": false,
+  "b1Complete": false,
+  "performanceQualified": false,
+  "binarySha256": "9d7c08f1e7e8e9ef865c996053378023536bfe1b9ffac401d8004936569477fb",
+  "asanBinarySha256": "1ec5accc10b75341f307dfda97dacbe410f493b75f728e3b83edebf7934019dd",
+  "sdkPatchSha256": "ba859e22743faa4c80969e42122d6ae0b812e5f98cdfb7503123efca65b26ceb",
+  "implementation": "Reuse the immediately prepared native CST and raw source-read history during fixed-provider isolation; preserve independent editor namespace and publication-time witnesses. No authentication results are transferred across requests.",
+  "tests": {
+    "nativeCTest": 929,
+    "serverAsanCases": 914,
+    "serverAsanAssertions": 170406,
+    "sdkNativeAndAsanCasesEach": 2629,
+    "sdkNativeAndAsanAssertionsEach": 29283,
+    "nativeScopeTargetedCases": 52,
+    "nativeScopeTargetedAssertions": 11483,
+    "python": 17,
+    "transport": 43,
+    "sdkIntegrityFiles": 709
+  },
+  "nativeCvaScenesCompleted": [
+    {
+      "scene": "body",
+      "states": 52
+    },
+    {
+      "scene": "effectful",
+      "states": 52
+    },
+    {
+      "scene": "generic",
+      "states": 52
+    },
+    {
+      "scene": "generic-changing",
+      "states": 28
+    },
+    {
+      "scene": "local-generic",
+      "states": 44
+    },
+    {
+      "scene": "local-imports",
+      "states": 32
+    },
+    {
+      "scene": "local-let",
+      "states": 48
+    },
+    {
+      "scene": "local-types",
+      "states": 28
+    },
+    {
+      "scene": "local-value-width",
+      "states": 32
+    },
+    {
+      "scene": "package",
+      "states": 52
+    },
+    {
+      "scene": "virtual-interface",
+      "states": 28
+    }
+  ],
+  "nativeCvaStatesCompleted": 448,
+  "nativeCvaStatesRequired": 448,
+  "asanCvaStatesRequired": 38,
+  "diagnosticArchivesRequired": 112,
+  "validationPipelineCell": "468",
+  "performanceStarted": true,
+  "performanceJobs": {
+    "fixed": 14,
+    "directBuild": 6
+  },
+  "experimentalDefaultEnabled": false,
+  "fixedDebounceAdded": false,
+  "successfulCrossRequestInputProofCache": false,
+  "networkUsed": false,
+  "pushedMain": false,
+  "correctnessQualified": true,
+  "asanCvaStatesCompleted": 38,
+  "nativeDiagnosticArchives": 112,
+  "evidenceAuditSha256": "6aef5188350dc5f2288b9ae51503d28365e58041c3a9f9b6c6a0ab2429a5b403",
+  "validationPipelineComplete": true,
+  "fixed14Qualified": true,
+  "directBuild6Qualified": false,
+  "directBuildFailedChecks": [
+    "direct-first-forward-startupMs",
+    "direct-first-forward-cpuSeconds",
+    "direct-first-forward-peakRss",
+    "direct-first-forward-peakFootprint",
+    "direct-first-reverse-startupMs",
+    "direct-first-reverse-cpuSeconds",
+    "direct-first-reverse-peakRss",
+    "direct-first-reverse-peakFootprint",
+    "direct-memory-forward-startupMs",
+    "direct-memory-forward-peakRss",
+    "direct-memory-forward-peakFootprint",
+    "direct-memory-reverse-peakRss",
+    "direct-memory-reverse-peakFootprint",
+    "direct-retire-forward-startupMs",
+    "direct-retire-forward-cpuSeconds",
+    "direct-retire-reverse-startupMs"
+  ],
+  "performanceSummary": {
+    "memory-final-1008": {
+      "ratios": {
+        "cpuSeconds": 1.0127496275061139,
+        "peakRss": 0.9575688968693887,
+        "peakFootprint": 0.950653289368359
+      },
+      "arms": {
+        "baseline": {
+          "p50": 17.4486665,
+          "p95": 20.841625,
+          "maximum": 38.4735,
+          "cancelled": 0,
+          "lastDiagnosticMs": 29.660833,
+          "memory": {
+            "peakRss": 1259175936,
+            "peakFootprint": 1102300504,
+            "samples": 3980,
+            "cpuSeconds": 28.951878541
+          }
+        },
+        "candidate": {
+          "p50": 18.0650415,
+          "p95": 20.581625,
+          "maximum": 24.796375,
+          "cancelled": 0,
+          "lastDiagnosticMs": 31.689042,
+          "memory": {
+            "peakRss": 1205747712,
+            "peakFootprint": 1047905600,
+            "samples": 4013,
+            "cpuSeconds": 29.321004208
+          }
+        }
+      }
+    },
+    "memory-final-reverse": {
+      "ratios": {
+        "cpuSeconds": 1.0048889630731974,
+        "peakRss": 0.9575403016120645,
+        "peakFootprint": 0.950443936472193
+      },
+      "arms": {
+        "candidate": {
+          "p50": 18.206646,
+          "p95": 20.754791,
+          "maximum": 56.667709,
+          "cancelled": 0,
+          "lastDiagnosticMs": 31.00525,
+          "memory": {
+            "peakRss": 1206747136,
+            "peakFootprint": 1048905024,
+            "samples": 4008,
+            "cpuSeconds": 29.577347166
+          }
+        },
+        "baseline": {
+          "p50": 17.926499999999997,
+          "p95": 21.171,
+          "maximum": 23.490917,
+          "cancelled": 0,
+          "lastDiagnosticMs": 32.503916,
+          "memory": {
+            "peakRss": 1260257280,
+            "peakFootprint": 1103594840,
+            "samples": 4005,
+            "cpuSeconds": 29.433448125
+          }
+        }
+      }
+    },
+    "effect-forward": {
+      "ratios": {
+        "cpuSeconds": 0.7668356140226534,
+        "peakRss": 0.9183132057625985,
+        "peakFootprint": 1.0382738677115044
+      },
+      "arms": {
+        "baseline": {
+          "p50": 12.5714375,
+          "p95": 477.705542,
+          "maximum": 477.705542,
+          "cancelled": 2,
+          "lastDiagnosticMs": 975.746375,
+          "memory": {
+            "peakRss": 1420443648,
+            "peakFootprint": 1104856408,
+            "samples": 297,
+            "cpuSeconds": 5.638133416
+          }
+        },
+        "candidate": {
+          "p50": 8.470625,
+          "p95": 18.118958,
+          "maximum": 36.393375,
+          "cancelled": 0,
+          "lastDiagnosticMs": 50.510334,
+          "memory": {
+            "peakRss": 1304412160,
+            "peakFootprint": 1147143536,
+            "samples": 259,
+            "cpuSeconds": 4.3235215
+          }
+        }
+      }
+    },
+    "effect-reverse": {
+      "ratios": {
+        "cpuSeconds": 0.7628273840122624,
+        "peakRss": 0.921222328607519,
+        "peakFootprint": 1.0407371126758764
+      },
+      "arms": {
+        "candidate": {
+          "p50": 8.423563000000001,
+          "p95": 18.781542,
+          "maximum": 36.780666,
+          "cancelled": 0,
+          "lastDiagnosticMs": 51.113542,
+          "memory": {
+            "peakRss": 1308393472,
+            "peakFootprint": 1151075720,
+            "samples": 260,
+            "cpuSeconds": 4.274479916
+          }
+        },
+        "baseline": {
+          "p50": 11.8033125,
+          "p95": 470.949667,
+          "maximum": 470.949667,
+          "cancelled": 2,
+          "lastDiagnosticMs": 969.178167,
+          "memory": {
+            "peakRss": 1420279808,
+            "peakFootprint": 1106019672,
+            "samples": 292,
+            "cpuSeconds": 5.603469416
+          }
+        }
+      }
+    },
+    "warm": {
+      "baseline": {
+        "p50": 16.1464895,
+        "p95": 20.228271,
+        "lastDiagnosticMs": 29.650875
+      },
+      "candidate": {
+        "p50": 16.86581275,
+        "p95": 19.656896500000002,
+        "lastDiagnosticMs": 28.0345625
+      }
+    },
+    "first": {
+      "baseline": {
+        "p50": 36.772541,
+        "p95": 36.772541,
+        "lastDiagnosticMs": 64.103458
+      },
+      "candidate": {
+        "p50": 33.1035,
+        "p95": 33.1035,
+        "lastDiagnosticMs": 61.224333
+      }
+    },
+    "proofCounts": {
+      "native": 0,
+      "baseline": 28,
+      "candidate": 28
+    }
+  }
+}

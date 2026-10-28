@@ -123,8 +123,16 @@ int worker(bool persistent = false) {
             rawFrame(2, "abc");
         }
         else if (mode == "double-frame") {
-            isolated_diagnostics::writeDiagnosticResponse("first");
-            isolated_diagnostics::writeDiagnosticResponse("second");
+            // Submit the same malformed bytes as one response batch. With four
+            // separate writes a persistent reader can finish the valid first
+            // frame before the second has even been submitted. Valid response
+            // fragmentation is exercised independently by the fragmented mode.
+            auto first = frameHeader(5), second = frameHeader(6);
+            std::string bytes(first.data(), first.size());
+            bytes += "first";
+            bytes.append(second.data(), second.size());
+            bytes += "second";
+            writeAll(STDOUT_FILENO, bytes.data(), bytes.size());
         }
         else if (mode == "crash") {
             ::raise(SIGKILL); // No core file, no dependency on a shell or another executable.

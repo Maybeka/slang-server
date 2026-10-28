@@ -1,0 +1,47 @@
+{
+  "kind": "complete-root ownership mechanism measurement; not overall performance qualification",
+  "binarySha256": "27329462a521f9dd1778a84805cabfb7bb6ce56f5c9e839e489b99713fa5cf7d",
+  "pairs": [
+    {
+      "baselineIndex": 0,
+      "candidateIndex": 1,
+      "reloadFootprintRatio": 0.9159413976428691,
+      "reloadRssRatio": 0.9340760922448186
+    },
+    {
+      "baselineIndex": 3,
+      "candidateIndex": 2,
+      "reloadFootprintRatio": 0.9197315913663439,
+      "reloadRssRatio": 0.9358768524194568
+    }
+  ],
+  "diagnosticUrisPerReload": 612,
+  "diagnosticsBeforeAfterEqual": true,
+  "releaseObserved": 2,
+  "nativeRegression": "887 CTest pass; Python17 and transport43 pass",
+  "asan": {
+    "cases": 872,
+    "assertions": 118741,
+    "leakDetection": false
+  },
+  "cva6VersionStates": {
+    "total": 104,
+    "package": 52,
+    "generic": 52,
+    "passed": true
+  },
+  "conclusion": "Both arm orderings show lower reload footprint and RSS. Does not prove startup, continuous edits, hard-limit latency or historical4032 peak qualification. No main push.",
+  "initialFocusedFailure": "Root recreation changed pointer-based cone enumeration order; paths were identical. Regression now compares sorted path sets; initial failure log retained.",
+  "sdk": {
+    "filesVerified": 709,
+    "changed": false,
+    "patchSha256": "5da5b7acdd81f14e4afd399646dd495752780bb6963294f0e42b1214935c93f6"
+  },
+  "qualificationPassed": false,
+  "goalComplete": false,
+  "delivered": false,
+  "sourceReceiptSha256": "7a06e202eaeac4bb01ca9db7c5b4f06948c46fb310fb1b29a41335d5d3f4e821",
+  "evidenceDirectory": "untracked/model-root-release-2026-10-24",
+  "rawComparison": "actual-reload/results.json",
+  "plan": "actual-reload/plan.json"
+}

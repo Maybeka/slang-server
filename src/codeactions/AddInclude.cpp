@@ -27,7 +27,7 @@ void addIncludeActions(std::vector<rfl::Variant<lsp::Command, lsp::CodeAction>>&
                              [](const auto& kind) { return kind.empty() || kind == "quickfix"; }))
         return;
 
-    auto tree = ctx.doc.getSyntaxTree();
+    auto tree = ctx.doc.getSyntaxTree(ctx.requestCtx);
     auto cursor = toSourceLocation(ctx.doc.getBuffer(), ctx.params.range.start, ctx.sourceManager);
     if (!cursor)
         return;
@@ -37,6 +37,7 @@ void addIncludeActions(std::vector<rfl::Variant<lsp::Command, lsp::CodeAction>>&
     bool macro = false;
     // Unknown object-like macros may be discarded by preprocessing, leaving no syntax token.
     for (const auto& diag : tree->diagnostics()) {
+        ctx.requestCtx.checkpoint("during include code actions");
         if (diag.code != diag::UnknownDirective || diag.location.buffer() != ctx.doc.getBuffer())
             continue;
         auto start = diag.location.offset();
@@ -67,13 +68,16 @@ void addIncludeActions(std::vector<rfl::Variant<lsp::Command, lsp::CodeAction>>&
     if (name.empty())
         return;
 
+    ctx.requestCtx.checkpoint("before include candidate lookup");
     auto paths = macro ? ctx.indexer.getFilesForMacro(name) : ctx.indexer.getHeadersForSymbol(name);
+    ctx.requestCtx.checkpoint("after include candidate lookup");
     std::ranges::sort(paths);
     paths.erase(std::unique(paths.begin(), paths.end()), paths.end());
 
     // Preserve the file's leading comments and blank lines, placing the include before code.
     size_t offset = 0;
     while (offset < text.size()) {
+        ctx.requestCtx.checkpoint("during include code actions");
         if (std::isspace(static_cast<unsigned char>(text[offset]))) {
             ++offset;
         }
@@ -98,6 +102,7 @@ void addIncludeActions(std::vector<rfl::Variant<lsp::Command, lsp::CodeAction>>&
         // member, keeping earlier imports and declarations available to the included text.
         auto* member = ctx.syntax;
         while (const syntax::SyntaxNode* parent = member->parent) {
+            ctx.requestCtx.checkpoint("during include code actions");
             if (parent->kind == syntax::SyntaxKind::CompilationUnit ||
                 parent->getFirstToken().location().buffer() != ctx.doc.getBuffer())
                 break;
@@ -111,6 +116,7 @@ void addIncludeActions(std::vector<rfl::Variant<lsp::Command, lsp::CodeAction>>&
     else {
         // Keep new macro definitions from affecting headers already included before this use.
         for (const auto& include : tree->getIncludeDirectives()) {
+            ctx.requestCtx.checkpoint("during include code actions");
             auto range = include.syntax->sourceRange();
             if (range.start().buffer() != ctx.doc.getBuffer() || range.end() > *cursor)
                 continue;
@@ -139,6 +145,7 @@ void addIncludeActions(std::vector<rfl::Variant<lsp::Command, lsp::CodeAction>>&
     auto library = sourceManager.getLibraryFor(ctx.doc.getBuffer());
 
     for (const auto& path : paths) {
+        ctx.requestCtx.checkpoint("during include code actions");
         auto fullPath = std::filesystem::absolute(path).lexically_normal();
         if (fullPath == currentPath)
             continue;
@@ -151,6 +158,7 @@ void addIncludeActions(std::vector<rfl::Variant<lsp::Command, lsp::CodeAction>>&
         auto suffix = fullPath.filename();
         auto directory = fullPath.parent_path();
         while (!directory.empty()) {
+            ctx.requestCtx.checkpoint("during include code actions");
             auto configured = sourceManager.readHeader(suffix.generic_string(), includeLoc, library,
                                                        false, configuredPaths);
             if (configured && sourceManager.getFullPath(configured->id) == fullPath) {

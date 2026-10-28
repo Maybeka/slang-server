@@ -1,0 +1,121 @@
+{
+  "accepted": false,
+  "decision": "Withdraw full-manager parallel prototype: both real CVA candidate full passes triggered conservative exact serial driver replay; no actual parallel-kept result, so this shape cannot supply material wall gain. No performance qualification attempted.",
+  "correctness": {
+    "passed": true,
+    "files": 612,
+    "referencePositions": 12,
+    "rows": [
+      {
+        "label": "native",
+        "binarySha256": "f4502db995335726988a486289a18a2054e39d19e5e40f538c2eeee26de9f101",
+        "passed": true,
+        "finalFiles": 612,
+        "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "cancelled": 0,
+        "parallelEvents": {
+          "start": 5,
+          "drained": 5,
+          "unfrozen": 5
+        },
+        "hoverResponsesChecked": 12
+      },
+      {
+        "label": "baseline",
+        "binarySha256": "276f15897dfb26e48cff9e7a7579cd2565ec5b7e712701167d6ddc0adf6a80bd",
+        "passed": true,
+        "finalFiles": 612,
+        "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "cancelled": 6,
+        "parallelEvents": {},
+        "hoverResponsesChecked": 12
+      },
+      {
+        "label": "candidate",
+        "binarySha256": "f4502db995335726988a486289a18a2054e39d19e5e40f538c2eeee26de9f101",
+        "passed": true,
+        "finalFiles": 612,
+        "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "cancelled": 6,
+        "parallelEvents": {
+          "start": 2,
+          "drained": 2,
+          "driver-fallback": 2,
+          "unfrozen": 2,
+          "worker-active": 1
+        },
+        "hoverResponsesChecked": 12
+      }
+    ],
+    "timingsDiscarded": true
+  },
+  "unitTests": {
+    "native": {
+      "cases": 6,
+      "assertions": 871,
+      "passed": true,
+      "coverage": "parallel comparison0/1/2; order-sensitive driver fallback; observer caller thread; actual worker cancellation/drain; initial frozen-provider promotion30states with scheduling off/on and changed defines/includes/constexpr/cooperative options"
+    }
+  },
+  "setupFailure": {
+    "cause": "Known server-only ParallelDiagnosticOptions increased Bag.size and made fixed-provider compiler-option fingerprint fail closed even when experiment false.",
+    "fixVerified": true,
+    "finalSetActiveInstance": true,
+    "introducedOnlyByWithdrawnPrototype": true
+  },
+  "asan": "4-target build before final fingerprint fix passed; not a test pass of final prototype",
+  "tsan": "Only tiny runtime smoke passed; project race verification not run because prototype fails usefulness boundary; no race-safety claim",
+  "versions": {
+    "source/include/Config.h": {
+      "baselineSha256": "999948bb6e3917cb4c335311dfb215a1e25c40c50a1f6499f43b44b7a416c128",
+      "prototypeSha256": "c835d225b198efad57d9ab423b309e35886a7be060d99911141ac6a24a6056ec"
+    },
+    "source/include/lsp/RequestContext.h": {
+      "baselineSha256": "7c4a4ab30e4b92dbe70fad03df4f7b72c3d3f6603991ad39c072ad3c05e14f91",
+      "prototypeSha256": "78178d5a72321ea6789efc324b53073f4365496a57cbe5aa512aab3f2b3769f2"
+    },
+    "source/include/ast/ServerCompilationAnalysis.h": {
+      "baselineSha256": "0f156527dfff47bcd35b46bc7cfb3811bb873e2a82ad2cb4373c201f968817c3",
+      "prototypeSha256": "68e23178fba2f4958a8d17cd48aec86c98092bf569d8e28a2fb8a9b6d3db6788"
+    },
+    "source/src/ast/ServerCompilationAnalysis.cpp": {
+      "baselineSha256": "2e49f24c5a6628a0fa61814f0561ad633fb1a382bb18be757792614350b08757",
+      "prototypeSha256": "e3ee34ac1fedaa0dc3fbc0f0b9402db73ab821aad877e81d1dafb2344674a351"
+    },
+    "source/src/ServerDriver.cpp": {
+      "baselineSha256": "7e2d3c4f488ba0e694627554155a380ffc3f6d9985b5c4aeb83fe5f756d95e38",
+      "prototypeSha256": "810e4daac20e3b6859068bc184a281fee5260c974e49b8909c028eb9a8806055"
+    },
+    "source/external/slang/include/slang/analysis/AnalysisManager.h": {
+      "baselineSha256": "0012f6c008e4d52fd4556bd4b6fe5cad4ece3dc4170f04a6caccdfea328f9b96",
+      "prototypeSha256": "75f20e1ef994ec6c1571823d724c38de9875311ba01c5b0d583b7795dbb37a4b"
+    },
+    "source/external/slang/source/analysis/AnalysisManager.cpp": {
+      "baselineSha256": "a3248ee963e21647a598ee9b94115080eb0df0c362781143b7396a6b49e64d72",
+      "prototypeSha256": "8a74bd78e48a032cc737beee208b0349bfa7ba89c8ce99cfe93d8af91eddae6a"
+    },
+    "source/restoration/slang.patch": {
+      "baselineSha256": "665b58a2dfe5265e9904c53f121f1ec79e0ef20f0e9c52c000de802e9420d52c",
+      "prototypeSha256": "c86ae349b0b2db18cbd7d6333be6a61990caf0bce32a602e8ea57c04dc51960f"
+    },
+    "source/restoration/main-sdk.json": {
+      "baselineSha256": "cce08862c7b0b6861e7a7f6873be1df68e36890a932a46966597a8957dabb36c",
+      "prototypeSha256": "d517c00d3fd0a295857bf9aacdfd83fd0ed92d8559caab930223c1556419330f"
+    },
+    "source/tests/cpp/CompilationTests.cpp": {
+      "baselineSha256": "8e3dcb670e153693d0d503a7a412ab5a23eed1019f58ef7114d1e106ba239193",
+      "prototypeSha256": "e1b3a106132673f6a9fef711da576c23e2ff393c4e66146c706cd354f2845036"
+    },
+    "source/tests/cpp/UvmLibraryTests.cpp": {
+      "baselineSha256": "cad472a892f50ee127de5a215501348d01812a6896337ed67c3e860c2db1cfdf",
+      "prototypeSha256": "03a7d9b74ae4fb965cb457af017f8a5bbec70b7f0e96176ec63e2bdd7fbbc6b0"
+    }
+  },
+  "head": "6eab073a06584c31c5a05e5fd7be00ca2af90dd2",
+  "next": "Design parallel intrinsic procedure computation with deterministic native-order driver accumulation; keep original serial fallback/checks and require exact diagnostics plus memory/cancellation tests. Existing procedure reuse can avoid serial DFA recompute, but replay ownership cannot be chained without an explicit safe native-summary adoption design.",
+  "original20StillFailed": true,
+  "mainPushed": false
+}

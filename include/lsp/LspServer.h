@@ -426,7 +426,7 @@ protected:
                                       &Impl::getDocSelectionRange>("textDocument/selectionRange");
     };
     /// A request to rename a symbol.
-    virtual std::optional<WorkspaceEdit> getDocRename(const RenameParams&) {
+    virtual std::optional<WorkspaceEdit> getDocRename(const RenameParams&, RequestContext = {}) {
         return std::optional<WorkspaceEdit>{};
     }
 
@@ -586,7 +586,8 @@ protected:
     /// {@link InlayHint InlayHint[]} or a Thenable that resolves to such.
     ///
     /// @since 3.17.0
-    virtual std::optional<std::vector<InlayHint>> getDocInlayHint(const InlayHintParams&) {
+    virtual std::optional<std::vector<InlayHint>> getDocInlayHint(const InlayHintParams&,
+                                                                  RequestContext = {}) {
         return std::optional<std::vector<InlayHint>>{};
     }
 
@@ -647,7 +648,7 @@ protected:
     /// that resolves to such.
     virtual rfl::Variant<std::vector<SymbolInformation>, std::vector<DocumentSymbol>,
                          std::monostate>
-    getDocDocumentSymbol(const DocumentSymbolParams&) {
+    getDocDocumentSymbol(const DocumentSymbolParams&, RequestContext = {}) {
         return rfl::Variant<std::vector<SymbolInformation>, std::vector<DocumentSymbol>,
                             std::monostate>{};
     }
@@ -659,7 +660,8 @@ protected:
                                       &Impl::getDocDocumentSymbol>("textDocument/documentSymbol");
     };
     /// A request to provide document links
-    virtual std::optional<std::vector<DocumentLink>> getDocDocumentLink(const DocumentLinkParams&) {
+    virtual std::optional<std::vector<DocumentLink>> getDocDocumentLink(const DocumentLinkParams&,
+                                                                        RequestContext = {}) {
         return std::optional<std::vector<DocumentLink>>{};
     }
 
@@ -672,7 +674,7 @@ protected:
     /// the request response is an array of type {@link DocumentHighlight}
     /// or a Thenable that resolves to such.
     virtual std::optional<std::vector<DocumentHighlight>> getDocDocumentHighlight(
-        const DocumentHighlightParams&) {
+        const DocumentHighlightParams&, RequestContext = {}) {
         return std::optional<std::vector<DocumentHighlight>>{};
     }
 
@@ -823,7 +825,7 @@ protected:
     };
     /// A request to provide commands for the given text document and range.
     virtual std::optional<std::vector<rfl::Variant<Command, CodeAction>>> getDocCodeAction(
-        const CodeActionParams&) {
+        const CodeActionParams&, RequestContext = {}) {
         return std::optional<std::vector<rfl::Variant<Command, CodeAction>>>{};
     }
 

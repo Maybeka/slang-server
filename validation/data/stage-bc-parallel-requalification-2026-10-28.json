@@ -1,0 +1,357 @@
+{
+  "status": "feasibility accepted; full BC/D qualification pending",
+  "native": {
+    "status": "passed",
+    "exitCode": 0,
+    "summary": [
+      "100% tests passed out of 974",
+      "Total Test time (real) =  15.48 sec"
+    ],
+    "logSha256": "604eccdd2f648cb519e124cb8ab15d17f609aa4670f8982c28998889add6edae",
+    "sourceReceiptSha256": "9406d914280fc1d51092df2598c974229fd1220126d48cd7b717d93207469924",
+    "TMPDIR": "/private/tmp",
+    "newPerformanceQualified": false,
+    "sourceReceipt": "native-code-receipt.json"
+  },
+  "asan": {
+    "status": "completed",
+    "passed": true,
+    "qualification": false,
+    "steps": [
+      {
+        "name": "sdk-full",
+        "exitCode": 0,
+        "summary": [
+          "All tests passed (36935 assertions in 2644 test cases)"
+        ],
+        "logSha256": "d2c5a1451ac36abcb231d0ad9ae1d9ed39bd7d3b3f98d53bd09fde5a467e06cb"
+      },
+      {
+        "name": "server-full",
+        "exitCode": 0,
+        "summary": [
+          "All tests passed (177158 assertions in 959 test cases)"
+        ],
+        "logSha256": "5202337481c27b8c8526ae7bf28edc21c6da5be6e9ccec41690ece794cfd285a"
+      },
+      {
+        "name": "sdk-integrity",
+        "exitCode": 0,
+        "summary": [
+          "Verified 709 SDK files at 151a801ceaf6faf23d79a42d210ff67e50eb4660 plus restored patch",
+          "Verified catch2: 562 files",
+          "Verified fmt: 142 files",
+          "Verified boost_regex: 380 files",
+          "Verified tomlplusplus: 212 files"
+        ],
+        "logSha256": "08c8fec12d316070e54e19554b6e1202309b0331e8a7c77793f4b889429e5309"
+      }
+    ],
+    "sourceReceiptSha256": "1954a5c8b16ab8f4a4d130a15359660257f7d95179b5c0b038768b78966448f9",
+    "detectLeaks": false
+  },
+  "asanRealCva": {
+    "passed": true,
+    "performanceClaim": false,
+    "purpose": "Real imported UVM/wholeDUT Native vs ASan diagnostic/hover oracle; instrumented timings discarded",
+    "sourceSha256": "6c2ecbefd33ef844ecbbe63d7282d37406714d9c18ef52711337e760141668cb",
+    "rows": [
+      {
+        "label": "native",
+        "binarySha256": "c23a8b2708c974174ee3b26f078fe7b91eef23a6ae805714e02ac3d653235a47",
+        "passed": true,
+        "finalFiles": 612,
+        "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "cancelled": 0,
+        "stderrSha256": "230d92b895b7ec5c7293756ced65db17977ad3a96ea5cef774df966f73092b05"
+      },
+      {
+        "label": "baseline",
+        "binarySha256": "c23a8b2708c974174ee3b26f078fe7b91eef23a6ae805714e02ac3d653235a47",
+        "passed": true,
+        "finalFiles": 612,
+        "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "cancelled": 6,
+        "stderrSha256": "392314efd084405416fdf68ac7592113b8df71001c12fa4d66e1ff5c1eb24a63"
+      },
+      {
+        "label": "candidate",
+        "binarySha256": "a183fc8c96f489ae28c6acef37d3ba92b2b6520bba1d7fed1b7aed7449d4e8a3",
+        "passed": true,
+        "finalFiles": 612,
+        "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "cancelled": 6,
+        "stderrSha256": "b281caff8f719e95fb66dffea0bb50eb7757cb333f06f61305d14c9d16856120"
+      }
+    ],
+    "exits": [
+      {
+        "pid": 80332,
+        "exitCode": 0,
+        "stderrSha256": "230d92b895b7ec5c7293756ced65db17977ad3a96ea5cef774df966f73092b05",
+        "tsanWarningLines": []
+      },
+      {
+        "pid": 80364,
+        "exitCode": 0,
+        "stderrSha256": "392314efd084405416fdf68ac7592113b8df71001c12fa4d66e1ff5c1eb24a63",
+        "tsanWarningLines": []
+      },
+      {
+        "pid": 80378,
+        "exitCode": 0,
+        "stderrSha256": "b281caff8f719e95fb66dffea0bb50eb7757cb333f06f61305d14c9d16856120",
+        "tsanWarningLines": []
+      }
+    ],
+    "rawResultSha256": "c0fe21f4e5e7b57107015c9592db38378e47f6d670aa3630758418adcf1a8b0b"
+  },
+  "tsan": {
+    "passed": true,
+    "performanceClaim": false,
+    "scope": "Bounded actual imported UVM/wholeDUT Native vs TSan candidate macro12; no suppression; not a universal race-free proof",
+    "sourceSha256": "6c2ecbefd33ef844ecbbe63d7282d37406714d9c18ef52711337e760141668cb",
+    "rows": [
+      {
+        "label": "native",
+        "binarySha256": "c23a8b2708c974174ee3b26f078fe7b91eef23a6ae805714e02ac3d653235a47",
+        "passed": true,
+        "finalFiles": 612,
+        "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "cancelled": 0,
+        "stderrSha256": "becebcfb68c5ae91485f9ed1dca3c0f475e948bf2c93ff124d5136ceec874710"
+      },
+      {
+        "label": "baseline",
+        "binarySha256": "c23a8b2708c974174ee3b26f078fe7b91eef23a6ae805714e02ac3d653235a47",
+        "passed": true,
+        "finalFiles": 612,
+        "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "cancelled": 6,
+        "stderrSha256": "f091ccb192c2e7efc3c18ebdb74628fe2b5bc19211c154b1e0cf10cd59201da0"
+      },
+      {
+        "label": "candidate",
+        "binarySha256": "d6f2cd57dc9076c0263fc0c4c35324165cc163508169f0f8ba1009afeb28464a",
+        "passed": true,
+        "finalFiles": 612,
+        "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "cancelled": 6,
+        "stderrSha256": "d85306820efc3c367fdb61ac91199c266b1a550d537c21be0e67a03a5bd8737c"
+      }
+    ],
+    "exits": [
+      {
+        "pid": 81048,
+        "exitCode": 0,
+        "stderrSha256": "becebcfb68c5ae91485f9ed1dca3c0f475e948bf2c93ff124d5136ceec874710",
+        "tsanWarningLines": []
+      },
+      {
+        "pid": 81052,
+        "exitCode": 0,
+        "stderrSha256": "f091ccb192c2e7efc3c18ebdb74628fe2b5bc19211c154b1e0cf10cd59201da0",
+        "tsanWarningLines": []
+      },
+      {
+        "pid": 81064,
+        "exitCode": 0,
+        "stderrSha256": "d85306820efc3c367fdb61ac91199c266b1a550d537c21be0e67a03a5bd8737c",
+        "tsanWarningLines": []
+      }
+    ],
+    "rawResultSha256": "aeff12477896abc2c476f72a673b7bf031094837eb1c0607ddd7307d01ff82dd",
+    "targeted": [
+      {
+        "summary": [
+          "All tests passed (881 assertions in 6 test cases)"
+        ],
+        "logSha256": "18efaa16b31943be5f728d5cfbde0a4264cb4307944ac30a11b4655e127b49b9"
+      },
+      {
+        "summary": [
+          "All tests passed (19 assertions in 1 test case)"
+        ],
+        "logSha256": "4d330162495a1441d9bea0a60fb112a8a0d254a483c57905cd5e762d5e605e55"
+      }
+    ]
+  },
+  "buildReceipt": {
+    "status": "native-and-asan-validated-performance-pending",
+    "qualified": false,
+    "sdkPatchSha256": "4e9b2d8191f90aedd42cb764ce06814663535afec274829af2a390e7c7bd90a4",
+    "sourceSha256": {
+      "source/include/Config.h": "c835d225b198efad57d9ab423b309e35886a7be060d99911141ac6a24a6056ec",
+      "source/include/lsp/RequestContext.h": "78178d5a72321ea6789efc324b53073f4365496a57cbe5aa512aab3f2b3769f2",
+      "source/include/ast/ServerCompilationAnalysis.h": "541d0d5139bb3dd03bba6d04f24fd516ac384eb3d2f62025b0be4b337a58a9ec",
+      "source/src/ast/ServerCompilationAnalysis.cpp": "90c62574cca92bd367ae482522f4fd3acc74a9904aa6e6ad576fc956328ab840",
+      "source/src/ServerDriver.cpp": "810e4daac20e3b6859068bc184a281fee5260c974e49b8909c028eb9a8806055",
+      "source/tests/cpp/CompilationTests.cpp": "8d94123b42544f0db6d38be9a2840f5ec9db01ec22aa29d6cd6b184b349e3e33",
+      "source/tests/cpp/UvmLibraryTests.cpp": "96286646a722b9129a7c2937e557798089120f9f3ed80fe22f9718e8c86996c8",
+      "source/include/document/BodyDiagnosticCache.h": "7d6a22a7e4b6989c7f726d3017b5b3b0261190dea76dd0300a2e08f0971b7c34",
+      "source/src/document/BodyDiagnosticCache.cpp": "f487c3d56d3d6cb6efd2f214a0815b98167fb5bc144188dfb9146ef751733d1e",
+      "source/src/diagnostics/DiagnosticSnapshotCodec.cpp": "47035932198578725ac726b781ccc69f4a31de8cbfb3cf5d0b8350e2f2026bd1",
+      "source/tests/cpp/DiagnosticSnapshotTests.cpp": "33962a93f033dcbd71d582ef727e11e69c7a21694c5c4351e82950ea474195c5",
+      "source/external/slang/include/slang/syntax/ParseArchive.h": "58c3dc58ec36f6d05cb57f62267517bd8905809d49f0608f56c9cc62bdecea70",
+      "source/external/slang/source/syntax/SyntaxTree.cpp": "764d8613d40985c26ea8e90a5e081dddc9b4b079c99340e56bb454f1d738654f",
+      "source/external/slang/tests/unittests/parsing/SyntaxPrinterTests.cpp": "7c65d612259e689aa7f5413933c6631f449b365e2038fba376dd961b1acf4c4a",
+      "source/src/uvm_preparse_main.cpp": "06dab7327fa2367d89b725b8c809448604d013fd6c19f0db34067568a317b8ae",
+      "source/src/UvmLibrary.cpp": "547f83f786ec0a87f9db6cd398c8498d07b92fd0c585b397cc772e312a0d5190"
+    },
+    "originalFailuresRetained": true,
+    "newPolicySha256": "2310281a5aa1b9830c067ef562a0a88601895b61269f221adec0a88464dc65ec",
+    "binarySha256": {
+      "build-uvm/bin/slang-server": "c23a8b2708c974174ee3b26f078fe7b91eef23a6ae805714e02ac3d653235a47",
+      "build-uvm/bin/server_unittests": "5026f27e193b9d0bc9d6dae13ff12fd436f741b8d52a4b1f6dc6c5355e9c03b6",
+      "build-uvm/bin/diagnostic_test_server": "f1265b77cbc811556793ffb002c66a67d0777f12daba6e9ec3a43f57f50b0626",
+      "build-uvm/bin/slang_server_counted": "620cf4ef3b7a25fe32a61ee3302aa3e6af2b7d8e1157823eea595dcb10b3ca07",
+      "untracked/semantic-cancellation-2026-10-23/asan-build/bin/slang-server": "a183fc8c96f489ae28c6acef37d3ba92b2b6520bba1d7fed1b7aed7449d4e8a3",
+      "untracked/semantic-cancellation-2026-10-23/asan-build/bin/server_unittests": "b32a58752153a0ee97962c80ede2d335e1b9324d3b2a1bc008f6085e937ebfd6",
+      "untracked/semantic-cancellation-2026-10-23/asan-build/bin/diagnostic_test_server": "96609ab93e569ed4ac6b385ef3155baa027432c7664ae9389526e516f902a385",
+      "untracked/semantic-cancellation-2026-10-23/asan-build/bin/slang_server_counted": "fc14010c0ebe1cdd138623ab0abbac21c3c4ce27fe6d3cd1031f6514db59c985",
+      "untracked/semantic-cancellation-2026-10-23/asan-build/bin/unittests": "c60bacc335638776dada8ba9261ef98b8ccf887c7fb9c39a838bcde68a0adc4e"
+    },
+    "build": {
+      "exitCode": 0,
+      "logSha256": "887fa596fc1d1e1ba3cdeb0560b9e90a26335ce045e2df27a08d541b0f1c87d9"
+    }
+  },
+  "tsanBuild": {
+    "status": "completed",
+    "networkUsed": false,
+    "steps": [
+      {
+        "name": "configure",
+        "arguments": [
+          "cmake",
+          "-S",
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/source",
+          "-B",
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/stage-bc-conditional-latency-2026-10-28/tsan-build",
+          "-G",
+          "Unix Makefiles",
+          "-DCMAKE_BUILD_TYPE=RelWithDebInfo",
+          "-DCMAKE_CXX_COMPILER=/opt/homebrew/opt/llvm/bin/clang++",
+          "-DCMAKE_C_COMPILER=/opt/homebrew/opt/llvm/bin/clang",
+          "-DCMAKE_CXX_FLAGS=-fsanitize=thread -fno-omit-frame-pointer -stdlib=libc++",
+          "-DCMAKE_CXX_FLAGS_RELWITHDEBINFO=-O1 -g -DNDEBUG",
+          "-DCMAKE_EXE_LINKER_FLAGS=-fsanitize=thread -stdlib=libc++",
+          "-DCMAKE_SHARED_LINKER_FLAGS=-fsanitize=thread",
+          "-DFETCHCONTENT_FULLY_DISCONNECTED=ON",
+          "-DFETCHCONTENT_UPDATES_DISCONNECTED=ON",
+          "-DSLANG_SERVER_INCLUDE_TESTS=ON",
+          "-DSLANG_SERVER_INCLUDE_SDK_TESTS=OFF",
+          "-DSLANG_USE_THREADS=ON",
+          "-DSLANG_USE_MIMALLOC=OFF",
+          "-DFETCHCONTENT_SOURCE_DIR_CATCH2=/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/dependencies/catch2-src",
+          "-DFETCHCONTENT_SOURCE_DIR_FMT=/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/dependencies/fmt-src",
+          "-DFETCHCONTENT_SOURCE_DIR_BOOST_REGEX=/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/dependencies/boost_regex-src",
+          "-DFETCHCONTENT_SOURCE_DIR_TOMLPLUSPLUS=/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/dependencies/tomlplusplus-src"
+        ],
+        "exitCode": 0,
+        "logSha256": "34923e7e3bc05f948f7a858cf6045b28130de87e3939aa3d6b431625e8a49e0a"
+      },
+      {
+        "name": "build",
+        "arguments": [
+          "cmake",
+          "--build",
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/stage-bc-conditional-latency-2026-10-28/tsan-build",
+          "--target",
+          "slang_server",
+          "server_unittests",
+          "-j",
+          "6"
+        ],
+        "exitCode": 0,
+        "logSha256": "e4ef54c71c5119e3f77da64893a9bd817e20967f8c167d86687bf04d4e8c9012"
+      }
+    ],
+    "sourceReceiptSha256": "1954a5c8b16ab8f4a4d130a15359660257f7d95179b5c0b038768b78966448f9",
+    "passed": true,
+    "binarySha256": {
+      "untracked/stage-bc-conditional-latency-2026-10-28/tsan-build/bin/slang-server": "d6f2cd57dc9076c0263fc0c4c35324165cc163508169f0f8ba1009afeb28464a",
+      "untracked/stage-bc-conditional-latency-2026-10-28/tsan-build/bin/server_unittests": "aa3f1a0617087618ae902b022371b1446c2e71a191f3c02c142452860b7df6fd"
+    }
+  },
+  "performance": {
+    "feasibilityPassed": true,
+    "originalGatesPassed": true,
+    "conditionalExceptionUsed": false,
+    "fullQualificationPassed": false,
+    "summary": {
+      "macro": {
+        "p50": {
+          "baselineMs": 15.5253125,
+          "candidateMs": 15.374999749999999,
+          "savingMs": 0.15031275000000122
+        },
+        "p95": {
+          "baselineMs": 464.6967285,
+          "candidateMs": 452.254479,
+          "savingMs": 12.442249500000003
+        },
+        "lastDiagnosticMs": {
+          "baselineMs": 977.9217289999999,
+          "candidateMs": 932.0059369999999,
+          "savingMs": 45.91579200000001
+        }
+      },
+      "body": {
+        "p50": {
+          "baselineMs": 15.590739750000001,
+          "candidateMs": 17.081947749999998,
+          "savingMs": -1.4912079999999968
+        },
+        "p95": {
+          "baselineMs": 17.822000000000003,
+          "candidateMs": 18.260375500000002,
+          "savingMs": -0.43837549999999936
+        },
+        "lastDiagnosticMs": {
+          "baselineMs": 26.3120625,
+          "candidateMs": 27.003042,
+          "savingMs": -0.690979500000001
+        }
+      }
+    },
+    "warmDataflowSavingMs": 37.31,
+    "sourceReceiptSha256": "1954a5c8b16ab8f4a4d130a15359660257f7d95179b5c0b038768b78966448f9",
+    "runtimeSha256": "53194b27031a6e31b492c6fbbc04a1d6a1a8394417a325abb4de6c77cd0a7fb6",
+    "next": "Keep current opt-in candidate for current-version TSan and full fixed14/direct6 qualification; macro admission and D38 remain pending",
+    "networkUsed": false
+  },
+  "policy": {
+    "userAuthorization": "如果可以换取到其他地方的巨大收益，可以适当放宽50ms以下的指标",
+    "status": "new conditional policy; original failures retained",
+    "eligibility": "Latency metrics only; both baseline and candidate under 50ms. Original passing gates stay passing. No changes to correctness, cancellation, CPU, memory or slower-latency gates.",
+    "fastException": {
+      "maxCandidateMs": 50,
+      "allowedExtraMsFormula": "min(10, max(2, 0.25 * baselineMs))",
+      "noiseFloorMs": 2,
+      "relativeAllowance": 0.25,
+      "absoluteGrowthCapMs": 10
+    },
+    "requiredCompensation": {
+      "baselineEndToEndMsAtLeast": 100,
+      "absoluteSavingMsAtLeast": 50,
+      "orRelativeReductionAtLeast": 0.2,
+      "note": "Must be a measured user-visible end-to-end path in the same candidate qualification; component sums do not qualify."
+    },
+    "recordBothPolicies": true,
+    "allOtherGatesUnchanged": true,
+    "defaultOff": true,
+    "next": "Rebase previously validated parallel-summary replay on current archive3 baseline; validate actual benefit before D38/main"
+  },
+  "originalFailuresRetained": true,
+  "experimentalDefaultOff": true,
+  "noNewDebounce": true,
+  "networkUsed": false,
+  "mainPushed": false
+}

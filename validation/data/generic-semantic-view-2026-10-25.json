@@ -1,0 +1,137 @@
+{
+  "stage": "A: raw semantic class view",
+  "status": "sdk-semantic-view-verified-server-integration-incomplete",
+  "featureComplete": false,
+  "performanceQualified": false,
+  "pushedToMain": false,
+  "binarySha256": "0d7ef40d89af5fbcce9c2110bb9dca75b0ffcc72ed8c600f10053103c0cd1db3",
+  "sdkBase": "151a801ceaf6faf23d79a42d210ff67e50eb4660",
+  "sdkPatchSha256": "4dc40d2f1615cdaf464b799748683bef81c74bdafa57ac7cdf5407f1595cd501",
+  "tests": {
+    "targetedSdk": {
+      "cases": 8,
+      "assertions": 2112,
+      "exitCode": 0
+    },
+    "semanticShapeMatrix": {
+      "combinations": 64,
+      "exactIndependentNativeSemanticDiagnostics": true,
+      "ownedImportedNestedAndFirstLast": true
+    },
+    "sdkNative": {
+      "cases": 2621,
+      "assertions": 28770,
+      "exitCode": 0
+    },
+    "sdkAsan": {
+      "cases": 2621,
+      "assertions": 28770,
+      "exitCode": 0,
+      "detectLeaks": false
+    },
+    "serverNative": {
+      "cases": 902,
+      "passed": 901,
+      "failed": 1,
+      "assertions": 145549,
+      "failedAssertions": 68,
+      "exitCode": 42
+    },
+    "serverAsan": {
+      "cases": 902,
+      "passed": 901,
+      "failed": 1,
+      "assertions": 145549,
+      "failedAssertions": 68,
+      "exitCode": 42,
+      "detectLeaks": false
+    },
+    "onlyServerFailure": "new generic-change regression: localDiagnosticUpdates; Native diagnostic/hover comparisons passed",
+    "python": {
+      "passed": 17,
+      "exitCode": 0
+    },
+    "transport": {
+      "passed": 43,
+      "exitCode": 0
+    }
+  },
+  "cva6": {
+    "scenes": 7,
+    "states": 296,
+    "uriCount": 612,
+    "exactHoverAndDiagnostics": true,
+    "uvmAndWholeDutSharing": true,
+    "reports": {
+      "body-automatic-correctness.json": {
+        "sha256": "628c99b249b2cf346e982db59ce6f2c305d20d9d44522a6f514767d10ab592b4",
+        "states": 52,
+        "passed": true
+      },
+      "effectful-automatic-correctness.json": {
+        "sha256": "da8be5876392eb0a605c261a770411b5e053ff6bdf477017efeeb6852b2b7cbc",
+        "states": 52,
+        "passed": true
+      },
+      "generic-automatic-correctness.json": {
+        "sha256": "af1482cf233d960509110998d59000558fefc4f0e4c5ee49b66429db3d4aa7c6",
+        "states": 52,
+        "passed": true
+      },
+      "local-imports-automatic-correctness.json": {
+        "sha256": "ca2e9d3a1fa4ffdd1b66e1f8bfc141bc0245cd565bfb5ca552c5302d58f899fe",
+        "states": 32,
+        "passed": true
+      },
+      "local-types-automatic-correctness.json": {
+        "sha256": "bc4c5bbf44e0f99de0f264b4faa97ccc159c8126b3138731d4c73504e46ce394",
+        "states": 28,
+        "passed": true
+      },
+      "package-automatic-correctness.json": {
+        "sha256": "494f282c1240b02400323b78a59e2cbc596526de62cfce68bb78d8c1305f3a7f",
+        "states": 52,
+        "passed": true
+      },
+      "virtual-interface-automatic-correctness.json": {
+        "sha256": "9071d6f42e69e10065cdae97670422b9d193e23e31f970dead6a74c205ce8d42",
+        "states": 28,
+        "passed": true
+      }
+    },
+    "purpose": "correctness only"
+  },
+  "sdkRestoration": {
+    "base": "151a801ceaf6faf23d79a42d210ff67e50eb4660",
+    "files": 709,
+    "patchSha256": "4dc40d2f1615cdaf464b799748683bef81c74bdafa57ac7cdf5407f1595cd501",
+    "cleanOfflineApplyVerified": true,
+    "temporaryTreeRemoved": true,
+    "networkUsed": false
+  },
+  "implemented": [
+    "joint raw semantic diagnostics with body/class filtering before coalescing",
+    "private last-instance invalid checks and first-instance placeholder superseding",
+    "indexed invalid scope discovery and private own generic completion",
+    "nested generic discovery without iterator invalidation or omitted checks",
+    "old-body evaluation and stale syntax protection in new private specializations"
+  ],
+  "remaining": [
+    "reference view using the same excluded/provisional imported scopes",
+    "current edited function syntax in newly created specializations including external methods/tasks",
+    "wire semantic/reference/flow closure into server and lift guards after proof",
+    "general generic-change CVA6 scene and complete performance qualification"
+  ],
+  "invariants": {
+    "experimentsDefaultOff": true,
+    "fixedDebounceAdded": false,
+    "networkUsed": false,
+    "executionOrder": [
+      "A",
+      "B",
+      "C",
+      "D"
+    ]
+  },
+  "evidenceDirectory": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/generic-semantic-view-2026-10-25"
+}

@@ -10,6 +10,7 @@
 
 #include "ast/ServerCompilation.h"
 #include "ast/TrustedUvmLibrary.h"
+#include "util/ModelOwnerTrace.h"
 #include "util/SlangExtensions.h"
 
 #include "slang/ast/symbols/CompilationUnitSymbols.h"
@@ -18,6 +19,7 @@
 #include "slang/ast/symbols/SubroutineSymbols.h"
 #include "slang/ast/symbols/ValueSymbol.h"
 #include "slang/diagnostics/AnalysisDiags.h"
+#include "slang/util/ScopeGuard.h"
 
 namespace server {
 using namespace slang;
@@ -29,9 +31,15 @@ ShallowCompilation::ShallowCompilation(
     BufferID sourceBuffer) :
     m_sourceManager(sourceManager), m_tree(std::move(tree)), m_allTrees{m_tree},
     m_analysisOptions(options.getOrDefault<analysis::AnalysisOptions>()) {
+    auto trace = slang::ScopeGuard([&] {
+        if (modelOwnerTraceEnabled() && m_compilation)
+            traceModelOwner("shallow-link", m_compilation.get(),
+                            m_activeDesign ? &m_activeDesign->getAnalysis().compilation : nullptr,
+                            m_compilation->getTotalBytesAllocated(), 0, m_compilation.use_count());
+    });
     m_fullDesignView = design != nullptr;
     if (auto setting = options.get<TrustedUvmImport>())
-        m_sourceOwnerLease = setting->sourceOwner;
+        m_sourceOwnerLease = setting->sourceOwner.lock();
     for (const auto& dependency : dependencies)
         if (std::find(m_allTrees.begin(), m_allTrees.end(), dependency) == m_allTrees.end())
             m_allTrees.push_back(dependency);
@@ -108,6 +116,18 @@ ShallowCompilation::ShallowCompilation(
         // never add default bodies or overrides to the shared library owner.
     }
 
+    // Private fallback elaboration must use this consumer's source manager.
+    // Fixed source navigation can start with the provider's retained tree;
+    // namespace views share its nodes and buffers without reparsing the library.
+    for (auto& tree : m_allTrees) {
+        if (&tree->sourceManager() != &sourceManager) {
+            auto view = syntax::SyntaxTree::sharedPrefixView(tree, sourceManager);
+            if (m_tree == tree)
+                m_tree = view;
+            tree = std::move(view);
+        }
+    }
+
     auto cOptions = options.getOrDefault<ast::CompilationOptions>();
     cOptions.flags |= ast::CompilationFlags::AllowTopLevelIfacePorts;
     cOptions.flags |= ast::CompilationFlags::CheckUninstantiated;
@@ -144,6 +164,17 @@ ShallowCompilation::ShallowCompilation(
         m_activeDesign = design->createActiveDesignContext(definitionNames, ctx);
         m_activeDesign->applyOverrides(*m_compilation);
     }
+}
+
+ShallowCompilation::ShallowCompilation(SourceManager& sm, std::shared_ptr<syntax::SyntaxTree> tree,
+                                       std::shared_ptr<ast::Compilation> completedOwner,
+                                       std::span<const ast::SubroutineSymbol* const> originals) :
+    m_bodyQueryRoots(originals.begin(), originals.end()), m_sourceManager(sm),
+    m_tree(std::move(tree)), m_allTrees{m_tree}, m_compilation(std::move(completedOwner)),
+    m_fullDesignView(true), m_editedDefinitionsElaborated(true) {
+    for (auto original : originals)
+        if (&original->getCompilation() != m_compilation.get())
+            throw std::logic_error("completed body context belongs to another compilation");
 }
 
 ShallowCompilation::ShallowCompilation(SourceManager& sm, std::shared_ptr<syntax::SyntaxTree> tree,

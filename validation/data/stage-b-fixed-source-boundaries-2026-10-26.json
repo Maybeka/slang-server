@@ -1,0 +1,24 @@
+{
+  "goalComplete": false,
+  "b1Complete": false,
+  "binarySha256": "3022f87ed94c2e6f85ee7a6989520f01f6dae63cd77aafa4ea840593e1bc5bfa",
+  "fullTests": {
+    "ctest": 927,
+    "serverAsanCases": 912,
+    "serverAsanAssertions": 170307,
+    "python": 17,
+    "transport": 43,
+    "sdkFiles": 709
+  },
+  "correctedTextProbe": {
+    "appendedTextBytes": 4194304,
+    "baselineBefore": 1848,
+    "baselineAfter": 8390733,
+    "isolatedProviderBefore": 1848,
+    "isolatedProviderAfter": 1848,
+    "scope": "Source accounting and reachability, not RSS measurement"
+  },
+  "CvaCorrectnessPending": true,
+  "performancePending": true,
+  "networkUsed": false
+}

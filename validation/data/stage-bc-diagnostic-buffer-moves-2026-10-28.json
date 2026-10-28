@@ -1,0 +1,541 @@
+{
+  "accepted": false,
+  "qualification": false,
+  "decision": {
+    "accepted": false,
+    "failedChecks": [
+      "warmPublicationCopyReductionGain"
+    ],
+    "warmRetirePlusReportsSavingsUs": 4793.5,
+    "requiredSavingsUs": 10000,
+    "otherDeclaredGatesPassed": true,
+    "withdrawn": "All Config/client/local/worker propagation/telemetry and5 tests reverted; retained independent atomic-ready fix from earlier stage",
+    "restoredSourceSha256": {
+      "source/include/ServerDiagClient.h": "3542b179634b1db382ef656457e339c88100033b3afaedd6a8c16ad9518ced14",
+      "source/src/ServerDiagClient.cpp": "ab16ea470ede4414839b66d9fbabc6717dfc70489a4fa8c476e3b246f5ea489b",
+      "source/include/Config.h": "999948bb6e3917cb4c335311dfb215a1e25c40c50a1f6499f43b44b7a416c128",
+      "source/src/ServerDriver.cpp": "7e2d3c4f488ba0e694627554155a380ffc3f6d9985b5c4aeb83fe5f756d95e38",
+      "source/tests/cpp/DiagTests.cpp": "0fa7de8dd3d38554f4fbb72d6251706b529504bfb0c5a01f0eeb80106be44eae",
+      "source/src/document/BodyDiagnosticCache.cpp": "802c5819e5476a8568b5377855408ddd82cd397f414848cc691204b791e924db",
+      "source/include/diagnostics/DiagnosticWorker.h": "34559f1625f09b8c8ba9f502301379196c75753dd555e87886a878632b4ce7b8",
+      "source/src/diagnostics/DiagnosticWorker.cpp": "246dc7601790bda432c3c8184921321ad7f02d990eea3b983df821f16a272ed3",
+      "source/src/diagnostics/DiagnosticSnapshotCapture.cpp": "4df7872123e76bb3e4619c47357f6fa23e6e1b42cc2541ded37d568afcc096dd",
+      "source/tests/cpp/DiagnosticSnapshotTests.cpp": "3caad9124a0d63fcec7e1a4972bb28c556dfed8c4a2232068dbd877a14db5270"
+    },
+    "original20FailureUnchanged": true
+  },
+  "evaluation": {
+    "qualification": false,
+    "feasible": false,
+    "candidateSha256": "5deac45ed79e32e55262092fdf0144a20cd6b7072b16750bf4f799201a3a02f5",
+    "checks": {
+      "macro-forward-fourArms": true,
+      "macro-forward-completeOracle": true,
+      "macro-forward-control-warmFullPass": true,
+      "macro-forward-candidate-warmFullPass": true,
+      "macro-reverse-fourArms": true,
+      "macro-reverse-completeOracle": true,
+      "macro-reverse-control-warmFullPass": true,
+      "macro-reverse-candidate-warmFullPass": true,
+      "body-forward-fourArms": true,
+      "body-forward-completeOracle": true,
+      "body-reverse-fourArms": true,
+      "body-reverse-completeOracle": true,
+      "macro-forward-control-complete-publication-warm": true,
+      "macro-forward-candidate-complete-publication-warm": true,
+      "macro-reverse-control-complete-publication-warm": true,
+      "macro-reverse-candidate-complete-publication-warm": true,
+      "warmPublicationCopyReductionGain": false,
+      "macroFinalDiagnosticGain": true,
+      "macro-p50-baseline": true,
+      "macro-p95-baseline": true,
+      "macro-p50-control": true,
+      "macro-p95-control": true,
+      "body-p50-baseline": true,
+      "body-p95-baseline": true,
+      "body-lastDiagnostic-baseline": true,
+      "body-p50-control": true,
+      "body-p95-control": true,
+      "body-lastDiagnostic-control": true,
+      "macro-peakRss-baseline": true,
+      "macro-peakFootprint-baseline": true,
+      "macro-cpuSeconds-baseline": true,
+      "macro-peakRss-control": true,
+      "macro-peakFootprint-control": true,
+      "macro-cpuSeconds-control": true,
+      "body-peakRss-baseline": true,
+      "body-peakFootprint-baseline": true,
+      "body-cpuSeconds-baseline": true,
+      "body-peakRss-control": true,
+      "body-peakFootprint-control": true,
+      "body-cpuSeconds-control": true,
+      "macro-forward-related-moves-exercised": true,
+      "macro-forward-off-control-no-moves": true,
+      "macro-forward-retired-moves-exercised": true,
+      "macro-reverse-related-moves-exercised": true,
+      "macro-reverse-off-control-no-moves": true,
+      "macro-reverse-retired-moves-exercised": true,
+      "body-forward-related-moves-exercised": true,
+      "body-forward-off-control-no-moves": true,
+      "body-reverse-related-moves-exercised": true,
+      "body-reverse-off-control-no-moves": true
+    },
+    "failedChecks": [
+      "warmPublicationCopyReductionGain"
+    ],
+    "ratios": {
+      "macro-p50-baseline": 0.8610788186889782,
+      "macro-p95-baseline": 1.0256701270157762,
+      "macro-p50-control": 0.8464188039338196,
+      "macro-p95-control": 0.9851300244147453,
+      "body-p50-baseline": 0.9734731904755289,
+      "body-p95-baseline": 0.9736437765312693,
+      "body-lastDiagnostic-baseline": 0.785696507332052,
+      "body-p50-control": 0.9871359744049628,
+      "body-p95-control": 1.0190144940108288,
+      "body-lastDiagnostic-control": 0.7984484707919686,
+      "macro-peakRss-baseline": 0.9984039229536255,
+      "macro-peakFootprint-baseline": 0.9978133227816802,
+      "macro-cpuSeconds-baseline": 1.0050120195855288,
+      "macro-peakRss-control": 0.9980040055670593,
+      "macro-peakFootprint-control": 0.9976341164144031,
+      "macro-cpuSeconds-control": 0.9748621369707473,
+      "body-peakRss-baseline": 1.000885506623765,
+      "body-peakFootprint-baseline": 1.0008537447161976,
+      "body-cpuSeconds-baseline": 1.0169699674049162,
+      "body-peakRss-control": 1.0000613212092542,
+      "body-peakFootprint-control": 1.0004319448320564,
+      "body-cpuSeconds-control": 1.0095259793859792
+    },
+    "savings": {
+      "warmRetirePlusReportsUsVsControl": 4793.5,
+      "macroFinalDiagnosticMsVsControl": 13.0560210000001
+    },
+    "semanticIssuePhases": {
+      "macro-forward": {
+        "control": {
+          "allUs": [
+            70929,
+            74513
+          ],
+          "warmMedianUs": 74513
+        },
+        "candidate": {
+          "allUs": [
+            70419,
+            74646
+          ],
+          "warmMedianUs": 74646
+        }
+      },
+      "macro-reverse": {
+        "control": {
+          "allUs": [
+            70928,
+            74359
+          ],
+          "warmMedianUs": 74359
+        },
+        "candidate": {
+          "allUs": [
+            70466,
+            74172
+          ],
+          "warmMedianUs": 74172
+        }
+      }
+    },
+    "bufferMoveStats": {
+      "macro-forward": {
+        "candidate": [
+          {
+            "retiredBuckets": 0,
+            "retiredDiagnostics": 0,
+            "relatedVectors": 13436
+          },
+          {
+            "retiredBuckets": 397,
+            "retiredDiagnostics": 24267,
+            "relatedVectors": 26873
+          }
+        ],
+        "control": [
+          {
+            "retiredBuckets": 0,
+            "retiredDiagnostics": 0,
+            "relatedVectors": 0
+          },
+          {
+            "retiredBuckets": 0,
+            "retiredDiagnostics": 0,
+            "relatedVectors": 0
+          }
+        ]
+      },
+      "macro-reverse": {
+        "candidate": [
+          {
+            "retiredBuckets": 0,
+            "retiredDiagnostics": 0,
+            "relatedVectors": 13436
+          },
+          {
+            "retiredBuckets": 397,
+            "retiredDiagnostics": 24267,
+            "relatedVectors": 26873
+          }
+        ],
+        "control": [
+          {
+            "retiredBuckets": 0,
+            "retiredDiagnostics": 0,
+            "relatedVectors": 0
+          },
+          {
+            "retiredBuckets": 0,
+            "retiredDiagnostics": 0,
+            "relatedVectors": 0
+          }
+        ]
+      },
+      "body-forward": {
+        "candidate": [
+          {
+            "retiredBuckets": 0,
+            "retiredDiagnostics": 0,
+            "relatedVectors": 13436
+          }
+        ],
+        "control": [
+          {
+            "retiredBuckets": 0,
+            "retiredDiagnostics": 0,
+            "relatedVectors": 0
+          }
+        ]
+      },
+      "body-reverse": {
+        "candidate": [
+          {
+            "retiredBuckets": 0,
+            "retiredDiagnostics": 0,
+            "relatedVectors": 13436
+          }
+        ],
+        "control": [
+          {
+            "retiredBuckets": 0,
+            "retiredDiagnostics": 0,
+            "relatedVectors": 0
+          }
+        ]
+      }
+    },
+    "completePublicationPhases": {
+      "macro-forward": {
+        "control": {
+          "completePasses": [
+            {
+              "prepared": 0,
+              "publication-inputs": 311,
+              "publication-retire-buckets": 262,
+              "publication-reports": 93526,
+              "publication-commit": 1,
+              "publication-transport": 81372
+            },
+            {
+              "prepared": 408323,
+              "publication-inputs": 372,
+              "publication-retire-buckets": 4409,
+              "publication-reports": 98908,
+              "publication-commit": 5,
+              "publication-transport": 82813
+            }
+          ],
+          "allUs": [
+            93788,
+            103317
+          ],
+          "warmMedianUs": 103317
+        },
+        "candidate": {
+          "completePasses": [
+            {
+              "prepared": 0,
+              "publication-inputs": 342,
+              "publication-retire-buckets": 240,
+              "publication-reports": 92978,
+              "publication-commit": 1,
+              "publication-transport": 96421
+            },
+            {
+              "prepared": 404673,
+              "publication-inputs": 345,
+              "publication-retire-buckets": 394,
+              "publication-reports": 98519,
+              "publication-commit": 5,
+              "publication-transport": 110005
+            }
+          ],
+          "allUs": [
+            93218,
+            98913
+          ],
+          "warmMedianUs": 98913
+        }
+      },
+      "macro-reverse": {
+        "control": {
+          "completePasses": [
+            {
+              "prepared": 0,
+              "publication-inputs": 330,
+              "publication-retire-buckets": 261,
+              "publication-reports": 93921,
+              "publication-commit": 2,
+              "publication-transport": 85529
+            },
+            {
+              "prepared": 401730,
+              "publication-inputs": 377,
+              "publication-retire-buckets": 4515,
+              "publication-reports": 99226,
+              "publication-commit": 4,
+              "publication-transport": 97429
+            }
+          ],
+          "allUs": [
+            94182,
+            103741
+          ],
+          "warmMedianUs": 103741
+        },
+        "candidate": {
+          "completePasses": [
+            {
+              "prepared": 0,
+              "publication-inputs": 301,
+              "publication-retire-buckets": 242,
+              "publication-reports": 92827,
+              "publication-commit": 2,
+              "publication-transport": 75397
+            },
+            {
+              "prepared": 402492,
+              "publication-inputs": 347,
+              "publication-retire-buckets": 440,
+              "publication-reports": 98118,
+              "publication-commit": 3,
+              "publication-transport": 78617
+            }
+          ],
+          "allUs": [
+            93069,
+            98558
+          ],
+          "warmMedianUs": 98558
+        }
+      }
+    },
+    "priorOriginal20FailureUnchanged": true,
+    "scope": "One declared diagnostic ownership-transfer feasibility set; all original final gates unchanged"
+  },
+  "preflight": {
+    "status": "completed",
+    "qualification": false,
+    "steps": [
+      {
+        "name": "native-targeted",
+        "status": "passed",
+        "argv": [
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/build-uvm/bin/server_unittests",
+          "[diagnostic-buffer-moves]"
+        ],
+        "pid": 95533,
+        "exitCode": 0,
+        "logSha256": "9948fcf10d719d1fe4081f8d2aab5a62ec2e5684488f78d7881966c671c48d65",
+        "summary": "109 assertions in 5 test cases"
+      },
+      {
+        "name": "asan-targeted",
+        "status": "passed",
+        "argv": [
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/semantic-cancellation-2026-10-23/asan-build/bin/server_unittests",
+          "[diagnostic-buffer-moves]"
+        ],
+        "pid": 95535,
+        "exitCode": 0,
+        "logSha256": "d0a21ff07ca5f7d5607812255e61727347f460065f92c4c4557a14ebd312db7e",
+        "summary": "109 assertions in 5 test cases"
+      },
+      {
+        "name": "native-full",
+        "status": "passed",
+        "argv": [
+          "ctest",
+          "--test-dir",
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/build-uvm",
+          "--output-on-failure",
+          "-j",
+          "1"
+        ],
+        "pid": 95536,
+        "exitCode": 0,
+        "logSha256": "cd38183687ae31a695feeca62621dc5529197de73b25f7884fe355b0addfe568",
+        "summary": "100% tests passed out of 975",
+        "ctestAutomaticLogSha256": "b68e1eeba12076e6cc933bcb0c4535e7ce3cd2a68393348fee70112a8687fbd9"
+      },
+      {
+        "name": "asan-full",
+        "status": "passed",
+        "argv": [
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/semantic-cancellation-2026-10-23/asan-build/bin/server_unittests"
+        ],
+        "pid": 98622,
+        "exitCode": 0,
+        "logSha256": "b8bf3db41a35b42d66bb59fad752c678b2cdbb4535a621f995f943f704ef3fae",
+        "summary": "All tests passed (176772 assertions in 960 test cases)"
+      },
+      {
+        "name": "integrity",
+        "status": "passed",
+        "argv": [
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/source/.venv/bin/python",
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/source/restoration/prepare-main-sdk.py",
+          "--deps-root",
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/dependencies"
+        ],
+        "pid": 678,
+        "exitCode": 0,
+        "logSha256": "08c8fec12d316070e54e19554b6e1202309b0331e8a7c77793f4b889429e5309",
+        "summary": "Verified 709 SDK files"
+      },
+      {
+        "name": "public56",
+        "status": "passed",
+        "argv": [
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/source/.venv/bin/python",
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/stage-bc-diagnostic-buffer-moves-2026-10-28/public-correctness.py",
+          "--binary",
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/build-uvm/bin/slang-server",
+          "--old",
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/stage-bc-parent-bound-leaf-2026-10-28/baseline/bin/slang-server",
+          "--output",
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/stage-bc-diagnostic-buffer-moves-2026-10-28/public56.json"
+        ],
+        "pid": 681,
+        "exitCode": 0,
+        "logSha256": "ea15a36ae103ffbc058be86f55f2189e0f5298dead306fc69e4373cef9d14468",
+        "summary": "PASS"
+      }
+    ],
+    "detectLeaks": false,
+    "binarySha256": {
+      "native": "5deac45ed79e32e55262092fdf0144a20cd6b7072b16750bf4f799201a3a02f5",
+      "nativeTests": "72623431016c32bc0b54a866af7f017e68ac1a523fe689a712fe78acc0a1ce59",
+      "asan": "4c398e2e9f95c747c677000624c0ffd0fb718ba70eef61a755ab28802d1846d0",
+      "asanTests": "84a1c2910a236a06d2a9a8f28f2783b9b91f81eb3a10dcce45321cea846f1d1a"
+    },
+    "nativeRegistration": {
+      "sha256": "6050fc648717847688a0ba7d70eb6d85219dbccf93a78fa8f39090ef125610d6",
+      "count": 961
+    },
+    "asanRegistration": {
+      "sha256": "6050fc648717847688a0ba7d70eb6d85219dbccf93a78fa8f39090ef125610d6",
+      "count": 961
+    },
+    "passed": true,
+    "publicStates": 56
+  },
+  "networkUsed": false,
+  "sourceReceipt": "1735 files including709 SDK; actual source/binary/helper hashes retained in local candidate receipt",
+  "prototype": "Default-off full/local/worker diagnostic DTO ownership transfer; all code/config/private optional metadata and5 tests withdrawn",
+  "retainedIndependentTestFix": "Earlier atomic PID readiness publication remains; not part of this prototype",
+  "original20FailureUnchanged": true,
+  "restoredValidation": {
+    "status": "completed",
+    "qualification": false,
+    "steps": [
+      {
+        "name": "native",
+        "status": "passed",
+        "pid": 3079,
+        "exitCode": 0,
+        "logSha256": "8cd17fb91a7b706e9cdccb5daee71ca61c50d9ab79e137637fe2ec7062476322",
+        "summary": "100% tests passed out of 970",
+        "ctestAutomaticLogSha256": "b99186ce9a02b4deb431a6252747f64e6de123f795c7721c7e2f6570513b08e3"
+      },
+      {
+        "name": "asan",
+        "status": "passed",
+        "pid": 6175,
+        "exitCode": 0,
+        "logSha256": "2c422b7330ffe525ac03b36c378bea6058770c82df265420611dcac894d3be0a",
+        "summary": "176653 assertions in 955 test cases"
+      },
+      {
+        "name": "integrity",
+        "status": "passed",
+        "pid": 8063,
+        "exitCode": 0,
+        "logSha256": "08c8fec12d316070e54e19554b6e1202309b0331e8a7c77793f4b889429e5309",
+        "summary": "Verified 709 SDK files"
+      }
+    ],
+    "detectLeaks": false,
+    "restoredSourceSha256": {
+      "source/include/ServerDiagClient.h": "3542b179634b1db382ef656457e339c88100033b3afaedd6a8c16ad9518ced14",
+      "source/src/ServerDiagClient.cpp": "ab16ea470ede4414839b66d9fbabc6717dfc70489a4fa8c476e3b246f5ea489b",
+      "source/include/Config.h": "999948bb6e3917cb4c335311dfb215a1e25c40c50a1f6499f43b44b7a416c128",
+      "source/src/ServerDriver.cpp": "7e2d3c4f488ba0e694627554155a380ffc3f6d9985b5c4aeb83fe5f756d95e38",
+      "source/tests/cpp/DiagTests.cpp": "0fa7de8dd3d38554f4fbb72d6251706b529504bfb0c5a01f0eeb80106be44eae",
+      "source/src/document/BodyDiagnosticCache.cpp": "802c5819e5476a8568b5377855408ddd82cd397f414848cc691204b791e924db",
+      "source/include/diagnostics/DiagnosticWorker.h": "34559f1625f09b8c8ba9f502301379196c75753dd555e87886a878632b4ce7b8",
+      "source/src/diagnostics/DiagnosticWorker.cpp": "246dc7601790bda432c3c8184921321ad7f02d990eea3b983df821f16a272ed3",
+      "source/src/diagnostics/DiagnosticSnapshotCapture.cpp": "4df7872123e76bb3e4619c47357f6fa23e6e1b42cc2541ded37d568afcc096dd",
+      "source/tests/cpp/DiagnosticSnapshotTests.cpp": "3caad9124a0d63fcec7e1a4972bb28c556dfed8c4a2232068dbd877a14db5270"
+    },
+    "binarySha256": {
+      "build-uvm/bin/slang-server": "276f15897dfb26e48cff9e7a7579cd2565ec5b7e712701167d6ddc0adf6a80bd",
+      "build-uvm/bin/server_unittests": "7595ce9b2b80bbc8aa4ef4df4543887fde41219e092a157c2de8f4b259912c0a",
+      "build-uvm/bin/diagnostic_test_server": "1798707f2eeda9c82fedcdc62a6ac3bc4bdc0637e7883d9aed94fccc77e4dba1",
+      "build-uvm/bin/slang_server_counted": "6c1a77941799e8f7ff59e6d6ecfb38c106fd4509be830851ddea86b870836f41",
+      "untracked/semantic-cancellation-2026-10-23/asan-build/bin/slang-server": "8f2b55dcf09c9ce05644d188e0abbca5e8ce19ed3d57f1c5b6e0223d12ba80bc",
+      "untracked/semantic-cancellation-2026-10-23/asan-build/bin/server_unittests": "d3aae9df4f255b2ffe0bfdbd28625ce7fe488716e09a3d698b27c7a9eb425109",
+      "untracked/semantic-cancellation-2026-10-23/asan-build/bin/diagnostic_test_server": "245f2d6357ceebcb9151e0dccce385383f585bcdd81a6d345031c698473f3b36",
+      "untracked/semantic-cancellation-2026-10-23/asan-build/bin/slang_server_counted": "dc4651f1e32f2311aa24b9a23cda6c24352c34818ac009094a11296298e78889"
+    },
+    "retainedFix": "Only earlier test-main atomic readiness fix retained; DTO prototype fully withdrawn",
+    "passed": true
+  },
+  "sourceVersions": {
+    "mainHeadUnchanged": "6eab073a06584c31c5a05e5fd7be00ca2af90dd2",
+    "mainIndexSha256Unchanged": "196fcc983ec57436a67e691ab1274e9a8e0b67ae56605ec13996b82b37599c63",
+    "baselineSource": {
+      "ref": "refs/codex/performance-evidence/baseline-276f-readyfix-d9a80bba5134",
+      "commit": "b15cc5fc316674adec99d9332577fa64a68a1c3e",
+      "tree": "d9a80bba51340672653a7e3763e5af133e022df0",
+      "localOnly": true
+    },
+    "rejectedPrototypeSource": {
+      "ref": "refs/codex/performance-evidence/rejected-dto-moves-5deac-9c3ed991f680",
+      "commit": "1038748741994eca4f3dd857db786ef48fae4770",
+      "tree": "9c3ed991f68064f6280035d571b433cdf00003f8",
+      "localOnly": true
+    },
+    "patchSha256": "8e455e4bcf763e35d7ed606ef8bda996d9b4634dfb3d913f31477beb7f39da20",
+    "baselineNativeBinarySha256": "276f15897dfb26e48cff9e7a7579cd2565ec5b7e712701167d6ddc0adf6a80bd",
+    "rejectedPrototypeNativeBinarySha256": "5deac45ed79e32e55262092fdf0144a20cd6b7072b16750bf4f799201a3a02f5",
+    "SDK": "Restore pinned SDK151a801ceaf6faf23d79a42d210ff67e50eb4660 with the snapshot restoration patch/inventory; deps1296 verified",
+    "buildSettings": {
+      "CMAKE_BUILD_TYPE:STRING": "Release",
+      "CMAKE_CXX_COMPILER:STRING": "/opt/homebrew/opt/llvm/bin/clang++",
+      "CMAKE_CXX_FLAGS:STRING": " -stdlib=libc++",
+      "CMAKE_CXX_FLAGS_RELEASE:STRING": "-O3 -DNDEBUG",
+      "CMAKE_CXX_FLAGS_RELWITHDEBINFO:STRING": "-O2 -g -DNDEBUG"
+    },
+    "purpose": "Durable local source version for conclusions/data. Compiled code files validated against measured candidate hashes; docs/data in baseline snapshot reflect this later archival step. No main branch commit or remote push performed."
+  },
+  "retainedPrototypePatchSha256": "8e455e4bcf763e35d7ed606ef8bda996d9b4634dfb3d913f31477beb7f39da20",
+  "retentionReceiptSha256": "b7a49a9dd388219faa0a220380cbee5e56b44f8a5c58b5989acbc7cf56cb381c"
+}

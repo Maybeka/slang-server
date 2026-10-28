@@ -11,6 +11,7 @@
 #include "LspTypes.h"
 #include "RequestContext.h"
 #include "util/Log.h"
+#include "util/BorrowedGenericReader.h"
 #include <chrono>
 #include <condition_variable>
 #include <deque>
@@ -47,9 +48,9 @@ protected:
     }
 
     std::unordered_map<std::string,
-                       std::function<rfl::Generic(rfl::Generic, const RequestContext&)>>
+                       std::function<rfl::Generic(const rfl::Generic&, const RequestContext&)>>
         requests;
-    std::unordered_map<std::string, std::function<void(rfl::Generic, const RequestContext&)>>
+    std::unordered_map<std::string, std::function<void(const rfl::Generic&, const RequestContext&)>>
         notifications;
 
     template<typename P, typename R, auto Method>
@@ -62,11 +63,11 @@ protected:
         if constexpr (acceptsContext)
             cancellableMethods.emplace(name);
 
-        requests[name] = [this](std::optional<rfl::Generic> paramsJson,
+        requests[name] = [this](const rfl::Generic& paramsJson,
                                 const RequestContext& ctx) -> rfl::Generic {
             auto getResult = [&]() -> R {
                 if constexpr (!std::is_same_v<P, std::nullopt_t>) {
-                    auto params = rfl::from_generic<P, rfl::UnderlyingEnums>(paramsJson.value());
+                    auto params = rfl::from_generic<P, rfl::UnderlyingEnums>(paramsJson);
                     if (!params)
                         throw std::runtime_error(params.error().what());
 
@@ -109,10 +110,10 @@ protected:
         if constexpr (acceptsContext)
             cancellableMethods.emplace(name);
 
-        notifications[name] = [this](std::optional<rfl::Generic> paramsJson,
+        notifications[name] = [this](const rfl::Generic& paramsJson,
                                      const RequestContext& ctx) {
             if constexpr (!std::is_same_v<P, std::nullopt_t>) {
-                auto params = rfl::from_generic<P, rfl::UnderlyingEnums>(paramsJson.value());
+                auto params = rfl::from_generic<P, rfl::UnderlyingEnums>(paramsJson);
                 if (!params)
                     throw std::runtime_error(params.error().what());
 
@@ -159,23 +160,31 @@ protected:
         if (request.method != "textDocument/didChange" || !request.params)
             return std::nullopt;
 
-        auto params = rfl::from_generic<DidChangeTextDocumentParams, rfl::UnderlyingEnums>(
-            *request.params);
+        // Only the validated URI is used. Do not copy source text merely to
+        // route cancellation; normal typed dispatch still owns the actual text.
+        auto params = server::readBorrowedGeneric<DidChangeTextDocumentParams,
+                                                  rfl::UnderlyingEnums>(*request.params, true);
         if (!params)
             return std::nullopt;
         return params->textDocument.uri.str();
     }
 
-    // Only position queries whose input belongs to one document can be
-    // superseded this way. Commands and workspace queries retain their order.
+    // A document request is obsolete when its primary document changes,
+    // including requests that return workspace edits. Commands retain their order.
     std::optional<std::string> getDocumentQueryKey(const RpcRequest& request) const {
         if (!request.id || !request.params ||
             (request.method != "textDocument/completion" &&
              request.method != "textDocument/hover" &&
              request.method != "textDocument/definition" &&
-             request.method != "textDocument/signatureHelp"))
+             request.method != "textDocument/signatureHelp" &&
+             request.method != "textDocument/rename" &&
+             request.method != "textDocument/documentHighlight" &&
+             request.method != "textDocument/inlayHint" &&
+             request.method != "textDocument/documentLink" &&
+             request.method != "textDocument/documentSymbol" &&
+             request.method != "textDocument/codeAction"))
             return {};
-        auto object = request.params->to_object();
+        const auto* object = std::get_if<rfl::Generic::Object>(&request.params->get());
         if (!object)
             return {};
         for (const auto& [key, value] : *object)
@@ -195,8 +204,10 @@ protected:
             activeRequests.insert_or_assign(*request.id, ctx);
             if (m_cancelObsoleteDocumentQueries.load(std::memory_order_relaxed) &&
                 ctx.supportsCancellation())
-                if (auto key = getDocumentQueryKey(request))
+                if (auto key = getDocumentQueryKey(request)) {
+                    registeredQueryKeys.insert_or_assign(ctx.id(), *key);
                     pendingDocumentQueries[*key].insert_or_assign(*request.id, ctx);
+                }
         }
 
         if (ctx.supportsCancellation()) {
@@ -212,6 +223,7 @@ protected:
             auto it = pendingDocumentChanges.find(*key);
             if (it != pendingDocumentChanges.end() && it->second.id() != ctx.id())
                 it->second.cancel();
+            registeredChangeKeys.insert_or_assign(ctx.id(), *key);
             pendingDocumentChanges.insert_or_assign(std::move(*key), ctx);
         }
     }
@@ -225,8 +237,8 @@ protected:
             auto it = activeRequests.find(*request.id);
             if (it != activeRequests.end() && it->second.id() == ctx.id())
                 activeRequests.erase(it);
-            if (auto key = getDocumentQueryKey(request))
-                if (auto queries = pendingDocumentQueries.find(*key);
+            if (auto key = registeredQueryKeys.find(ctx.id()); key != registeredQueryKeys.end()) {
+                if (auto queries = pendingDocumentQueries.find(key->second);
                     queries != pendingDocumentQueries.end()) {
                     auto query = queries->second.find(*request.id);
                     if (query != queries->second.end() && query->second.id() == ctx.id())
@@ -234,16 +246,17 @@ protected:
                     if (queries->second.empty())
                         pendingDocumentQueries.erase(queries);
                 }
+                registeredQueryKeys.erase(key);
+            }
         }
 
         if (ctx.supportsCancellation()) {
-            auto key = getDidChangeKey(request);
-            if (!key)
-                return;
-
-            auto it = pendingDocumentChanges.find(*key);
-            if (it != pendingDocumentChanges.end() && it->second.id() == ctx.id())
-                pendingDocumentChanges.erase(it);
+            if (auto key = registeredChangeKeys.find(ctx.id()); key != registeredChangeKeys.end()) {
+                auto it = pendingDocumentChanges.find(key->second);
+                if (it != pendingDocumentChanges.end() && it->second.id() == ctx.id())
+                    pendingDocumentChanges.erase(it);
+                registeredChangeKeys.erase(key);
+            }
         }
     }
 
@@ -275,7 +288,7 @@ protected:
         ctx.info("Started {}", ctx.method());
     }
 
-    std::variant<rfl::Generic, RpcError, std::nullopt_t> processMessage(RpcRequest request,
+    std::variant<rfl::Generic, RpcError, std::nullopt_t> processMessage(const RpcRequest& request,
                                                                         RequestContext ctx = {},
                                                                         bool logStart = true) {
         struct MessageLog {
@@ -442,6 +455,10 @@ protected:
 
     // Successive /didChange requests should cancel earlier ones doing analysis
     std::unordered_map<std::string, RequestContext> pendingDocumentChanges;
+    // Internal context IDs remain unique even when a client reuses its RPC ID.
+    // Completion uses these exact registered keys, never reparses a large edit
+    // or accidentally removes a newer registration for the same client ID.
+    std::unordered_map<uint64_t, std::string> registeredQueryKeys, registeredChangeKeys;
 
 public:
     void run() {

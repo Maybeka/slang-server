@@ -99,6 +99,18 @@ struct Config {
         bool>
         experimentalMethodBodyQueries = false;
 
+    rfl::Description<
+        "Experimental full-unit macro dependency facts for body preprocessing proofs. "
+        "Default off; requires experimentalMethodBodyQueries. Allows unchanged define/undef "
+        "effects and proved unused macro names. Unsafe edits retain native analysis; "
+        "private fragments never supply whole-unit absence proofs.", bool>
+        experimentalMethodBodyMacroProof = false;
+    rfl::Description<
+        "Macro proof recording / restore budget per compilation unit in MiB, default 16. "
+        "Zero disables runtime recording and macro proof. This is not an RSS limit; "
+        "fixed-library artifacts have their own bounded build-time facts.", uint32_t>
+        methodBodyMacroProofMaxMiB = 16;
+
     rfl::Description<"Experimental local method-body diagnostics. Default off. Requires "
                      "experimentalMethodBodyQueries and a completed full-design diagnostic "
                      "context. Unsupported dependency changes use full current analysis.",
@@ -120,6 +132,36 @@ struct Config {
                      "superseded edits and certifies its local slice on diagnostic demand.",
                      bool>
         experimentalMethodBodyCertification = false;
+
+    // Kept readable for local prototype configurations; it no longer enables work.
+    rfl::Description<"Obsolete experimental query/diagnostic transaction key; ignored. "
+                     "Queries and background diagnostics certify their inputs independently.",
+                     bool>
+        experimentalQueryDiagnosticTransactions = false;
+
+    rfl::Description<"Retained unchanged-suffix budget in KiB for the experimental later-macro "
+                     "syntax memo. Default 1024, zero disables; capped at 65536. Requires "
+                     "method-body queries, diagnostics and certification. Keeps one line "
+                     "coordinate, never a history of edits. Semantic dependencies and complete "
+                     "physical publication proofs are still checked each time.",
+                     uint32_t>
+        methodBodyLineSyntaxCacheKiB = 1024;
+
+    rfl::Description<"Charged retained diagnostic display memo budget in KiB. Default 256, "
+                     "zero disables; capped at 16384. Requires experimental method-body "
+                     "queries, diagnostics and certification. Holds one function-end "
+                     "coordinate and pure LSP payloads; no semantic owners or input-proof "
+                     "success is cached. Oversized entries use normal rendering.",
+                     uint32_t>
+        methodBodyRenderingCacheKiB = 256;
+
+    rfl::Description<"Retained negative-input name plan budget in KiB. Default 512, zero "
+                     "disables; capped at 16384. Only experimental method-body certification "
+                     "uses it. At most 64 directories are pinned during each fresh proof; "
+                     "descriptors and successful proofs never survive the invocation. "
+                     "Budget or descriptor exhaustion uses the ordinary complete proof.",
+                     uint32_t>
+        methodBodyDirectoryProofCacheKiB = 512;
 
     rfl::Description<"Experimental cooperative syntax parsing and background context retirement. "
                      "Default off. Cancelled syntax candidates are discarded; semantic model "
@@ -165,6 +207,26 @@ struct Config {
                      "repairs and URI retirements are still published.",
                      bool>
         experimentalDiagnosticDeltaPublishing = false;
+
+    rfl::Description<"Experimental bounded parallel full-design flow diagnostics. Default off. "
+                     "Observers or order-sensitive driver reports retain serial analysis.", bool>
+        experimentalParallelDiagnostics = false;
+    rfl::Description<"Maximum full diagnostic workers, default2, capped8. Zero or one uses "
+                     "ordinary serial analysis. Does not parallelize local-body updates.", uint32_t>
+        parallelDiagnosticThreads = 2;
+
+    rfl::Description<
+        "Experimental authenticated syntax-prefix reuse for configured single-unit inputs. "
+        "Default off. Requires cooperative analysis and a prepared fixed scope prefix. "
+        "Mutable preceding roots and includes are rechecked before reuse; this does not "
+        "declare them fixed or reuse their semantics.", bool>
+        experimentalSyntaxPrefixCache = false;
+    rfl::Description<
+        "Retained mutable syntax-prefix cache budget in MiB, default 256. Zero disables "
+        "this cache. Charges one pending or reusable CST owner, excluding the already "
+        "charged fixed prefix. This budget is separate from frozenSources.maxMiB and "
+        "sourceHistoryMaxMiB; it is not a process RSS limit.", uint32_t>
+        syntaxPrefixCacheMaxMiB = 256;
 
     struct FrozenSourcesConfig {
         rfl::Description<

@@ -1,0 +1,238 @@
+{
+  "qualification": false,
+  "binarySha256": "3e2054e581d995f87b0d3e66d1b9e74ee868f17ebd357f76cd8480a7b2f85954",
+  "sourceSha256": "d185240296439043c28ceaee287537a9abf4f2c69a0d368a9c15ec82c0c351e5",
+  "baselineNativeSha256": "276f15897dfb26e48cff9e7a7579cd2565ec5b7e712701167d6ddc0adf6a80bd",
+  "sourceBaselineLocalRef": "refs/codex/performance-evidence/baseline-276f-readyfix-d9a80bba5134",
+  "replaySha256": "797514696f2a3870e14911e5d160f62e0fbc1262225a318949d38049862fd190",
+  "complete612MapAndPublicHoverOracle": true,
+  "SDKUnchanged": true,
+  "resolutionUs": 1,
+  "summary": {
+    "native": {
+      "model-root-binding": {
+        "count": 5,
+        "allUs": [
+          107866,
+          106607,
+          104127,
+          102484,
+          106656
+        ],
+        "firstUs": 107866,
+        "warmMedianUs": 105367.0
+      },
+      "private-full-semantics": {
+        "count": 5,
+        "allUs": [
+          131986,
+          97675,
+          97511,
+          97222,
+          99065
+        ],
+        "firstUs": 131986,
+        "warmMedianUs": 97593.0
+      },
+      "prepare-cached-semantics": {
+        "count": 5,
+        "allUs": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "firstUs": 0,
+        "warmMedianUs": 0.0
+      },
+      "prepare-instance-body-publication": {
+        "count": 5,
+        "allUs": [
+          180538,
+          1056,
+          1064,
+          839,
+          1011
+        ],
+        "firstUs": 180538,
+        "warmMedianUs": 1033.5
+      },
+      "prepare-analysis-manager-setup": {
+        "count": 5,
+        "allUs": [
+          22,
+          5,
+          4,
+          4,
+          4
+        ],
+        "firstUs": 22,
+        "warmMedianUs": 4.0
+      },
+      "prepare-analysis-manager-analyze": {
+        "count": 5,
+        "allUs": [
+          124792,
+          119975,
+          121735,
+          117323,
+          120318
+        ],
+        "firstUs": 124792,
+        "warmMedianUs": 120146.5
+      },
+      "prepare-analysis-manager-commit": {
+        "count": 5,
+        "allUs": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "firstUs": 0,
+        "warmMedianUs": 0.0
+      },
+      "private-full-dataflow": {
+        "count": 5,
+        "allUs": [
+          306219,
+          121661,
+          123235,
+          118621,
+          121981
+        ],
+        "firstUs": 306219,
+        "warmMedianUs": 121821.0
+      }
+    },
+    "baseline": {
+      "model-root-binding": {
+        "count": 2,
+        "allUs": [
+          115245,
+          116473
+        ],
+        "firstUs": 115245,
+        "warmMedianUs": 116473
+      },
+      "private-full-semantics": {
+        "count": 2,
+        "allUs": [
+          141961,
+          107189
+        ],
+        "firstUs": 141961,
+        "warmMedianUs": 107189
+      },
+      "private-full-dataflow": {
+        "count": 2,
+        "allUs": [
+          307796,
+          121451
+        ],
+        "firstUs": 307796,
+        "warmMedianUs": 121451
+      }
+    },
+    "candidate": {
+      "model-root-binding": {
+        "count": 2,
+        "allUs": [
+          115284,
+          115355
+        ],
+        "firstUs": 115284,
+        "warmMedianUs": 115355
+      },
+      "private-full-semantics": {
+        "count": 2,
+        "allUs": [
+          141574,
+          112309
+        ],
+        "firstUs": 141574,
+        "warmMedianUs": 112309
+      },
+      "prepare-cached-semantics": {
+        "count": 2,
+        "allUs": [
+          0,
+          0
+        ],
+        "firstUs": 0,
+        "warmMedianUs": 0
+      },
+      "prepare-instance-body-publication": {
+        "count": 2,
+        "allUs": [
+          182701,
+          1004
+        ],
+        "firstUs": 182701,
+        "warmMedianUs": 1004
+      },
+      "prepare-analysis-manager-setup": {
+        "count": 2,
+        "allUs": [
+          10,
+          5
+        ],
+        "firstUs": 10,
+        "warmMedianUs": 5
+      },
+      "prepare-analysis-manager-analyze": {
+        "count": 2,
+        "allUs": [
+          121769,
+          123127
+        ],
+        "firstUs": 121769,
+        "warmMedianUs": 123127
+      },
+      "prepare-analysis-manager-commit": {
+        "count": 2,
+        "allUs": [
+          0,
+          0
+        ],
+        "firstUs": 0,
+        "warmMedianUs": 0
+      },
+      "private-full-dataflow": {
+        "count": 2,
+        "allUs": [
+          305199,
+          124800
+        ],
+        "firstUs": 305199,
+        "warmMedianUs": 124800
+      }
+    }
+  },
+  "conclusions": [
+    "Cold instance-body publication/independent owner construction about180-183ms; warm callback about1ms",
+    "Native manager analyze about120-123ms warm; setup negligible and cached semantics below1us trace resolution",
+    "Do not combine cold+warm median into a claim of an extra100ms inside every analysis pass; no evidence of that gap",
+    "Warm preparation is primarily root binding, semantic elaboration, native flow analysis in succession. No production feature adopted."
+  ],
+  "networkUsed": false,
+  "restoration": {
+    "allPriorEightBinariesMatch": true,
+    "binarySha256": {
+      "build-uvm/bin/slang-server": "276f15897dfb26e48cff9e7a7579cd2565ec5b7e712701167d6ddc0adf6a80bd",
+      "build-uvm/bin/server_unittests": "7595ce9b2b80bbc8aa4ef4df4543887fde41219e092a157c2de8f4b259912c0a",
+      "build-uvm/bin/diagnostic_test_server": "1798707f2eeda9c82fedcdc62a6ac3bc4bdc0637e7883d9aed94fccc77e4dba1",
+      "build-uvm/bin/slang_server_counted": "6c1a77941799e8f7ff59e6d6ecfb38c106fd4509be830851ddea86b870836f41",
+      "untracked/semantic-cancellation-2026-10-23/asan-build/bin/slang-server": "8f2b55dcf09c9ce05644d188e0abbca5e8ce19ed3d57f1c5b6e0223d12ba80bc",
+      "untracked/semantic-cancellation-2026-10-23/asan-build/bin/server_unittests": "d3aae9df4f255b2ffe0bfdbd28625ce7fe488716e09a3d698b27c7a9eb425109",
+      "untracked/semantic-cancellation-2026-10-23/asan-build/bin/diagnostic_test_server": "245f2d6357ceebcb9151e0dccce385383f585bcdd81a6d345031c698473f3b36",
+      "untracked/semantic-cancellation-2026-10-23/asan-build/bin/slang_server_counted": "dc4651f1e32f2311aa24b9a23cda6c24352c34818ac009094a11296298e78889"
+    },
+    "sourceSha256": "2e49f24c5a6628a0fa61814f0561ad633fb1a382bb18be757792614350b08757",
+    "priorExactValidation": "untracked/stage-bc-diagnostic-buffer-moves-2026-10-28/restored-validation-runtime.json",
+    "testEvidence": "Exact same Native970 andASan955 executables, core sources unchanged; no inherited validation for changed binaries",
+    "SDKUnchanged": true
+  }
+}

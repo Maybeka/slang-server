@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <fmt/format.h>
 
+#include "slang/ast/symbols/SubroutineSymbols.h"
 #include "slang/text/CharInfo.h"
 #include "slang/text/SourceLocation.h"
 
@@ -46,11 +47,13 @@ std::optional<const parsing::Token> findNameToken(const syntax::SyntaxNode* node
 namespace {
 thread_local const BodySourceProjection* bodyProjection = nullptr;
 }
-BodySourceProjection::BodySourceProjection(const SourceManager& sm, BufferID current,
-                                           BufferID query, size_t oldEnd, size_t newEnd,
-                                           uint32_t baselineBufferLimit) :
+BodySourceProjection::BodySourceProjection(
+    const SourceManager& sm, BufferID current, BufferID query, size_t oldEnd, size_t newEnd,
+    uint32_t baselineBufferLimit, std::span<const ast::SubroutineSymbol* const> queryScopes,
+    std::string_view displayedScope) :
     previous(bodyProjection), sources(sm), current(current), query(query), oldEnd(oldEnd),
-    newEnd(newEnd), baselineBufferLimit(baselineBufferLimit) {
+    newEnd(newEnd), baselineBufferLimit(baselineBufferLimit), queryScopes(queryScopes),
+    displayedScope(displayedScope) {
     bodyProjection = this;
 }
 BodySourceProjection::~BodySourceProjection() {
@@ -66,6 +69,30 @@ SourceLocation BodySourceProjection::project(SourceLocation location,
     if (offset >= oldEnd)
         offset = newEnd + (offset - oldEnd);
     return SourceLocation(current, offset);
+}
+
+std::string BodySourceProjection::projectLexicalPath(const ast::Symbol& symbol,
+                                                     const SourceManager& sm) const {
+    auto path = symbol.getLexicalPath();
+    if (&sm != &sources || displayedScope.empty())
+        return path;
+    for (const auto* current = &symbol; current;) {
+        for (auto query : queryScopes)
+            if (current == query) {
+                const auto prefix = query->getLexicalPath();
+                if (path.starts_with(prefix))
+                    return std::string(displayedScope) + path.substr(prefix.size());
+                return path;
+            }
+        const auto parent = current->getParentScope();
+        current = parent ? &parent->asSymbol() : nullptr;
+    }
+    return path;
+}
+
+std::string bodyQueryLexicalPath(const ast::Symbol& symbol, const SourceManager& sources) {
+    return bodyProjection ? bodyProjection->projectLexicalPath(symbol, sources)
+                          : symbol.getLexicalPath();
 }
 
 lsp::Position toPosition(const SourceLocation& loc, const SourceManager& sourceManager) {

@@ -1,0 +1,274 @@
+{
+  "qualified": true,
+  "binarySha256": "7b205824339136afbe87069093baae69f0765f3eab1ad98b208f8e236d584abb",
+  "pending": [],
+  "checks": {
+    "ctest": 926,
+    "serverAsanCases": 911,
+    "serverAsanAssertions": 169699,
+    "python": 17,
+    "transport": 43,
+    "sdkFiles": 709,
+    "sdkNativeAndAsanCases": 2626,
+    "sdkNativeAndAsanAssertions": 29250
+  },
+  "failedChecks": [],
+  "summary": {
+    "memory-final-1008": {
+      "ratios": {
+        "cpuSeconds": 0.9827341396028146,
+        "peakRss": 0.9453530633437176,
+        "peakFootprint": 0.9363774139331008
+      },
+      "arms": {
+        "baseline": {
+          "p50": 19.593,
+          "p95": 21.970917,
+          "maximum": 33.51925,
+          "cancelled": 0,
+          "lastDiagnosticMs": 31.507917,
+          "memory": {
+            "peakRss": 1262223360,
+            "peakFootprint": 1105528152,
+            "samples": 4496,
+            "cpuSeconds": 31.032769041
+          }
+        },
+        "candidate": {
+          "p50": 19.7279795,
+          "p95": 20.963167,
+          "maximum": 25.24925,
+          "cancelled": 0,
+          "lastDiagnosticMs": 30.821875,
+          "memory": {
+            "peakRss": 1193246720,
+            "peakFootprint": 1035191592,
+            "samples": 4506,
+            "cpuSeconds": 30.496961583
+          }
+        }
+      }
+    },
+    "memory-final-reverse": {
+      "ratios": {
+        "cpuSeconds": 0.9811696804848783,
+        "peakRss": 0.9405893104834006,
+        "peakFootprint": 0.9310008411253107
+      },
+      "arms": {
+        "candidate": {
+          "p50": 19.7584375,
+          "p95": 20.951666,
+          "maximum": 28.011083,
+          "cancelled": 0,
+          "lastDiagnosticMs": 23.462625,
+          "memory": {
+            "peakRss": 1188790272,
+            "peakFootprint": 1030620456,
+            "samples": 4377,
+            "cpuSeconds": 30.672565041
+          }
+        },
+        "baseline": {
+          "p50": 19.8768335,
+          "p95": 22.837667,
+          "maximum": 25.223875,
+          "cancelled": 0,
+          "lastDiagnosticMs": 31.665375,
+          "memory": {
+            "peakRss": 1263878144,
+            "peakFootprint": 1107002712,
+            "samples": 4051,
+            "cpuSeconds": 31.261223875
+          }
+        }
+      }
+    },
+    "effect-forward": {
+      "ratios": {
+        "cpuSeconds": 0.693972627084461,
+        "peakRss": 0.911167454189236,
+        "peakFootprint": 1.0284923149361072
+      },
+      "arms": {
+        "baseline": {
+          "p50": 12.236291999999999,
+          "p95": 476.819625,
+          "maximum": 476.819625,
+          "cancelled": 2,
+          "lastDiagnosticMs": 975.5505,
+          "memory": {
+            "peakRss": 1421639680,
+            "peakFootprint": 1106363736,
+            "samples": 302,
+            "cpuSeconds": 5.67420375
+          }
+        },
+        "candidate": {
+          "p50": 8.6251875,
+          "p95": 18.422791,
+          "maximum": 38.38275,
+          "cancelled": 0,
+          "lastDiagnosticMs": 51.127917,
+          "memory": {
+            "peakRss": 1295351808,
+            "peakFootprint": 1137886600,
+            "samples": 250,
+            "cpuSeconds": 3.937742083
+          }
+        }
+      }
+    },
+    "effect-reverse": {
+      "ratios": {
+        "cpuSeconds": 0.6951605410263317,
+        "peakRss": 0.9080677153005212,
+        "peakFootprint": 1.0245012216388618
+      },
+      "arms": {
+        "candidate": {
+          "p50": 8.7167915,
+          "p95": 17.840541,
+          "maximum": 38.656125,
+          "cancelled": 0,
+          "lastDiagnosticMs": 51.307916,
+          "memory": {
+            "peakRss": 1290141696,
+            "peakFootprint": 1132447088,
+            "samples": 247,
+            "cpuSeconds": 3.9558835
+          }
+        },
+        "baseline": {
+          "p50": 13.078645999999999,
+          "p95": 475.760459,
+          "maximum": 475.760459,
+          "cancelled": 2,
+          "lastDiagnosticMs": 996.7715,
+          "memory": {
+            "peakRss": 1420754944,
+            "peakFootprint": 1105364312,
+            "samples": 295,
+            "cpuSeconds": 5.690604208
+          }
+        }
+      }
+    },
+    "warm": {
+      "baseline": {
+        "p50": 17.96399975,
+        "p95": 21.054563,
+        "lastDiagnosticMs": 30.5316875
+      },
+      "candidate": {
+        "p50": 18.98781275,
+        "p95": 20.106125,
+        "lastDiagnosticMs": 30.5458335
+      }
+    },
+    "first": {
+      "baseline": {
+        "p50": 37.94325,
+        "p95": 37.94325,
+        "lastDiagnosticMs": 65.62475
+      },
+      "candidate": {
+        "p50": 32.35325,
+        "p95": 32.35325,
+        "lastDiagnosticMs": 61.967167
+      }
+    },
+    "proofCounts": {
+      "native": 0,
+      "baseline": 28,
+      "candidate": 28
+    }
+  },
+  "scope": "Stage A local semantic coverage fixed14 evaluation only. All five-category goal remains active; no full delivery qualification.",
+  "goalComplete": false,
+  "phaseAQualified": true,
+  "nextPhase": "B",
+  "correctness": {
+    "passed": true,
+    "scenes": {
+      "generic-changing": {
+        "passed": true,
+        "states": 28,
+        "report": "generic-changing-automatic-correctness.json",
+        "sha256": "cad9b83871611f92d850835e87e85304257dd67f44a0350509b6f11c1042dba4"
+      },
+      "body": {
+        "passed": true,
+        "states": 52,
+        "report": "body-automatic-correctness.json",
+        "sha256": "cb9fc7710b256c1ce7b7259bcbf59c8103b24a929315883c8262f59607e5c58f"
+      },
+      "package": {
+        "passed": true,
+        "states": 52,
+        "report": "package-automatic-correctness.json",
+        "sha256": "ca9b2bf390824e2835963a5fe9bc10923529c9d51bfb5f9c2150e1399b442141"
+      },
+      "generic": {
+        "passed": true,
+        "states": 52,
+        "report": "generic-automatic-correctness.json",
+        "sha256": "48dbe50d1be072ac75365afb25e974e1700b16ae025e5e1f02a6e1ed37e5aba6"
+      },
+      "effectful": {
+        "passed": true,
+        "states": 52,
+        "report": "effectful-automatic-correctness.json",
+        "sha256": "6bd69aa7af808b13474568f5361f2872d5aa3faf2216cfff6c1c881edaf46b04"
+      },
+      "virtual-interface": {
+        "passed": true,
+        "states": 28,
+        "report": "virtual-interface-automatic-correctness.json",
+        "sha256": "4a2cb2c56dd1cf0c85e1b9c90166f9411bc46117fdf260fb70c997371e0ef947"
+      },
+      "local-types": {
+        "passed": true,
+        "states": 28,
+        "report": "local-types-automatic-correctness.json",
+        "sha256": "a2adbdc75fcb8df977194a9c309c6baccb9e418a494b70fcf122a4c0467e2613"
+      },
+      "local-imports": {
+        "passed": true,
+        "states": 32,
+        "report": "local-imports-automatic-correctness.json",
+        "sha256": "56fc78909d43722c08a7484f9efdeedc915d2143aacd02ede9f0c656c5a450a1"
+      },
+      "local-generic": {
+        "passed": true,
+        "states": 44,
+        "report": "local-generic-automatic-correctness.json",
+        "sha256": "4cf717a42b1bd31c4bece7ea75a6a864e17d0f7b001b616d07b3d95663162647"
+      },
+      "local-value-width": {
+        "passed": true,
+        "states": 32,
+        "report": "local-value-width-automatic-correctness.json",
+        "sha256": "459336c910cf6f2c583838b44111c7a5389029cc8b6074c055b150fcf524d9ee"
+      },
+      "local-let": {
+        "passed": true,
+        "states": 48,
+        "report": "local-let-automatic-correctness.json",
+        "sha256": "e245c87fa5cce62f3ccd184d5a647602373c086823de98a5defdf95d69ee0aac"
+      }
+    },
+    "nativeStates": 448,
+    "asanCandidateStates": 38,
+    "nativeDiagnosticArchives": 112,
+    "asanOracleRevalidatedAgainstCurrentFreshNative": true,
+    "asanReportSha256": "e452cd54326f028c8f4a7c8c711afcbfa8fd0ed66e9a5e6f93d2daf37482b0f1",
+    "binarySha256": "7b205824339136afbe87069093baae69f0765f3eab1ad98b208f8e236d584abb",
+    "asanLocalGenericReportSha256": "258c84247ddcdac637e08762f82feca764dbb345f510c41242b22649d41b93b0",
+    "asanValueWidthReportSha256": "2a55b9023a6e36f1b62be843db59de29f94ac1ea038d16bde2959109eb510fac",
+    "asanLetReportSha256": "43f91bfb582894fd31fe51ea5e197756b7edb50fae068721e851c729df32fe56"
+  },
+  "evidenceDirectory": "untracked/stage-a-watch-sort-2026-10-26",
+  "rawEvaluationSha256": "f60694914026b93db0bb4728fc5f2fd0791cd8e0e1a73e07848779e4016c8926",
+  "networkUsed": false
+}

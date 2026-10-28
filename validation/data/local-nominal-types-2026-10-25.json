@@ -1,0 +1,52 @@
+{
+  "checkpoint": "local-nominal-types-2026-10-25",
+  "binarySha256": "115026e414038affebf5d8027336396a7bed7cab65465be265b63c3aa523c4c7",
+  "scope": "Correctness only for experimental method-local nominal declarations, not performance qualification or completion of Stage A.",
+  "experimentsDefaultOff": true,
+  "implemented": [
+    "private method-local typedef, enum, packed/unpacked struct and union diagnostics",
+    "unused alias declaration errors preserved",
+    "function/task, class/package/module, initial type present/absent, cancellation/retry, valid/invalid/multiline/removal, per-state Native hover and historical URI diagnostics"
+  ],
+  "validation": {
+    "localTypeCases": 1,
+    "localTypeGeneratedCombinations": 168,
+    "localTypeAssertions": 11984,
+    "ctest": 914,
+    "python": 17,
+    "transport": 43,
+    "cva6LocalTypeStates": 28,
+    "fixtureParallelRepetitions": 40,
+    "sdkRestorationFiles": 709
+  },
+  "serverAsan": {
+    "cases": 899,
+    "assertions": 136454,
+    "detectLeaks": false
+  },
+  "sdkAsan": {
+    "cases": 2614,
+    "assertions": 26686,
+    "detectLeaks": false,
+    "unchangedSdkManifest": true,
+    "evidence": "../sequential-stage-a-2026-10-25/sdk-asan.log"
+  },
+  "cva6": {
+    "scene": "Actual CVA6 UVM build_phase; UVM and full DUT semantically shared",
+    "states": 28,
+    "historicalDiagnosticUris": 612,
+    "comparison": "Fresh unfrozen Native, frozen Native, historical baseline and candidate; exact public hovers and complete diagnostic maps each state"
+  },
+  "retainedFailures": [
+    "Before implementation: 60 local-path assertion failures",
+    "Hover fixture initially used stale DocumentHandle text for LSP coordinates; corrected to current buffer; raw failures retained",
+    "First CTest 913/914 due confirmed temp-directory collision between PIDs 95928 and 95929; fixed atomic directory ownership; subsequent complete914 and40 parallel repetitions passed"
+  ],
+  "performanceQualified": false,
+  "mainPushed": false,
+  "goalComplete": false,
+  "remaining": [
+    "Stage A: local imports and newly introduced package/type dependency closure; audit which local-class/assertion syntax is legal and which elaboration effects still require implementation",
+    "Stages B/C/D: original lifetime, first-cost and complete performance/delivery gates remain open"
+  ]
+}

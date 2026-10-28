@@ -1,5 +1,9 @@
 # Validation records
 
+## macOS 2026-10-29: converged five-category performance qualification
+
+The [BC original20 record](data/stage-bc-current-qualification-2026-10-29.json) passes all original numerical and correctness gates without fast-latency exceptions. The [D38 record](data/stage-d-current-2026-10-29.json) covers installation, one shipped default UVM profile, project cold/warm caches, offline reconstruction, public queries and the remaining real workloads. It preserves two false natural-retirement trigger assertions and the prospective budget-purpose decision separately. It also records an execution interruption without replacing completed control measurements. See the [current status and supported boundaries](../docs/development/performance-roadmap-status.md); final cleanup and main delivery are recorded separately.
+
 ## macOS 2026-10-20: frozen-analysis correctness prerequisite
 
 The [RTL freshness report](macos-frozen-foundation-2026-10-20.md) records lazy
@@ -270,3 +274,5 @@ GCC 13 and Linux arm64 are unverified here. CMake used the existing Python 3.12.
 for source generation; the final Python/LSP suite and benchmark used a scoped
 Python 3.12.6 matching the project's Python pin. Tool installation did not change
 user settings or the system Python installation.
+
+- [交付前最终核验与清理汇总](data/performance-final-delivery-2026-10-29.json)：精确程序／SDK 身份、保留限制与指标权衡规则；实际 main 提交与远端校验见交付记录。

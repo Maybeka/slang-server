@@ -1,0 +1,38 @@
+{
+  "stage": "A",
+  "status": "candidate-rejected-untyped-value-width-diagnostic-mismatch",
+  "binarySha256": "0e8e563849de25e465d883ef0351012a01251b8731683ef9695d74d1942111bf",
+  "targeted": {
+    "passed": true,
+    "cases": 2,
+    "assertions": 6768,
+    "log": "targeted-fixed.log"
+  },
+  "nativeCtest": {
+    "passed": false,
+    "tests": 921,
+    "failed": 2,
+    "log": "ctest.log"
+  },
+  "serverAsan": {
+    "passed": false,
+    "cases": 906,
+    "failedCases": 2,
+    "assertions": 153563,
+    "failedAssertions": 4,
+    "detectLeaks": false,
+    "log": "server-asan.log"
+  },
+  "failureInterpretation": "Three checks expected the old local-generic fallback; one full diagnostic map comparison exposed a genuine untyped parameter width collision. Native generic keys compared equal values without their inferred types.",
+  "cva6": {
+    "passed": true,
+    "scenes": 9,
+    "states": 368,
+    "report": "correctness-all.log",
+    "qualification": false
+  },
+  "allOwnedProcessesTerminal": true,
+  "mainPushed": false,
+  "performanceQualified": false,
+  "networkUsed": false
+}

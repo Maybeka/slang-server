@@ -1,0 +1,66 @@
+{
+  "goalComplete": false,
+  "b1Complete": false,
+  "binarySha256": "87b7f886ad4098d3928cbb69704cfe619ee9a70a406d37abd9720853dbd9ad8e",
+  "sdkPatchSha256": "1ad0093d1528702ffb7cdf74b34849deb77b2e38b34a28594b729f8b9846ab0b",
+  "sourceIsolationModes": [
+    "compact independent namespace shared within one publication batch",
+    "full native namespace snapshot without reparsing"
+  ],
+  "tests": {
+    "nativeServerCases": 928,
+    "asanServerCases": 913,
+    "asanServerAssertions": 170389,
+    "sdkNativeAndAsanCasesEach": 2628,
+    "sdkNativeAndAsanAssertionsEach": 29267,
+    "python": 17,
+    "transport": 43,
+    "sdkFiles": 709
+  },
+  "evidenceSha256": {
+    "ctest.log": "02e3ca0b711e987ebd7214e9ad31326d1dd05cb9895605d6a4cb7f641ebff921",
+    "server-asan.log": "92e949587cdca2e7961d840b9bd14db53ba08e440e8557a9e65c5732f1995474",
+    "sdk-native.log": "6e33665f297eabfc941f5013cea77b3361964fa5050e629224657ade603f88dc",
+    "sdk-asan.log": "01ece7b7839b4dc01be83e080d977f3bce093070a395babaca86d837691bfdb0",
+    "python.log": "bc72332eafc8a2b1b9ebd3662b76f11df5641817a3d6d10761386742370929af",
+    "transport.log": "3e846f65fb57d3adaea36364c8be35a43ab92429e868ece9632f27c17d979dfa",
+    "sdk-integrity.log": "100d97edfb5511b899d0bc1a86903d1da0dd53bf3088c133d2cc3710010fc12e"
+  },
+  "activeHandles": {},
+  "pending": [
+    "Fixed14/main performance qualification",
+    "Direct-build6/A7b startup and retirement qualification"
+  ],
+  "experimentsDefaultOff": true,
+  "networkUsed": false,
+  "note": "Both stable-parameter modes and post-edit owners release retired driver sources. No real-workload performance or total-goal completion claim yet.",
+  "correctnessAuditPassed": true,
+  "nativeStates": 448,
+  "asanCandidateStates": 38,
+  "nativeDiagnosticArchives": 112,
+  "performanceQualified": false,
+  "fixed14FailedChecks": [
+    "warm-p50"
+  ],
+  "direct6FailedChecks": [
+    "direct-first-forward-startupMs",
+    "direct-first-forward-cpuSeconds",
+    "direct-first-forward-peakRss",
+    "direct-first-forward-peakFootprint",
+    "direct-first-reverse-startupMs",
+    "direct-first-reverse-cpuSeconds",
+    "direct-first-reverse-peakRss",
+    "direct-first-reverse-peakFootprint",
+    "direct-memory-forward-startupMs",
+    "direct-memory-forward-peakRss",
+    "direct-memory-forward-peakFootprint",
+    "direct-memory-reverse-startupMs",
+    "direct-memory-reverse-peakRss",
+    "direct-memory-reverse-peakFootprint",
+    "direct-retire-forward-startupMs",
+    "direct-retire-forward-cpuSeconds",
+    "direct-retire-reverse-startupMs",
+    "direct-retire-reverse-lastDiagnosticMs"
+  ],
+  "direct6Completed": true
+}

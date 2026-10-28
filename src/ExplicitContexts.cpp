@@ -5,8 +5,10 @@
 #include "util/Converters.h"
 #include "util/DisposableParseRequest.h"
 #include "util/SlangExtensions.h"
+#include "util/UvmPhaseTrace.h"
 #include <algorithm>
 #include <set>
+#include <unordered_set>
 
 #include "slang/driver/SourceLoader.h"
 #include "slang/parsing/Preprocessor.h"
@@ -315,67 +317,93 @@ bool ServerDriver::isPackageOnlyContext(const URI& uri) const {
 bool ServerDriver::isPackageQueryContext(const URI& uri) const {
     return (!comp || isCooperativeAnalysisEnabled()) && m_packageOnlyContexts.contains(uri);
 }
-void ServerDriver::updatePackageContextKind(const URI& uri, const syntax::SyntaxTree& tree) {
+void ServerDriver::updatePackageContextKind(const URI& uri,
+                                            const std::shared_ptr<syntax::SyntaxTree>& tree) {
     if ((comp && !isCooperativeAnalysisEnabled()) || !m_packageOnlyContexts.contains(uri))
         return;
     auto document = docs.find(uri);
     if (document == docs.end())
         return;
     const auto& path = sm.getFullPath(document->second->getBuffer());
+    const auto applyKind = [&](bool needsDesign) {
+        if (needsDesign)
+            m_packageOnlyContexts.erase(uri);
+        else
+            m_packageOnlyContexts.insert(uri);
+    };
+    const bool cacheKind = isCooperativeAnalysisEnabled();
+    if (cacheKind && m_packageContextKind && m_packageContextKind->tree.lock() == tree &&
+        m_packageContextKind->path == path && m_packageContextKind->fullDesign == bool(comp)) {
+        applyKind(m_packageContextKind->needsDesign);
+        return;
+    }
     bool directDesign = false;
-    for (const auto& [node, _] : tree.getMetadata().nodeMeta) {
+    for (const auto& [node, _] : tree->getMetadata().nodeMeta) {
         auto location = sm.getFullyExpandedLoc(node->header->name.location());
         if (node->kind != syntax::SyntaxKind::PackageDeclaration && location.valid() &&
             sm.getFullPath(location.buffer()) == path)
             directDesign = true;
     }
-    if (directDesign || (comp && needsPackageDesignContext(sm, tree, path)))
-        m_packageOnlyContexts.erase(uri);
-    else
-        m_packageOnlyContexts.insert(uri);
+    const bool needsDesign = directDesign || (comp && needsPackageDesignContext(sm, *tree, path));
+    if (cacheKind)
+        m_packageContextKind = PackageContextKind{tree, path, bool(comp), needsDesign};
+    applyKind(needsDesign);
 }
 uint64_t ServerDriver::getExplicitContextRevision(const URI& uri) const {
     return m_explicitContexts.contains(uri) || hasConfiguredCompilationInputs() ? m_snapshotRevision
                                                                                 : 0;
 }
 
-std::vector<std::filesystem::path> ServerDriver::getContextWatchPaths() const {
+std::vector<std::filesystem::path> ServerDriver::collectContextWatchPathInputs() const {
     if (!isFrozenSourcesEnabled() && (comp || !hasConfiguredCompilationInputs()) &&
         !hasSourceContextHints() && !m_config.uvm.value())
         return {};
-    std::set<std::filesystem::path> paths;
-    paths.insert(m_uvmWatchPaths.begin(), m_uvmWatchPaths.end());
+    UvmPhaseTrace phases;
+    std::vector<std::filesystem::path> paths(m_uvmWatchPaths.begin(), m_uvmWatchPaths.end());
     for (const auto& [path, _] : driver.getCommandFileMetadata())
-        paths.insert(path);
+        paths.push_back(path);
     for (const auto& path : driver.sourceLoader.getFailedLiteralPaths())
-        paths.insert(path);
+        paths.push_back(path);
     if (m_config.compilationFilelist.value()) {
         auto path = std::filesystem::path(*m_config.compilationFilelist.value());
         if (path.is_relative())
             path = std::filesystem::path(m_workspacePathPrefix) / path;
-        paths.insert(normalized(path));
+        paths.push_back(normalized(path));
     }
+    phases.mark("watch-path-seeds");
+    // Included documents commonly retain the same configured syntax tree.
+    // The result is a set union: resolve each tree and BufferID once in this
+    // call, while rebuilding the union on the next input revision as before.
+    std::unordered_set<const syntax::SyntaxTree*> visitedTrees;
+    std::unordered_set<BufferID> visitedBuffers;
+    auto collectBuffer = [&](BufferID buffer) {
+        if (visitedBuffers.insert(buffer).second) {
+            const auto& path = sm.getFullPath(buffer);
+            if (!path.empty())
+                paths.push_back(path);
+        }
+    };
     auto collect = [&](const std::shared_ptr<syntax::SyntaxTree>& tree) {
-        if (tree)
+        if (tree && visitedTrees.insert(tree.get()).second)
             for (auto buffer : tree->getSourceBufferIds())
-                if (!sm.getFullPath(buffer).empty())
-                    paths.insert(sm.getFullPath(buffer));
+                collectBuffer(buffer);
     };
     if (hasConfiguredCompilationInputs() || hasSourceContextHints()) {
         for (const auto& tree : m_currentConfiguredTrees)
             collect(tree);
         for (const auto& [uri, doc] : docs) {
-            paths.insert(sm.getFullPath(doc->getBuffer()));
+            collectBuffer(doc->getBuffer());
             collect(doc->getCachedSyntaxTree());
             collect(doc->getCachedAnalysisTree());
         }
     }
+    phases.mark("watch-path-tree-union");
     // Failed literal targets must remain watched so recreation can repair context.
     // Only current physical owner metadata and active import bindings participate.
     for (const auto& [source, cached] : m_sourceHints) {
         const auto& hints = cached.hints;
         if (hints.owner && sm.isLatestData(BufferID{hints.bufferId, ""}))
-            paths.insert(
+            paths.push_back(
                 normalized(std::filesystem::path(source).parent_path() / hints.owner->path));
     }
     for (const auto& [weakTree, hints] : m_boundSourceHints) {
@@ -383,11 +411,66 @@ std::vector<std::filesystem::path> ServerDriver::getContextWatchPaths() const {
         if (!tree || !hasValidBuffers(sm, tree))
             continue;
         for (const auto& hint : hints.imports)
-            paths.insert(normalized(
+            paths.push_back(normalized(
                 sm.getFullPath(BufferID{hint.range.bufferId, ""}).parent_path() / hint.path));
     }
-    paths.erase(std::filesystem::path{});
-    return {paths.begin(), paths.end()};
+    phases.mark("watch-path-hints");
+    return paths;
+}
+
+namespace {
+bool sameNativeWatchPaths(const std::vector<std::filesystem::path>& a,
+                          const std::vector<std::filesystem::path>& b) {
+    return a.size() == b.size() &&
+           std::equal(a.begin(), a.end(), b.begin(), [](const auto& left, const auto& right) {
+               return left.native() == right.native();
+           });
+}
+std::vector<std::filesystem::path> normalizeWatchPaths(std::vector<std::filesystem::path> paths) {
+    UvmPhaseTrace phases;
+    for (auto& path : paths)
+        path = path.lexically_normal();
+    std::erase(paths, std::filesystem::path{});
+    // Watch registrations have no path-component ordering requirement. Compare
+    // the normalized native spelling directly instead of walking components
+    // again for every comparison in this sort.
+    std::sort(paths.begin(), paths.end(),
+              [](const auto& left, const auto& right) { return left.native() < right.native(); });
+    paths.erase(std::unique(paths.begin(), paths.end()), paths.end());
+    phases.mark("watch-path-normalize-sort");
+    return paths;
+}
+} // namespace
+
+std::vector<std::filesystem::path> ServerDriver::getContextWatchPaths() const {
+    return normalizeWatchPaths(collectContextWatchPathInputs());
+}
+
+std::shared_ptr<const std::vector<std::filesystem::path>> ServerDriver::getContextWatchCatalogue()
+    const {
+    if (!m_config.experimentalMethodBodyQueries.value() ||
+        !m_config.experimentalMethodBodyCertification.value())
+        return std::make_shared<const std::vector<std::filesystem::path>>(getContextWatchPaths());
+    // Collect every current input as before. Only the pure lexical transform
+    // is memoized, by exact owned path values, without syntax/model owners or
+    // any successful filesystem/content/version witness.
+    auto paths = collectContextWatchPathInputs();
+    if (m_contextWatchCatalogue && sameNativeWatchPaths(paths, m_contextWatchRawPaths)) {
+        UvmPhaseTrace phases;
+        phases.mark("watch-path-catalogue-reuse");
+        return m_contextWatchCatalogue;
+    }
+    auto rawPaths = paths;
+    auto normalizedPaths = normalizeWatchPaths(std::move(paths));
+    auto catalogue = m_contextWatchCatalogue;
+    if (!catalogue || !sameNativeWatchPaths(normalizedPaths, *catalogue))
+        catalogue = std::make_shared<const std::vector<std::filesystem::path>>(
+            std::move(normalizedPaths));
+    // Publish the exact key only after its complete value is ready. Allocation
+    // failure must never associate new inputs with an older sorted catalogue.
+    m_contextWatchRawPaths = std::move(rawPaths);
+    m_contextWatchCatalogue = std::move(catalogue);
+    return m_contextWatchCatalogue;
 }
 
 std::optional<ServerDriver::PackageIncludeContext> ServerDriver::getExplicitIncludeContext(
@@ -412,7 +495,7 @@ std::optional<ServerDriver::PackageIncludeContext> ServerDriver::getExplicitIncl
                 // Preserve full-design source views' first-include ordering for
                 // multiply included library headers.
                 m_packageOnlyContexts.insert(uri);
-                updatePackageContextKind(uri, *matches.front().tree);
+                updatePackageContextKind(uri, matches.front().tree);
                 return matches.front();
             }
         }

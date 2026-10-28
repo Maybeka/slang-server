@@ -101,6 +101,8 @@ public:
         return m_state && m_state->cancelled.load(std::memory_order_acquire);
     }
 
+    bool hasCheckpointObserver() const { return bool(m_checkpointObserver); }
+
     void markStarted() const {
         if (m_state)
             m_state->started.store(true, std::memory_order_relaxed);
@@ -127,6 +129,21 @@ public:
     void setCheckpointObserverForTesting(std::function<void(std::string_view)> observer) {
         m_checkpointObserver = std::make_shared<const std::function<void(std::string_view)>>(
             std::move(observer));
+    }
+
+    // A child operation shares cancellation and request identity, while adding
+    // a worker-local preparation boundary. The original observer remains active.
+    RequestContext withCheckpoint(std::function<void(std::string_view)> boundary) const {
+        auto copy = *this;
+        copy.m_checkpointObserver =
+            std::make_shared<const std::function<void(std::string_view)>>(
+                [previous = m_checkpointObserver, boundary = std::move(boundary)](
+                    std::string_view name) {
+                    if (previous)
+                        (*previous)(name);
+                    boundary(name);
+                });
+        return copy;
     }
 
     std::string elapsedContext() const {

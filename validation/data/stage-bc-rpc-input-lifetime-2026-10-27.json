@@ -1,0 +1,206 @@
+{
+  "stage": "BC v4 input lifetime",
+  "candidateSha256": "ad885330761a3e7deb00e76b4d8857a81685edcb5a960aedbf6700c2cdd49618",
+  "native": {
+    "jsonRpc": {
+      "cases": 16,
+      "assertions": 230,
+      "passed": true
+    },
+    "bodyCertification": {
+      "cases": 45,
+      "assertions": 21869,
+      "passed": true
+    },
+    "ctest": {
+      "passed": true,
+      "tests": 963,
+      "environment": "TMPDIR=/private/tmp",
+      "initialNoncanonicalTmpRun": "962/963; SDK3 cases5 assertions failed due /var vs /private/var aliases; log preserved"
+    }
+  },
+  "keyFeasibility": {
+    "passed": true,
+    "sampleCount": 180,
+    "uriExact": true,
+    "results": [
+      {
+        "bytes": 65536,
+        "mediansNs": {
+          "owningA": 27874.5,
+          "borrowed": 3792.0,
+          "owningB": 28562.5
+        },
+        "reductions": [
+          0.8639616854113975,
+          0.8672385120350109
+        ],
+        "passed": true
+      },
+      {
+        "bytes": 1048576,
+        "mediansNs": {
+          "owningA": 279062.5,
+          "borrowed": 2812.5,
+          "owningB": 278333.0
+        },
+        "reductions": [
+          0.9899216125419933,
+          0.9898951974792785
+        ],
+        "passed": true
+      },
+      {
+        "bytes": 8388608,
+        "mediansNs": {
+          "owningA": 1302020.5,
+          "borrowed": 1416.0,
+          "owningB": 1320229.0
+        },
+        "reductions": [
+          0.9989124595196466,
+          0.9989274587969208
+        ],
+        "passed": true
+      }
+    ],
+    "qualification": false,
+    "binarySha256": "16abead62983f46bece5846d3cd8c4f5bc3aa7673472befb2d4d76fc70fd388a"
+  },
+  "asan": {
+    "passed": true,
+    "cases": 948,
+    "assertions": 176125,
+    "detectLeaks": false
+  },
+  "actualCva": {
+    "mechanismFeasibilityPassed": true,
+    "qualification": false,
+    "bcComplete": false,
+    "checks": {
+      "forward-sameBinary": true,
+      "forward-Native612": true,
+      "forward-p50": true,
+      "forward-p95": true,
+      "forward-maximum": true,
+      "forward-lastDiagnosticMs": true,
+      "forward-cpuSeconds": true,
+      "forward-peakRss": true,
+      "forward-peakFootprint": true,
+      "reverse-sameBinary": true,
+      "reverse-Native612": true,
+      "reverse-p50": true,
+      "reverse-p95": true,
+      "reverse-maximum": true,
+      "reverse-lastDiagnosticMs": true,
+      "reverse-cpuSeconds": true,
+      "reverse-peakRss": true,
+      "reverse-peakFootprint": true,
+      "sourceIdentity": true
+    },
+    "failed": [],
+    "summary": {
+      "forward": {
+        "native": {
+          "p50": 1964.670646,
+          "p95": 3266.000375,
+          "maximum": 3567.593083,
+          "lastDiagnosticMs": 4064.252958,
+          "memory": {
+            "peakRss": 1414168576,
+            "peakFootprint": 1014203880,
+            "samples": 447,
+            "cpuSeconds": 10.3830735
+          }
+        },
+        "baseline": {
+          "p50": 19.2058965,
+          "p95": 20.735666,
+          "maximum": 22.055,
+          "lastDiagnosticMs": 27.460042,
+          "memory": {
+            "peakRss": 953745408,
+            "peakFootprint": 796820632,
+            "samples": 348,
+            "cpuSeconds": 3.491347625
+          }
+        },
+        "candidate": {
+          "p50": 18.1128955,
+          "p95": 19.061125,
+          "maximum": 19.832292,
+          "lastDiagnosticMs": 25.343167,
+          "memory": {
+            "peakRss": 953073664,
+            "peakFootprint": 796148864,
+            "samples": 348,
+            "cpuSeconds": 3.406622791
+          }
+        }
+      },
+      "reverse": {
+        "candidate": {
+          "p50": 17.922021,
+          "p95": 18.902625,
+          "maximum": 19.688291,
+          "lastDiagnosticMs": 21.058833,
+          "memory": {
+            "peakRss": 953368576,
+            "peakFootprint": 796443776,
+            "samples": 345,
+            "cpuSeconds": 3.391340916
+          }
+        },
+        "baseline": {
+          "p50": 18.9330005,
+          "p95": 20.19,
+          "maximum": 20.96225,
+          "lastDiagnosticMs": 26.18075,
+          "memory": {
+            "peakRss": 953040896,
+            "peakFootprint": 796083352,
+            "samples": 343,
+            "cpuSeconds": 3.516969125
+          }
+        },
+        "native": {
+          "p50": 1969.4362500000002,
+          "p95": 3280.986667,
+          "maximum": 3573.26675,
+          "lastDiagnosticMs": 4065.156833,
+          "memory": {
+            "peakRss": 1413791744,
+            "peakFootprint": 1014007272,
+            "samples": 427,
+            "cpuSeconds": 10.378238125
+          }
+        }
+      }
+    }
+  },
+  "fullQualification": false,
+  "bcComplete": false,
+  "pushedMain": false,
+  "networkUsed": false,
+  "evidenceDirectory": "untracked/stage-bc-rpc-input-lifetime-2026-10-27",
+  "remaining": "Substantive local diagnostic improvement required; co first samples failed, no unchanged repeats; current pressure/original14+6 not started",
+  "fullCorrectness": {
+    "passed": true,
+    "evidence": "untracked/stage-bc-rpc-input-validation-2026-10-27/correctness-runtime.json",
+    "nativeStates": 448,
+    "asanStates": 38,
+    "diagnosticArchives": 112,
+    "registeredTests": 949,
+    "sdkFilesVerified": 709,
+    "sdkNativeAndAsanCases": 2635,
+    "sdkNativeAndAsanAssertions": 35691
+  },
+  "coPerformance": {
+    "passed": false,
+    "failed": [
+      "forward-vs-control-diagnostic20percent",
+      "reverse-vs-baseline-maximum"
+    ],
+    "evidence": "untracked/stage-bc-rpc-input-co-performance-2026-10-27/performance-evaluation.json"
+  }
+}

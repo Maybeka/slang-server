@@ -258,14 +258,18 @@ public:
 
     /// @brief For the document symbols request
     // TODO: should this use the shallow compilation instead of syntax tree?
-    std::vector<lsp::DocumentSymbol> getSymbols() { return getAnalysis()->getDocSymbols(); }
+    std::vector<lsp::DocumentSymbol> getSymbols(const lsp::RequestContext& ctx = {}) {
+        return getAnalysis(ctx)->getDocSymbols(ctx);
+    }
 
     /// Map editor coordinates into the selected analysis context. An included file has a
     /// different BufferID there from the editor's backing buffer returned by getBuffer().
     std::optional<slang::SourceLocation> getLocation(const lsp::Position& position,
                                                      const lsp::RequestContext& ctx = {});
 
-    std::vector<lsp::DocumentLink> getDocLinks() { return getAnalysis()->getDocLinks(); }
+    std::vector<lsp::DocumentLink> getDocLinks(const lsp::RequestContext& ctx = {}) {
+        return getAnalysis(ctx)->getDocLinks(ctx);
+    }
 
     std::vector<lsp::Range> getInactiveRegions(const lsp::RequestContext& ctx = {});
 };

@@ -9,6 +9,7 @@
 #pragma once
 
 #include "lsp/LspTypes.h"
+#include "lsp/RequestContext.h"
 #include <memory>
 #include <optional>
 #include <string>
@@ -25,8 +26,19 @@ public:
     explicit SymbolTreeVisitor(const slang::SourceManager& sourceManager, slang::BufferID buffer);
 
     std::vector<lsp::DocumentSymbol> getSymbols(std::shared_ptr<slang::syntax::SyntaxTree> tree,
-                                                bool macros, slang::BufferID buffer = {});
-    void invalidate() { m_symbols.clear(); }
+                                                bool macros, slang::BufferID buffer = {},
+                                                const lsp::RequestContext& ctx = {});
+    void invalidate() {
+        m_symbols.clear();
+        m_symbolsValid = false;
+    }
+
+    template<typename T>
+    void visit(const T& node) {
+        if (m_requestCtx)
+            m_requestCtx->checkpoint("during document symbol traversal");
+        slang::syntax::SyntaxVisitor<SymbolTreeVisitor>::visit(node);
+    }
 
     void handle(const slang::syntax::GenerateBlockSyntax& node);
 
@@ -84,6 +96,9 @@ private:
     const slang::SourceManager& m_sourceManager;
     /// Source buffer whose declarations are shown in this document's outline.
     slang::BufferID m_buffer;
+    const lsp::RequestContext* m_requestCtx = nullptr;
+    bool m_symbolsValid = false;
+    bool m_includeMacros = false;
     std::vector<lsp::DocumentSymbol> m_symbols;
     std::vector<lsp::DocumentSymbol>* m_currentSymbols = &m_symbols;
 };

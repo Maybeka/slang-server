@@ -1,0 +1,38 @@
+{
+  "stage": "A",
+  "status": "full-model-boundary-audit-passed",
+  "productionChanged": false,
+  "binarySha256": "f4f426688550d513808533ac4b098af25d3cf961a429d034d198015d67fb711e",
+  "sdkPatchSha256": "50bb01239c09becff26c5f5b27d196263fb804582ca42a04cacbf822851bb625",
+  "cases": {
+    "externalConstantEvaluation": "Changing a function used by an outside localparam changes the declared vector type; require full model, compare hover and complete diagnostic publications for8/invalid/4",
+    "fatalHierarchy": "Inspect the full active design rather than package-only projection; recursive hierarchy is fatal and full-model publication remains Native-equivalent for three edits",
+    "boundedPublication": "Server CLI forcibly resets error-limit to zero. Directly set bounded engine settings only to verify capture rejection, then restore supported unlimited publication and compare three edit versions"
+  },
+  "tests": {
+    "nativeTargeted": {
+      "passed": true,
+      "assertions": 143,
+      "cases": 1,
+      "log": "native-final.log"
+    },
+    "ctest": {
+      "passed": true,
+      "tests": 925,
+      "log": "ctest.log"
+    },
+    "serverAsan": {
+      "passed": true,
+      "assertions": 169680,
+      "cases": 910,
+      "detectLeaks": false,
+      "log": "server-asan.log"
+    }
+  },
+  "currentVersionsAndHistoricalUriPayloadsCompared": true,
+  "errorsAndRepairCompared": true,
+  "initialFixtureFailures": "CLI limit was reset by ServerDriver and package projection does not contain hierarchy fatal state; forcing the engine limit during unrelated multi-publications was not a supported server configuration. native.log/native-fixed.log preserve these fixture failures.",
+  "allProcessesTerminal": true,
+  "performanceStarted": false,
+  "allFiveComplete": false
+}

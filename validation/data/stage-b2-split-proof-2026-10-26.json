@@ -1,0 +1,78 @@
+{
+  "stage": "B2",
+  "complete": false,
+  "goalComplete": false,
+  "candidateSha256": "01607a62e137841494a774cc04e71f55effb50d4edd8da6c181a8dbeba603e53",
+  "experimentsDefaultOff": true,
+  "networkUsed": false,
+  "currentProductionChanges": [
+    "Immutable watch catalogue memo, keyed by exact freshly collected raw path vector; no input/content/version proof memo. Server tracks its own consumed immutable DTO; changed driver still rebuilds anchors. Transactional key/value publication.",
+    "One context-owned helper only for foreground RPC physical proofs without test checkpoint observers; helper reads existing/unknown files, caller checks known-missing paths; background and notifications serial. All original per-file physical predicates preserved. Tasks cleared before completion, stop/join before semantic owner teardown."
+  ],
+  "targetedNative": {
+    "passed": true,
+    "cases": 25,
+    "assertions": 12857
+  },
+  "shortMechanism": {
+    "qualification": false,
+    "passed": true,
+    "arms": {
+      "baseline": {
+        "p50": 20.058374999999998,
+        "p95": 21.332333,
+        "lastDiagnosticMs": 26.011334,
+        "cancelled": 0,
+        "memory": {
+          "peakRss": 884244480,
+          "peakFootprint": 727516240,
+          "samples": 328,
+          "cpuSeconds": 3.180407041
+        },
+        "finalFiles": 612,
+        "hoverProofMedianUs": 11483.5,
+        "publicationProofMedianUs": 6191.0,
+        "catalogueReuses": 0
+      },
+      "candidate": {
+        "p50": 17.9722295,
+        "p95": 19.008584,
+        "lastDiagnosticMs": 31.208375,
+        "cancelled": 0,
+        "memory": {
+          "peakRss": 880345088,
+          "peakFootprint": 723338344,
+          "samples": 324,
+          "cpuSeconds": 3.406012625
+        },
+        "finalFiles": 612,
+        "hoverProofMedianUs": 10829.5,
+        "publicationProofMedianUs": 6471.0,
+        "catalogueReuses": 51
+      }
+    },
+    "ratios": {
+      "p50": 0.8959962858407026,
+      "p95": 0.891069157789727,
+      "lastDiagnosticMs": 1.1997990952713151
+    },
+    "memoryRatios": {
+      "peakRss": 0.9955901426718547,
+      "peakFootprint": 0.994257315822943,
+      "cpuSeconds": 1.0709360723616885
+    }
+  },
+  "fullCorrectness": "not started for current candidate; no ASan/CVA inheritance claimed",
+  "longMechanism": {
+    "originalExecSession": 54924,
+    "runtime": "untracked/stage-b2-split-proof-2026-10-26/long-runtime.json",
+    "purpose": "Changed-code long mechanism attribution against d31 serial proof; not qualification, never replaces original failed gates. Amortize startup to measure sustained CPU cost before expensive full validation.",
+    "qualification": false
+  },
+  "remaining": [
+    "Long steady-state CPU/latency evidence; no acceptance from short sample",
+    "Keep or remove parallel prototype based on evidence",
+    "Complete Native/ASan/448+38/112 and lifecycle pressure before original unchanged14+6 qualification",
+    "B2 audit, B3/C/D and main delivery with unused artifact cleanup"
+  ]
+}

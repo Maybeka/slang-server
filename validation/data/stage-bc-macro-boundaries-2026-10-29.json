@@ -1,0 +1,2357 @@
+{
+  "status": "Current BC original20 all original gates passed after current correctness, TSan and six mechanism audits; D/main pending",
+  "experimentsDefaultOff": true,
+  "mainPushed": false,
+  "networkUsed": false,
+  "sourceReceipt": {
+    "status": "local-macro-admission-first-version-validated-broader-boundaries-pending",
+    "defaultOff": true,
+    "qualification": false,
+    "sourceSha256": {
+      "source/include/util/BodyMacroProof.h": "3465511dc59d081f7463eecbdddf3d0dbbb31251b6f2a2b8632541d2ab5d64f1",
+      "source/include/util/LineIndependentMacros.h": "fbd73aee777f0518511b61b1f6fcc0e9e5646b57d4cc252d6ff1d658c96aee5c",
+      "source/include/document/MethodScopeOverlay.h": "a718d7125341ecdefd5a560b109b4f95f4f1afd8f4264fbd4fa99d9ca5d3e023",
+      "source/src/document/MethodScopeOverlay.cpp": "e2a17426e0755a061477a8bd8206f35cf7da9702ee7731ca50f72010ba3497f2",
+      "source/include/Config.h": "c3f54a8c97ac2f150e161f77f713ef597e610e94456f915981f6859126931dce",
+      "source/tests/cpp/MethodScopeOverlayTests.cpp": "de5634c53ea3fd8db241e01dfb5d3a677c47913af7b7d490466e9cd8164e172b",
+      "source/external/slang/source/parsing/Preprocessor.cpp": "4495f8b734048d6e07d5ec4c14b01b30376612a86c135f53d34e6bb718264582",
+      "source/external/slang/include/slang/parsing/PreprocessorMetadata.h": "fcb6806858c64b2c4517660f698232adb7276be7556f73e414babc9fa357269b",
+      "source/external/slang/tests/unittests/parsing/PreprocessorTests.cpp": "74d80ec62bd26d10d3fb252c2d4a5e59b9b6924dfb6b3c7d557e4de652c5d05a"
+    },
+    "sdkPatchSha256": "e38fe0dca662c80c031feb80db9d4327061b42a15ad3cd2381ef838c44254a09",
+    "binarySha256": {
+      "build-uvm/bin/slang-server": "4e4bd90f1a5954b17a89db17b854f15905fea502fa4280eb67f6e06aa99c79c5",
+      "build-uvm/bin/server_unittests": "f96c8c77999d6e6349b8ef04fd2ed7f82b5a11c3514db4df47c2631bde4ae97e",
+      "build-uvm/bin/unittests": "a3445381968dab27206899454b00053552e61bdff00d6ddb78a03a93cd616ad8",
+      "build-uvm/bin/diagnostic_test_server": "9779323f8ec21c9bf6f5cebdade92165ae19bff5c971de7212e99dfc16c17201",
+      "build-uvm/bin/slang_server_counted": "1ea6191df2aaff5e9a94d1dc70eab97a869e4e708e6a7fe9cb7f558f557f9be5",
+      "untracked/semantic-cancellation-2026-10-23/asan-build/bin/slang-server": "2456b67f680d4cb1b77cdd7b929ee53a69ba58e3dfc4e55050d7bfc32221dc98",
+      "untracked/semantic-cancellation-2026-10-23/asan-build/bin/server_unittests": "1aa0cdb59700a1285dde306fb4073359f64a44fb400fd65ff38d737658b62dac",
+      "untracked/semantic-cancellation-2026-10-23/asan-build/bin/diagnostic_test_server": "04fb100b1ef49bf8d4c203ca348f3c1140c4851e84a01dbb6bf94b3b805a83e9",
+      "untracked/semantic-cancellation-2026-10-23/asan-build/bin/slang_server_counted": "af99ad7cf5a83ba166798c8e3ecbebf385c3821ca2d7f86eb2ccab9680ddf15a",
+      "untracked/semantic-cancellation-2026-10-23/asan-build/bin/unittests": "04f3440c6d3f4aa0f7a38e150f320d6977cda07979677615a7ce355848ec9c93"
+    }
+  },
+  "native": {
+    "passed": true,
+    "tests": 990,
+    "logSha256": "34dbf910fcbde9ea25875fbafa445a3040d4f3e91a78e3390d4e271953f71dae",
+    "sourceReceiptSha256": "4e437f0d9b0028d71716bd0b9bfa4db19ef229075fca2de0811811c72452286f"
+  },
+  "asan": {
+    "status": "completed",
+    "passed": true,
+    "qualification": false,
+    "steps": [
+      {
+        "name": "sdk-full",
+        "exitCode": 0,
+        "summary": [
+          "All tests passed (36972 assertions in 2644 test cases)"
+        ],
+        "logSha256": "d17e714e0ff8c0bcefb979c893895988673d3668d041556b5397004bd3878e91"
+      },
+      {
+        "name": "server-full",
+        "exitCode": 0,
+        "summary": [
+          "All tests passed (178521 assertions in 975 test cases)"
+        ],
+        "logSha256": "39c52e08b8bc335bc4f46f72cc46856d4a4194d44436e352f2b871bfd591b531"
+      },
+      {
+        "name": "sdk-integrity",
+        "exitCode": 0,
+        "summary": [
+          "Verified 709 SDK files at 151a801ceaf6faf23d79a42d210ff67e50eb4660 plus restored patch",
+          "Verified catch2: 562 files",
+          "Verified fmt: 142 files",
+          "Verified boost_regex: 380 files",
+          "Verified tomlplusplus: 212 files"
+        ],
+        "logSha256": "08c8fec12d316070e54e19554b6e1202309b0331e8a7c77793f4b889429e5309"
+      }
+    ],
+    "sourceReceiptSha256": "4e437f0d9b0028d71716bd0b9bfa4db19ef229075fca2de0811811c72452286f",
+    "detectLeaks": false
+  },
+  "cvaCorrectness": {
+    "purpose": "Current macro-proof optout/optin full612/hover oracle; no local admission or performance claim",
+    "binarySha256": "4e4bd90f1a5954b17a89db17b854f15905fea502fa4280eb67f6e06aa99c79c5",
+    "sourceSha256": "6c2ecbefd33ef844ecbbe63d7282d37406714d9c18ef52711337e760141668cb",
+    "arms": [
+      {
+        "macroProof": false,
+        "delta": true,
+        "phases": [
+          {
+            "localState": {
+              "active": false,
+              "accepted": 0,
+              "decline": "",
+              "localDiagnosticUpdates": 0,
+              "localDiagnosticDecline": ""
+            },
+            "phase": "original",
+            "version": 1,
+            "hoverHash": "7e075da3d4bd50bd492e8069d51fed3a74fb916c9b7372c0bf4984144291e903",
+            "hoverMs": 52.318083,
+            "frames": 1,
+            "bytes": 44932,
+            "unchangedDiagnosticFrames": 1,
+            "unchangedDiagnosticBytes": 44932,
+            "identicalParamsFrames": 0,
+            "distinctUris": 1,
+            "diagnostics": 64,
+            "firstNotificationMs": 0.575333,
+            "lastNotificationMs": 0.575333,
+            "mapUris": 612,
+            "mapHash": "4974008de55cdd5769f40045ba7845f6d25e031bb554f0f8702bcfaa16e6efe2",
+            "versionOnlyFrames": 1
+          },
+          {
+            "localState": {
+              "active": true,
+              "accepted": 1,
+              "decline": "",
+              "localDiagnosticUpdates": 1,
+              "localDiagnosticDecline": ""
+            },
+            "phase": "0",
+            "version": 2,
+            "hoverHash": "7e075da3d4bd50bd492e8069d51fed3a74fb916c9b7372c0bf4984144291e903",
+            "hoverMs": 25.199292,
+            "frames": 1,
+            "bytes": 45551,
+            "unchangedDiagnosticFrames": 0,
+            "unchangedDiagnosticBytes": 0,
+            "identicalParamsFrames": 0,
+            "distinctUris": 1,
+            "diagnostics": 65,
+            "firstNotificationMs": 48.229708,
+            "lastNotificationMs": 48.229708,
+            "mapUris": 612,
+            "mapHash": "dd200e5f9885e86a5000a23ea2205f7a732ea91e6aaa6f98e954ba80340c5ec6",
+            "versionOnlyFrames": 0
+          },
+          {
+            "localState": {
+              "active": true,
+              "accepted": 2,
+              "decline": "",
+              "localDiagnosticUpdates": 2,
+              "localDiagnosticDecline": ""
+            },
+            "phase": "00",
+            "version": 3,
+            "hoverHash": "7e075da3d4bd50bd492e8069d51fed3a74fb916c9b7372c0bf4984144291e903",
+            "hoverMs": 7.670833,
+            "frames": 1,
+            "bytes": 45551,
+            "unchangedDiagnosticFrames": 1,
+            "unchangedDiagnosticBytes": 45551,
+            "identicalParamsFrames": 0,
+            "distinctUris": 1,
+            "diagnostics": 65,
+            "firstNotificationMs": 14.331542,
+            "lastNotificationMs": 14.331542,
+            "mapUris": 612,
+            "mapHash": "dd200e5f9885e86a5000a23ea2205f7a732ea91e6aaa6f98e954ba80340c5ec6",
+            "versionOnlyFrames": 1
+          },
+          {
+            "localState": {
+              "active": false,
+              "accepted": 0,
+              "decline": "body changes preprocessing state",
+              "localDiagnosticUpdates": 0,
+              "localDiagnosticDecline": ""
+            },
+            "phase": "macro",
+            "version": 4,
+            "hoverHash": "7e075da3d4bd50bd492e8069d51fed3a74fb916c9b7372c0bf4984144291e903",
+            "hoverMs": 474.663166,
+            "frames": 1,
+            "bytes": 45551,
+            "unchangedDiagnosticFrames": 0,
+            "unchangedDiagnosticBytes": 0,
+            "identicalParamsFrames": 0,
+            "distinctUris": 1,
+            "diagnostics": 65,
+            "firstNotificationMs": 1084.055125,
+            "lastNotificationMs": 1084.055125,
+            "mapUris": 612,
+            "mapHash": "bd47f271fda95cff5d900c21f9abef90e83d2a4fa526b09a742453893ec1024a",
+            "versionOnlyFrames": 0
+          },
+          {
+            "localState": {
+              "active": false,
+              "accepted": 0,
+              "decline": "body changes preprocessing state",
+              "localDiagnosticUpdates": 0,
+              "localDiagnosticDecline": ""
+            },
+            "phase": "6",
+            "version": 5,
+            "hoverHash": "7e075da3d4bd50bd492e8069d51fed3a74fb916c9b7372c0bf4984144291e903",
+            "hoverMs": 159.79975,
+            "frames": 1,
+            "bytes": 45551,
+            "unchangedDiagnosticFrames": 0,
+            "unchangedDiagnosticBytes": 0,
+            "identicalParamsFrames": 0,
+            "distinctUris": 1,
+            "diagnostics": 65,
+            "firstNotificationMs": 682.367083,
+            "lastNotificationMs": 682.367083,
+            "mapUris": 612,
+            "mapHash": "dd200e5f9885e86a5000a23ea2205f7a732ea91e6aaa6f98e954ba80340c5ec6",
+            "versionOnlyFrames": 0
+          }
+        ],
+        "uvmStatus": {
+          "enabled": true,
+          "prepared": true,
+          "generation": 1,
+          "consumers": 1,
+          "namespaceDeclines": 0,
+          "chargedBytes": 100211226,
+          "astBytes": 29039968,
+          "fixedSourceFiles": 374,
+          "diagnosticsShareOwner": true,
+          "shippedPreparse": false,
+          "shippedProfile": "",
+          "projectCacheHit": true,
+          "projectCachePath": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/cva6-uvm-2026-10-21/project/.slang/cache/uvm/15862058619812106388.cst",
+          "syntaxParseMs": 0.0,
+          "archiveWriteMs": 0.0,
+          "archiveLoadMs": 0.0,
+          "reason": "UVM shares the fixed scope semantic owner; charges cover its full closure"
+        },
+        "scopeFrozen": {
+          "prepared": true,
+          "retainedRoots": [
+            "uvmt_cva6_tb.cva6_dut_wrap.cva6_tb_wrapper_i.i_cva6"
+          ]
+        },
+        "exitCode": 0,
+        "stderrSha256": "d1491106ec56bc61a5327e2ebd41fa35ecbb1c72a10becd3e52b9659aed309d4"
+      },
+      {
+        "macroProof": true,
+        "delta": true,
+        "phases": [
+          {
+            "localState": {
+              "active": false,
+              "accepted": 0,
+              "decline": "",
+              "localDiagnosticUpdates": 0,
+              "localDiagnosticDecline": ""
+            },
+            "phase": "original",
+            "version": 1,
+            "hoverHash": "7e075da3d4bd50bd492e8069d51fed3a74fb916c9b7372c0bf4984144291e903",
+            "hoverMs": 55.82775,
+            "frames": 1,
+            "bytes": 44932,
+            "unchangedDiagnosticFrames": 1,
+            "unchangedDiagnosticBytes": 44932,
+            "identicalParamsFrames": 0,
+            "distinctUris": 1,
+            "diagnostics": 64,
+            "firstNotificationMs": 0.607167,
+            "lastNotificationMs": 0.607167,
+            "mapUris": 612,
+            "mapHash": "4974008de55cdd5769f40045ba7845f6d25e031bb554f0f8702bcfaa16e6efe2",
+            "versionOnlyFrames": 1
+          },
+          {
+            "localState": {
+              "active": true,
+              "accepted": 1,
+              "decline": "",
+              "localDiagnosticUpdates": 1,
+              "localDiagnosticDecline": ""
+            },
+            "phase": "0",
+            "version": 2,
+            "hoverHash": "7e075da3d4bd50bd492e8069d51fed3a74fb916c9b7372c0bf4984144291e903",
+            "hoverMs": 25.782167,
+            "frames": 1,
+            "bytes": 45551,
+            "unchangedDiagnosticFrames": 0,
+            "unchangedDiagnosticBytes": 0,
+            "identicalParamsFrames": 0,
+            "distinctUris": 1,
+            "diagnostics": 65,
+            "firstNotificationMs": 48.396,
+            "lastNotificationMs": 48.396,
+            "mapUris": 612,
+            "mapHash": "dd200e5f9885e86a5000a23ea2205f7a732ea91e6aaa6f98e954ba80340c5ec6",
+            "versionOnlyFrames": 0
+          },
+          {
+            "localState": {
+              "active": true,
+              "accepted": 2,
+              "decline": "",
+              "localDiagnosticUpdates": 2,
+              "localDiagnosticDecline": ""
+            },
+            "phase": "00",
+            "version": 3,
+            "hoverHash": "7e075da3d4bd50bd492e8069d51fed3a74fb916c9b7372c0bf4984144291e903",
+            "hoverMs": 6.271083,
+            "frames": 1,
+            "bytes": 45551,
+            "unchangedDiagnosticFrames": 1,
+            "unchangedDiagnosticBytes": 45551,
+            "identicalParamsFrames": 0,
+            "distinctUris": 1,
+            "diagnostics": 65,
+            "firstNotificationMs": 11.54625,
+            "lastNotificationMs": 11.54625,
+            "mapUris": 612,
+            "mapHash": "dd200e5f9885e86a5000a23ea2205f7a732ea91e6aaa6f98e954ba80340c5ec6",
+            "versionOnlyFrames": 1
+          },
+          {
+            "localState": {
+              "active": true,
+              "accepted": 3,
+              "decline": "",
+              "localDiagnosticUpdates": 3,
+              "localDiagnosticDecline": ""
+            },
+            "phase": "macro",
+            "version": 4,
+            "hoverHash": "7e075da3d4bd50bd492e8069d51fed3a74fb916c9b7372c0bf4984144291e903",
+            "hoverMs": 6.884334,
+            "frames": 1,
+            "bytes": 45551,
+            "unchangedDiagnosticFrames": 0,
+            "unchangedDiagnosticBytes": 0,
+            "identicalParamsFrames": 0,
+            "distinctUris": 1,
+            "diagnostics": 65,
+            "firstNotificationMs": 12.993,
+            "lastNotificationMs": 12.993,
+            "mapUris": 612,
+            "mapHash": "bd47f271fda95cff5d900c21f9abef90e83d2a4fa526b09a742453893ec1024a",
+            "versionOnlyFrames": 0
+          },
+          {
+            "localState": {
+              "active": true,
+              "accepted": 4,
+              "decline": "",
+              "localDiagnosticUpdates": 4,
+              "localDiagnosticDecline": ""
+            },
+            "phase": "6",
+            "version": 5,
+            "hoverHash": "7e075da3d4bd50bd492e8069d51fed3a74fb916c9b7372c0bf4984144291e903",
+            "hoverMs": 7.023625,
+            "frames": 1,
+            "bytes": 45551,
+            "unchangedDiagnosticFrames": 0,
+            "unchangedDiagnosticBytes": 0,
+            "identicalParamsFrames": 0,
+            "distinctUris": 1,
+            "diagnostics": 65,
+            "firstNotificationMs": 13.317084,
+            "lastNotificationMs": 13.317084,
+            "mapUris": 612,
+            "mapHash": "dd200e5f9885e86a5000a23ea2205f7a732ea91e6aaa6f98e954ba80340c5ec6",
+            "versionOnlyFrames": 0
+          }
+        ],
+        "uvmStatus": {
+          "enabled": true,
+          "prepared": true,
+          "generation": 1,
+          "consumers": 1,
+          "namespaceDeclines": 0,
+          "chargedBytes": 100328752,
+          "astBytes": 29039968,
+          "fixedSourceFiles": 374,
+          "diagnosticsShareOwner": true,
+          "shippedPreparse": false,
+          "shippedProfile": "",
+          "projectCacheHit": true,
+          "projectCachePath": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/cva6-uvm-2026-10-21/project/.slang/cache/uvm/15862058619812106388.cst",
+          "syntaxParseMs": 0.0,
+          "archiveWriteMs": 0.0,
+          "archiveLoadMs": 0.0,
+          "reason": "UVM shares the fixed scope semantic owner; charges cover its full closure"
+        },
+        "scopeFrozen": {
+          "prepared": true,
+          "retainedRoots": [
+            "uvmt_cva6_tb.cva6_dut_wrap.cva6_tb_wrapper_i.i_cva6"
+          ]
+        },
+        "exitCode": 0,
+        "stderrSha256": "495ee6f85255c14039f839774f051883f0332e61ce063efa3f30c99c3d91554d"
+      }
+    ],
+    "passed": true
+  },
+  "longPlan": {
+    "status": "started",
+    "qualification": false,
+    "purpose": "Current macro-on/off long memory/CPU and input continuity; one fixed forward/reverse pair, each local arm1008 edits; Native12 correctness reference",
+    "runs": [
+      {
+        "name": "long-forward",
+        "reverse": false
+      },
+      {
+        "name": "long-reverse",
+        "reverse": true
+      }
+    ],
+    "cycles": 84,
+    "intervalMs": 100,
+    "scenario": "macro",
+    "warm": true,
+    "delta": true,
+    "memory": true,
+    "trace": true,
+    "gates": {
+      "cpuRatioMax": 1.1,
+      "peakRssFootprintRatioMax": 1.05,
+      "slowLatencyRatioMax": 1.1,
+      "fastMaximumMs": 50,
+      "fastMaximumAddedMs": 5,
+      "requiredCompensatingSavingMs": 250
+    },
+    "latencyPolicy": "Preserve original successful-only metrics. For fast requests use the common-successful index cohort when cancellation counts differ; candidate cancellations must not increase. A <=5ms fast increase requires >=250ms end-to-end diagnostic saving in this same long candidate. No repeat to get green; preserve all raw failed judgments.",
+    "correctness": "Exact all612 Native full diagnostics and noncancelled public hover values; final request successful, latest version and postidle map stable; source hard bound and two current/no old query buffers. No universal race-free or all-scope claim.",
+    "sourceReceipt": "source-receipt.json",
+    "retention": "Aggregate metrics/cohort/source memory/phase/counts and exact code/config/binary identity only; raw terminal logs/traces/perpoint samples removed when consumed"
+  },
+  "longResult": {
+    "status": "completed",
+    "qualification": false,
+    "steps": [
+      {
+        "name": "long-forward",
+        "status": "passed",
+        "pid": 13591,
+        "exitCode": 0,
+        "logSha256": "c87b4a6d179f033af686bd1c762c73f7b93f4451bfb934073b93c7f9316d0f70"
+      },
+      {
+        "name": "long-reverse",
+        "status": "passed",
+        "pid": 13716,
+        "exitCode": 0,
+        "logSha256": "2cb102df8b65937d41e0837266e798101bdb1fe65ffd88c2f8d3edd42db644ae"
+      }
+    ],
+    "sourceReceiptSha256": "4e437f0d9b0028d71716bd0b9bfa4db19ef229075fca2de0811811c72452286f",
+    "harnessSha256": {
+      "profile-performance.py": "bdfce3762158adbc494046bb746941d663359a73b3bb359ef9af0948df1c38c6",
+      "sampler.py": "d53b8bdeb47fdd895726b64d7e0322a84a3987629ea472bb310d213d548337ff",
+      "run-long.py": "cbd2121f2cc6d40e6f4ede50c68b2d9526c50e4305cc03622ce862e22be15c82"
+    },
+    "passed": true,
+    "checks": {
+      "long-forward-oracle": true,
+      "long-forward-binary": true,
+      "long-forward-1008": true,
+      "long-forward-coverage": true,
+      "long-forward-commonSuccess": true,
+      "long-forward-sourceBounds": true,
+      "long-forward-frozenReady": true,
+      "long-reverse-oracle": true,
+      "long-reverse-binary": true,
+      "long-reverse-1008": true,
+      "long-reverse-coverage": true,
+      "long-reverse-commonSuccess": true,
+      "long-reverse-sourceBounds": true,
+      "long-reverse-frozenReady": true,
+      "cpuSeconds": true,
+      "peakRss": true,
+      "peakFootprint": true,
+      "paired-p50": true,
+      "paired-p95": true,
+      "latestQueryMs": true,
+      "lastDiagnosticMs": true
+    },
+    "failedChecks": [],
+    "metrics": {
+      "long-forward": {
+        "native": {
+          "p50": 1685.9603965000001,
+          "p95": 2792.376875,
+          "maximum": 3048.368083,
+          "cancelled": 0,
+          "lastDiagnosticMs": 3466.871791,
+          "memory": {
+            "peakRss": 1428193280,
+            "peakFootprint": 1031046608,
+            "samples": 414,
+            "cpuSeconds": 8.942112583
+          },
+          "finalFiles": 612,
+          "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+          "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+          "binarySha256": "4e4bd90f1a5954b17a89db17b854f15905fea502fa4280eb67f6e06aa99c79c5",
+          "configurationSha256": "961af2b8a31cbfce1a6ba7ba723ffe73b8299ad55d4a091c272078e073a86104",
+          "latestQueryMs": 3048.368083,
+          "p50AllResponseMs": 1685.9603965000001,
+          "requests": 12,
+          "successful": 12
+        },
+        "baseline": {
+          "p50": 14.929186999999999,
+          "p95": 411.95275,
+          "maximum": 411.95275,
+          "cancelled": 1002,
+          "lastDiagnosticMs": 883.207375,
+          "memory": {
+            "peakRss": 1492385792,
+            "peakFootprint": 1335002648,
+            "samples": 4258,
+            "cpuSeconds": 103.583333833
+          },
+          "finalFiles": 612,
+          "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+          "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+          "binarySha256": "4e4bd90f1a5954b17a89db17b854f15905fea502fa4280eb67f6e06aa99c79c5",
+          "configurationSha256": "427086204eb92c0691881f680f5c8a731e27e31a50851742f6c0961b1ae29e94",
+          "latestQueryMs": 411.95275,
+          "p50AllResponseMs": 102.1024795,
+          "requests": 1008,
+          "successful": 6
+        },
+        "candidate": {
+          "p50": 16.013146,
+          "p95": 17.5065,
+          "maximum": 21.203,
+          "cancelled": 0,
+          "lastDiagnosticMs": 26.099167,
+          "memory": {
+            "peakRss": 961232896,
+            "peakFootprint": 803751016,
+            "samples": 4206,
+            "cpuSeconds": 27.913053625
+          },
+          "finalFiles": 612,
+          "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+          "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+          "binarySha256": "4e4bd90f1a5954b17a89db17b854f15905fea502fa4280eb67f6e06aa99c79c5",
+          "configurationSha256": "3952f0b670fd743b70d2b7f8967e56e5dff55e88e6abb53c7e25adb13511e0eb",
+          "latestQueryMs": 16.440667,
+          "p50AllResponseMs": 16.013146,
+          "requests": 1008,
+          "successful": 1008
+        }
+      },
+      "long-reverse": {
+        "candidate": {
+          "p50": 16.078896,
+          "p95": 19.357209,
+          "maximum": 25.739875,
+          "cancelled": 0,
+          "lastDiagnosticMs": 24.945209,
+          "memory": {
+            "peakRss": 960577536,
+            "peakFootprint": 803112064,
+            "samples": 4235,
+            "cpuSeconds": 27.930279333
+          },
+          "finalFiles": 612,
+          "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+          "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+          "binarySha256": "4e4bd90f1a5954b17a89db17b854f15905fea502fa4280eb67f6e06aa99c79c5",
+          "configurationSha256": "3952f0b670fd743b70d2b7f8967e56e5dff55e88e6abb53c7e25adb13511e0eb",
+          "latestQueryMs": 15.270375,
+          "p50AllResponseMs": 16.078896,
+          "requests": 1008,
+          "successful": 1008
+        },
+        "baseline": {
+          "p50": 11.730854,
+          "p95": 414.451292,
+          "maximum": 414.451292,
+          "cancelled": 1002,
+          "lastDiagnosticMs": 880.882083,
+          "memory": {
+            "peakRss": 1489993728,
+            "peakFootprint": 1332430360,
+            "samples": 4272,
+            "cpuSeconds": 103.518805166
+          },
+          "finalFiles": 612,
+          "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+          "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+          "binarySha256": "4e4bd90f1a5954b17a89db17b854f15905fea502fa4280eb67f6e06aa99c79c5",
+          "configurationSha256": "427086204eb92c0691881f680f5c8a731e27e31a50851742f6c0961b1ae29e94",
+          "latestQueryMs": 414.451292,
+          "p50AllResponseMs": 101.994,
+          "requests": 1008,
+          "successful": 6
+        },
+        "native": {
+          "p50": 1763.8086245,
+          "p95": 2920.815958,
+          "maximum": 3179.165625,
+          "cancelled": 0,
+          "lastDiagnosticMs": 3599.825666,
+          "memory": {
+            "peakRss": 1427849216,
+            "peakFootprint": 1030653416,
+            "samples": 418,
+            "cpuSeconds": 9.204632083
+          },
+          "finalFiles": 612,
+          "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+          "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+          "binarySha256": "4e4bd90f1a5954b17a89db17b854f15905fea502fa4280eb67f6e06aa99c79c5",
+          "configurationSha256": "961af2b8a31cbfce1a6ba7ba723ffe73b8299ad55d4a091c272078e073a86104",
+          "latestQueryMs": 3179.165625,
+          "p50AllResponseMs": 1763.8086245,
+          "requests": 12,
+          "successful": 12
+        }
+      }
+    },
+    "pairedCommonSuccess": {
+      "long-forward": {
+        "baseline": {
+          "p50": 14.929186999999999,
+          "p95": 411.95275
+        },
+        "candidate": {
+          "p50": 14.8649795,
+          "p95": 16.668375
+        },
+        "count": 6
+      },
+      "long-reverse": {
+        "baseline": {
+          "p50": 11.730854,
+          "p95": 414.451292
+        },
+        "candidate": {
+          "p50": 13.305812,
+          "p95": 15.270375
+        },
+        "count": 6
+      }
+    },
+    "summary": {
+      "cpuSeconds": {
+        "baseline": 103.5510694995,
+        "candidate": 27.921666479000002
+      },
+      "peakRss": {
+        "baseline": 1491189760.0,
+        "candidate": 960905216.0
+      },
+      "peakFootprint": {
+        "baseline": 1333716504.0,
+        "candidate": 803431540.0
+      },
+      "lastDiagnosticMs": {
+        "baselineMs": 882.044729,
+        "candidateMs": 25.522188,
+        "savingMs": 856.5225409999999
+      },
+      "latestQueryMs": {
+        "baselineMs": 413.202021,
+        "candidateMs": 15.855521,
+        "savingMs": 397.3465
+      },
+      "paired-p50": {
+        "baselineMs": 13.3300205,
+        "candidateMs": 14.08539575,
+        "extraMs": 0.7553752500000002
+      },
+      "paired-p95": {
+        "baselineMs": 413.202021,
+        "candidateMs": 15.969375,
+        "extraMs": -397.232646
+      }
+    },
+    "ratios": {
+      "cpuSeconds": 0.2696415074605755,
+      "peakRss": 0.6443882876448938,
+      "peakFootprint": 0.6024005383380935,
+      "lastDiagnosticMs": 0.02893525369051891,
+      "latestQueryMs": 0.03837232199791201
+    },
+    "observations": {
+      "long-forward": {
+        "baseline": {
+          "status": {
+            "active": false,
+            "accepted": 0,
+            "decline": "current query context required",
+            "version": 0,
+            "localDiagnosticUpdates": 0,
+            "localDiagnosticDecline": "",
+            "localDiagnosticProceduresReused": 0,
+            "localDiagnosticProceduresRecomputed": 0,
+            "localDiagnosticRenderingsReused": 0,
+            "localDiagnosticRenderingsFresh": 0,
+            "certificateRenewals": 0,
+            "retainedHandles": 0,
+            "sourceMemory": {
+              "dataBytes": 12356923,
+              "queryBytes": 0,
+              "queryBuffers": 0,
+              "retainedNameBytes": 39857,
+              "indexBytes": 47975
+            },
+            "sources": []
+          },
+          "uvmPrepared": true,
+          "scopePrepared": true,
+          "retainedRoots": [
+            "uvmt_cva6_tb.cva6_dut_wrap.cva6_tb_wrapper_i.i_cva6"
+          ]
+        },
+        "candidate": {
+          "status": {
+            "active": true,
+            "accepted": 1010,
+            "decline": "",
+            "version": 1011,
+            "localDiagnosticUpdates": 1010,
+            "localDiagnosticDecline": "",
+            "localDiagnosticProceduresReused": 0,
+            "localDiagnosticProceduresRecomputed": 0,
+            "localDiagnosticRenderingsReused": 59,
+            "localDiagnosticRenderingsFresh": 6,
+            "certificateRenewals": 15,
+            "retainedHandles": 0,
+            "sourceMemory": {
+              "dataBytes": 12365642,
+              "queryBytes": 30046,
+              "queryBuffers": 2,
+              "retainedNameBytes": 34575,
+              "indexBytes": 48700
+            },
+            "sources": []
+          },
+          "uvmPrepared": true,
+          "scopePrepared": true,
+          "retainedRoots": [
+            "uvmt_cva6_tb.cva6_dut_wrap.cva6_tb_wrapper_i.i_cva6"
+          ]
+        },
+        "sourceStorage": {
+          "storage": {
+            "current": {
+              "source": {
+                "dataBytes": 12365642,
+                "queryBytes": 30046,
+                "queryBuffers": 2,
+                "retainedNameBytes": 34575,
+                "indexBytes": 48700
+              },
+              "managers": 1,
+              "locationTableBytes": 5585159,
+              "immutableTableBytes": 3670127
+            },
+            "retained": {
+              "source": {
+                "dataBytes": 9797698,
+                "queryBytes": 0,
+                "queryBuffers": 0,
+                "retainedNameBytes": 42645,
+                "indexBytes": 47950
+              },
+              "managers": 2,
+              "locationTableBytes": 28783,
+              "immutableTableBytes": 3670127
+            },
+            "total": {
+              "source": {
+                "dataBytes": 12414957,
+                "queryBytes": 30046,
+                "queryBuffers": 2,
+                "retainedNameBytes": 56013,
+                "indexBytes": 96650
+              },
+              "managers": 3,
+              "locationTableBytes": 5613942,
+              "immutableTableBytes": 3670127
+            }
+          },
+          "retirementEnabled": true,
+          "historyMaxMiB": 64,
+          "historyBaseBytes": 18783069,
+          "historySoftLimitBytes": 52337501,
+          "historyHardLimitBytes": 85891933,
+          "retirementPending": false,
+          "pendingEditorBytes": 0,
+          "editorAdmissionPending": false,
+          "processMemory": {
+            "residentBytes": 932184064,
+            "residentPeakBytes": 961232896,
+            "footprintBytes": 655279208,
+            "footprintPeakBytes": 803751016,
+            "internalBytes": 654491648,
+            "externalBytes": 15106048,
+            "reusableBytes": 262586368,
+            "compressedBytes": 0,
+            "compressedPeakBytes": 0,
+            "allocatorInUseBytes": 740568224,
+            "allocatorAllocatedBytes": 927793152
+          }
+        }
+      },
+      "long-reverse": {
+        "candidate": {
+          "status": {
+            "active": true,
+            "accepted": 1010,
+            "decline": "",
+            "version": 1011,
+            "localDiagnosticUpdates": 1010,
+            "localDiagnosticDecline": "",
+            "localDiagnosticProceduresReused": 0,
+            "localDiagnosticProceduresRecomputed": 0,
+            "localDiagnosticRenderingsReused": 59,
+            "localDiagnosticRenderingsFresh": 6,
+            "certificateRenewals": 15,
+            "retainedHandles": 0,
+            "sourceMemory": {
+              "dataBytes": 12365642,
+              "queryBytes": 30046,
+              "queryBuffers": 2,
+              "retainedNameBytes": 34575,
+              "indexBytes": 48700
+            },
+            "sources": []
+          },
+          "uvmPrepared": true,
+          "scopePrepared": true,
+          "retainedRoots": [
+            "uvmt_cva6_tb.cva6_dut_wrap.cva6_tb_wrapper_i.i_cva6"
+          ]
+        },
+        "baseline": {
+          "status": {
+            "active": false,
+            "accepted": 0,
+            "decline": "current query context required",
+            "version": 0,
+            "localDiagnosticUpdates": 0,
+            "localDiagnosticDecline": "",
+            "localDiagnosticProceduresReused": 0,
+            "localDiagnosticProceduresRecomputed": 0,
+            "localDiagnosticRenderingsReused": 0,
+            "localDiagnosticRenderingsFresh": 0,
+            "certificateRenewals": 0,
+            "retainedHandles": 0,
+            "sourceMemory": {
+              "dataBytes": 12356923,
+              "queryBytes": 0,
+              "queryBuffers": 0,
+              "retainedNameBytes": 39857,
+              "indexBytes": 47975
+            },
+            "sources": []
+          },
+          "uvmPrepared": true,
+          "scopePrepared": true,
+          "retainedRoots": [
+            "uvmt_cva6_tb.cva6_dut_wrap.cva6_tb_wrapper_i.i_cva6"
+          ]
+        },
+        "sourceStorage": {
+          "storage": {
+            "current": {
+              "source": {
+                "dataBytes": 12365642,
+                "queryBytes": 30046,
+                "queryBuffers": 2,
+                "retainedNameBytes": 34575,
+                "indexBytes": 48700
+              },
+              "managers": 1,
+              "locationTableBytes": 5585159,
+              "immutableTableBytes": 3670127
+            },
+            "retained": {
+              "source": {
+                "dataBytes": 9797698,
+                "queryBytes": 0,
+                "queryBuffers": 0,
+                "retainedNameBytes": 42645,
+                "indexBytes": 47950
+              },
+              "managers": 2,
+              "locationTableBytes": 28783,
+              "immutableTableBytes": 3670127
+            },
+            "total": {
+              "source": {
+                "dataBytes": 12414957,
+                "queryBytes": 30046,
+                "queryBuffers": 2,
+                "retainedNameBytes": 56013,
+                "indexBytes": 96650
+              },
+              "managers": 3,
+              "locationTableBytes": 5613942,
+              "immutableTableBytes": 3670127
+            }
+          },
+          "retirementEnabled": true,
+          "historyMaxMiB": 64,
+          "historyBaseBytes": 18783069,
+          "historySoftLimitBytes": 52337501,
+          "historyHardLimitBytes": 85891933,
+          "retirementPending": false,
+          "pendingEditorBytes": 0,
+          "editorAdmissionPending": false,
+          "processMemory": {
+            "residentBytes": 934772736,
+            "residentPeakBytes": 960577536,
+            "footprintBytes": 657261696,
+            "footprintPeakBytes": 803112064,
+            "internalBytes": 656457728,
+            "externalBytes": 15106048,
+            "reusableBytes": 263208960,
+            "compressedBytes": 0,
+            "compressedPeakBytes": 0,
+            "allocatorInUseBytes": 740564128,
+            "allocatorAllocatedBytes": 936181760
+          }
+        }
+      }
+    },
+    "compensatingSaving": true
+  },
+  "retention": {
+    "removedRawBytes": 6820743,
+    "rule": "Keep conclusions, aggregates and source/binary identities; raw logs and traces deleted after consumption",
+    "terminalUnitBuildLogsRemovedBytes": 30909930
+  },
+  "boundaries": [
+    "Original observed macro contents and byte locations must remain unchanged",
+    "Fresh macro names require complete original full-unit positive/negative/write footprint and EOF, plus exit absence",
+    "Effects from inactive original raw directives are filtered symmetrically",
+    "Dynamic or pasted lookup names outside the body remain Native",
+    "Changed dependency bytes, cancellation and version proofs are still checked for each publication",
+    "After generation retirement a current query context is needed before local editing resumes"
+  ],
+  "newTargeted": {
+    "cases": 14,
+    "assertions": 1033,
+    "passed": true
+  },
+  "currentMatrix": "untracked/stage-bc-current-correctness-2026-10-29/runtime.json",
+  "priorFailedEight": "stage-bc-local-macro-admission-2026-10-28.json",
+  "nativeSdk": {
+    "passed": true,
+    "assertions": 36972,
+    "cases": 2644,
+    "exitCode": 0,
+    "binarySha256": "a3445381968dab27206899454b00053552e61bdff00d6ddb78a03a93cd616ad8",
+    "logSha256": "9bd84c425baba42d7611bd1e68978703a128a9f2a632e26f79f60727cf03a178",
+    "sourceReceiptSha256": "4e437f0d9b0028d71716bd0b9bfa4db19ef229075fca2de0811811c72452286f",
+    "retentionNote": "Initial SDK run exited0 but concurrent matrix coordinator removed its log by overly broad glob. Repeated SDK once with log outside matrix directory for independent count/assertion receipt; no performance resampling."
+  },
+  "tsanTargeted": {
+    "passed": true,
+    "exitCode": 0,
+    "cases": 18,
+    "assertions": 1074,
+    "logSha256": "b3a7e8ee3beac47e8d1785e19e17d5f86b4425d166b8ed807a58133af4847942",
+    "scope": "parallel-diagnostics plus method-macro-proof targeted tests; no suppression, bounded evidence only",
+    "tsanOptions": "halt_on_error=1",
+    "buildReceiptSha256": "2ec6c52adff206c486ed00c8271986a071076b39e7b39c6d2f8f7227fd36043a"
+  },
+  "currentFullCorrectness": {
+    "passed": true,
+    "candidateSha256": "4e4bd90f1a5954b17a89db17b854f15905fea502fa4280eb67f6e06aa99c79c5",
+    "nativeStates": 448,
+    "asanStates": 38,
+    "nativeMapsComparedAndHashed": 112,
+    "wireCases": 12,
+    "wire": {
+      "native-complete": {
+        "passed": true,
+        "cases": 6,
+        "sha256": "dc198cfdede84fce1c7c4138409408c20e9ee9a5f464c7414b79a4ea30fd82ee"
+      },
+      "asan-matrix": {
+        "passed": true,
+        "cases": 6,
+        "sha256": "83750504301d43abc4523b3b46576f34cd61af124c140a4c770a71442c107c24"
+      }
+    },
+    "formalQualification": false,
+    "sourceReceiptSha256": "118c8460004d8c7e43b8b1d22c4904fab7701282e86e19535d9190c07ff5ee3e",
+    "evidenceAuditSha256": "2b79b97310385f9bfa9f62a539da3d8cfd0ecf119cd2fcbd9cef1832b7a6d59c",
+    "unitEvidence": {
+      "native-validation.json": "6cfa02e454cd3df8857e4715b2d0021ac0ef893e0322b8b8fdd6003d8cb40773",
+      "asan-validation.json": "93a8a5a64edf16688785b7c4ab76b6e5f6dcbab7eff88f793da2461cc3f5c21a",
+      "native-sdk-validation.json": "f9ee8773f4540881734e093ff46c37c4f094c40eea1ba9fb3b233f2e9a3eb7b6"
+    },
+    "experiments": {
+      "candidateMacroProof": true,
+      "candidateParallelDiagnostics": true,
+      "parallelDiagnosticThreads": 2
+    },
+    "leakDetection": false,
+    "networkUsed": false
+  },
+  "tsanCva": {
+    "passed": true,
+    "performanceClaim": false,
+    "scope": "Current imported UVM and full DUT macro12/warm Native-vs-TSan complete612 map and hover oracle; bounded scenario only",
+    "rows": [
+      {
+        "label": "native",
+        "binarySha256": "4e4bd90f1a5954b17a89db17b854f15905fea502fa4280eb67f6e06aa99c79c5",
+        "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "finalFiles": 612,
+        "passed": true,
+        "cancelled": 0
+      },
+      {
+        "label": "baseline",
+        "binarySha256": "4e4bd90f1a5954b17a89db17b854f15905fea502fa4280eb67f6e06aa99c79c5",
+        "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "finalFiles": 612,
+        "passed": true,
+        "cancelled": 6
+      },
+      {
+        "label": "candidate",
+        "binarySha256": "632b68d9ea5aeb4eed0f70ffa4a6d238cda7ab64943916a24fdc132f470c51f1",
+        "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+        "finalFiles": 612,
+        "passed": true,
+        "cancelled": 0
+      }
+    ],
+    "exits": [
+      {
+        "pid": 14957,
+        "exitCode": 0,
+        "stderrSha256": "8b2ef22435aa4cdcd62dca0ac9fd3f4bf706d4aac2b9b0f2edb1098c05e64be4",
+        "tsanWarningLines": []
+      },
+      {
+        "pid": 14960,
+        "exitCode": 0,
+        "stderrSha256": "6decb4aee9ae51b532135074ad8cdf7726d225a0957cf39b8d5119e4f4300ea1",
+        "tsanWarningLines": []
+      },
+      {
+        "pid": 14963,
+        "exitCode": 0,
+        "stderrSha256": "e06e00ce2e4c1547db5c4d751164a01bed3463c07763962f6f5bf66a10677d6b",
+        "tsanWarningLines": []
+      }
+    ],
+    "parallelTrace": [
+      "start\t2",
+      "drained\t2",
+      "serial-replay\t2",
+      "procedures-reused\t18698",
+      "procedures-recomputed\t435",
+      "parallel-summary-kept\t2",
+      "unfrozen\t2"
+    ],
+    "binaryReceiptSha256": "2ec6c52adff206c486ed00c8271986a071076b39e7b39c6d2f8f7227fd36043a",
+    "rawFiles": {
+      "tsan-cva-baseline-parallel.tmp.tsv": {
+        "sha256": "31a9407faa90e42679527670cfd67949cf3b36a18443e767309b517f1daa3622",
+        "bytes": 58
+      },
+      "tsan-cva-candidate-parallel.tmp.tsv": {
+        "sha256": "92e9e5943666933b47bdbd592307def29cf162403b4e386c79e4943bc11d1d24",
+        "bytes": 119
+      },
+      "tsan-cva-native-parallel.tmp.tsv": {
+        "sha256": "cd139a9c10f1d9c09dbbc303c1d0d10d40739b9ffae71cc1815fab9d8388c532",
+        "bytes": 145
+      },
+      "tsan-cva.tmp.log": {
+        "sha256": "adc74350e0ba6d64d4508f18c3f781f0ab4cc101f220cb542eef1fbfb40ff20a",
+        "bytes": 125
+      },
+      "tsan-cva.json": {
+        "sha256": "727fe3e458b4223f5364ab30ff2fa2399daef79d28fc5e8a2ffb6aba9a5a1709",
+        "bytes": 65944
+      }
+    }
+  },
+  "registeredTests": {
+    "count": 990,
+    "testNamesSha256": "974bd9e07c0e2d611602e717f96ff549822c77c365b81e0a5d6874236261c474",
+    "integrationCommands": [
+      {
+        "name": "unittests",
+        "command": [
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/build-uvm/bin/unittests"
+        ]
+      },
+      {
+        "name": "regression_all_file",
+        "command": [
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/build-uvm/bin/slang",
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/source/external/slang/tests/regression/all.sv",
+          "--ast-json=-",
+          "--ast-json-detailed-types",
+          "--std=1800-2023"
+        ]
+      },
+      {
+        "name": "ast_lit_tests",
+        "command": [
+          "/opt/homebrew/Frameworks/Python.framework/Versions/3.15/bin/python3.15",
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/source/external/slang/scripts/slang-lit.py",
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/source/external/slang/tests/regression/ast",
+          "--slang",
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/build-uvm/bin/slang"
+        ]
+      },
+      {
+        "name": "regression_cst_json_roundtrip",
+        "command": [
+          "/opt/homebrew/Frameworks/Python.framework/Versions/3.15/bin/python3.15",
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/source/external/slang/scripts/reconstruct_from_json.py",
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/build-uvm/external/slang/tests/regression/cst/all_cst.json",
+          "--compare",
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/source/external/slang/tests/regression/cst/../all.sv"
+        ]
+      },
+      {
+        "name": "regression_cst_json_gen",
+        "command": [
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/build-uvm/bin/slang",
+          "--cst-json",
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/build-uvm/external/slang/tests/regression/cst/all_cst.json",
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/source/external/slang/tests/regression/cst/../all.sv",
+          "--std=1800-2023"
+        ]
+      },
+      {
+        "name": "regression_cst_json_conditionals_gen",
+        "command": [
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/build-uvm/bin/slang",
+          "--cst-json",
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/build-uvm/external/slang/tests/regression/cst/conditionals_cst.json",
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/source/external/slang/tests/regression/cst/conditionals.sv",
+          "--std=1800-2023"
+        ]
+      },
+      {
+        "name": "regression_cst_json_conditionals_roundtrip",
+        "command": [
+          "/opt/homebrew/Frameworks/Python.framework/Versions/3.15/bin/python3.15",
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/source/external/slang/scripts/reconstruct_from_json.py",
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/build-uvm/external/slang/tests/regression/cst/conditionals_cst.json",
+          "--compare",
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/source/external/slang/tests/regression/cst/conditionals.sv"
+        ]
+      },
+      {
+        "name": "regression_cst_json_conditionals_foo_gen",
+        "command": [
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/build-uvm/bin/slang",
+          "--cst-json",
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/build-uvm/external/slang/tests/regression/cst/conditionals_foo_cst.json",
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/source/external/slang/tests/regression/cst/conditionals.sv",
+          "--std=1800-2023",
+          "-DFOO"
+        ]
+      },
+      {
+        "name": "regression_cst_json_conditionals_foo_roundtrip",
+        "command": [
+          "/opt/homebrew/Frameworks/Python.framework/Versions/3.15/bin/python3.15",
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/source/external/slang/scripts/reconstruct_from_json.py",
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/build-uvm/external/slang/tests/regression/cst/conditionals_foo_cst.json",
+          "--compare",
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/source/external/slang/tests/regression/cst/conditionals.sv"
+        ]
+      },
+      {
+        "name": "regression_cst_json_conditionals_bar_baz_gen",
+        "command": [
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/build-uvm/bin/slang",
+          "--cst-json",
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/build-uvm/external/slang/tests/regression/cst/conditionals_bar_baz_cst.json",
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/source/external/slang/tests/regression/cst/conditionals.sv",
+          "--std=1800-2023",
+          "-DBAR",
+          "-DBAZ"
+        ]
+      },
+      {
+        "name": "regression_cst_json_conditionals_bar_baz_roundtrip",
+        "command": [
+          "/opt/homebrew/Frameworks/Python.framework/Versions/3.15/bin/python3.15",
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/source/external/slang/scripts/reconstruct_from_json.py",
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/build-uvm/external/slang/tests/regression/cst/conditionals_bar_baz_cst.json",
+          "--compare",
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/source/external/slang/tests/regression/cst/conditionals.sv"
+        ]
+      },
+      {
+        "name": "regression_cst_json_conditionals_foo_inner_gen",
+        "command": [
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/build-uvm/bin/slang",
+          "--cst-json",
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/build-uvm/external/slang/tests/regression/cst/conditionals_foo_inner_cst.json",
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/source/external/slang/tests/regression/cst/conditionals.sv",
+          "--std=1800-2023",
+          "-DFOO",
+          "-DINNER"
+        ]
+      },
+      {
+        "name": "regression_cst_json_conditionals_foo_inner_roundtrip",
+        "command": [
+          "/opt/homebrew/Frameworks/Python.framework/Versions/3.15/bin/python3.15",
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/source/external/slang/scripts/reconstruct_from_json.py",
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/build-uvm/external/slang/tests/regression/cst/conditionals_foo_inner_cst.json",
+          "--compare",
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/source/external/slang/tests/regression/cst/conditionals.sv"
+        ]
+      },
+      {
+        "name": "driver_lit_tests",
+        "command": [
+          "/opt/homebrew/Frameworks/Python.framework/Versions/3.15/bin/python3.15",
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/source/external/slang/scripts/slang-lit.py",
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/source/external/slang/tests/regression/driver",
+          "--slang",
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/build-uvm/bin/slang"
+        ]
+      },
+      {
+        "name": "tidy_unittests",
+        "command": [
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/build-uvm/bin/tidy_unittests"
+        ]
+      }
+    ],
+    "sourceReceiptSha256": "4e437f0d9b0028d71716bd0b9bfa4db19ef229075fca2de0811811c72452286f"
+  },
+  "currentPressure": {
+    "runtime": {
+      "status": "passed",
+      "pid": 14987,
+      "processStart": 1952249991803,
+      "startedAtNs": 1793205826264980000,
+      "completedJobs": [
+        {
+          "name": "natural-forward",
+          "reportSha256": "f07aa220c882f4cdc40eff4391fce996415e70b463990ec7e22982121333e365",
+          "logSha256": "0689558652975d5a20367e0e6895889cd9612b5dc681951f891d78022a335611"
+        },
+        {
+          "name": "natural-reverse",
+          "reportSha256": "1ed175159f8d29e8b4f8e015c09cb14275d3efced6bc99598758cc404201f897",
+          "logSha256": "51c1f22f9296fcc2fa92689af0be638030ecfc0dfbb2fb5082a4986a1954513a"
+        },
+        {
+          "name": "forced-forward",
+          "reportSha256": "8b0cbddc2cf2a49dbd096652d35de7006a0dd2272b15678fc347d3528a087c69",
+          "logSha256": "c0d2d23fa1d0d0639e3a1132c033d2945a177817d14462b5077f22600dbac9f6"
+        },
+        {
+          "name": "forced-reverse",
+          "reportSha256": "23c0356425de323ca01ea6e159319fe08058ccf630248465d67830d21b00cb6d",
+          "logSha256": "f56e6b83b7caab23c5f2356f06399c08eeced5fe8da6663491ff8810472d5657"
+        },
+        {
+          "name": "ranged-forced-20ms",
+          "reportSha256": "ca35ada4225e8bdbdd56c571c840409c54537ef3736b2f5634b0d1eb6449ccb4",
+          "logSha256": "6c76af608526b26a00dbffd718e6b5bac07c82165356329a729e8ada867dee3f"
+        },
+        {
+          "name": "ranged-hard-20ms",
+          "reportSha256": "d874d08c675f22741672f41c4adcc0a5aa9afe7d626f39a60b240e69dc3ece7d",
+          "logSha256": "ad74ba3c5912e1a7f646941d0b1c49b2853412eaa8d0257294e435d1fccb44a7"
+        }
+      ],
+      "currentJob": "ranged-hard-20ms",
+      "childPid": 15150,
+      "childBirth": 1958969101704,
+      "finishedAtNs": 1793206143999007000
+    },
+    "arrival": {
+      "purpose": "B3 arrival/queue/cancellation attribution; no qualification claim",
+      "jobs": {
+        "natural-forward": {
+          "reportSha256": "f07aa220c882f4cdc40eff4391fce996415e70b463990ec7e22982121333e365",
+          "arms": {
+            "native": {
+              "allQueryMs": {
+                "count": 12,
+                "p50": 2198.7831875,
+                "p95": 3897.7215,
+                "maximum": 3897.7215
+              },
+              "successfulQueryMs": {
+                "count": 12,
+                "p50": 2198.7831875,
+                "p95": 3897.7215,
+                "maximum": 3897.7215
+              },
+              "cancelledQueryMs": {
+                "count": 0
+              },
+              "allStatusMs": {
+                "count": 12,
+                "p50": 2203.2197505000004,
+                "p95": 3902.136125,
+                "maximum": 3902.136125
+              },
+              "queryToStatusGapMs": {
+                "count": 12,
+                "p50": 4.55824999999993,
+                "p95": 16.676625,
+                "maximum": 16.676625
+              },
+              "cancelled": 0,
+              "lastDiagnosticMs": 4355.517625,
+              "finalVersion": 15,
+              "finalFiles": 612,
+              "memory": {
+                "peakRss": 1020542976,
+                "peakFootprint": 795100264,
+                "samples": 466,
+                "cpuSeconds": 9.413256708
+              },
+              "generationEvents": {
+                "retired": 8
+              },
+              "privateRootQuanta": [
+                {
+                  "maximumUs": 5730,
+                  "checkpoints": 4154,
+                  "completed": true
+                },
+                {
+                  "maximumUs": 5573,
+                  "checkpoints": 4154,
+                  "completed": true
+                },
+                {
+                  "maximumUs": 5862,
+                  "checkpoints": 4154,
+                  "completed": true
+                }
+              ],
+              "maximumPrivateRootQuantumUs": 5862
+            },
+            "baseline": {
+              "allQueryMs": {
+                "count": 384,
+                "p50": 100.4179585,
+                "p95": 469.673292,
+                "maximum": 881.336875
+              },
+              "successfulQueryMs": {
+                "count": 180,
+                "p50": 15.544979,
+                "p95": 17.463458,
+                "maximum": 881.336875
+              },
+              "cancelledQueryMs": {
+                "count": 204,
+                "p50": 219.98979150000002,
+                "p95": 476.431917,
+                "maximum": 499.936917
+              },
+              "allStatusMs": {
+                "count": 384,
+                "p50": 100.812083,
+                "p95": 567.339083,
+                "maximum": 1376.63375
+              },
+              "queryToStatusGapMs": {
+                "count": 384,
+                "p50": 0.1953124999999991,
+                "p95": 464.620917,
+                "maximum": 495.296875
+              },
+              "cancelled": 204,
+              "lastDiagnosticMs": 1724.311708,
+              "finalVersion": 387,
+              "finalFiles": 612,
+              "memory": {
+                "peakRss": 943144960,
+                "peakFootprint": 726123576,
+                "samples": 1771,
+                "cpuSeconds": 29.1402365
+              },
+              "generationEvents": {
+                "replacement-cancelled": 1,
+                "retired": 36
+              },
+              "privateRootQuanta": [],
+              "maximumPrivateRootQuantumUs": null
+            },
+            "candidate": {
+              "allQueryMs": {
+                "count": 384,
+                "p50": 15.119396,
+                "p95": 17.416042,
+                "maximum": 64.206291
+              },
+              "successfulQueryMs": {
+                "count": 384,
+                "p50": 15.119396,
+                "p95": 17.416042,
+                "maximum": 64.206291
+              },
+              "cancelledQueryMs": {
+                "count": 0
+              },
+              "allStatusMs": {
+                "count": 384,
+                "p50": 15.3506255,
+                "p95": 17.69725,
+                "maximum": 64.211208
+              },
+              "queryToStatusGapMs": {
+                "count": 384,
+                "p50": 0.22068750000000126,
+                "p95": 0.2716250000000002,
+                "maximum": 0.9885829999999984
+              },
+              "cancelled": 0,
+              "lastDiagnosticMs": 22.985834,
+              "finalVersion": 387,
+              "finalFiles": 612,
+              "memory": {
+                "peakRss": 959741952,
+                "peakFootprint": 780338304,
+                "samples": 1692,
+                "cpuSeconds": 12.611347583
+              },
+              "generationEvents": {
+                "replacement-cancelled": 1,
+                "retired": 1
+              },
+              "privateRootQuanta": [
+                {
+                  "maximumUs": 5417,
+                  "checkpoints": 4154,
+                  "completed": true
+                }
+              ],
+              "maximumPrivateRootQuantumUs": 5417
+            }
+          }
+        },
+        "natural-reverse": {
+          "reportSha256": "1ed175159f8d29e8b4f8e015c09cb14275d3efced6bc99598758cc404201f897",
+          "arms": {
+            "candidate": {
+              "allQueryMs": {
+                "count": 384,
+                "p50": 15.168937499999998,
+                "p95": 17.300375,
+                "maximum": 21.088334
+              },
+              "successfulQueryMs": {
+                "count": 384,
+                "p50": 15.168937499999998,
+                "p95": 17.300375,
+                "maximum": 21.088334
+              },
+              "cancelledQueryMs": {
+                "count": 0
+              },
+              "allStatusMs": {
+                "count": 384,
+                "p50": 15.3879165,
+                "p95": 17.55275,
+                "maximum": 21.31725
+              },
+              "queryToStatusGapMs": {
+                "count": 384,
+                "p50": 0.23025000000000073,
+                "p95": 0.2833330000000007,
+                "maximum": 0.3836669999999991
+              },
+              "cancelled": 0,
+              "lastDiagnosticMs": 27.030708,
+              "finalVersion": 387,
+              "finalFiles": 612,
+              "memory": {
+                "peakRss": 958447616,
+                "peakFootprint": 776602728,
+                "samples": 1708,
+                "cpuSeconds": 12.555156958
+              },
+              "generationEvents": {
+                "replacement-cancelled": 1,
+                "retired": 1
+              },
+              "privateRootQuanta": [
+                {
+                  "maximumUs": 5461,
+                  "checkpoints": 4154,
+                  "completed": true
+                }
+              ],
+              "maximumPrivateRootQuantumUs": 5461
+            },
+            "baseline": {
+              "allQueryMs": {
+                "count": 384,
+                "p50": 100.57960399999999,
+                "p95": 464.383833,
+                "maximum": 745.833709
+              },
+              "successfulQueryMs": {
+                "count": 180,
+                "p50": 15.3333125,
+                "p95": 17.518875,
+                "maximum": 745.833709
+              },
+              "cancelledQueryMs": {
+                "count": 204,
+                "p50": 219.321146,
+                "p95": 475.060416,
+                "maximum": 522.711083
+              },
+              "allStatusMs": {
+                "count": 384,
+                "p50": 101.838583,
+                "p95": 563.711208,
+                "maximum": 1221.677834
+              },
+              "queryToStatusGapMs": {
+                "count": 384,
+                "p50": 0.186104499999999,
+                "p95": 457.559667,
+                "maximum": 519.042042
+              },
+              "cancelled": 204,
+              "lastDiagnosticMs": 1561.862542,
+              "finalVersion": 387,
+              "finalFiles": 612,
+              "memory": {
+                "peakRss": 944390144,
+                "peakFootprint": 727762000,
+                "samples": 1774,
+                "cpuSeconds": 28.784818333
+              },
+              "generationEvents": {
+                "replacement-cancelled": 1,
+                "retired": 35
+              },
+              "privateRootQuanta": [],
+              "maximumPrivateRootQuantumUs": null
+            },
+            "native": {
+              "allQueryMs": {
+                "count": 12,
+                "p50": 2077.275646,
+                "p95": 4011.859708,
+                "maximum": 4011.859708
+              },
+              "successfulQueryMs": {
+                "count": 12,
+                "p50": 2077.275646,
+                "p95": 4011.859708,
+                "maximum": 4011.859708
+              },
+              "cancelledQueryMs": {
+                "count": 0
+              },
+              "allStatusMs": {
+                "count": 12,
+                "p50": 2082.062875,
+                "p95": 4015.980666,
+                "maximum": 4015.980666
+              },
+              "queryToStatusGapMs": {
+                "count": 12,
+                "p50": 4.708666500000049,
+                "p95": 16.72475000000003,
+                "maximum": 16.72475000000003
+              },
+              "cancelled": 0,
+              "lastDiagnosticMs": 4465.69025,
+              "finalVersion": 15,
+              "finalFiles": 612,
+              "memory": {
+                "peakRss": 1017954304,
+                "peakFootprint": 792134760,
+                "samples": 475,
+                "cpuSeconds": 9.558690166
+              },
+              "generationEvents": {
+                "retired": 8
+              },
+              "privateRootQuanta": [
+                {
+                  "maximumUs": 5655,
+                  "checkpoints": 4154,
+                  "completed": true
+                },
+                {
+                  "maximumUs": 5366,
+                  "checkpoints": 4154,
+                  "completed": true
+                },
+                {
+                  "maximumUs": 6058,
+                  "checkpoints": 4154,
+                  "completed": true
+                }
+              ],
+              "maximumPrivateRootQuantumUs": 6058
+            }
+          }
+        },
+        "forced-forward": {
+          "reportSha256": "8b0cbddc2cf2a49dbd096652d35de7006a0dd2272b15678fc347d3528a087c69",
+          "arms": {
+            "native": {
+              "allQueryMs": {
+                "count": 12,
+                "p50": 2042.5453539999999,
+                "p95": 3631.77925,
+                "maximum": 3631.77925
+              },
+              "successfulQueryMs": {
+                "count": 12,
+                "p50": 2042.5453539999999,
+                "p95": 3631.77925,
+                "maximum": 3631.77925
+              },
+              "cancelledQueryMs": {
+                "count": 0
+              },
+              "allStatusMs": {
+                "count": 12,
+                "p50": 2042.8409165,
+                "p95": 3632.0575,
+                "maximum": 3632.0575
+              },
+              "queryToStatusGapMs": {
+                "count": 12,
+                "p50": 0.27995849999990696,
+                "p95": 0.35408300000017334,
+                "maximum": 0.35408300000017334
+              },
+              "cancelled": 0,
+              "lastDiagnosticMs": 4107.755417,
+              "finalVersion": 15,
+              "finalFiles": 612,
+              "memory": {
+                "peakRss": 1379352576,
+                "peakFootprint": 1015072184,
+                "samples": 434,
+                "cpuSeconds": 9.393461666
+              },
+              "generationEvents": {
+                "retired": 1
+              },
+              "privateRootQuanta": [
+                {
+                  "maximumUs": 4822,
+                  "checkpoints": 4154,
+                  "completed": true
+                },
+                {
+                  "maximumUs": 5721,
+                  "checkpoints": 4154,
+                  "completed": true
+                },
+                {
+                  "maximumUs": 5693,
+                  "checkpoints": 4154,
+                  "completed": true
+                },
+                {
+                  "maximumUs": 5526,
+                  "checkpoints": 4154,
+                  "completed": true
+                }
+              ],
+              "maximumPrivateRootQuantumUs": 5721
+            },
+            "baseline": {
+              "allQueryMs": {
+                "count": 48,
+                "p50": 15.1751665,
+                "p95": 17.0105,
+                "maximum": 17.409041
+              },
+              "successfulQueryMs": {
+                "count": 48,
+                "p50": 15.1751665,
+                "p95": 17.0105,
+                "maximum": 17.409041
+              },
+              "cancelledQueryMs": {
+                "count": 0
+              },
+              "allStatusMs": {
+                "count": 48,
+                "p50": 15.41725,
+                "p95": 17.249125,
+                "maximum": 17.655625
+              },
+              "queryToStatusGapMs": {
+                "count": 48,
+                "p50": 0.22750000000000004,
+                "p95": 0.2655000000000012,
+                "maximum": 0.34795799999999844
+              },
+              "cancelled": 0,
+              "lastDiagnosticMs": 27.260042,
+              "finalVersion": 51,
+              "finalFiles": 612,
+              "memory": {
+                "peakRss": 1074216960,
+                "peakFootprint": 912852168,
+                "samples": 346,
+                "cpuSeconds": 4.018654958
+              },
+              "generationEvents": {
+                "replacement-cancelled": 1,
+                "retired": 1
+              },
+              "privateRootQuanta": [
+                {
+                  "maximumUs": 61601,
+                  "checkpoints": 1022,
+                  "completed": true
+                }
+              ],
+              "maximumPrivateRootQuantumUs": 61601
+            },
+            "candidate": {
+              "allQueryMs": {
+                "count": 48,
+                "p50": 15.2944995,
+                "p95": 16.554084,
+                "maximum": 17.487708
+              },
+              "successfulQueryMs": {
+                "count": 48,
+                "p50": 15.2944995,
+                "p95": 16.554084,
+                "maximum": 17.487708
+              },
+              "cancelledQueryMs": {
+                "count": 0
+              },
+              "allStatusMs": {
+                "count": 48,
+                "p50": 15.5448125,
+                "p95": 16.837542,
+                "maximum": 17.731291
+              },
+              "queryToStatusGapMs": {
+                "count": 48,
+                "p50": 0.24224999999999852,
+                "p95": 0.3105000000000011,
+                "maximum": 0.3532920000000015
+              },
+              "cancelled": 0,
+              "lastDiagnosticMs": 26.448625,
+              "finalVersion": 51,
+              "finalFiles": 612,
+              "memory": {
+                "peakRss": 960036864,
+                "peakFootprint": 799458432,
+                "samples": 346,
+                "cpuSeconds": 3.927799958
+              },
+              "generationEvents": {
+                "replacement-cancelled": 1,
+                "retired": 1
+              },
+              "privateRootQuanta": [
+                {
+                  "maximumUs": 5527,
+                  "checkpoints": 4154,
+                  "completed": true
+                }
+              ],
+              "maximumPrivateRootQuantumUs": 5527
+            }
+          }
+        },
+        "forced-reverse": {
+          "reportSha256": "23c0356425de323ca01ea6e159319fe08058ccf630248465d67830d21b00cb6d",
+          "arms": {
+            "candidate": {
+              "allQueryMs": {
+                "count": 48,
+                "p50": 14.788667,
+                "p95": 16.693083,
+                "maximum": 17.683209
+              },
+              "successfulQueryMs": {
+                "count": 48,
+                "p50": 14.788667,
+                "p95": 16.693083,
+                "maximum": 17.683209
+              },
+              "cancelledQueryMs": {
+                "count": 0
+              },
+              "allStatusMs": {
+                "count": 48,
+                "p50": 15.012979,
+                "p95": 16.91025,
+                "maximum": 17.909125
+              },
+              "queryToStatusGapMs": {
+                "count": 48,
+                "p50": 0.21812500000000057,
+                "p95": 0.25649999999999906,
+                "maximum": 0.26545800000000064
+              },
+              "cancelled": 0,
+              "lastDiagnosticMs": 24.456542,
+              "finalVersion": 51,
+              "finalFiles": 612,
+              "memory": {
+                "peakRss": 955662336,
+                "peakFootprint": 791020672,
+                "samples": 346,
+                "cpuSeconds": 3.927818333
+              },
+              "generationEvents": {
+                "replacement-cancelled": 1,
+                "retired": 1
+              },
+              "privateRootQuanta": [
+                {
+                  "maximumUs": 5714,
+                  "checkpoints": 4154,
+                  "completed": true
+                }
+              ],
+              "maximumPrivateRootQuantumUs": 5714
+            },
+            "baseline": {
+              "allQueryMs": {
+                "count": 48,
+                "p50": 14.877583,
+                "p95": 16.0625,
+                "maximum": 18.144459
+              },
+              "successfulQueryMs": {
+                "count": 48,
+                "p50": 14.877583,
+                "p95": 16.0625,
+                "maximum": 18.144459
+              },
+              "cancelledQueryMs": {
+                "count": 0
+              },
+              "allStatusMs": {
+                "count": 48,
+                "p50": 15.096646,
+                "p95": 16.258041,
+                "maximum": 18.331125
+              },
+              "queryToStatusGapMs": {
+                "count": 48,
+                "p50": 0.1980834999999992,
+                "p95": 0.2220829999999996,
+                "maximum": 0.24416699999999913
+              },
+              "cancelled": 0,
+              "lastDiagnosticMs": 28.042125,
+              "finalVersion": 51,
+              "finalFiles": 612,
+              "memory": {
+                "peakRss": 1065861120,
+                "peakFootprint": 907412656,
+                "samples": 348,
+                "cpuSeconds": 3.966492958
+              },
+              "generationEvents": {
+                "replacement-cancelled": 1,
+                "retired": 1
+              },
+              "privateRootQuanta": [
+                {
+                  "maximumUs": 62061,
+                  "checkpoints": 1022,
+                  "completed": true
+                }
+              ],
+              "maximumPrivateRootQuantumUs": 62061
+            },
+            "native": {
+              "allQueryMs": {
+                "count": 12,
+                "p50": 2049.8934585,
+                "p95": 3621.610541,
+                "maximum": 3621.610541
+              },
+              "successfulQueryMs": {
+                "count": 12,
+                "p50": 2049.8934585,
+                "p95": 3621.610541,
+                "maximum": 3621.610541
+              },
+              "cancelledQueryMs": {
+                "count": 0
+              },
+              "allStatusMs": {
+                "count": 12,
+                "p50": 2050.1900415,
+                "p95": 3621.899875,
+                "maximum": 3621.899875
+              },
+              "queryToStatusGapMs": {
+                "count": 12,
+                "p50": 0.2861245000000281,
+                "p95": 0.3065420000002632,
+                "maximum": 0.3065420000002632
+              },
+              "cancelled": 0,
+              "lastDiagnosticMs": 4093.980375,
+              "finalVersion": 15,
+              "finalFiles": 612,
+              "memory": {
+                "peakRss": 1379270656,
+                "peakFootprint": 1015530936,
+                "samples": 429,
+                "cpuSeconds": 9.268490125
+              },
+              "generationEvents": {
+                "retired": 1
+              },
+              "privateRootQuanta": [
+                {
+                  "maximumUs": 4705,
+                  "checkpoints": 4154,
+                  "completed": true
+                },
+                {
+                  "maximumUs": 5537,
+                  "checkpoints": 4154,
+                  "completed": true
+                },
+                {
+                  "maximumUs": 5777,
+                  "checkpoints": 4154,
+                  "completed": true
+                },
+                {
+                  "maximumUs": 6006,
+                  "checkpoints": 4154,
+                  "completed": true
+                }
+              ],
+              "maximumPrivateRootQuantumUs": 6006
+            }
+          }
+        },
+        "ranged-forced-20ms": {
+          "reportSha256": "ca35ada4225e8bdbdd56c571c840409c54537ef3736b2f5634b0d1eb6449ccb4",
+          "arms": {
+            "native": {
+              "allQueryMs": {
+                "count": 12,
+                "p50": 2495.1415415,
+                "p95": 4667.14425,
+                "maximum": 4667.14425
+              },
+              "successfulQueryMs": {
+                "count": 12,
+                "p50": 2495.1415415,
+                "p95": 4667.14425,
+                "maximum": 4667.14425
+              },
+              "cancelledQueryMs": {
+                "count": 0
+              },
+              "allStatusMs": {
+                "count": 12,
+                "p50": 2495.4123124999996,
+                "p95": 4667.405625,
+                "maximum": 4667.405625
+              },
+              "queryToStatusGapMs": {
+                "count": 12,
+                "p50": 0.28050000000001774,
+                "p95": 0.3208750000001146,
+                "maximum": 0.3208750000001146
+              },
+              "cancelled": 0,
+              "lastDiagnosticMs": 5138.009791,
+              "finalVersion": 15,
+              "finalFiles": 612,
+              "memory": {
+                "peakRss": 1380728832,
+                "peakFootprint": 1017824696,
+                "samples": 441,
+                "cpuSeconds": 9.578443916
+              },
+              "generationEvents": {
+                "retired": 1
+              },
+              "privateRootQuanta": [
+                {
+                  "maximumUs": 5214,
+                  "checkpoints": 4154,
+                  "completed": true
+                },
+                {
+                  "maximumUs": 5702,
+                  "checkpoints": 4154,
+                  "completed": true
+                },
+                {
+                  "maximumUs": 5827,
+                  "checkpoints": 4154,
+                  "completed": true
+                },
+                {
+                  "maximumUs": 5778,
+                  "checkpoints": 4154,
+                  "completed": true
+                }
+              ],
+              "maximumPrivateRootQuantumUs": 5827
+            },
+            "baseline": {
+              "allQueryMs": {
+                "count": 96,
+                "p50": 7.902041499999999,
+                "p95": 20.102709,
+                "maximum": 61.89875
+              },
+              "successfulQueryMs": {
+                "count": 93,
+                "p50": 7.829667,
+                "p95": 10.398792,
+                "maximum": 61.89875
+              },
+              "cancelledQueryMs": {
+                "count": 3,
+                "p50": 25.958417,
+                "p95": 37.10175,
+                "maximum": 37.10175
+              },
+              "allStatusMs": {
+                "count": 96,
+                "p50": 8.0288955,
+                "p95": 20.274625,
+                "maximum": 61.902291
+              },
+              "queryToStatusGapMs": {
+                "count": 96,
+                "p50": 0.1341874999999999,
+                "p95": 0.1613340000000001,
+                "maximum": 0.19216699999999953
+              },
+              "cancelled": 3,
+              "lastDiagnosticMs": 15.602708,
+              "finalVersion": 99,
+              "finalFiles": 612,
+              "memory": {
+                "peakRss": 1074315264,
+                "peakFootprint": 914080968,
+                "samples": 234,
+                "cpuSeconds": 4.231984541
+              },
+              "generationEvents": {
+                "replacement-cancelled": 1,
+                "retired": 1
+              },
+              "privateRootQuanta": [
+                {
+                  "maximumUs": 62051,
+                  "checkpoints": 1022,
+                  "completed": true
+                }
+              ],
+              "maximumPrivateRootQuantumUs": 62051
+            },
+            "candidate": {
+              "allQueryMs": {
+                "count": 96,
+                "p50": 7.5964795,
+                "p95": 25.231333,
+                "maximum": 406.263709
+              },
+              "successfulQueryMs": {
+                "count": 64,
+                "p50": 7.3360205,
+                "p95": 9.154791,
+                "maximum": 406.263709
+              },
+              "cancelledQueryMs": {
+                "count": 32,
+                "p50": 21.354104,
+                "p95": 44.374791,
+                "maximum": 45.264042
+              },
+              "allStatusMs": {
+                "count": 96,
+                "p50": 7.757542,
+                "p95": 25.415375,
+                "maximum": 406.565334
+              },
+              "queryToStatusGapMs": {
+                "count": 96,
+                "p50": 0.1545415000000001,
+                "p95": 0.19195799999999963,
+                "maximum": 0.30162500000000136
+              },
+              "cancelled": 32,
+              "lastDiagnosticMs": 889.742875,
+              "finalVersion": 99,
+              "finalFiles": 612,
+              "memory": {
+                "peakRss": 1241890816,
+                "peakFootprint": 1055147304,
+                "samples": 265,
+                "cpuSeconds": 5.041624083
+              },
+              "generationEvents": {
+                "replacement-cancelled": 1,
+                "retired": 1
+              },
+              "privateRootQuanta": [
+                {
+                  "maximumUs": 5437,
+                  "checkpoints": 4154,
+                  "completed": true
+                },
+                {
+                  "maximumUs": 5748,
+                  "checkpoints": 4154,
+                  "completed": true
+                }
+              ],
+              "maximumPrivateRootQuantumUs": 5748
+            }
+          }
+        },
+        "ranged-hard-20ms": {
+          "reportSha256": "d874d08c675f22741672f41c4adcc0a5aa9afe7d626f39a60b240e69dc3ece7d",
+          "arms": {
+            "native": {
+              "allQueryMs": {
+                "count": 12,
+                "p50": 2714.788583,
+                "p95": 5158.429667,
+                "maximum": 5158.429667
+              },
+              "successfulQueryMs": {
+                "count": 12,
+                "p50": 2714.788583,
+                "p95": 5158.429667,
+                "maximum": 5158.429667
+              },
+              "cancelledQueryMs": {
+                "count": 0
+              },
+              "allStatusMs": {
+                "count": 12,
+                "p50": 2719.3071870000003,
+                "p95": 5162.689042,
+                "maximum": 5162.689042
+              },
+              "queryToStatusGapMs": {
+                "count": 12,
+                "p50": 4.777395500000239,
+                "p95": 16.445375000000013,
+                "maximum": 16.445375000000013
+              },
+              "cancelled": 0,
+              "lastDiagnosticMs": 5644.844375,
+              "finalVersion": 15,
+              "finalFiles": 612,
+              "memory": {
+                "peakRss": 1019805696,
+                "peakFootprint": 791823464,
+                "samples": 492,
+                "cpuSeconds": 9.901115375
+              },
+              "generationEvents": {
+                "retired": 8
+              },
+              "privateRootQuanta": [
+                {
+                  "maximumUs": 5758,
+                  "checkpoints": 4154,
+                  "completed": true
+                },
+                {
+                  "maximumUs": 5232,
+                  "checkpoints": 4154,
+                  "completed": true
+                },
+                {
+                  "maximumUs": 5880,
+                  "checkpoints": 4154,
+                  "completed": true
+                }
+              ],
+              "maximumPrivateRootQuantumUs": 5880
+            },
+            "baseline": {
+              "allQueryMs": {
+                "count": 384,
+                "p50": 19.9558335,
+                "p95": 405.826166,
+                "maximum": 525.029792
+              },
+              "successfulQueryMs": {
+                "count": 178,
+                "p50": 8.614167,
+                "p95": 10.010334,
+                "maximum": 525.029792
+              },
+              "cancelledQueryMs": {
+                "count": 206,
+                "p50": 134.038375,
+                "p95": 427.798375,
+                "maximum": 472.123417
+              },
+              "allStatusMs": {
+                "count": 384,
+                "p50": 20.1419585,
+                "p95": 424.047208,
+                "maximum": 1029.749875
+              },
+              "queryToStatusGapMs": {
+                "count": 384,
+                "p50": 0.1448959999999997,
+                "p95": 0.19416599999999917,
+                "maximum": 504.72008299999993
+              },
+              "cancelled": 206,
+              "lastDiagnosticMs": 1382.105583,
+              "finalVersion": 387,
+              "finalFiles": 612,
+              "memory": {
+                "peakRss": 941441024,
+                "peakFootprint": 724452408,
+                "samples": 530,
+                "cpuSeconds": 10.513148125
+              },
+              "generationEvents": {
+                "replacement-cancelled": 6,
+                "retired": 7
+              },
+              "privateRootQuanta": [],
+              "maximumPrivateRootQuantumUs": null
+            },
+            "candidate": {
+              "allQueryMs": {
+                "count": 384,
+                "p50": 7.1661459999999995,
+                "p95": 23.147458,
+                "maximum": 63.445791
+              },
+              "successfulQueryMs": {
+                "count": 358,
+                "p50": 7.102771499999999,
+                "p95": 11.656125,
+                "maximum": 60.714375
+              },
+              "cancelledQueryMs": {
+                "count": 26,
+                "p50": 25.9540625,
+                "p95": 62.58275,
+                "maximum": 63.445791
+              },
+              "allStatusMs": {
+                "count": 384,
+                "p50": 7.3015415,
+                "p95": 23.284625,
+                "maximum": 63.448583
+              },
+              "queryToStatusGapMs": {
+                "count": 384,
+                "p50": 0.13272949999999994,
+                "p95": 0.15891699999999975,
+                "maximum": 0.9505829999999982
+              },
+              "cancelled": 26,
+              "lastDiagnosticMs": 14.400291,
+              "finalVersion": 387,
+              "finalFiles": 612,
+              "memory": {
+                "peakRss": 957595648,
+                "peakFootprint": 791135360,
+                "samples": 467,
+                "cpuSeconds": 8.207686708
+              },
+              "generationEvents": {
+                "replacement-cancelled": 19,
+                "retired": 1
+              },
+              "privateRootQuanta": [
+                {
+                  "maximumUs": 5790,
+                  "checkpoints": 4154,
+                  "completed": true
+                }
+              ],
+              "maximumPrivateRootQuantumUs": 5790
+            }
+          }
+        }
+      },
+      "passed": true,
+      "ownerBalanced": true,
+      "boundaries": [
+        "Arrival times start before framing/writing each edit/query batch; include serialization, transport and server queue, not a pure dispatch timestamp",
+        "Root quanta cover disposable binding checkpoints, not shared binding or destructor duration",
+        "Final Native map oracle and monotonic versions do not prove every cancelled intermediate state was semantically analyzed",
+        "No response hard limit or all-scenario performance claim derived from these six samples"
+      ]
+    },
+    "boundaries": {
+      "mechanismPassed": true,
+      "formalPerformanceClaim": false,
+      "privateRootObservedGapImproved": {
+        "forced-forward": true,
+        "forced-reverse": true,
+        "ranged-forced-20ms": true
+      },
+      "coldRecoveryObservation": {
+        "workload": "ranged-forced-20ms",
+        "candidateQueryMaximumMs": 406.263709,
+        "candidateFinalDiagnosticMs": 889.742875,
+        "baselineQueryMaximumMs": 61.89875,
+        "baselineFinalDiagnosticMs": 15.602708,
+        "candidateCancelled": 32,
+        "baselineCancelled": 3,
+        "reasonFromRetainedEvidence": "Replacement cancelled once then committed while producer continued. Candidate post-retirement has no current query view; versions72-98 cancel with current query context required. Latest query builds cold view; captured-prefix-required-parse occurs twice. Final99/612 map correct; no unmatched/remaining root owners. This is an instrumented synthetic forced limit8 sample, not formal latency acceptance or proof of improvement.",
+        "resolution": "Preserve as known cold recovery boundary; fixed original20 and D workload checks remain required, no fast-latency exemption applied."
+      },
+      "scopeLimits": [
+        "Private-root checkpoints exclude shared binding/destructor atomic regions",
+        "Correct final map does not prove cancelled versions were semantically analyzed",
+        "No hard latency guarantee after forced/hard-budget cold recovery"
+      ],
+      "arrivalSha256": "c88e0d1018015fdce5441d4ea8ccc86cb7d6bef26246ecabce292fb1fcbc3f8e"
+    },
+    "rawRemovedBytes": 6699336
+  },
+  "currentQualification": "stage-bc-current-qualification-2026-10-29.json"
+}

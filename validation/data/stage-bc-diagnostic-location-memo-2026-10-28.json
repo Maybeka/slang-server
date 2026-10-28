@@ -1,0 +1,433 @@
+{
+  "accepted": false,
+  "qualification": false,
+  "evaluation": {
+    "qualification": false,
+    "feasible": false,
+    "candidateSha256": "74700f3ae2350311933d3c3ffadda789dac9d33321b6fbc3decb92c7751c01d1",
+    "checks": {
+      "macro-forward-fourArms": true,
+      "macro-forward-completeOracle": true,
+      "macro-forward-control-warmFullPass": true,
+      "macro-forward-candidate-warmFullPass": true,
+      "macro-reverse-fourArms": true,
+      "macro-reverse-completeOracle": true,
+      "macro-reverse-control-warmFullPass": true,
+      "macro-reverse-candidate-warmFullPass": true,
+      "body-forward-fourArms": true,
+      "body-forward-completeOracle": true,
+      "body-reverse-fourArms": true,
+      "body-reverse-completeOracle": true,
+      "warmSemanticIssueGain": false,
+      "macroFinalDiagnosticGain": true,
+      "macro-p50-baseline": true,
+      "macro-p95-baseline": true,
+      "macro-p50-control": false,
+      "macro-p95-control": true,
+      "body-p50-baseline": true,
+      "body-p95-baseline": true,
+      "body-lastDiagnostic-baseline": true,
+      "body-p50-control": true,
+      "body-p95-control": false,
+      "body-lastDiagnostic-control": true,
+      "macro-peakRss-baseline": true,
+      "macro-peakFootprint-baseline": true,
+      "macro-peakRss-control": true,
+      "macro-peakFootprint-control": true,
+      "body-peakRss-baseline": true,
+      "body-peakFootprint-baseline": true,
+      "body-peakRss-control": true,
+      "body-peakFootprint-control": true,
+      "macro-forward-memo-exercised": true,
+      "macro-forward-memo-bounded": true,
+      "macro-reverse-memo-exercised": true,
+      "macro-reverse-memo-bounded": true,
+      "body-forward-memo-exercised": true,
+      "body-forward-memo-bounded": true,
+      "body-reverse-memo-exercised": true,
+      "body-reverse-memo-bounded": true
+    },
+    "failedChecks": [
+      "warmSemanticIssueGain",
+      "macro-p50-control",
+      "body-p95-control"
+    ],
+    "ratios": {
+      "warmSemanticIssueVsControl": 0.975499487619137,
+      "macro-p50-baseline": 0.9550168874114083,
+      "macro-p95-baseline": 1.0029519214612803,
+      "macro-p50-control": 1.1157512912350023,
+      "macro-p95-control": 0.9627699740501214,
+      "body-p50-baseline": 0.9762929512694991,
+      "body-p95-baseline": 1.0603762795991907,
+      "body-lastDiagnostic-baseline": 0.9068360389403838,
+      "body-p50-control": 1.0058023346033733,
+      "body-p95-control": 1.105178669812053,
+      "body-lastDiagnostic-control": 0.9696004554212646,
+      "macro-peakRss-baseline": 0.9952745168193448,
+      "macro-peakFootprint-baseline": 0.994214864034984,
+      "macro-peakRss-control": 0.999762660373776,
+      "macro-peakFootprint-control": 0.9997972411715662,
+      "body-peakRss-baseline": 1.005430634392848,
+      "body-peakFootprint-baseline": 1.006488975125544,
+      "body-peakRss-control": 1.0037750391955926,
+      "body-peakFootprint-control": 1.0046445430275746
+    },
+    "savings": {
+      "macroFinalDiagnosticMsVsControl": 17.265771500000028
+    },
+    "semanticIssuePhases": {
+      "macro-forward": {
+        "control": {
+          "allUs": [
+            70647,
+            74278
+          ],
+          "warmMedianUs": 74278
+        },
+        "candidate": {
+          "allUs": [
+            67501,
+            74023
+          ],
+          "warmMedianUs": 74023
+        }
+      },
+      "macro-reverse": {
+        "control": {
+          "allUs": [
+            71083,
+            75025
+          ],
+          "warmMedianUs": 75025
+        },
+        "candidate": {
+          "allUs": [
+            67689,
+            71622
+          ],
+          "warmMedianUs": 71622
+        }
+      }
+    },
+    "memoRows": {
+      "macro-forward": [
+        {
+          "lookups": 42080,
+          "hits": 31321,
+          "entries": 10759,
+          "chargedBytes": 6742792,
+          "exhausted": 0
+        },
+        {
+          "lookups": 42082,
+          "hits": 31322,
+          "entries": 10760,
+          "chargedBytes": 6743378,
+          "exhausted": 0
+        }
+      ],
+      "macro-reverse": [
+        {
+          "lookups": 42080,
+          "hits": 31321,
+          "entries": 10759,
+          "chargedBytes": 6742792,
+          "exhausted": 0
+        },
+        {
+          "lookups": 42082,
+          "hits": 31322,
+          "entries": 10760,
+          "chargedBytes": 6743378,
+          "exhausted": 0
+        }
+      ],
+      "body-forward": [
+        {
+          "lookups": 42080,
+          "hits": 31321,
+          "entries": 10759,
+          "chargedBytes": 6742792,
+          "exhausted": 0
+        }
+      ],
+      "body-reverse": [
+        {
+          "lookups": 42080,
+          "hits": 31321,
+          "entries": 10759,
+          "chargedBytes": 6742792,
+          "exhausted": 0
+        }
+      ]
+    },
+    "priorOriginal20FailureUnchanged": true,
+    "scope": "One declared bounded publication-local physical conversion feasibility set; not original qualification"
+  },
+  "preflight": {
+    "status": "completed",
+    "qualification": false,
+    "detectLeaks": false,
+    "steps": [
+      {
+        "name": "native-targeted",
+        "status": "passed",
+        "argv": [
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/build-uvm/bin/server_unittests",
+          "[diagnostic-location-memo]"
+        ],
+        "pid": 75573,
+        "exitCode": 0,
+        "logSha256": "edf67721a245f9e9d5434c7b98c6633086b1c3e291cf9db39ab19da1935e835f",
+        "summary": [
+          "All tests passed (35 assertions in 3 test cases)"
+        ]
+      },
+      {
+        "name": "asan-targeted",
+        "status": "passed",
+        "argv": [
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/semantic-cancellation-2026-10-23/asan-build/bin/server_unittests",
+          "[diagnostic-location-memo]"
+        ],
+        "pid": 75574,
+        "exitCode": 0,
+        "logSha256": "a110c42876d0e335db559a6cedabdae88d3acc431dac059cdd2dcbf3f54d95fe",
+        "summary": [
+          "All tests passed (35 assertions in 3 test cases)"
+        ]
+      },
+      {
+        "name": "native-full",
+        "status": "passed",
+        "argv": [
+          "ctest",
+          "--test-dir",
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/build-uvm",
+          "--output-on-failure",
+          "-j",
+          "1"
+        ],
+        "pid": 75575,
+        "exitCode": 0,
+        "logSha256": "6a5301fb342542e4d7170d7079c1e29665a81a6fa2af126c2ff2f7017a43df7d",
+        "summary": [
+          "100% tests passed out of 973"
+        ],
+        "ctestAutomaticLogSha256": "49c6bedbd4f8501be65e5dff0bf7bf994632345106cd569ab7d1835775bba650"
+      },
+      {
+        "name": "asan-full",
+        "status": "passed",
+        "argv": [
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/semantic-cancellation-2026-10-23/asan-build/bin/server_unittests"
+        ],
+        "pid": 78656,
+        "exitCode": 0,
+        "logSha256": "223a81768b3ecf2986c66e2d44ad904953d88352818fe5e2fd05d32bdd1c8246",
+        "summary": [
+          "All tests passed (176688 assertions in 958 test cases)"
+        ]
+      },
+      {
+        "name": "integrity",
+        "status": "passed",
+        "argv": [
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/source/.venv/bin/python",
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/source/restoration/prepare-main-sdk.py",
+          "--deps-root",
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/dependencies"
+        ],
+        "pid": 80546,
+        "exitCode": 0,
+        "logSha256": "08c8fec12d316070e54e19554b6e1202309b0331e8a7c77793f4b889429e5309",
+        "summary": [
+          "Verified 709 SDK files at 151a801ceaf6faf23d79a42d210ff67e50eb4660 plus restored patch",
+          "Verified catch2: 562 files",
+          "Verified fmt: 142 files",
+          "Verified boost_regex: 380 files",
+          "Verified tomlplusplus: 212 files"
+        ]
+      },
+      {
+        "name": "public56",
+        "status": "passed",
+        "argv": [
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/source/.venv/bin/python",
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/stage-bc-diagnostic-location-memo-2026-10-28/public-correctness.py",
+          "--binary",
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/build-uvm/bin/slang-server",
+          "--old",
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/stage-bc-parent-bound-leaf-2026-10-28/baseline/bin/slang-server",
+          "--output",
+          "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/stage-bc-diagnostic-location-memo-2026-10-28/public56.json"
+        ],
+        "pid": 80548,
+        "exitCode": 0,
+        "logSha256": "ea15a36ae103ffbc058be86f55f2189e0f5298dead306fc69e4373cef9d14468",
+        "summary": []
+      }
+    ],
+    "binarySha256": {
+      "native": "74700f3ae2350311933d3c3ffadda789dac9d33321b6fbc3decb92c7751c01d1",
+      "nativeTests": "f706a9c125a2e86ca4bd8504af63663bbc699c7ec4bc6f11f97847cd10db3022",
+      "asan": "3ff9c6ff4e30f3cd670acce28a7328847b67751ce4f4c89671355d06d4676514",
+      "asanTests": "fef36237b886ab5707657f0292c8ef6e23d93ee1ad5cf48a3aec8f7332cf9203"
+    },
+    "passed": true,
+    "publicStateCount": 56
+  },
+  "failedInitialTestAndIndependentFix": {
+    "status": "failed",
+    "productionMemoEnabled": false,
+    "nativeCTestPassed": 972,
+    "nativeCTestTotal": 973,
+    "failedTest": "Blocked private diagnostic child does not block newest foreground queries",
+    "assertion": "childPid > 0; actual 0",
+    "causeEvidence": "Test child main created .ready directly with ofstream before PID write/close; parent treats existence as complete. Fixed producer to atomically rename a closed PID file into .ready. Original failing run is preserved and not counted as passed.",
+    "runtimeSha256": "3dd3c3717368884516159b987985d8c550ed541d409db19f06b1edd7a101459d",
+    "rawDeleted": {
+      "untracked/stage-bc-diagnostic-location-memo-2026-10-28/native-full.tmp.log": {
+        "sha256": "5f08f641b40d49ce1584c129c716833f345710b122662af61a6fbd8ae500496a",
+        "bytes": 225888
+      },
+      "untracked/stage-bc-diagnostic-location-memo-2026-10-28/preflight-progress.tmp.log": {
+        "sha256": "175d94621e0a7a503a04644e5bcd2c9ad8c7e7b0389cd76f511fa860bbd366a1",
+        "bytes": 4235
+      },
+      "build-uvm/Testing/Temporary/LastTest.log": {
+        "sha256": "53c02b0af0814c9d8cc3f6081a4532db045b645404cdb933974420749f68c6b1",
+        "bytes": 30321036
+      }
+    },
+    "binarySha256": {
+      "native": "74700f3ae2350311933d3c3ffadda789dac9d33321b6fbc3decb92c7751c01d1",
+      "nativeTests": "07c78b35f9d46672f166095ad0ce5ac643c3a3e1fd1136561c6649d4028edf68",
+      "asan": "3ff9c6ff4e30f3cd670acce28a7328847b67751ce4f4c89671355d06d4676514",
+      "asanTests": "b206a71574f3dfe17d73b6ab2449ab15bf35923ea878902e30a2db1297c3f88c"
+    },
+    "priorSteps": [
+      {
+        "name": "native-targeted",
+        "status": "passed",
+        "pid": 72241,
+        "exitCode": 0,
+        "logSha256": "70518e5e62a3feb505feb8d5ff2edd167c42bde873f95636117c73ca3dc44773",
+        "summary": [
+          "All tests passed (35 assertions in 3 test cases)"
+        ]
+      },
+      {
+        "name": "asan-targeted",
+        "status": "passed",
+        "pid": 72242,
+        "exitCode": 0,
+        "logSha256": "eff4f365a041c4c91a80a08c90392602da74ecc0b09998aa35f0c6c4130a73f2",
+        "summary": [
+          "All tests passed (35 assertions in 3 test cases)"
+        ]
+      },
+      {
+        "name": "native-full",
+        "status": "failed",
+        "pid": 72243,
+        "exitCode": 8,
+        "logSha256": "5f08f641b40d49ce1584c129c716833f345710b122662af61a6fbd8ae500496a",
+        "summary": [
+          "test cases: 1 | 1 failed",
+          "99% tests passed, 1 tests failed out of 973"
+        ]
+      }
+    ],
+    "rawRuntimeDeleted": {
+      "preflight-before-ready-fix.json": "3dd3c3717368884516159b987985d8c550ed541d409db19f06b1edd7a101459d",
+      "preflight-runtime.json": "3dd3c3717368884516159b987985d8c550ed541d409db19f06b1edd7a101459d"
+    }
+  },
+  "decision": {
+    "accepted": false,
+    "reason": [
+      "warmSemanticIssueGain",
+      "macro-p50-control",
+      "body-p95-control"
+    ],
+    "restoredCacheSourceSha256": {
+      "source/include/util/Converters.h": "8fa539b75965dee6656a8a7533758eab7d7299e324d34d89afc76e34343c8e89",
+      "source/src/util/Converters.cpp": "80d55e269a642061d1411a3449a5a17d9f28cdfea913281863814b52f2417adf",
+      "source/src/ServerDriver.cpp": "7e2d3c4f488ba0e694627554155a380ffc3f6d9985b5c4aeb83fe5f756d95e38",
+      "source/tests/cpp/ConverterTests.cpp": "08c74fee0c39876e2a273e1f6c1eb2f47ec308d56210e80031ed64965747331a"
+    },
+    "retainedIndependentFix": {
+      "file": "source/tests/cpp/main.cpp",
+      "sha256": "a8c5842e3a6f64713478a69469d3f4aab1c77b47f52964081e47cdc92d335ef0",
+      "reason": "Atomically publish fully written diagnostic test child readiness PID; cache-off initial full run exposed race"
+    },
+    "original20FailureUnchanged": true,
+    "allExperimentsStillDefaultOff": true,
+    "publicConfigNeverAdded": true,
+    "newPerformanceQualification": false
+  },
+  "candidateSourceAndBinaryReceiptSha256": "e2bd895290d6afa8fdae0e4c3ef20f519ce5d6af4f6bf2e61fe0bc3c7624b840",
+  "prototypePatchSha256": "89596bc096037a72d20d925bc37688e0927e186a36b5ecc11d82e49410ccbadc",
+  "networkUsed": false,
+  "original20SupplementalFailureRemains": true,
+  "publicConfigAdded": false,
+  "restoredValidation": {
+    "status": "completed",
+    "qualification": false,
+    "steps": [
+      {
+        "name": "native",
+        "status": "passed",
+        "pid": 81895,
+        "exitCode": 0,
+        "logSha256": "af3bc98b779f2e5977cc78f1523451af193b8d10ddc7c2853676ba28f58b245c",
+        "expectedSummary": "100% tests passed out of 970",
+        "ctestAutomaticLogSha256": "add23c379e9761d5bbed3bf63bab94f8c3a1a2110b64564c5377e2d503ba2e6a"
+      },
+      {
+        "name": "asan",
+        "status": "passed",
+        "pid": 85007,
+        "exitCode": 0,
+        "logSha256": "ba07d7b8545f50daf0df7146415053c56e7b003ec65b16170badad92a6848754",
+        "expectedSummary": "176653 assertions in 955 test cases"
+      },
+      {
+        "name": "integrity",
+        "status": "passed",
+        "pid": 86899,
+        "exitCode": 0,
+        "logSha256": "08c8fec12d316070e54e19554b6e1202309b0331e8a7c77793f4b889429e5309",
+        "expectedSummary": "Verified 709 SDK files"
+      }
+    ],
+    "detectLeaks": false,
+    "binarySha256": {
+      "build-uvm/bin/slang-server": "276f15897dfb26e48cff9e7a7579cd2565ec5b7e712701167d6ddc0adf6a80bd",
+      "build-uvm/bin/server_unittests": "7595ce9b2b80bbc8aa4ef4df4543887fde41219e092a157c2de8f4b259912c0a",
+      "build-uvm/bin/diagnostic_test_server": "1798707f2eeda9c82fedcdc62a6ac3bc4bdc0637e7883d9aed94fccc77e4dba1",
+      "build-uvm/bin/slang_server_counted": "6c1a77941799e8f7ff59e6d6ecfb38c106fd4509be830851ddea86b870836f41",
+      "untracked/semantic-cancellation-2026-10-23/asan-build/bin/slang-server": "a7ef5544e95574deba8d0cf9bb5e1fd65e28f415272b527b774db8640acd0334",
+      "untracked/semantic-cancellation-2026-10-23/asan-build/bin/server_unittests": "817f85c44e5abeeef7a971ecf56e2a93762f6ea6b10eb0a6ab343ed6c38a2a2d",
+      "untracked/semantic-cancellation-2026-10-23/asan-build/bin/diagnostic_test_server": "70f1dbb3c6197972ac1dffa44f8af08a4c16f0cd868f725e4a2d16bcffc0af75",
+      "untracked/semantic-cancellation-2026-10-23/asan-build/bin/slang_server_counted": "2cd6adb0a572723c586f8c51262e95ba1c7202caa970ed738aebe615de62a58e"
+    },
+    "retainedFix": "Only tests/cpp/main.cpp atomic readiness publication retained from rejected prototype; no memo or public option remains",
+    "sourceSha256": {
+      "source/include/util/Converters.h": "8fa539b75965dee6656a8a7533758eab7d7299e324d34d89afc76e34343c8e89",
+      "source/src/util/Converters.cpp": "80d55e269a642061d1411a3449a5a17d9f28cdfea913281863814b52f2417adf",
+      "source/src/ServerDriver.cpp": "7e2d3c4f488ba0e694627554155a380ffc3f6d9985b5c4aeb83fe5f756d95e38",
+      "source/tests/cpp/ConverterTests.cpp": "08c74fee0c39876e2a273e1f6c1eb2f47ec308d56210e80031ed64965747331a",
+      "source/tests/cpp/main.cpp": "a8c5842e3a6f64713478a69469d3f4aab1c77b47f52964081e47cdc92d335ef0"
+    },
+    "parserCorrection": {
+      "originalRuntimeSha256": "56e183c5fface061c1499bd310b68e3e2856c8a7c5a3946275b496fa8b1c8df1",
+      "reason": "Controller expected older CTest summary wording, actual exit0 and100% tests passed out of970 verified. No test rerun or failed numerical gate accepted.",
+      "actualSummary": "100% tests passed out of 970"
+    },
+    "passed": true
+  },
+  "cleanupReceiptSha256": "f692b864e63e6d13d94d7f4f825f30937543495f791abab34598177d6cc690e1"
+}

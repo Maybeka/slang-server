@@ -1,0 +1,67 @@
+{
+  "nativeBinarySha256": "fa14efd7c600ccf39197a8cd5129260957276d2873b34f6e008d1286ec919ac6",
+  "asanBinarySha256": "efb96789758cad170dda95f6a4349a910e5bb845665a376d279988b93ec855a6",
+  "sdkPatchSha256": "ddfa95ad2326e19d5daaa19acb76e1f6243f701b3742ec56a6a225dec83d24d0",
+  "sourceLocationBytesAfter1008": {
+    "prior": 24708539,
+    "candidate": 16611275,
+    "reductionBytes": 8097264,
+    "scope": "Same real CVA6 profiling workload in separate process runs; source table capacity accounting, not a paired performance qualification or process memory claim."
+  },
+  "networkUsed": false,
+  "goalComplete": false,
+  "b1Complete": false,
+  "correctnessQualified": true,
+  "performanceQualified": false,
+  "performanceStarted": true,
+  "tests": {
+    "nativeCTest": 931,
+    "sdkNativeCases": 2630,
+    "sdkNativeAssertions": 35437,
+    "sdkAsanCases": 2630,
+    "sdkAsanAssertions": 35437,
+    "serverAsanCases": 916,
+    "serverAsanAssertions": 170694,
+    "growthCases": 1,
+    "growthAssertions": 6151,
+    "python": 17,
+    "transport": 43,
+    "sdkIntegrityFiles": 709
+  },
+  "nativeCvaStatesRequired": 448,
+  "asanCvaStatesRequired": 38,
+  "diagnosticArchivesRequired": 112,
+  "cvaValidationCell": "669",
+  "experimentalDefaultEnabled": false,
+  "fixedDebounceAdded": false,
+  "pushedMain": false,
+  "implementation": "Use one-eighth geometric spare capacity in append-only source location tables with immutable prefixes. Other source managers retain standard vector growth. No IDs reclaimed; no changes to proofs, budgets, default flags or debounce.",
+  "priorPerformance": "60f failed only forward1008 peakFootprint in both fixed14 and direct6; failed samples preserved. No unchanged-candidate qualification resampling.",
+  "profilingBoundary": "Table capacity accounting improves; process footprint and query latency not yet qualified. malloc_zone_pressure_relief probe did not release pages in its already-reusable-page run; temporary RPC removed.",
+  "fullCorrectnessComplete": true,
+  "nativeCvaStatesCompleted": 448,
+  "asanCvaStatesCompleted": 38,
+  "nativeDiagnosticArchives": 112,
+  "evidenceAuditSha256": "033860bf95251ceeed0ec456fd3b9a82f698d7fbde4f5cf80a5b8685400cf9e8",
+  "validationPipelineComplete": true,
+  "pending": [
+    "Profile first-query stages; direct reverse single query35.642ms vs31.880292ms (+11.8%) fails10% gate. Preserve all samples, no unchanged qualification rerun.",
+    "B1 integration remains incomplete; B2/B3/C/D pending"
+  ],
+  "performanceComplete": true,
+  "performanceResults": {
+    "evaluation.json": {
+      "qualified": true,
+      "failedChecks": [],
+      "sha256": "cf6ad87856935f52faea0d8f4ef2bbf9bccebd071bb75efcc8db84fce3ff0b33"
+    },
+    "direct-build-evaluation.json": {
+      "qualified": false,
+      "failedChecks": [
+        "direct-first-reverse-p50",
+        "direct-first-reverse-p95"
+      ],
+      "sha256": "c56c1b59afa5c6501ad8350dd57d96071b51d90d6059af3459e7dadea7018f8e"
+    }
+  }
+}

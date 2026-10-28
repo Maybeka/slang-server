@@ -1,0 +1,50 @@
+{
+  "date": "2026-10-29",
+  "state": "validated_ready_for_main",
+  "parentCommit": "6eab073a06584c31c5a05e5fd7be00ca2af90dd2",
+  "binarySha256": "4e4bd90f1a5954b17a89db17b854f15905fea502fa4280eb67f6e06aa99c79c5",
+  "compileInputsChecked": 467,
+  "compileInputMismatches": [],
+  "sdkBase": "151a801ceaf6faf23d79a42d210ff67e50eb4660",
+  "sdkPatchSha256": "e38fe0dca662c80c031feb80db9d4327061b42a15ad3cd2381ef838c44254a09",
+  "checks": {
+    "BC20OriginalGates": true,
+    "D38NumericalAndCorrectness": true,
+    "D38OriginalAllAssertions": false,
+    "D38PredeclaredBudgetPurposeDecision": true,
+    "allExperimentsDefaultOff": true,
+    "noFixedDebounceAdded": true,
+    "inputAndVersionChecksPreserved": true,
+    "manualRebuildAndConfigurableBudgetsPreserved": true,
+    "testedSourceMatchesFinalSource": true,
+    "manualLauncher11SyntaxChecks": true
+  },
+  "limits": [
+    "Two original D natural-retirement assertions remain false: macro reuse kept storage under budget; predeclared purpose policy and real forced retirement/recovery passed.",
+    "Structural edits still require full analysis; rare forced cold recovery remains hundreds of ms.",
+    "Historical Native UTF-16 query positioning defect remains a negative control.",
+    "ASan leak detection off; targeted TSan is not a universal race-free guarantee."
+  ],
+  "cleanup": {
+    "untrackedAllocatedKiB": 3281184,
+    "retiredSanitizerBuildBytes": 12831895946,
+    "retiredHistoricalCompressedRawBytes": 518421284,
+    "retiredHistoricalTraceBytes": 40258506,
+    "retainedCompressedConclusionBytes": 8874124,
+    "policy": "Keep conclusions, numerical data, correctness hashes and exact versions. Retain active project inputs and reusable caches; retire unused caches and raw logs.",
+    "receipts": {
+      "conclusion-compression-progress.json": "5ce0fa39ecf1cb112772ceaacba67201105accb879a7ecac4d7cae959ea0dfc8",
+      "historical-install-retirement.json": "62b6843a1e07d43c22934c7bf796d800aef78ed42dce67d4a92ac249885da2d9",
+      "historical-payload-retention.json": "a181c89a7bec7bb5db55847adbcea43b2928504121fc77c446a9a50f01d13673",
+      "historical-trace-retention.json": "0f0938437ce5faade1c3b247227ec1514bba6758aa0168292de2f742f04a9546",
+      "manual-entry-update.json": "4712f978755c2800e49c5b94247110b5be9fa72687dada56ee4a5cb3e8c79846",
+      "obsolete-artifact-retirement.json": "0e63a9b9e0988f54357b98fe31b633b266eae99a31412d494cebe297502dfa00",
+      "sanitizer-build-retirement.json": "4981d2024397ef1a7b1fce7b890edc13025d5272ccc2fcaead3441219ba9dbed"
+    }
+  },
+  "metricPolicy": {
+    "sub50msMayRegressForLargeOtherBenefit": true,
+    "appliedToCurrentQualification": false,
+    "correctnessAndSafetyUnchanged": true
+  }
+}

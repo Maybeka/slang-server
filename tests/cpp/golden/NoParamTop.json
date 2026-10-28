@@ -317,11 +317,11 @@
             "uri": "file://hdl_test.sv",
             "range": {
               "start": {
-                "line": 380,
+                "line": 378,
                 "character": 8
               },
               "end": {
-                "line": 380,
+                "line": 378,
                 "character": 8
               }
             }
@@ -353,11 +353,11 @@
             "uri": "file://hdl_test.sv",
             "range": {
               "start": {
-                "line": 384,
+                "line": 382,
                 "character": 8
               },
               "end": {
-                "line": 384,
+                "line": 382,
                 "character": 8
               }
             }
@@ -389,11 +389,11 @@
             "uri": "file://hdl_test.sv",
             "range": {
               "start": {
-                "line": 387,
+                "line": 386,
                 "character": 8
               },
               "end": {
-                "line": 387,
+                "line": 386,
                 "character": 8
               }
             }

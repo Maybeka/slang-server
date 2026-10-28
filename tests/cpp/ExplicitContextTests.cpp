@@ -805,6 +805,45 @@ TEST_CASE("Resolved source graphs reuse their analysis once and cancel before pu
     CHECK(expected == rfl::json::write(server.getDocHover(query)));
 }
 
+TEST_CASE("Package context kind distinguishes shared tree paths and replaced syntax",
+          "[package-query-context][context-kind-cache]") {
+    ExplicitWorkspace workspace;
+    workspace.write(".slang/server.json",
+                    "{\"flags\":\"--single-unit --top top\",\"indexingThreads\":1,"
+                    "\"experimentalCooperativeAnalysis\":true}\n");
+    workspace.write("ordinary.svh", "class A; int field; endclass\n");
+    workspace.write("generic.svh", "class B #(type T=int); T field; endclass\n");
+    workspace.write("owner.sv", "package p;\n`include \"ordinary.svh\"\n"
+                                "`include \"generic.svh\"\nendpackage\n");
+    workspace.write("top.sv", "module top; endmodule\n");
+    workspace.write("design.f", "owner.sv\ntop.sv\n");
+    ServerHarness server(workspace.params());
+    server.setBuildFile(workspace.path("design.f").string());
+    REQUIRE(server.m_driver->comp);
+    auto ordinary = server.openFile("ordinary.svh");
+    auto generic = server.openFile("generic.svh");
+    auto firstDoc = server.m_driver->getDocument(ordinary.m_uri);
+    auto secondDoc = server.m_driver->getDocument(generic.m_uri);
+    auto first = firstDoc->getAnalysisInputs();
+    REQUIRE(server.m_driver->isPackageQueryContext(ordinary.m_uri));
+    auto second = secondDoc->getAnalysisInputs();
+    REQUIRE(first.tree == second.tree);
+    REQUIRE_FALSE(server.m_driver->isPackageQueryContext(generic.m_uri));
+    // Same tree, different physical target: the generic requirement must not
+    // leak to the ordinary class, or be lost when the target switches back.
+    firstDoc->getAnalysisInputs();
+    CHECK(server.m_driver->isPackageQueryContext(ordinary.m_uri));
+    secondDoc->getAnalysisInputs();
+    CHECK_FALSE(server.m_driver->isPackageQueryContext(generic.m_uri));
+    server.SlangServer::onDocDidChange(
+        {.textDocument = {.version = 2, .uri = generic.m_uri},
+         .contentChanges = {lsp::TextDocumentContentChangeWholeDocument{
+             .text = "class B; int field; endclass\n"}}});
+    auto replaced = secondDoc->getAnalysisInputs();
+    REQUIRE(replaced.tree != second.tree);
+    CHECK(server.m_driver->isPackageQueryContext(generic.m_uri));
+}
+
 TEST_CASE("Package queries retain full context for generic and out-of-block methods",
           "[package-query-context][semantic-cancellation]") {
     struct Scenario {

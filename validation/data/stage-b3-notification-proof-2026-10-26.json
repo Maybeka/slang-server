@@ -1,0 +1,106 @@
+{
+  "stage": "B3",
+  "complete": false,
+  "goalComplete": false,
+  "candidateSha256": "2bc8252a8336def3236abaa82fbace7f6411771437c19ef2a505a75e18c121de",
+  "changes": [
+    "didOpen accepts latest text/version and version resets without requiring successful configuration admission",
+    "didSave preserves corrected full text and queues saved index work; indexing is behind Native input certification and cancellable",
+    "New unmaterialized editor URIs seed replacement loader input overlays, including unsaved roots subsequently referenced by filelists",
+    "didClose discards pending text independently of invalid configuration",
+    "Local hover stays local; authenticated saved indexing runs in Native consumers or cancellable background work"
+  ],
+  "targetedNative": {
+    "cases": 7,
+    "assertions": 724,
+    "passed": true
+  },
+  "fullCorrectness": {
+    "originalExecSession": 31212,
+    "status": "Native942CTest/Python17/transport43/SDK709/SDKNative2632/SDKAsan2632/serverAsan927+172107 and Native/ASan6 wire each passed; CVA448Native running",
+    "runtime": "untracked/stage-b3-notification-proof-2026-10-26/correctness-runtime.json",
+    "serverAsanCases": 927,
+    "serverAsanAssertions": 172107,
+    "registeredNativeAsanNamesEqual": true,
+    "registeredIncludingHiddenProfile": 928
+  },
+  "notificationWire": {
+    "native": {
+      "binarySha256": "2bc8252a8336def3236abaa82fbace7f6411771437c19ef2a505a75e18c121de",
+      "harnessSha256": "4ffc023be3a5ced8e6dd2fa0eed9c31c49ae423716ffcdcb820f3de127c02d27",
+      "startedAtNs": 1793027376604447000,
+      "rows": [
+        {
+          "name": "normal",
+          "reportSha256": "faedb5083ea4da760d99955050feef75b591ea931d0861ca3eee5ae4ab701c41"
+        },
+        {
+          "name": "close-invalid",
+          "reportSha256": "0580b06299fc1e446e73c443ab8c1ae93f8ea53de4e0275135eba70310bb1f45"
+        },
+        {
+          "name": "reopen-invalid",
+          "reportSha256": "ce1aa225c9c32d2d26d0b644db19a3b0107cfeb97ae21a78eb8c52f828fc2b90"
+        },
+        {
+          "name": "save-invalid",
+          "reportSha256": "b668fc5962f39213345bb260f6519ea5c8288b9323350ef10bafdea13ad48a48"
+        },
+        {
+          "name": "new-open-invalid",
+          "reportSha256": "41087b0e254603392ad1ef468cf8eddc3d0808d444f3a56a24ce8f2b98a0fc15"
+        },
+        {
+          "name": "save-index",
+          "reportSha256": "c22feb2da967caf316c207567e8724efccf49f3f7e1d7649f6b5487f440e0bfe"
+        }
+      ],
+      "passed": true,
+      "networkUsed": false,
+      "finishedAtNs": 1793027377551303000
+    },
+    "asan": {
+      "binarySha256": "d4aa93974542744165082a4d2537a10e6fdd93fafd039e06c9b1cec689f576c2",
+      "harnessSha256": "4ffc023be3a5ced8e6dd2fa0eed9c31c49ae423716ffcdcb820f3de127c02d27",
+      "startedAtNs": 1793027831738354000,
+      "rows": [
+        {
+          "name": "normal",
+          "reportSha256": "913a91f9b8e1c31aac91c62eb6e0f6ebddd343a670eb76364d0745f8a5ce6b8b"
+        },
+        {
+          "name": "close-invalid",
+          "reportSha256": "97c1e9b0a27018cfd1d389bcc9b99751994c43c5b8a9a95c4f466629fb96365a"
+        },
+        {
+          "name": "reopen-invalid",
+          "reportSha256": "687b5193f3730e70749e89cc3e4063303dabcba41f611b376872f716b078fb0b"
+        },
+        {
+          "name": "save-invalid",
+          "reportSha256": "7c5a7d1fe020efc2b73024cd79f4aaf67632da8fe09990146a8ab50dc04d2aa7"
+        },
+        {
+          "name": "new-open-invalid",
+          "reportSha256": "75a935cd15c19ee0df7ce28faae6cb51922dccefec1acef892335e9be50c18c0"
+        },
+        {
+          "name": "save-index",
+          "reportSha256": "675d0e142405113faeb42e9875672740e71d240b63837dc6d7ae3c9bc7aea0a3"
+        }
+      ],
+      "passed": true,
+      "networkUsed": false,
+      "finishedAtNs": 1793027835544568000
+    }
+  },
+  "remaining": [
+    "Finish current pipeline Native448/ASan38/112 archive audit",
+    "Current candidate rapid-edit/pressure cancellation latency and owner/source-memory audit",
+    "Original unchanged performance qualification and requirement-by-requirement B3 closure",
+    "C first authentication and formatting remainder; D final complete qualification cleanup main"
+  ],
+  "experimentsDefaultOff": true,
+  "newFixedDebounce": false,
+  "networkUsed": false
+}

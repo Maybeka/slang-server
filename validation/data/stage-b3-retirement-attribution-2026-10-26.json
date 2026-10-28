@@ -1,0 +1,96 @@
+{
+  "stage": "B3",
+  "complete": false,
+  "goalComplete": false,
+  "originalExecSession": 8878,
+  "originalExitCode": 0,
+  "probeBinarySha256": "86673f253d8dea845f131760a41b1707e0b9da85b58664b110427317774a37d2",
+  "productionProbeRestored": true,
+  "sourceSha256AfterRestore": {
+    "SlangServer.cpp": "6f2a38bd6b9eb7e84645e227e9fbe6f9f6713b6dbedf310999d49a274ea7c04c",
+    "ServerDriver.cpp": "a01e4c2c5c2be4430a0b750353c7d98e59f02568b0024cfb48aa1a0aee2ac6b9"
+  },
+  "oraclePassed": true,
+  "qualification": false,
+  "subphases": {
+    "retirement-build-inputs": {
+      "count": 9,
+      "medianMs": 254.891,
+      "maxMs": 668.322,
+      "totalMs": 2704.691
+    },
+    "retirement-build-model": {
+      "count": 9,
+      "medianMs": 151.225,
+      "maxMs": 154.157,
+      "totalMs": 1359.131
+    },
+    "retirement-build-diagnostics": {
+      "count": 9,
+      "medianMs": 0.183,
+      "maxMs": 710.019,
+      "totalMs": 711.503
+    },
+    "retirement-release": {
+      "count": 15,
+      "medianMs": 1.243,
+      "maxMs": 27.077,
+      "totalMs": 40.808
+    },
+    "replacement-model-released": {
+      "count": 8,
+      "medianMs": 0.0,
+      "maxMs": 0.0,
+      "totalMs": 0.0
+    },
+    "reload-native-input-parse": {
+      "count": 8,
+      "medianMs": 240.05,
+      "maxMs": 242.158,
+      "totalMs": 1918.314
+    },
+    "reload-fixed-library-prepare": {
+      "count": 8,
+      "medianMs": 0.4555,
+      "maxMs": 0.475,
+      "totalMs": 3.631
+    },
+    "reload-private-driver": {
+      "count": 8,
+      "medianMs": 406.0015,
+      "maxMs": 410.938,
+      "totalMs": 3252.269
+    },
+    "reload-before-driver-swap": {
+      "count": 8,
+      "medianMs": 0.0,
+      "maxMs": 0.0,
+      "totalMs": 0.0
+    },
+    "reload-driver-swap-release": {
+      "count": 8,
+      "medianMs": 1.8145,
+      "maxMs": 3.806,
+      "totalMs": 17.202
+    },
+    "reload-watches-and-publication": {
+      "count": 8,
+      "medianMs": 3.4925,
+      "maxMs": 3.597,
+      "totalMs": 28.04
+    },
+    "retirement-load-publish": {
+      "count": 8,
+      "medianMs": 411.3255,
+      "maxMs": 418.523,
+      "totalMs": 3298.773
+    }
+  },
+  "finding": "Hard retirement blocks in private driver construction, predominantly native source parse and model binding; driver destruction and watches are small. Some other maxima include initialization and are not retirement-only.",
+  "nextWork": [
+    "Investigate avoiding repeated native parse of unchanged stable syntax while retaining separate mutable namespace and complete content/version proofs",
+    "Investigate separating private driver source admission from full model binding so binding can use existing cancellable disposable roots",
+    "Do not delay hard-budget enforcement or bypass latest input/diagnostic proof; test ranged edits, repeated cancellation and bounded owner/source storage before acceptance"
+  ],
+  "networkUsed": false
+}

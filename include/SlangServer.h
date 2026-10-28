@@ -69,6 +69,8 @@ protected:
     uint64_t m_contextEdits = 0;
     bool m_contextRetired = false;
     bool m_contextRetirementPending = false;
+    bool m_contextAdmissionPending = false;
+    void admitRetirementInputs(const lsp::RequestContext& ctx);
     MaintenanceRetry m_contextRetry;
     bool retirementIsOnlyBackgroundWork() const;
     void maybeRetireParsedContext(const lsp::RequestContext* retirementContext = nullptr);
@@ -107,6 +109,7 @@ protected:
     uint64_t m_contextWatchRegistrationSerial = 0;
     std::string m_contextWatchRegistrationId;
     std::vector<std::filesystem::path> m_contextWatchPaths;
+    std::shared_ptr<const std::vector<std::filesystem::path>> m_contextWatchCatalogue;
     void refreshContextFileWatches();
 
     template<typename Params, typename Result>
@@ -304,11 +307,11 @@ public:
     /// Symbol tree
     rfl::Variant<std::vector<lsp::SymbolInformation>, std::vector<lsp::DocumentSymbol>,
                  std::monostate>
-    getDocDocumentSymbol(const lsp::DocumentSymbolParams&) override;
+    getDocDocumentSymbol(const lsp::DocumentSymbolParams&, lsp::RequestContext ctx = {}) override;
 
     /// Document links (include files)
     std::optional<std::vector<lsp::DocumentLink>> getDocDocumentLink(
-        const lsp::DocumentLinkParams&) override;
+        const lsp::DocumentLinkParams&, lsp::RequestContext ctx = {}) override;
 
     /// Hover
     std::optional<lsp::Hover> getDocHover(const lsp::HoverParams&,
@@ -316,7 +319,7 @@ public:
 
     /// Code Actions (quick fixes, refactoring)
     std::optional<std::vector<rfl::Variant<lsp::Command, lsp::CodeAction>>> getDocCodeAction(
-        const lsp::CodeActionParams&) override;
+        const lsp::CodeActionParams&, lsp::RequestContext ctx = {}) override;
 
     /// Goto Definition
     rfl::Variant<lsp::Definition, std::vector<lsp::DefinitionLink>, std::monostate>
@@ -331,12 +334,13 @@ public:
                                                              lsp::RequestContext ctx = {}) override;
 
     std::optional<std::vector<lsp::InlayHint>> getDocInlayHint(
-        const lsp::InlayHintParams&) override;
+        const lsp::InlayHintParams&, lsp::RequestContext ctx = {}) override;
 
     std::optional<std::vector<lsp::Location>> getDocReferences(
         const lsp::ReferenceParams&, lsp::RequestContext ctx = {}) override;
 
-    std::optional<lsp::WorkspaceEdit> getDocRename(const lsp::RenameParams&) override;
+    std::optional<lsp::WorkspaceEdit> getDocRename(const lsp::RenameParams&,
+                                                   lsp::RequestContext ctx = {}) override;
 
     /// Completions resolve (get docs and snippet string)
     lsp::CompletionItem getCompletionItemResolve(const lsp::CompletionItem&,
@@ -344,7 +348,7 @@ public:
 
     /// Get a list of highlights for all references to a symbol in the current document
     std::optional<std::vector<lsp::DocumentHighlight>> getDocDocumentHighlight(
-        const lsp::DocumentHighlightParams&) override;
+        const lsp::DocumentHighlightParams&, lsp::RequestContext ctx = {}) override;
 
     ////////////////////////////////////////////////
     /// Cone tracing

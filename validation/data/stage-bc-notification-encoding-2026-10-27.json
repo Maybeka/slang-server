@@ -1,0 +1,103 @@
+{
+  "candidateSha256": "125309d5b29c0dd41ecdb8d561df439dd93d7ba6feb143b819a6c84538008d92",
+  "implementation": "Borrow synchronous notification parameters while directly encoding typed diagnostics; move exact sent DTO into delta ledger",
+  "prototype": {
+    "passed": true,
+    "results": [
+      {
+        "diagnostics": 1,
+        "mediansNs": {
+          "owningA": 13333.5,
+          "borrowed": 2104.0,
+          "owningB": 13312.5
+        },
+        "reductions": [
+          0.842201972475344,
+          0.8419530516431925
+        ],
+        "passed": true
+      },
+      {
+        "diagnostics": 65,
+        "mediansNs": {
+          "owningA": 262334.0,
+          "borrowed": 24625.0,
+          "owningB": 264521.0
+        },
+        "reductions": [
+          0.906131115295768,
+          0.9069072020746936
+        ],
+        "passed": true
+      },
+      {
+        "diagnostics": 512,
+        "mediansNs": {
+          "owningA": 2029395.5,
+          "borrowed": 171750.0,
+          "owningB": 2022479.5
+        },
+        "reductions": [
+          0.915368886941949,
+          0.9150794853544869
+        ],
+        "passed": true
+      },
+      {
+        "diagnostics": 4096,
+        "mediansNs": {
+          "owningA": 16814020.5,
+          "borrowed": 1383166.5,
+          "owningB": 16449875.0
+        },
+        "reductions": [
+          0.9177373133332387,
+          0.9159162911572276
+        ],
+        "passed": true
+      }
+    ],
+    "wireByteExact": true,
+    "sampleCount": 240,
+    "qualification": false,
+    "networkUsed": false,
+    "binarySha256": "dd61ecaff5e16243b91c319ef73fe38265f40858303ae55987a65b18d63bf347"
+  },
+  "native": {
+    "ctestPassed": 965
+  },
+  "asan": {
+    "cases": 950,
+    "assertions": 176159,
+    "passed": true,
+    "detectLeaks": false
+  },
+  "fullCvaCorrectness": {
+    "passed": true,
+    "nativeStates": 448,
+    "asanStates": 38,
+    "diagnosticArchives": 112,
+    "sdkFilesVerified": 709,
+    "sdkNativeAndAsanCases": 2635,
+    "sdkNativeAndAsanAssertions": 35691,
+    "registeredTests": 951,
+    "wireMatrices": "Native6/ASan6",
+    "evidence": "untracked/stage-bc-notification-validation-2026-10-27/correctness-runtime.json"
+  },
+  "wholeServerPerformance": {
+    "passed": false,
+    "failed": [
+      "reverse-vs-baseline-diagnostic20percent",
+      "reverse-vs-control-diagnostic20percent"
+    ],
+    "evidence": "untracked/stage-bc-notification-co-performance-2026-10-27/performance-evaluation.json",
+    "allQueryCpuMemoryGatesPassed": true
+  },
+  "bcComplete": false,
+  "goalComplete": false,
+  "experimentsDefaultOff": true,
+  "pushedMain": false,
+  "networkUsed": false,
+  "previousV4CoFailurePreserved": "untracked/stage-bc-rpc-input-co-performance-2026-10-27/performance-evaluation.json",
+  "evidenceDirectory": "untracked/stage-bc-notification-encoding-2026-10-27"
+}

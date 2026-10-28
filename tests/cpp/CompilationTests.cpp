@@ -1,3 +1,9 @@
+#include "ast/ServerCompilationAnalysis.h"
+#include "ServerDiagClient.h"
+#include <atomic>
+#include <thread>
+#include <fstream>
+#include "slang/util/OS.h"
 // SPDX-FileCopyrightText: Hudson River Trading
 // SPDX-License-Identifier: MIT
 
@@ -5,6 +11,8 @@
 #include "utils/ServerHarness.h"
 #include <catch2/generators/catch_generators.hpp>
 #include <cstdlib>
+#include "slang/syntax/AllSyntax.h"
+#include "slang/syntax/SyntaxVisitor.h"
 
 TEST_CASE("SetBuildFile") {
     ServerHarness server("comp_repo");
@@ -628,3 +636,208 @@ TEST_CASE("Source accounting observes retired views without retaining them",
     CHECK(after.retained.managers == 0);
     CHECK(after.total.managers == 1);
 }
+
+TEST_CASE("Deferred replacement models restore selections privately and retry cancelled binding",
+          "[model-cancellation][deferred-retirement-model]") {
+    const auto boundary = GENERATE("during full-model selection restoration",
+                                   "during full-model frozen selection",
+                                   "before full-model publication");
+    ServerHarness server;
+    auto doc = server.openFile("deferred_model.sv",
+        "module leaf; int member_value; endmodule\n"
+        "module model_top; for(genvar i=0;i<2;i++) begin:g leaf inst(); end endmodule\n");
+    server.setTopLevel(std::string(doc.m_uri.getPath()));
+    auto& previous = *server.m_driver->comp;
+    REQUIRE(previous.setActiveInstance("model_top.g[1].inst"));
+    size_t models = 0, callbacks = 0;
+    lsp::RequestContext construction("replacement inputs", std::nullopt);
+    construction.setCheckpointObserverForTesting([&](std::string_view phase) {
+        if (phase == "before full-model publication")
+            ++models;
+    });
+    auto currentDoc = server.m_driver->getDocument(doc.m_uri);
+    server::ServerCompilation replacement({currentDoc}, server.m_driver->options,
+        server.m_driver->sm, server.client, "model_top", &previous, construction, true,
+        server.m_driver->driver.getSourceOwner(), true);
+    replacement.configureFrozenInstances({"model_top.g[1].inst"}, 1024*1024, {},
+        [&](const auto&) { ++callbacks; }, {}, construction);
+    CHECK(models == 0);
+    CHECK(callbacks == 0);
+    const auto selections = rfl::json::write(replacement.frozenInstances()->selections());
+    lsp::RequestContext cancelled("first replacement binding", 617);
+    bool reached = false;
+    cancelled.setCheckpointObserverForTesting([&](std::string_view phase) {
+        if (phase == boundary) { reached = true; cancelled.cancel(); }
+    });
+    CHECK_THROWS_AS(replacement.createActiveDesignContext({}, cancelled), lsp::RequestCancelled);
+    REQUIRE(reached);
+    CHECK(callbacks == 0);
+    CHECK(rfl::json::write(replacement.frozenInstances()->selections()) == selections);
+    auto active = replacement.getActiveInstance("leaf");
+    REQUIRE(active);
+    CHECK(active->instPath == "model_top.g[1].inst");
+    const slang::syntax::LoopGenerateSyntax* loop = nullptr;
+    auto visitor = slang::syntax::makeSyntaxVisitor(
+        [&](auto&, const slang::syntax::LoopGenerateSyntax& node) { loop = &node; });
+    visitor.visit(currentDoc->getSyntaxTree()->root());
+    REQUIRE(loop);
+    auto generate = replacement.getActiveGenerateLoop("model_top", *loop);
+    REQUIRE(generate);
+    CHECK(generate->activePath == "model_top.g[1]");
+    CHECK(callbacks == 1);
+    REQUIRE(replacement.frozenInstances()->selections().size() == 1);
+    CHECK(replacement.frozenInstances()->selections()[0].resolved);
+    CHECK(previous.getActiveInstance("leaf")->instPath == active->instPath);
+}
+
+namespace {
+std::string parallelFixture(int count) {
+    std::string text = "module parallel_top; endmodule\n";
+    for (int i=0; i<count; ++i)
+        text += "class P" + std::to_string(i) + "; function int f(input int v); int s=0; "
+                "for(int i=0;i<4096;i++) s+=i+v; return s; endfunction endclass\n";
+    return text;
+}
+slang::Bag parallelOptions(ServerHarness& server, uint32_t workers) {
+    auto options = server.m_driver->options;
+    options.set(server::ParallelDiagnosticOptions{true, workers});
+    auto flags = options.getOrDefault<slang::ast::CompilationOptions>();
+    flags.flags |= slang::ast::CompilationFlags::TrackSubroutineBodyDependencies;
+    options.set(flags);
+    return options;
+}
+std::string fullFlowPayload(server::ServerCompilationAnalysis& model, ServerHarness& server) {
+    ClientHarness client;
+    auto output = std::make_shared<server::ServerDiagClient>(server.m_driver->sm, client);
+    output->disableDestructorPublication();
+    slang::DiagnosticEngine engine(server.m_driver->sm);
+    engine.addClient(output);
+    model.issueDiagnosticsTo(engine, {}, {});
+    std::vector<std::string> values;
+    for (const auto& [uri, diagnostics] : output->renderedDiagnostics())
+        for (const auto& diagnostic : diagnostics)
+            values.push_back(rfl::json::write(uri) + rfl::json::write(diagnostic));
+    std::ranges::sort(values);
+    return rfl::json::write(values);
+}
+}
+TEST_CASE("Bounded parallel native flow matches serial diagnostics and stays opt in", "[parallel-diagnostics]") {
+    CHECK_FALSE(Config{}.experimentalParallelDiagnostics.value());
+    const auto workers = GENERATE(0u, 1u, 2u);
+    ServerHarness server;
+    auto doc = server.openFile("parallel_flow.sv", parallelFixture(4));
+    std::unordered_map<std::string,std::shared_ptr<server::SlangDoc>> docs{
+        {std::string(doc.m_uri.getPath()), doc.doc}};
+    auto serialOptions = parallelOptions(server, 0), options = parallelOptions(server, workers);
+    server::ServerCompilationAnalysis serial(docs, serialOptions, server.m_driver->sm);
+    const auto expected = fullFlowPayload(serial, server);
+    server::ServerCompilationAnalysis parallel(docs, options, server.m_driver->sm);
+    CHECK(fullFlowPayload(parallel, server) == expected);
+    auto stats = parallel.parallelDiagnosticStats();
+#if defined(SLANG_USE_THREADS)
+    CHECK(stats.attempted == (workers > 1));
+    CHECK(stats.kept == (workers > 1));
+#endif
+    CHECK_FALSE(parallel.compilation.isFrozen());
+    // The SDK still rejects chains of transformed replay managers. Local edits
+    // receive the original intrinsic manager, never the serial replay view.
+    slang::analysis::AnalysisManager next(parallel.getAnalysisManager().getOptions());
+    auto noDelete = [](const slang::analysis::AnalysisManager*) {};
+    next.setProcedureReuse(std::shared_ptr<const slang::analysis::AnalysisManager>(
+        &parallel.getProcedureReuseBaseline(), noDelete));
+    parallel.compilation.freeze();
+    auto thaw = slang::ScopeGuard([&] { parallel.compilation.unfreeze(); });
+    CHECK_NOTHROW(next.analyze(parallel.compilation));
+    CHECK(next.getProcedureReuseCounts().first > 0);
+    CHECK(parallel.analysisMemoryBytes() >= parallel.getAnalysisManager().getStats().memoryUsage);
+}
+TEST_CASE("Parallel intrinsic summaries replay exact serial driver reports before publication", "[parallel-diagnostics]") {
+    ServerHarness server;
+    auto doc = server.openFile("parallel_drivers.sv",
+        "module a(output wire q); assign q=1'b1; endmodule\n"
+        "module b(output wire q); assign q=1'b0; endmodule\n"
+        "module top; uwire q; a aa(q); b bb(q); endmodule\n");
+    std::unordered_map<std::string,std::shared_ptr<server::SlangDoc>> docs{
+        {std::string(doc.m_uri.getPath()), doc.doc}};
+    auto nativeOptions = parallelOptions(server, 0), options = parallelOptions(server, 2);
+    server::ServerCompilationAnalysis native(docs, nativeOptions, server.m_driver->sm);
+    const auto expected = fullFlowPayload(native, server);
+    server::ServerCompilationAnalysis parallel(docs, options, server.m_driver->sm);
+    CHECK(fullFlowPayload(parallel, server) == expected);
+#if defined(SLANG_USE_THREADS)
+    CHECK(parallel.parallelDiagnosticStats().attempted);
+    CHECK(parallel.parallelDiagnosticStats().serialReplay);
+    CHECK(parallel.parallelDiagnosticStats().kept);
+    CHECK(parallel.parallelDiagnosticStats().proceduresReused > 0);
+#endif
+}
+TEST_CASE("Checkpoint observers retain caller-thread execution with parallel opt in", "[parallel-diagnostics]") {
+    ServerHarness server;
+    auto doc = server.openFile("parallel_observer.sv", parallelFixture(2));
+    auto options = parallelOptions(server, 2);
+    std::unordered_map<std::string,std::shared_ptr<server::SlangDoc>> docs{
+        {std::string(doc.m_uri.getPath()), doc.doc}};
+    server::ServerCompilationAnalysis model(docs, options, server.m_driver->sm);
+    lsp::RequestContext ctx("observer", 19);
+    const auto caller = std::this_thread::get_id();
+    std::atomic_bool wrongThread=false;
+    size_t callbacks=0;
+    ctx.setCheckpointObserverForTesting([&](std::string_view) {
+        if (std::this_thread::get_id()!=caller) wrongThread.store(true);
+        else ++callbacks;
+    });
+    model.getAnalysisManager(ctx);
+    CHECK(callbacks>0);
+    CHECK_FALSE(wrongThread.load());
+    CHECK(model.parallelDiagnosticStats().observerSerial);
+    CHECK_FALSE(model.parallelDiagnosticStats().attempted);
+}
+#if defined(__APPLE__) || defined(__linux__)
+TEST_CASE("Parallel cancellation drains actual workers before thaw and permits retry", "[parallel-diagnostics]") {
+    ServerHarness server;
+    auto doc = server.openFile("parallel_cancel.sv", parallelFixture(16));
+    auto options = parallelOptions(server, 2);
+    std::unordered_map<std::string,std::shared_ptr<server::SlangDoc>> docs{
+        {std::string(doc.m_uri.getPath()), doc.doc}};
+    server::ServerCompilationAnalysis model(docs, options, server.m_driver->sm);
+    const auto path = std::filesystem::temp_directory_path() /
+        ("slang-parallel-cancel-"+std::to_string(slang::OS::getpid())+".tsv");
+    std::filesystem::remove(path);
+    std::optional<std::string> previous;
+    if (auto* value=std::getenv("SLANG_PARALLEL_DIAGNOSTIC_TRACE")) previous=value;
+    setenv("SLANG_PARALLEL_DIAGNOSTIC_TRACE",path.c_str(),1);
+    auto cleanup=slang::ScopeGuard([&] {
+        if(previous) setenv("SLANG_PARALLEL_DIAGNOSTIC_TRACE",previous->c_str(),1);
+        else unsetenv("SLANG_PARALLEL_DIAGNOSTIC_TRACE");
+        std::filesystem::remove(path);
+    });
+    lsp::RequestContext ctx("parallel-cancel",31);
+    std::atomic_bool stop=false, observed=false;
+    std::thread cancel([&] {
+        while(!stop.load()) {
+            std::ifstream input(path);
+            std::string value((std::istreambuf_iterator<char>(input)),{});
+            if(value.find("worker-active")!=std::string::npos) {
+                observed.store(true);ctx.cancel();return;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+    });
+    bool cancelled=false;
+    try { model.getAnalysisManager(ctx); }
+    catch (const lsp::RequestCancelled&) { cancelled=true; }
+    stop.store(true);cancel.join();
+    CHECK(observed.load());
+    CHECK(cancelled);
+    CHECK_FALSE(model.compilation.isFrozen());
+    CHECK_FALSE(model.diagnosticsReady());
+    std::ifstream input(path);
+    std::string trace((std::istreambuf_iterator<char>(input)),{});
+    auto drained=trace.find("drained"), unfrozen=trace.find("unfrozen");
+    REQUIRE(drained!=std::string::npos);
+    REQUIRE(unfrozen!=std::string::npos);
+    CHECK(drained<unfrozen);
+    model.getAnalysisManager({});
+    CHECK(model.diagnosticsReady());
+}
+#endif

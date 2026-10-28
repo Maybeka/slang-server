@@ -1,0 +1,103 @@
+{
+  "stage": "BC deferred cooperative retirement model",
+  "status": "implemented; full current unit suites and first63state predecessor feasibility passed; complete perversion matrix and formal qualification incomplete",
+  "goalComplete": false,
+  "bcComplete": false,
+  "binarySha256": "1c185357e3a81b95dbe4dab1e6bea7fdd2847d1bfe6ab2c81265ec7d9f11d0d0",
+  "experimentsDefaultOff": true,
+  "fixedDebounceAdded": false,
+  "tests": {
+    "nativeCtest": 970,
+    "asanCases": 955,
+    "asanAssertions": 176789,
+    "asanLeakDetection": false,
+    "python": 17,
+    "transport": 43,
+    "targetedCasesEach": 14,
+    "targetedAssertionsEach": 1606
+  },
+  "firstFeasibility": {
+    "passed": true,
+    "qualification": false,
+    "candidateSha256": "1c185357e3a81b95dbe4dab1e6bea7fdd2847d1bfe6ab2c81265ec7d9f11d0d0",
+    "checks": {
+      "all63StatesNative612Exact": true,
+      "binaryIdentities": true,
+      "peakRssWithin5Percent": true,
+      "peakFootprintWithin5Percent": true,
+      "budgetAndOneSyntaxOwner": true,
+      "retainedManagersWithinPreviousPlus1": true,
+      "editorAdmissionClear": true,
+      "previousActuallyRetired": true,
+      "candidateActuallyRetired": true,
+      "ownerEventsBalanced": true
+    },
+    "failedChecks": [],
+    "memory": {
+      "native": {
+        "peakRss": 1281245184,
+        "peakFootprint": 969721056
+      },
+      "previous": {
+        "peakRss": 1253457920,
+        "peakFootprint": 1126434136
+      },
+      "candidate": {
+        "peakRss": 1251557376,
+        "peakFootprint": 1025262864
+      }
+    },
+    "memoryRatios": {
+      "peakRss": 0.9984837592314227,
+      "peakFootprint": 0.9101844761565357
+    },
+    "owners": {
+      "native": {
+        "peakFullRoots": 2,
+        "remainingAtProcessClose": 0,
+        "unmatched": [],
+        "events": {
+          "full-start": 21,
+          "full-release": 21
+        }
+      },
+      "previous": {
+        "peakFullRoots": 2,
+        "remainingAtProcessClose": 0,
+        "unmatched": [],
+        "events": {
+          "full-start": 10,
+          "full-release": 10
+        }
+      },
+      "candidate": {
+        "peakFullRoots": 2,
+        "remainingAtProcessClose": 0,
+        "unmatched": [],
+        "events": {
+          "full-start": 10,
+          "full-release": 10
+        }
+      }
+    },
+    "generationEvents": {
+      "previous": {
+        "replacement-cancelled": 3,
+        "retired": 2
+      },
+      "candidate": {
+        "replacement-cancelled": 2,
+        "retired": 2
+      }
+    },
+    "timingsDescriptiveOnly": true,
+    "resultsSha256": "d8d5f6fd15bfc801332d46141c0a8c149293263e0f11238730a1c63c7f97532a"
+  },
+  "currentSourceReceipt": "untracked/stage-bc-deferred-retirement-model-2026-10-28/candidate-receipt.json",
+  "currentFullCvaMatrix": "untracked/stage-bc-deferred-retirement-validation-2026-10-28; prepared, not complete",
+  "priorFullCva": "fa22 only:448Native/38ASan/dual6wire",
+  "priorPressure": "untracked/stage-bc-syntax-cache-pressure-2026-10-28/pressure-summary.json",
+  "oldFailuresRemainFailures": true,
+  "networkUsed": false,
+  "pushedMain": false
+}

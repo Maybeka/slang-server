@@ -41,6 +41,7 @@ struct CodeActionContext {
     const slang::syntax::SyntaxNode* syntax;
     /// Diagnostics at the cursor range (from the request)
     const std::vector<lsp::Diagnostic>& diagnostics;
+    lsp::RequestContext requestCtx;
 };
 
 class CodeActionDispatch {
@@ -53,7 +54,7 @@ public:
     CodeActionDispatch(ServerDriver& driver, slang::SourceManager& sm, const Indexer& indexer);
 
     std::vector<rfl::Variant<lsp::Command, lsp::CodeAction>> getCodeActions(
-        const lsp::CodeActionParams& params);
+        const lsp::CodeActionParams& params, const lsp::RequestContext& requestCtx = {});
 };
 
 } // namespace server

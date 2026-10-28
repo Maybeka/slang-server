@@ -3,6 +3,7 @@
 
 #include "ast/ClosedTypeContext.h"
 #include "ast/TrustedUvmLibrary.h"
+#include "util/SourceStorageRegistry.h"
 #include <algorithm>
 #include <cstdlib>
 #include <fmt/format.h>
@@ -18,6 +19,10 @@ namespace server {
 using namespace slang;
 using namespace slang::ast;
 namespace {
+struct BodySourceOwner {
+    std::shared_ptr<SourceManager> sources;
+    std::shared_ptr<const void> libraries;
+};
 struct AdmissionTraversal : ASTVisitor<AdmissionTraversal, VisitFlags::Symbols> {
     std::function<bool(const InstanceBodySymbol&)> consider;
     explicit AdmissionTraversal(std::function<bool(const InstanceBodySymbol&)> callback) :
@@ -236,14 +241,16 @@ size_t charge(const Compilation& compilation) {
 } // namespace
 
 ScopeBodyCache::ScopeBodyCache(std::shared_ptr<TrustedUvmLibrary> library, size_t budget,
-                               std::vector<std::string> modules,
-                               std::vector<std::string> instances) :
-    library(std::move(library)), modules(std::move(modules)), instances(std::move(instances)) {
+                               std::vector<std::string> modules, std::vector<std::string> instances,
+                               std::shared_ptr<SourceStorageRegistry> sourceRegistry) :
+    library(std::move(library)), sourceRegistry(std::move(sourceRegistry)),
+    modules(std::move(modules)), instances(std::move(instances)) {
     counters.budgetBytes = budget;
     counters.baseBytes = this->library->semanticBytes;
 }
 
-void ScopeBodyCache::install(Compilation& compilation) {
+void ScopeBodyCache::install(Compilation& compilation,
+                             std::shared_ptr<const void> sourceLibraries) {
     if (compilation.hasFlag(CompilationFlags::PackageAnalysis))
         return;
     auto weak = weak_from_this();
@@ -252,9 +259,9 @@ void ScopeBodyCache::install(Compilation& compilation) {
             if (auto cache = weak.lock())
                 cache->lookup(current, body);
         },
-        [weak](std::shared_ptr<Compilation> current) {
+        [weak, sourceLibraries = std::move(sourceLibraries)](std::shared_ptr<Compilation> current) {
             if (auto cache = weak.lock())
-                cache->publish(std::move(current));
+                cache->publish(std::move(current), sourceLibraries);
         });
 }
 
@@ -402,34 +409,84 @@ bool ScopeBodyCache::capacityAdvice(const Compilation& current, const InstanceBo
     return std::ranges::any_of(groups, advice) || std::ranges::any_of(staged, advice);
 }
 
-void ScopeBodyCache::publish(std::shared_ptr<Compilation> current) {
+void ScopeBodyCache::publish(std::shared_ptr<Compilation> current,
+                             std::shared_ptr<const void> sourceLibraries) {
     if (current->hasFatalErrors())
         return;
     auto& sources = *const_cast<SourceManager*>(current->getSourceManager());
+    // A batch can publish multiple independent bodies. Share one namespace for
+    // their generated wrappers, but never append later editor generations to it.
+    std::shared_ptr<SourceManager> compactSources;
+    std::shared_ptr<SourceManager> fullSources;
     auto bind = [&](const std::optional<BodyContext>& compact, bool inheritedBindTarget = false) {
         ++counters.ownerBuilds;
         auto result = std::make_shared<Compilation>(current->getOptions());
         result->enableInstanceBodyReferenceTracking(/* complete */ true);
         if (compact)
             result->setInstanceBodyCacheContext(inheritedBindTarget);
-        if (auto lease = current->getSourceOwnerLease())
-            result->retainSourceOwner(lease);
+        auto* ownerSources = &sources;
+        if (compact) {
+            if (!compactSources) {
+                compactSources = std::make_shared<SourceManager>();
+                compactSources->inheritIncludeConfiguration(sources.getIncludeConfiguration());
+                compactSources->inheritImmutablePrefix(library->sources);
+                compactSources->retainSourceNames();
+                if (sourceRegistry)
+                    sourceRegistry->track(compactSources);
+            }
+            ownerSources = compactSources.get();
+        }
+        else {
+            if (!fullSources) {
+                std::vector<BufferID> required;
+                for (const auto& tree : current->getSyntaxTrees())
+                    for (auto id : tree->getSourceBufferIds())
+                        required.push_back(id);
+                fullSources = sources.forkRetainedNamespace(required);
+                if (sourceRegistry)
+                    sourceRegistry->track(fullSources);
+            }
+            ownerSources = fullSources.get();
+        }
+        // Keep library identities independently of the mutable driver's manager.
+        auto lease = std::make_shared<BodySourceOwner>(compact ? compactSources : fullSources,
+                                                       sourceLibraries);
+        result->retainSourceOwner(lease);
         for (const auto& name : library->packages)
-            result->importPackage(library->compilation, name, sources);
+            result->importPackage(library->compilation, name, *ownerSources);
         for (const auto& name : library->definitions)
-            result->importDefinition(library->compilation, name, sources);
+            result->importDefinition(library->compilation, name, *ownerSources);
         if (library->hasUnitDeclarations)
-            result->importCompilationUnitDeclarations(library->compilation, sources);
+            result->importCompilationUnitDeclarations(library->compilation, *ownerSources);
         if (compact) {
             auto parseOptions = current->getSyntaxTrees().back()->options();
-            result->addSyntaxTree(syntax::SyntaxTree::fromText(compact->source, sources,
+            if (auto import = parseOptions.get<TrustedUvmImport>()) {
+                auto fixed = *import;
+                fixed.sourceOwner = lease;
+                parseOptions.set(std::move(fixed));
+            }
+            if (auto prefix = parseOptions.get<syntax::PrecompiledUvmSyntax>();
+                prefix && prefix->tree) {
+                auto view = *prefix;
+                view.tree = syntax::SyntaxTree::sharedPrefixView(prefix->tree, *ownerSources);
+                parseOptions.set(std::move(view));
+            }
+            result->addSyntaxTree(syntax::SyntaxTree::fromText(compact->source, *ownerSources,
                                                                "<scope-cache-context>", "",
                                                                parseOptions),
                                   true);
         }
         else {
-            for (const auto& tree : current->getSyntaxTrees())
-                result->addSyntaxTree(tree, true);
+            for (const auto& tree : current->getSyntaxTrees()) {
+                auto parseOptions = tree->options();
+                if (auto import = parseOptions.get<TrustedUvmImport>()) {
+                    auto fixed = *import;
+                    fixed.sourceOwner = lease;
+                    parseOptions.set(std::move(fixed));
+                }
+                result->addSyntaxTree(
+                    syntax::SyntaxTree::sharedPrefixView(tree, *ownerSources, &parseOptions), true);
+            }
         }
         const auto& ownerDiagnostics = result->getSemanticDiagnostics();
         if (compact) {
@@ -438,7 +495,7 @@ void ScopeBodyCache::publish(std::shared_ptr<Compilation> current) {
                                   fmt::format("context-{}", counters.ownerBuilds);
                 std::ofstream(stem.string() + ".sv") << compact->source;
                 std::ofstream(stem.string() + ".diagnostics")
-                    << DiagnosticEngine::reportAll(sources, ownerDiagnostics);
+                    << DiagnosticEngine::reportAll(*ownerSources, ownerDiagnostics);
             }
         }
         if (compact && !compact->types.dependencies.empty()) {

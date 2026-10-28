@@ -1,0 +1,172 @@
+{
+  "candidateSha256": "cc7dea51c0f622f057822dacc5072202e7d40b7c5ca47fcb23f0da89db21623f",
+  "baselineForPerformance": "ef8a1ce63d31ae4d9ba90738be273eb6470ae87149dc033f3722ceac7d9b6713",
+  "nativeCtest": 880,
+  "pythonTests": 17,
+  "transportTests": 43,
+  "asanServer": {
+    "cases": 865,
+    "assertions": 118532
+  },
+  "asanSdk": {
+    "cases": 2607,
+    "assertions": 26500
+  },
+  "leakDetection": false,
+  "correctness": {
+    "package": {
+      "states": 52,
+      "all612UrisMatch": true,
+      "runtimeSemanticSharingVerified": true,
+      "candidateLocalUpdates": 12,
+      "rawSha256": "49d41c5fb8d0453d81724985232a921cc8edff463565a69f899790ebe0e2d7e7"
+    },
+    "generic": {
+      "states": 52,
+      "all612UrisMatch": true,
+      "runtimeSemanticSharingVerified": true,
+      "candidateLocalUpdates": 12,
+      "rawSha256": "e00101ae24c0d56527e288f5fd2c836133e57b0cc1b981c771ef49938299ccc3"
+    }
+  },
+  "additionalProjects": {
+    "cases": 15,
+    "statesPerArm": 53,
+    "allPublicResultsAndMapsMatch": true,
+    "encodingNegativeControlRetained": true,
+    "rawSha256": "a03af2421bd69bb746e8cb82a6cf1bcb000cb25b0e1e5734dbb78915cc34ff61"
+  },
+  "installedDefaultAndExternalColdWarmPassed": true,
+  "mechanismChecks": {
+    "package-forward-completed": true,
+    "package-forward-native612": true,
+    "package-forward-local": true,
+    "package-forward-latest": true,
+    "package-forward-p95": true,
+    "package-forward-diagnostic": true,
+    "package-forward-cpuSeconds": true,
+    "package-forward-peakRss": true,
+    "package-forward-peakFootprint": true,
+    "package-forward-storage": true,
+    "generic-forward-completed": true,
+    "generic-forward-native612": true,
+    "generic-forward-local": true,
+    "generic-forward-latest": true,
+    "generic-forward-p95": true,
+    "generic-forward-diagnostic": true,
+    "generic-forward-cpuSeconds": true,
+    "generic-forward-peakRss": true,
+    "generic-forward-peakFootprint": true,
+    "generic-forward-storage": true,
+    "generic-reverse-completed": true,
+    "generic-reverse-native612": true,
+    "generic-reverse-local": true,
+    "generic-reverse-latest": true,
+    "generic-reverse-p95": true,
+    "generic-reverse-diagnostic": true,
+    "generic-reverse-cpuSeconds": true,
+    "generic-reverse-peakRss": true,
+    "generic-reverse-peakFootprint": true,
+    "generic-reverse-storage": true
+  },
+  "pairedSummary": {
+    "package-forward": {
+      "ratios": {
+        "cpuSeconds": 1.0005087722126562,
+        "peakRss": 1.0002785762222532,
+        "peakFootprint": 1.0019670456092455
+      },
+      "arms": {
+        "baseline": {
+          "p50": 14.64575,
+          "p95": 37.061667,
+          "maximum": 85.396625,
+          "cancelled": 0,
+          "lastDiagnosticMs": 20.786209,
+          "localUpdates": 12
+        },
+        "candidate": {
+          "p50": 18.237896,
+          "p95": 35.969167,
+          "maximum": 83.154083,
+          "cancelled": 0,
+          "lastDiagnosticMs": 20.289667,
+          "localUpdates": 12
+        }
+      }
+    },
+    "generic-forward": {
+      "ratios": {
+        "cpuSeconds": 0.7592129900550207,
+        "peakRss": 0.9765877587424282,
+        "peakFootprint": 1.0013825006250074
+      },
+      "arms": {
+        "baseline": {
+          "p50": 16.374917,
+          "p95": 728.311833,
+          "maximum": 728.311833,
+          "cancelled": 2,
+          "lastDiagnosticMs": 1213.93275,
+          "localUpdates": 0
+        },
+        "candidate": {
+          "p50": 15.814791,
+          "p95": 28.602834,
+          "maximum": 28.602834,
+          "cancelled": 1,
+          "lastDiagnosticMs": 22.1615,
+          "localUpdates": 11
+        }
+      }
+    },
+    "generic-reverse": {
+      "ratios": {
+        "cpuSeconds": 0.7621811608064851,
+        "peakRss": 0.9782247875740084,
+        "peakFootprint": 0.9999098535116262
+      },
+      "arms": {
+        "baseline": {
+          "p50": 18.8059375,
+          "p95": 722.840458,
+          "maximum": 722.840458,
+          "cancelled": 2,
+          "lastDiagnosticMs": 1210.70325,
+          "localUpdates": 0
+        },
+        "candidate": {
+          "p50": 16.140209,
+          "p95": 30.925583,
+          "maximum": 30.925583,
+          "cancelled": 1,
+          "lastDiagnosticMs": 20.156084,
+          "localUpdates": 11
+        }
+      }
+    }
+  },
+  "performanceQualificationComplete": false,
+  "fiveCategoryGoalComplete": false,
+  "limitations": [
+    "Generic fixture is added editor text within the real CVA6 package, not pre-existing CVA6 source.",
+    "Completed-query percentiles exclude cancelled replies: candidate generic multiline-first-proof queries still cancelled at about106ms; cancellations improve2 to1, not0.",
+    "Ordinary package p50 single pair14.65 to18.24ms; the30 mechanism gates do not cover p50. No comprehensive no-regression claim.",
+    "Older4032-edit peak-footprint failure, hard-water synchronous retirement and general effect/initializer closure remain unresolved."
+  ],
+  "evidenceBoundaryCorrection": "Older sequential package correctness enabled mutually exclusive syntax and semantic freezing. Its maps remain output comparison evidence but cannot prove DUT semantic reuse. New104-state runs disable syntax freezing and verify actual UVM/whole-DUT-root semantic sharing.",
+  "sourceReceiptSha256": "891573b69289bc59eb1cc5970e2e21b64d85af8896e0a3b81173526736cb94b7",
+  "evidence": {
+    "ctest.log": "8364a3e8cef656ff9283aa8a711f29f8254c78f7da9521ea765b9b799faf5767",
+    "python.log": "346950c20b827b9579236acefba8252f98c083f9896d87c93c94348b8b501753",
+    "transport.log": "2facf1741f15419354e984b661aa0b791050cd5fe1a363e7e41896bf73dbaa45",
+    "asan-complete.log": "6bcaf2200f3dcc311cc283ce5da159d859d2b1ecfd974c027fea5f74cfec69e2",
+    "sdk-asan-complete.log": "facb881f7b57a24eb9d60b3448a0cc8131d0346bce92b03301ea78363a102b0b",
+    "mechanism-plan.json": "0bbe4d1bb8e92e08eaede2480546aabcaef8917aa2980573d6dce05320f6b32b",
+    "mechanism-evaluation.json": "b4f5d4b56a9bfa99d9fd8cfa9862108fef5d422701056eafba3ba756a9e28213",
+    "preflight-correction.json": "d3716827197ad1f9a90ec28865b19cbad616f024ca54b0815c5f23f19461d59d",
+    "install-smoke.json": "ecd29ab37b0d8700a6b1e1deeffcd271ef57933bc96ebbb2fa49c0d34f4a5885",
+    "external-cold-smoke.json": "e722a9fc5e9890228d071f100b877853272b08a5deffc9b82666eaedf7ed8ac7",
+    "external-smoke.json": "34d75b0678ac1518ba7fd4aaec2af7bb5e1c84c2cf046c00c5e17950c92f92bc"
+  }
+}

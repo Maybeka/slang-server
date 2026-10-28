@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: MIT
 #include "completions/MemberCompletions.h"
+#include "document/BodyDiagnosticCache.h"
+#include "document/BodyLineProof.h"
+
 #include "document/MethodScopeOverlay.h"
 #include "util/Converters.h"
 #include "utils/ServerHarness.h"
@@ -11,10 +14,20 @@
 #include <iostream>
 #include <rfl/json/write.hpp>
 #include <thread>
+#include <unordered_set>
+
+#if defined(__APPLE__)
+#    include <sys/resource.h>
+#    include <fcntl.h>
+#    include <unistd.h>
+#endif
 
 #include "slang/ast/symbols/ClassSymbols.h"
+#include "slang/ast/symbols/ParameterSymbols.h"
 #include "slang/ast/symbols/SubroutineSymbols.h"
+#include "slang/ast/types/AllTypes.h"
 #include "slang/util/ScopeGuard.h"
+#include "util/DirectoryProofPlan.h"
 
 namespace {
 const std::string header =
@@ -34,11 +47,16 @@ struct Workspace {
     std::filesystem::path root, previous = std::filesystem::current_path();
     Workspace() {
         static std::atomic_uint64_t serial{0};
-        root = std::filesystem::canonical(std::filesystem::temp_directory_path()) /
-               ("slang-method-" +
-                std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()) + "-" +
-                std::to_string(serial++));
-        std::filesystem::create_directories(root / ".slang");
+        const auto temporary = std::filesystem::canonical(std::filesystem::temp_directory_path());
+        // Clock resolution can give separate CTest processes the same name.
+        // Claim the root atomically before writing or owning its cleanup.
+        do {
+            root = temporary /
+                   ("slang-method-" +
+                    std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()) +
+                    "-" + std::to_string(serial++));
+        } while (!std::filesystem::create_directory(root));
+        std::filesystem::create_directory(root / ".slang");
         write(".slang/server.json",
               "{\"indexingThreads\":1,\"flags\":\"--single-unit --threads 1\","
               "\"compilationFilelist\":\"design.f\",\"experimentalMethodScopeOverlay\":true}");
@@ -1279,7 +1297,24 @@ auto diagnosticMap(ServerHarness& server) {
     }
     return result;
 }
-void checkNativeDiagnostics(Workspace& workspace, ServerHarness& server, const std::string& text) {
+void checkNativeDiagnostics(Workspace& workspace, ServerHarness& server, const std::string& text,
+                            bool comparePublications = false,
+                            std::optional<lsp::Position> hoverAt = {},
+                            std::string_view instance = {},
+                            std::string_view sourceName = "item.svh") {
+    std::optional<std::string> actualHover;
+    if (hoverAt) {
+        std::vector<std::string> phases;
+        lsp::RequestContext ctx("local-type-hover", 205);
+        ctx.setCheckpointObserverForTesting(
+            [&](std::string_view phase) { phases.emplace_back(phase); });
+        actualHover = rfl::json::write(server.getDocHover(
+            {.textDocument = {.uri = URI::fromFile(workspace.root / std::string(sourceName))},
+             .position = *hoverAt},
+            ctx));
+        INFO(rfl::json::write(phases));
+        CHECK(state(server).active);
+    }
     auto actual = diagnosticMap(server);
     std::ifstream input(workspace.root / ".slang/server.json");
     const std::string saved{std::istreambuf_iterator<char>(input), {}};
@@ -1287,12 +1322,49 @@ void checkNativeDiagnostics(Workspace& workspace, ServerHarness& server, const s
     auto restore = slang::ScopeGuard([&] { workspace.write(".slang/server.json", saved); });
     BodyTestServer native(workspace.params());
     native.setBuildFile((workspace.root / "design.f").string());
-    auto oracle = native.openFile("item.svh", text);
-    CHECK(actual == diagnosticMap(native));
+    if (!instance.empty())
+        REQUIRE(native.setActiveInstance(std::string(instance)));
+    auto oracle = native.openFile(std::string(sourceName), text);
+    if (hoverAt)
+        CHECK(*actualHover == rfl::json::write(native.getDocHover(
+                                  {.textDocument = {.uri = oracle.m_uri}, .position = *hoverAt})));
+    auto expected = diagnosticMap(native);
+    if (comparePublications) {
+        // A local repair deliberately publishes [] to clear an old error; a
+        // fresh Native server may never create that empty internal bucket.
+        // First compare every actual client payload, including old URI routes,
+        // so normalizing empty buckets cannot hide a stale diagnostic.
+        std::unordered_set<URI> keys(server.client.diagnosticPublications.begin(),
+                                     server.client.diagnosticPublications.end());
+        keys.insert(native.client.diagnosticPublications.begin(),
+                    native.client.diagnosticPublications.end());
+        auto publicValues = [](auto& client, const URI& uri) {
+            std::vector<std::string> result;
+            for (const auto& diagnostic : client.getDiagnostics(uri))
+                result.push_back(rfl::json::write(diagnostic));
+            std::sort(result.begin(), result.end());
+            return result;
+        };
+        for (const auto& uri : keys)
+            CHECK(publicValues(server.client, uri) == publicValues(native.client, uri));
+        REQUIRE(server.client.diagnosticVersions.contains(oracle.m_uri));
+        REQUIRE(server.getDoc(oracle.m_uri));
+        CHECK(server.client.diagnosticVersions.at(oracle.m_uri) ==
+              server.getDoc(oracle.m_uri)->getVersion());
+        std::erase_if(actual, [](const auto& item) { return item.second.empty(); });
+        std::erase_if(expected, [](const auto& item) { return item.second.empty(); });
+    }
+    if (actual != expected) {
+        INFO("Actual diagnostic map: " << rfl::json::write(actual));
+        INFO("Native diagnostic map: " << rfl::json::write(expected));
+        CHECK(actual == expected);
+        return;
+    }
+    CHECK(actual == expected);
 }
 } // namespace
 
-TEST_CASE("Local diagnostics reject changed outside usage and rebase on a native result",
+TEST_CASE("Local diagnostics update outside usage without rebuilding the native root",
           "[method-body-diagnostics]") {
     Workspace workspace;
     workspace.write(".slang/server.json", localDiagnosticConfig);
@@ -1306,18 +1378,18 @@ TEST_CASE("Local diagnostics reject changed outside usage and rebase on a native
     server.runBackgroundWork({});
     REQUIRE(state(server).active);
     auto first = diagnosticState(server);
-    CHECK(first.localDiagnosticUpdates == 0);
-    CHECK(first.localDiagnosticDecline == "method changes external reference usage");
-    checkNativeDiagnostics(workspace, server, text);
+    CHECK(first.localDiagnosticUpdates == 1);
+    CHECK(first.localDiagnosticDecline.empty());
+    checkNativeDiagnostics(workspace, server, text, true);
     text.replace(text.find("marker + charl"), 14, "marker + charl + 10");
     change(server, doc.m_uri, 3, text);
     server.runBackgroundWork({});
     auto second = diagnosticState(server);
     INFO(second.localDiagnosticDecline);
-    CHECK(second.localDiagnosticUpdates == 1);
+    CHECK(second.localDiagnosticUpdates == 2);
     CHECK_FALSE(server.m_driver->comp->containsCurrentSource(workspace.root / "item.svh"));
     CHECK(server.client.diagnosticVersions.at(doc.m_uri) == 3);
-    checkNativeDiagnostics(workspace, server, text);
+    checkNativeDiagnostics(workspace, server, text, true);
 }
 
 TEST_CASE("Local diagnostic cancellation publishes no partial state and retries safely",
@@ -1477,9 +1549,9 @@ TEST_CASE("Local diagnostics track imported uses and evaluated generic parameter
             server.runBackgroundWork({});
             REQUIRE(state(server).active);
             auto result = diagnosticState(server);
-            CHECK(result.localDiagnosticUpdates == 0);
-            CHECK_FALSE(result.localDiagnosticDecline.empty());
-            checkNativeDiagnostics(workspace, server, text);
+            CHECK(result.localDiagnosticUpdates == 1);
+            CHECK(result.localDiagnosticDecline.empty());
+            checkNativeDiagnostics(workspace, server, text, true);
         }
     }
 }
@@ -1526,6 +1598,375 @@ TEST_CASE("Local diagnostic owners retire with the context and preserve unsaved 
     CHECK(actual == diagnosticMap(native));
 }
 #endif
+
+TEST_CASE("Body macro proof preserves existing effects and admits unused new names",
+          "[method-body][method-body-diagnostics][method-macro-proof]") {
+    const bool existing = GENERATE(false, true);
+    const bool certify = GENERATE(false, true);
+    const bool returnsLine = GENERATE(false, true);
+    Workspace workspace;
+    const std::string prefix = "class C; function int work(input int arg);\n";
+    const std::string original = prefix +
+        (existing ? "`define SAVED_BODY_FLAG 1\n" : "") +
+        "return arg; endfunction\n" +
+        (returnsLine ? "function int later(); return `__LINE__; endfunction endclass\n" :
+         "function void report(input int line_number); endfunction\n"
+         "function void later(); report(`__LINE__); endfunction endclass\n");
+    workspace.write("item.svh", original);
+    auto config = localDiagnosticConfig;
+    config.insert(1, std::string("\"experimentalMethodBodyMacroProof\":true,") +
+                     (certify ? "\"experimentalMethodBodyCertification\":true," : ""));
+    workspace.write(".slang/server.json", config);
+    BodyTestServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    int version = 1;
+    for (const auto& expression : {std::string("arg + 1"), std::string("arg + 22"),
+                                    std::string("arg + 3")}) {
+        auto current = original;
+        current.replace(current.find("return arg;"), 11,
+            (existing ? std::string{} : "`define NEW_BODY_VALUE 7\n") +
+                "return " + expression + ";");
+        change(server, doc.m_uri, ++version, current);
+        server.runBackgroundWork({});
+        INFO(state(server).decline);
+        INFO(diagnosticState(server).localDiagnosticDecline);
+        CHECK(state(server).active);
+        // Returning a changed line literal still requires the existing full
+        // diagnostic path once; subsequent same-line edits are local again.
+        CHECK(diagnosticState(server).localDiagnosticUpdates ==
+              uint64_t(version - 1 - (!existing && returnsLine ? 1 : 0)));
+        checkNativeDiagnostics(workspace, server, current);
+    }
+}
+
+TEST_CASE("Public macro queries observe newly admitted definitions",
+          "[method-body][method-macro-proof][method-macro-public]") {
+    const auto operation = GENERATE("hover", "source", "expanded", "both", "define", "complete", "expand");
+    Workspace workspace;
+    const std::string original = "class C; function int work(input int arg);\n"
+                                 "return arg; endfunction endclass\n";
+    workspace.write("item.svh", original);
+    auto config = localDiagnosticConfig;
+    config.insert(1, "\"experimentalMethodBodyMacroProof\":true,");
+    workspace.write(".slang/server.json", config);
+    BodyTestServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    auto current = original;
+    current.replace(current.find("return arg;"), 11,
+        "`define NEW_BODY_VALUE 7\nreturn arg + `NEW_BODY_VALUE;");
+    change(server, doc.m_uri, 2, current);
+    server.runBackgroundWork({});
+    INFO(state(server).decline);
+    REQUIRE(state(server).active);
+    doc.m_text = current;
+    auto query = [&](BodyTestServer& instance, DocumentHandle& handle, const char* output) {
+        const auto at = current.rfind("NEW_BODY_VALUE") + 5;
+        if (std::string_view(operation) == "source" || std::string_view(operation) == "expanded" ||
+            std::string_view(operation) == "both")
+            return rfl::json::write(instance.previewHover(
+                {.textDocument={.uri=handle.m_uri}, .position=handle.getPosition(at), .macroView=operation}));
+        if (std::string_view(operation) == "hover")
+            return rfl::json::write(instance.getDocHover(
+                {.textDocument={.uri=handle.m_uri}, .position=handle.getPosition(at)}));
+        if (std::string_view(operation) == "define")
+            return rfl::json::write(instance.getDocDefinition(
+                {.textDocument={.uri=handle.m_uri}, .position=handle.getPosition(at)}));
+        if (std::string_view(operation) == "complete") {
+            auto response = instance.getDocCompletion(
+                {.textDocument={.uri=handle.m_uri}, .position=handle.getPosition(at)});
+            auto list = rfl::get_if<lsp::CompletionList>(&response);
+            REQUIRE(list);
+            CHECK(list->isIncomplete);
+            CHECK(std::ranges::any_of(list->items, [](const auto& item) {
+                return item.label == "`NEW_BODY_VALUE";
+            }));
+            auto items = list->items;
+            for (auto& item : items) {
+                item = instance.getCompletionItemResolve(item);
+                item.data.reset();
+            }
+            return rfl::json::write(items);
+        }
+        auto destination = workspace.root / output;
+        REQUIRE(instance.expandMacros({.src=(workspace.root/"item.svh").string(),
+                                       .dst=destination.string()}));
+        std::ifstream stream(destination);
+        return std::string(std::istreambuf_iterator<char>(stream), {});
+    };
+    auto actual = query(server, doc, "actual.sv");
+    bodyConfig(workspace, false);
+    BodyTestServer native(workspace.params());
+    native.setBuildFile((workspace.root / "design.f").string());
+    auto reference = native.openFile("item.svh", current);
+    CHECK(actual == query(native, reference, "expected.sv"));
+}
+
+TEST_CASE("Body macro proof rejects changes observed by later conditional code",
+          "[method-body][method-body-diagnostics][method-macro-proof]") {
+    Workspace workspace;
+    const std::string original =
+        "class C; function int work(input int arg);\nreturn arg; endfunction\n"
+        "function int later();\n`ifdef BODY_FLAG\nreturn 1;\n`else\nreturn 2;\n`endif\n"
+        "endfunction endclass\n";
+    workspace.write("item.svh", original);
+    auto config = localDiagnosticConfig;
+    config.insert(1, "\"experimentalMethodBodyMacroProof\":true,");
+    workspace.write(".slang/server.json", config);
+    BodyTestServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    auto current = original;
+    current.replace(current.find("return arg;"), 11, "`define BODY_FLAG 1\nreturn arg;");
+    change(server, doc.m_uri, 2, current);
+    server.runBackgroundWork({});
+    CHECK_FALSE(state(server).active);
+    checkNativeDiagnostics(workspace, server, current);
+}
+
+TEST_CASE("Fresh macro effects survive ranged incomplete and repaired body edits",
+          "[method-macro-proof][macro-boundaries]") {
+    const bool ranged = GENERATE(false, true);
+    Workspace workspace;
+    const std::string head = "class C; function int work(input int arg);\n";
+    const std::string tail = "endfunction endclass\n";
+    const std::string original = head + "return arg;\n" + tail;
+    workspace.write("item.svh", original);
+    auto config = localDiagnosticConfig;
+    config.insert(1, "\"experimentalMethodBodyMacroProof\":true,\"experimentalMethodBodyCertification\":true,");
+    workspace.write(".slang/server.json", config);
+    BodyTestServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    const std::vector<std::string> bodies = {
+        "`define LOCAL_VALUE 7\nreturn arg + `LOCAL_VALUE;\n",
+        "`define LOCAL_VALUE 9\nreturn arg + `LOCAL_VALUE;\n",
+        "`define LOCAL_VALUE 9\n`undef LOCAL_VALUE\nreturn arg;\n",
+        "`undef LOCAL_VALUE\nreturn arg + 1;\n",
+        "return arg +;\n",
+        "`define LOCAL_VALUE 3\nreturn missing_symbol + `LOCAL_VALUE;\n",
+        "return arg + 2;\n"};
+    int version = 1;
+    for (const auto& body : bodies) {
+        const auto current = head + body + tail;
+        if (ranged)
+            server.SlangServer::onDocDidChange(
+                {.textDocument={.version=++version,.uri=doc.m_uri},
+                 .contentChanges={lsp::TextDocumentContentChangePartial{
+                     .range={.start=doc.getPosition(head.size()),
+                             .end=doc.getPosition(doc.m_text.find("endfunction"))},
+                     .text=body}}});
+        else change(server, doc.m_uri, ++version, current);
+        doc.m_text = current;
+        server.runBackgroundWork({});
+        INFO(state(server).decline);
+        INFO(diagnosticState(server).localDiagnosticDecline);
+        CHECK(state(server).active);
+        CHECK(diagnosticState(server).localDiagnosticUpdates == uint64_t(version - 1));
+        CHECK(server.m_driver->getDocument(doc.m_uri)->getVersion() == version);
+        CHECK(server.client.diagnosticVersions.at(doc.m_uri) == version);
+        checkNativeDiagnostics(workspace, server, current, true);
+    }
+}
+
+TEST_CASE("Unchanged undef effects permit later edits on the same source line",
+          "[method-macro-proof][macro-boundaries]") {
+    Workspace workspace;
+    const std::string original = "`define SAVED_FLAG 1\nclass C; function int work(input int arg);\n"
+                                 "`undef SAVED_FLAG return arg;\nendfunction endclass\n";
+    workspace.write("item.svh", original);
+    auto config = localDiagnosticConfig;
+    config.insert(1, "\"experimentalMethodBodyMacroProof\":true,");
+    workspace.write(".slang/server.json", config);
+    BodyTestServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    auto current = original;
+    current.replace(current.find("return arg;"), 11, "return arg + 1;");
+    change(server, doc.m_uri, 2, current);
+    server.runBackgroundWork({});
+    INFO(state(server).decline);
+    INFO(diagnosticState(server).localDiagnosticDecline);
+    CHECK(state(server).active);
+    CHECK(diagnosticState(server).localDiagnosticUpdates == 1);
+    checkNativeDiagnostics(workspace, server, current, true);
+}
+
+TEST_CASE("Inactive original macro directives do not obstruct ordinary body edits",
+          "[method-macro-proof][macro-boundaries]") {
+    Workspace workspace;
+    const std::string original = "class C; function int work(input int arg);\n"
+        "`ifdef ABSENT_FLAG\n`define DORMANT 7\n`endif\nreturn arg;\nendfunction endclass\n";
+    workspace.write("item.svh", original);
+    auto config = localDiagnosticConfig;
+    config.insert(1, "\"experimentalMethodBodyMacroProof\":true,");
+    workspace.write(".slang/server.json", config);
+    BodyTestServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    std::vector<std::string> sequence;
+    auto ordinary=original;
+    ordinary.replace(ordinary.find("return arg;"),11,"return arg + 1;");
+    sequence.push_back(ordinary);
+    auto changed=original;
+    changed.replace(changed.find("DORMANT 7"),9,"DORMANT 9");
+    sequence.push_back(changed);
+    auto activated=changed;
+    activated.replace(activated.find("`ifdef"),6,"`ifndef");
+    sequence.push_back(activated);
+    sequence.push_back("class C; function int work(input int arg);\nreturn arg + 2;\nendfunction endclass\n");
+    int version=1;
+    for(const auto& current : sequence) {
+        change(server,doc.m_uri,++version,current);
+        server.runBackgroundWork({});
+        INFO(state(server).decline);
+        INFO(diagnosticState(server).localDiagnosticDecline);
+        CHECK(state(server).active);
+        CHECK(diagnosticState(server).localDiagnosticUpdates==uint64_t(version-1));
+        checkNativeDiagnostics(workspace,server,current,true);
+    }
+}
+
+TEST_CASE("Included negative macro observations forbid new body definitions",
+          "[method-macro-proof][macro-boundaries]") {
+    Workspace workspace;
+    workspace.write("observer.svh", "`ifdef BODY_FLAG\nint observed_field;\n`endif\n");
+    const std::string original = "class C; function int work(input int arg);\n"
+        "return arg; endfunction\n`include \"observer.svh\"\nendclass\n";
+    workspace.write("item.svh", original);
+    auto config = localDiagnosticConfig;
+    config.insert(1, "\"experimentalMethodBodyMacroProof\":true,");
+    workspace.write(".slang/server.json", config);
+    BodyTestServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    auto current = original;
+    current.replace(current.find("return arg;"), 11, "`define BODY_FLAG 1\nreturn arg;");
+    change(server, doc.m_uri, 2, current);
+    server.runBackgroundWork({});
+    CHECK_FALSE(state(server).active);
+    checkNativeDiagnostics(workspace, server, current, true);
+}
+
+TEST_CASE("Task macro effects retain local timing diagnostics through add and remove",
+          "[method-macro-proof][macro-boundaries]") {
+    Workspace workspace;
+    const std::string head="class C; task work(input int arg);\n";
+    const std::string tail="endtask endclass\n";
+    const auto original=head+"arg = arg + 1;\n"+tail;
+    workspace.write("item.svh",original);
+    auto config=localDiagnosticConfig;
+    config.insert(1,"\"experimentalMethodBodyMacroProof\":true,");
+    workspace.write(".slang/server.json",config);
+    BodyTestServer server(workspace.params());
+    server.setBuildFile((workspace.root/"design.f").string());
+    auto doc=server.openFile("item.svh",original);
+    doc.doc->getAnalysis();
+    int version=1;
+    for(const auto& body : {"`define TASK_VALUE 2\n#1 arg = arg + `TASK_VALUE;\n",
+                           "`define TASK_VALUE 3\n#2 arg = arg + `TASK_VALUE;\n",
+                           "arg = arg + 4;\n"}) {
+        const auto current=head+body+tail;
+        change(server,doc.m_uri,++version,current);
+        server.runBackgroundWork({});
+        INFO(state(server).decline);
+        CHECK(state(server).active);
+        CHECK(diagnosticState(server).localDiagnosticUpdates==uint64_t(version-1));
+        checkNativeDiagnostics(workspace,server,current,true);
+    }
+}
+
+TEST_CASE("Observed macro values and definition locations require native reconstruction",
+          "[method-macro-proof][macro-boundaries]") {
+    const bool move=GENERATE(false,true);
+    Workspace workspace;
+    const std::string original="class C; function int work(input int arg);\n"
+        "`define OBSERVED_VALUE 1\nreturn arg; endfunction\n"
+        "function int later(); return `OBSERVED_VALUE; endfunction endclass\n";
+    workspace.write("item.svh",original);
+    auto config=localDiagnosticConfig;
+    config.insert(1,"\"experimentalMethodBodyMacroProof\":true,");
+    workspace.write(".slang/server.json",config);
+    BodyTestServer server(workspace.params());
+    server.setBuildFile((workspace.root/"design.f").string());
+    auto doc=server.openFile("item.svh",original);
+    doc.doc->getAnalysis();
+    auto current=original;
+    if(move) current.insert(current.find("`define"),"\n");
+    else current.replace(current.find("VALUE 1"),7,"VALUE 2");
+    change(server,doc.m_uri,2,current);
+    server.runBackgroundWork({});
+    CHECK_FALSE(state(server).active);
+    checkNativeDiagnostics(workspace,server,current,true);
+    doc.m_text=current;
+    const auto at=current.rfind("OBSERVED_VALUE")+4;
+    auto actual=rfl::json::write(server.getDocHover(
+        {.textDocument={.uri=doc.m_uri},.position=doc.getPosition(at)}));
+    bodyConfig(workspace,false);
+    BodyTestServer native(workspace.params());
+    native.setBuildFile((workspace.root/"design.f").string());
+    auto reference=native.openFile("item.svh",current);
+    CHECK(actual==rfl::json::write(native.getDocHover(
+        {.textDocument={.uri=reference.m_uri},.position=reference.getPosition(at)})));
+}
+
+TEST_CASE("Fresh body macros cannot bypass outside token-pasted lookup proof",
+          "[method-macro-proof][macro-boundaries]") {
+    const bool lookup=GENERATE(false,true);
+    Workspace workspace;
+    const std::string original=std::string(lookup ?
+        "`define F1 report(1);\n`define LATER(N) `F``N\n" :
+        "`define LATER(N) report(arg``N);\n") +
+        "class C; int arg1; function int work(input int arg);\nreturn arg; endfunction\n"
+        "function void report(input int n); endfunction\n"
+        "function void later(); `LATER(1) endfunction endclass\n";
+    workspace.write("item.svh",original);
+    auto config=localDiagnosticConfig;
+    config.insert(1,"\"experimentalMethodBodyMacroProof\":true,");
+    workspace.write(".slang/server.json",config);
+    BodyTestServer server(workspace.params());
+    server.setBuildFile((workspace.root/"design.f").string());
+    auto doc=server.openFile("item.svh",original);
+    doc.doc->getAnalysis();
+    auto current=original;
+    current.insert(current.find("return arg;"),"`define NEW_BODY_VALUE 7\n");
+    change(server,doc.m_uri,2,current);
+    server.runBackgroundWork({});
+    CHECK_FALSE(state(server).active);
+    checkNativeDiagnostics(workspace,server,current,true);
+}
+
+TEST_CASE("Macro proof remains opt in and zero budget disables new eligibility",
+          "[method-macro-proof][macro-boundaries]") {
+    const int mode=GENERATE(0,1,2);
+    Workspace workspace;
+    const std::string original="class C; function int work(input int arg);\n"
+                                 "return arg; endfunction endclass\n";
+    workspace.write("item.svh",original);
+    auto config=localDiagnosticConfig;
+    if(mode) config.insert(1,"\"experimentalMethodBodyMacroProof\":true,");
+    if(mode==1) config.insert(1,"\"methodBodyMacroProofMaxMiB\":0,");
+    workspace.write(".slang/server.json",config);
+    BodyTestServer server(workspace.params());
+    server.setBuildFile((workspace.root/"design.f").string());
+    auto doc=server.openFile("item.svh",original);
+    doc.doc->getAnalysis();
+    auto current=original;
+    current.insert(current.find("return arg;"),"`define NEW_BODY_VALUE 7\n");
+    change(server,doc.m_uri,2,current);
+    server.runBackgroundWork({});
+    CHECK(state(server).active==(mode==2));
+    CHECK(diagnosticState(server).localDiagnosticUpdates==(mode==2?1:0));
+    checkNativeDiagnostics(workspace,server,current,true);
+}
 
 TEST_CASE("Removing existing preprocessing state cannot retain stale method suffixes",
           "[method-body][method-body-diagnostics]") {
@@ -1576,8 +2017,8 @@ TEST_CASE("Local diagnostics preserve nonlocal persistent driver analysis",
             server.runBackgroundWork({});
             auto result = diagnosticState(server);
             INFO(result.localDiagnosticDecline);
-            CHECK(result.localDiagnosticUpdates == 0);
-            CHECK_FALSE(result.localDiagnosticDecline.empty());
+            CHECK(result.localDiagnosticUpdates == 1);
+            CHECK(result.localDiagnosticDecline.empty());
             checkNativeDiagnostics(workspace, server, text);
         }
     }
@@ -1602,7 +2043,8 @@ TEST_CASE("Local diagnostics distinguish untyped generic value widths",
     server.runBackgroundWork({});
     auto result = diagnosticState(server);
     INFO(result.localDiagnosticDecline);
-    CHECK(result.localDiagnosticUpdates == 0);
+    CHECK(result.localDiagnosticUpdates == 1);
+    CHECK(result.localDiagnosticDecline.empty());
     checkNativeDiagnostics(workspace, server, text);
 }
 
@@ -1879,6 +2321,8 @@ TEST_CASE("Cooperative Native and renewed methods retain the hard source-storage
     server.m_contextHardBudget = 1; // Above the hard high-water mark with no library experiments.
     auto text = edited();
     change(server, doc.m_uri, 2, text);
+    CHECK(server.m_driver->completions.getCompletionEpoch() == epoch);
+    server.runBackgroundWork({}); // Admit current text before any semantic consumer.
     CHECK(server.m_driver->completions.getCompletionEpoch() != epoch);
     CHECK(server.m_driver->getDocument(doc.m_uri)->getText() == text + '\0');
     server.m_driver->getDocument(doc.m_uri)->getAnalysis();
@@ -1898,6 +2342,7 @@ std::string certificationConfig(bool enabled = true) {
 }
 struct CertificationServer : BodyTestServer {
     using BodyTestServer::BodyTestServer;
+    using SlangServer::backgroundGracePeriod;
     using SlangServer::m_config;
     using SlangServer::m_contextBudget;
     using SlangServer::m_contextEpoch;
@@ -1905,6 +2350,176 @@ struct CertificationServer : BodyTestServer {
     using SlangServer::m_methodScope;
 };
 } // namespace
+
+TEST_CASE("Macro identity witness cancellation preserves incoming text and recovers",
+          "[method-macro-proof][macro-boundaries][macro-cancellation]") {
+    const bool cached = GENERATE(false, true);
+    Workspace workspace;
+    const std::string original = "class C; function int work(input int arg);\n"
+        "return arg; endfunction\nfunction void report(input int n); endfunction\n"
+        "function void later(); report(`__LINE__); endfunction endclass\n";
+    workspace.write("item.svh", original);
+    auto config = localDiagnosticConfig;
+    config.insert(1, "\"experimentalMethodBodyMacroProof\":true,\"experimentalMethodBodyCertification\":true,");
+    workspace.write(".slang/server.json", config);
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    auto make = [&](int value, bool macro) {
+        auto current = original;
+        current.replace(current.find("return arg;"), 11,
+            (macro ? "`define NEW_BODY_VALUE 7\n" : "") +
+                std::string("return arg + ") + std::to_string(value) + ";");
+        return current;
+    };
+    change(server, doc.m_uri, 2, make(1, false));
+    server.runBackgroundWork({});
+    REQUIRE(state(server).active);
+    int version = 3;
+    if (cached) {
+        change(server, doc.m_uri, version++, make(1, true));
+        server.runBackgroundWork({});
+        REQUIRE(state(server).active);
+    }
+    const auto current = make(2, true);
+    lsp::RequestContext ctx("macro-witness-cancel", version);
+    bool reached = false;
+    ctx.setCheckpointObserverForTesting([&](std::string_view phase) {
+        if (phase == (cached ? "reuse outside macro lookup identity proof" :
+                               "before outside macro lookup identity witness commit")) {
+            reached = true;
+            ctx.cancel();
+        }
+    });
+    CHECK_THROWS_AS(change(server, doc.m_uri, version, current, ctx), lsp::RequestCancelled);
+    REQUIRE(reached);
+    CHECK(server.m_driver->getDocument(doc.m_uri)->getVersion() == version);
+    CHECK(server.m_driver->getDocument(doc.m_uri)->getText() == current + '\0');
+    server.runBackgroundWork({});
+    checkNativeDiagnostics(workspace, server, current, true);
+    const auto repaired = make(3, true);
+    change(server, doc.m_uri, ++version, repaired);
+    server.runBackgroundWork({});
+    checkNativeDiagnostics(workspace, server, repaired, true);
+    CHECK(server.client.diagnosticVersions.at(doc.m_uri) == version);
+}
+
+TEST_CASE("Cached macro identity properties never replace physical input authentication",
+          "[method-macro-proof][macro-boundaries][macro-input-auth]") {
+    Workspace workspace;
+    workspace.write("dependency.svh", "`define OBSERVED 1\n");
+    const std::string original = "`include \"dependency.svh\"\n"
+        "class C; function int work(input int arg);\nreturn arg; endfunction\n"
+        "function int later(); return `OBSERVED; endfunction endclass\n";
+    workspace.write("item.svh", original);
+    auto config = localDiagnosticConfig;
+    config.insert(1, "\"experimentalMethodBodyMacroProof\":true,\"experimentalMethodBodyCertification\":true,");
+    workspace.write(".slang/server.json", config);
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    auto current = original;
+    current.replace(current.find("return arg;"), 11, "`define NEW_BODY_VALUE 7\nreturn arg + 1;");
+    change(server, doc.m_uri, 2, current);
+    server.runBackgroundWork({});
+    REQUIRE(state(server).active);
+    REQUIRE(server.m_methodScope);
+    doc.m_text = current;
+    workspace.write("dependency.svh", "`define OBSERVED 2\n");
+    CHECK_FALSE(server.m_methodScope->hover(doc.m_uri,
+        doc.getPosition(current.find("return arg") + 8), server.m_config, {}).has_value());
+    CHECK(server.m_methodScope->observedInputChange());
+    server.getDocHover({.textDocument={.uri=doc.m_uri},
+                       .position=doc.getPosition(current.find("return arg") + 8)});
+    server.runBackgroundWork({});
+    checkNativeDiagnostics(workspace, server, current, true);
+}
+
+#if defined(__linux__) || defined(__APPLE__)
+TEST_CASE("Macro body recovery after retirement preserves an incomplete incoming version",
+          "[method-macro-proof][macro-boundaries][macro-retirement]") {
+    Workspace workspace;
+    const std::string original = "class C; function int work(input int arg);\n"
+                                 "return arg; endfunction endclass\n";
+    workspace.write("item.svh", original);
+    auto config = localDiagnosticConfig;
+    config.insert(1, "\"experimentalMethodBodyMacroProof\":true,\"experimentalMethodBodyCertification\":true,"
+                     "\"experimentalUvmPrefixCache\":true,");
+    workspace.write(".slang/server.json", config);
+    std::optional<std::string> previous;
+    if (auto value=std::getenv("SLANG_UVM_GENERATION_EDIT_LIMIT")) previous=value;
+    setenv("SLANG_UVM_GENERATION_EDIT_LIMIT", "1", 1);
+    auto restore=slang::ScopeGuard([&] {
+        if(previous) setenv("SLANG_UVM_GENERATION_EDIT_LIMIT",previous->c_str(),1);
+        else unsetenv("SLANG_UVM_GENERATION_EDIT_LIMIT");
+    });
+    BodyTestServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc=server.openFile("item.svh",original);
+    doc.doc->getAnalysis();
+    const auto epoch=server.m_driver->completions.getCompletionEpoch();
+    auto make=[&](std::string_view expression) {
+        auto value=original;
+        value.replace(value.find("return arg;"),11,
+            "`define NEW_BODY_VALUE 7\nreturn "+std::string(expression)+";");
+        return value;
+    };
+    change(server,doc.m_uri,2,make("arg + 1"));
+    server.runBackgroundWork({});
+    const auto incomplete=make("arg +");
+    change(server,doc.m_uri,3,incomplete);
+    server.runBackgroundWork({});
+    CHECK(server.m_driver->completions.getCompletionEpoch()!=epoch);
+    CHECK(server.m_driver->getDocument(doc.m_uri)->getText()==incomplete+'\0');
+    CHECK(server.client.diagnosticVersions.at(doc.m_uri)==3);
+    checkNativeDiagnostics(workspace,server,incomplete,true);
+    unsetenv("SLANG_UVM_GENERATION_EDIT_LIMIT");
+    const auto repaired=make("arg + 2");
+    change(server,doc.m_uri,4,repaired);
+    server.runBackgroundWork({});
+    checkNativeDiagnostics(workspace,server,repaired,true);
+    // Recovery deliberately does not speculate by rebuilding an old query
+    // model on didChange. Establish the current model through the real query.
+    doc.m_text=repaired;
+    REQUIRE(server.getDocHover({.textDocument={.uri=doc.m_uri},
+                                .position=doc.getPosition(repaired.find("return arg")+8)}));
+    change(server,doc.m_uri,5,make("arg + 3"));
+    server.runBackgroundWork({});
+    INFO(state(server).decline);
+    CHECK(state(server).active);
+    CHECK(diagnosticState(server).localDiagnosticUpdates>0);
+    checkNativeDiagnostics(workspace,server,make("arg + 3"),true);
+}
+#endif
+
+TEST_CASE("Prepared cooperative local diagnostics do not wait for a settling window",
+          "[body-certification][local-diagnostic-scheduling]") {
+    const bool cooperative = GENERATE(false, true);
+    Workspace workspace;
+    auto config = certificationConfig();
+    if (!cooperative) {
+        const std::string old = "\"experimentalCooperativeAnalysis\":true";
+        const auto offset = config.find(old);
+        REQUIRE(offset != std::string::npos);
+        config.replace(offset, old.size(), "\"experimentalCooperativeAnalysis\":false");
+    }
+    workspace.write(".slang/server.json", config);
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", header);
+    doc.doc->getAnalysis();
+    REQUIRE(server.m_driver->comp);
+    CHECK(server.backgroundGracePeriod() == std::chrono::milliseconds(2));
+    const auto text = edited();
+    change(server, doc.m_uri, 2, text);
+    server.runBackgroundWork({});
+    REQUIRE(server.m_methodScope);
+    REQUIRE(server.m_methodScope->hasPreparedLocalDiagnostics());
+    CHECK(server.backgroundGracePeriod() == std::chrono::milliseconds(cooperative ? 0 : 2));
+    checkNativeDiagnostics(workspace, server, text);
+}
 
 TEST_CASE("Superseded first inputs retain one original native diagnostic baseline",
           "[body-certification]") {
@@ -2030,6 +2645,9 @@ TEST_CASE("Method result construction ends with one full content certificate",
 TEST_CASE("Deferred diagnostic certification cancels without losing its original baseline",
           "[body-certification]") {
     auto boundary = GENERATE("after local diagnostic binding", "after local diagnostic baseline",
+                             "initial diagnostic equality candidates",
+                             "native driver diagnostic location proof",
+                             "class external driver effects unchanged",
                              "retained local diagnostic publication");
     Workspace workspace;
     workspace.write(".slang/server.json", certificationConfig());
@@ -2076,6 +2694,8 @@ TEST_CASE("Pending diagnostic baselines cannot cross a hard context retirement",
     server.m_contextHardBudget = 1;
     auto text = edited();
     change(server, doc.m_uri, 2, text);
+    CHECK(server.m_driver->completions.getCompletionEpoch() == epoch);
+    server.runBackgroundWork({}); // Admit current text before any semantic consumer.
     CHECK(server.m_driver->completions.getCompletionEpoch() != epoch);
     CHECK_FALSE(server.m_methodScope);
     CHECK(server.m_driver->getDocument(doc.m_uri)->getText() == text + '\0');
@@ -2084,9 +2704,8 @@ TEST_CASE("Pending diagnostic baselines cannot cross a hard context retirement",
     checkNativeDiagnostics(workspace, server, text);
 }
 
-TEST_CASE(
-    "Deferred original diagnostics reject external usage changes and recover on native baseline",
-    "[body-certification]") {
+TEST_CASE("Deferred original diagnostics replay changed external reference usage",
+          "[body-certification]") {
     Workspace workspace;
     workspace.write(".slang/server.json", certificationConfig());
     CertificationServer server(workspace.params());
@@ -2097,17 +2716,16 @@ TEST_CASE(
     text.replace(text.find("local_1 + charl"), 15, "marker + charl");
     change(server, doc.m_uri, 2, text);
     server.runBackgroundWork({});
-    CHECK(diagnosticState(server).localDiagnosticUpdates == 0);
-    CHECK(diagnosticState(server).localDiagnosticDecline ==
-          "method changes external reference usage");
-    checkNativeDiagnostics(workspace, server, text);
+    CHECK(diagnosticState(server).localDiagnosticUpdates == 1);
+    CHECK(diagnosticState(server).localDiagnosticDecline.empty());
+    checkNativeDiagnostics(workspace, server, text, true);
     workspace.write(".slang/server.json", certificationConfig());
     text.replace(text.find("marker + charl"), 14, "marker + charl + 10");
     change(server, doc.m_uri, 3, text);
     server.runBackgroundWork({});
     INFO(diagnosticState(server).localDiagnosticDecline);
-    CHECK(diagnosticState(server).localDiagnosticUpdates == 1);
-    checkNativeDiagnostics(workspace, server, text);
+    CHECK(diagnosticState(server).localDiagnosticUpdates == 2);
+    checkNativeDiagnostics(workspace, server, text, true);
 }
 
 TEST_CASE("Deferred diagnostics verify disk contents after constructing the result",
@@ -2622,11 +3240,8 @@ TEST_CASE("Fixed provider usage proves added and removed method references",
         server.runBackgroundWork({});
         const auto status = diagnosticState(server);
         INFO(status.localDiagnosticDecline);
-        if (providerUses)
-            CHECK(status.localDiagnosticUpdates == uint64_t(version - 1));
-        else if (version == 2)
-            CHECK(status.localDiagnosticUpdates == 0);
-        checkNativeDiagnostics(workspace, server, text);
+        CHECK(status.localDiagnosticUpdates == uint64_t(version - 1));
+        checkNativeDiagnostics(workspace, server, text, true);
     }
 }
 
@@ -2666,14 +3281,15 @@ TEST_CASE("Fixed reference proofs retain package call driver boundaries",
     server.runBackgroundWork({});
     const auto status = diagnosticState(server);
     INFO(status.localDiagnosticDecline);
-    CHECK(status.localDiagnosticUpdates == 0);
-    CHECK(status.localDiagnosticDecline.find("full effect analysis") != std::string::npos);
+    CHECK(status.localDiagnosticUpdates == 1);
+    CHECK(status.localDiagnosticDecline.empty());
     checkNativeDiagnostics(workspace, server, text);
 }
 
 TEST_CASE("Later runtime line arguments preserve native diagnostics across multiline edits",
           "[method-body-diagnostics][later-macro-lines]") {
     const bool certify = GENERATE(false, true);
+    const uint32_t syntaxBudget = GENERATE(0u, 1024u);
     const bool nested = GENERATE(false, true);
     const bool primary = GENERATE(false, true);
     const std::string argument = GENERATE(std::string("`__LINE__"), std::string("`BODY_LINE"));
@@ -2695,6 +3311,8 @@ TEST_CASE("Later runtime line arguments preserve native diagnostics across multi
     auto cfg = localDiagnosticConfig;
     if (certify)
         cfg.insert(cfg.size() - 1, ",\"experimentalMethodBodyCertification\":true");
+    cfg.insert(cfg.size() - 1, ",\"methodBodyLineSyntaxCacheKiB\":" +
+                                   std::to_string(syntaxBudget));
     workspace.write(".slang/server.json", cfg);
     BodyTestServer server(workspace.params());
     server.setBuildFile((workspace.root / "design.f").string());
@@ -2705,7 +3323,16 @@ TEST_CASE("Later runtime line arguments preserve native diagnostics across multi
         text.replace(text.find("local_1 + charl"), 15,
                      version == 3 ? "local_0 + charl" : "local_0 +\n charl");
         change(server, doc.m_uri, version, text);
+        const auto beforeDiagnostics = server.m_driver->sm.getSourceLocationEntryCount();
         server.runBackgroundWork({});
+        if (version == 4) {
+            // Returning to a proven height must honor the configured memo budget
+            // without allocating another neighbour replay buffer.
+            if (certify && syntaxBudget)
+                CHECK(server.m_driver->sm.getSourceLocationEntryCount() == beforeDiagnostics);
+            else
+                CHECK(server.m_driver->sm.getSourceLocationEntryCount() > beforeDiagnostics);
+        }
         REQUIRE(state(server).active);
         const auto result = diagnosticState(server);
         INFO(result.localDiagnosticDecline);
@@ -2871,6 +3498,7 @@ TEST_CASE("Multiline local diagnostics keep later method hover and resolve curre
 TEST_CASE("Nested edited-body macros cannot alter the retained following environment",
           "[method-body-diagnostics][later-macro-lines]") {
     const bool argument = GENERATE(false, true);
+    const bool macroProof = GENERATE(false, true);
     Workspace workspace;
     auto original = std::string("`define AFTER 1\n`define STATE `define AFTER "
                                 "missing_user_name\n`define NESTED `STATE\n`define WRAP(x) x\n") +
@@ -2878,6 +3506,7 @@ TEST_CASE("Nested edited-body macros cannot alter the retained following environ
     original.replace(original.rfind("return value;"), 13, "return `AFTER;");
     workspace.write("item.svh", original);
     auto cfg = localDiagnosticConfig;
+    if (macroProof) cfg.insert(1, "\"experimentalMethodBodyMacroProof\":true,");
     cfg.insert(cfg.size() - 1, ",\"experimentalMethodBodyCertification\":true");
     workspace.write(".slang/server.json", cfg);
     BodyTestServer server(workspace.params());
@@ -3000,6 +3629,49 @@ void addProofWitnessFiles(Workspace& workspace) {
 }
 } // namespace
 
+TEST_CASE("Large input proofs handle concurrent cancellation and retry",
+          "[body-certification][batched-file-proof][parallel-file-proof]") {
+    const auto delay = GENERATE(0, 50, 500);
+    Workspace workspace;
+    addProofWitnessFiles(workspace);
+    workspace.write(".slang/server.json", certificationConfig());
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", header);
+    doc.doc->getAnalysis();
+    change(server, doc.m_uri, 2, edited());
+    REQUIRE(server.m_methodScope);
+    REQUIRE(server.m_methodScope->valid(server.m_config, {}));
+    for (int iteration = 0; iteration < 8; ++iteration) {
+        lsp::RequestContext ctx("concurrent physical proof cancellation", 284);
+        std::atomic<bool> begin = false;
+        std::thread canceller([&] {
+            while (!begin.load(std::memory_order_acquire))
+                std::this_thread::yield();
+            if (delay)
+                std::this_thread::sleep_for(std::chrono::microseconds(delay));
+            ctx.cancel();
+        });
+        bool accepted = false, cancelled = false;
+        begin.store(true, std::memory_order_release);
+        try {
+            accepted = server.m_methodScope->valid(server.m_config, ctx);
+        }
+        catch (const lsp::RequestCancelled&) {
+            cancelled = true;
+        }
+        canceller.join();
+        // Either cancellation arrived before completion, or this proof finished
+        // first. Neither outcome may leave an input failure or borrowed reads
+        // referring to its invocation-local expected bytes and descriptors.
+        CHECK((accepted || cancelled));
+        CHECK(ctx.isCancelled());
+        CHECK_FALSE(server.m_methodScope->observedInputChange());
+        CHECK(server.m_methodScope->valid(server.m_config, {}));
+        CHECK(doc.doc->getVersion() == 2);
+    }
+}
+
 TEST_CASE("Large content proofs observe equal-size dependency changes before watch events",
           "[body-certification][batched-file-proof]") {
     const bool changed = GENERATE(false, true);
@@ -3055,6 +3727,48 @@ TEST_CASE("Large content proofs observe equal-size dependency changes before wat
     CHECK(actualDiagnostics == diagnosticMap(native));
 }
 
+TEST_CASE("Batched absence proofs observe a newly available earlier include",
+          "[body-certification][batched-file-proof][file-proof-absence]") {
+    const auto kind = GENERATE("file", "symlink", "directory");
+    Workspace workspace;
+    addProofWitnessFiles(workspace);
+    std::filesystem::create_directory(workspace.root / "fallback");
+    std::filesystem::rename(workspace.root / "item.svh", workspace.root / "fallback/item.svh");
+    auto recipe = std::string("+incdir+fallback\n");
+    std::ifstream original(workspace.root / "design.f");
+    recipe.append(std::istreambuf_iterator<char>(original), {});
+    workspace.write("design.f", recipe);
+    workspace.write(".slang/server.json", certificationConfig());
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("fallback/item.svh", header);
+    doc.doc->getAnalysis();
+    change(server, doc.m_uri, 2, edited());
+    REQUIRE(server.m_methodScope);
+    REQUIRE(server.m_methodScope->valid(server.m_config, {}));
+    bool appeared = false;
+    lsp::RequestContext ctx("absent include became available", 283);
+    ctx.setCheckpointObserverForTesting([&](std::string_view where) {
+        // Directory names have already been checked. The per-request physical
+        // absence proof must still observe a new candidate before publication.
+        if (where != "method input validation" || appeared)
+            return;
+        appeared = true;
+        if (std::string_view(kind) == "file")
+            workspace.write("item.svh", header);
+        else if (std::string_view(kind) == "symlink")
+            std::filesystem::create_symlink(workspace.root / "fallback/item.svh",
+                                            workspace.root / "item.svh");
+        else
+            std::filesystem::create_directory(workspace.root / "item.svh");
+    });
+    CHECK_FALSE(server.m_methodScope->valid(server.m_config, ctx));
+    REQUIRE(appeared);
+    CHECK(server.m_methodScope->observedInputChange());
+    std::filesystem::remove_all(workspace.root / "item.svh");
+    CHECK(server.m_methodScope->valid(server.m_config, {}));
+}
+
 TEST_CASE("Large content proof failure closes files before discarding its owner",
           "[body-certification][batched-file-proof]") {
     const auto failure = GENERATE("missing", "directory", "symlink");
@@ -3093,6 +3807,106 @@ TEST_CASE("Large content proof failure closes files before discarding its owner"
     native.openFile("item.svh", text);
     CHECK(rfl::json::write(actual) == rfl::json::write(native.getDocHover(params)));
 }
+
+#if defined(__APPLE__)
+TEST_CASE("Content proofs release directory access on cancellation and descriptor pressure",
+          "[body-certification][batched-file-proof][file-proof-directories]") {
+    const bool cancel = GENERATE(false, true);
+    Workspace workspace;
+    std::string recipe = "+incdir+.\nprelude.sv\nowner.sv\ntail.sv\n";
+    for (int i = 0; i < 80; ++i) {
+        const auto directory = "proof_parent_" + std::to_string(i);
+        std::filesystem::create_directory(workspace.root / directory);
+        const auto name = directory + "/dep.sv";
+        workspace.write(name, "package proof_" + std::to_string(i) + "; int fixed; endpackage\n");
+        recipe += name + "\n";
+    }
+    workspace.write("design.f", recipe);
+    workspace.write(".slang/server.json", certificationConfig());
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", header);
+    doc.doc->getAnalysis();
+    change(server, doc.m_uri, 2, edited());
+    REQUIRE(server.m_methodScope);
+    auto descriptorCount = [] {
+        return std::distance(std::filesystem::directory_iterator("/dev/fd"),
+                             std::filesystem::directory_iterator{});
+    };
+    const auto before = descriptorCount();
+    struct rlimit original;
+    REQUIRE(::getrlimit(RLIMIT_NOFILE, &original) == 0);
+    auto limited = original;
+    limited.rlim_cur = std::min<rlim_t>(original.rlim_cur, 48);
+    REQUIRE(before + 8 < limited.rlim_cur);
+    REQUIRE(::setrlimit(RLIMIT_NOFILE, &limited) == 0);
+    auto restore = slang::ScopeGuard([&] { ::setrlimit(RLIMIT_NOFILE, &original); });
+    size_t reads = 0;
+    lsp::RequestContext ctx("directory descriptor pressure", 281);
+    ctx.setCheckpointObserverForTesting([&](std::string_view where) {
+        if (where == "method input validation" && ++reads == 12 && cancel)
+            ctx.cancel();
+    });
+    if (cancel) {
+        CHECK_THROWS_AS(server.m_methodScope->valid(server.m_config, ctx), lsp::RequestCancelled);
+        CHECK_FALSE(server.m_methodScope->observedInputChange());
+    }
+    else {
+        CHECK(server.m_methodScope->valid(server.m_config, ctx));
+    }
+    CHECK(descriptorCount() == before);
+    CHECK(server.m_methodScope->valid(server.m_config, {}));
+    CHECK(descriptorCount() == before);
+}
+
+TEST_CASE("Directory access cannot certify a file in a moved input directory",
+          "[body-certification][batched-file-proof][file-proof-directories]") {
+    Workspace workspace;
+    addProofWitnessFiles(workspace);
+    std::filesystem::create_directory(workspace.root / "proofs");
+    std::string recipe = "+incdir+.\nprelude.sv\nowner.sv\ntail.sv\n";
+    for (int i = 0; i < 80; ++i) {
+        const auto name = "proof_" + std::to_string(i) + ".sv";
+        std::filesystem::rename(workspace.root / name, workspace.root / "proofs" / name);
+        recipe += "proofs/" + name + "\n";
+    }
+    workspace.write("design.f", recipe);
+    workspace.write(".slang/server.json", certificationConfig());
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", header);
+    doc.doc->getAnalysis();
+    change(server, doc.m_uri, 2, edited());
+    REQUIRE(server.m_methodScope);
+    bool firstRead = false, moved = false;
+    const auto first = (workspace.root / "proofs/proof_0.sv").string();
+    lsp::RequestContext ctx("directory replacement during proof", 282);
+    ctx.setCheckpointObserverForTesting([&](std::string_view where) {
+        if (where == first)
+            firstRead = true;
+        if (firstRead && !moved && where == "method input validation") {
+            moved = true;
+            std::filesystem::rename(workspace.root / "proofs", workspace.root / "moved");
+            std::filesystem::copy(workspace.root / "moved", workspace.root / "proofs",
+                                  std::filesystem::copy_options::recursive);
+        }
+    });
+    CHECK_FALSE(server.m_methodScope->valid(server.m_config, ctx));
+    REQUIRE(moved);
+    CHECK(server.m_methodScope->observedInputChange());
+    // Retry must use the current namespace, not a directory handle from this proof.
+    server.m_methodScope.reset();
+    doc.m_text = edited();
+    const lsp::HoverParams params{.textDocument = {.uri = doc.m_uri},
+                                  .position = doc.getPosition(doc.m_text.rfind("charl") + 2)};
+    auto actual = server.getDocHover(params);
+    bodyConfig(workspace, false);
+    BodyTestServer native(workspace.params());
+    native.setBuildFile((workspace.root / "design.f").string());
+    native.openFile("item.svh", edited());
+    CHECK(rfl::json::write(actual) == rfl::json::write(native.getDocHover(params)));
+}
+#endif
 
 TEST_CASE("Large content proof cancellation preserves publication and retries its latest input",
           "[body-certification][batched-file-proof]") {
@@ -3315,6 +4129,37 @@ TEST_CASE("Strict file proofs reject replaced parents before serving a fresh nat
     CHECK(rfl::json::write(actual) == rfl::json::write(expected));
     CHECK(diagnostics == diagnosticMap(native));
 }
+
+#if defined(__APPLE__)
+TEST_CASE("Complete file proof observes revoked read permission before publication",
+          "[body-certification][batched-file-proof][file-proof-permissions]") {
+    if (::geteuid() == 0)
+        SKIP("The root credential can read files without owner read permission");
+    Workspace workspace;
+    addProofWitnessFiles(workspace);
+    workspace.write(".slang/server.json", certificationConfig());
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", header);
+    doc.doc->getAnalysis();
+    change(server, doc.m_uri, 2, edited());
+    REQUIRE(server.m_methodScope);
+    REQUIRE(server.m_methodScope->valid(server.m_config, {}));
+    const auto file = workspace.root / "proof_41.sv";
+    const auto permissions = std::filesystem::status(file).permissions();
+    auto restore = slang::ScopeGuard([&] { std::filesystem::permissions(file, permissions); });
+    std::filesystem::permissions(file, std::filesystem::perms::none);
+    const int fresh = ::open(file.c_str(), O_RDONLY | O_CLOEXEC);
+    if (fresh >= 0)
+        ::close(fresh);
+    REQUIRE(fresh < 0);
+    CHECK_FALSE(server.m_methodScope->valid(server.m_config, {}));
+    CHECK(server.m_methodScope->observedInputChange());
+    std::filesystem::permissions(file, permissions);
+    CHECK(server.m_methodScope->valid(server.m_config, {}));
+}
+
+#endif
 
 TEST_CASE("Strict file proofs retain exact filename identity after a case-only rename",
           "[body-certification][batched-file-proof]") {
@@ -3613,6 +4458,7 @@ TEST_CASE("Native completion tickets survive the first source history retirement
         void retireNow() {
             m_contextBudget = m_contextHardBudget = 1;
             onForegroundComplete();
+            admitRetirementInputs({});
         }
     };
     auto params = workspace.params();
@@ -3688,15 +4534,12 @@ TEST_CASE("Independent native receiver reads admit changed ordinary property use
     server.runBackgroundWork({});
     const auto status = diagnosticState(server);
     INFO(status.localDiagnosticDecline);
-    if (std::string_view(peerKind) == "live")
-        CHECK(status.localDiagnosticUpdates == 1);
-    else if (!isDead)
-        CHECK(status.localDiagnosticUpdates == 0);
-    checkNativeDiagnostics(workspace, server, text);
+    CHECK(status.localDiagnosticUpdates == 1);
+    checkNativeDiagnostics(workspace, server, text, true);
     // Removal must restore diagnostics using the same independent peer evidence.
     change(server, doc.m_uri, 3, original);
     server.runBackgroundWork({});
-    checkNativeDiagnostics(workspace, server, original);
+    checkNativeDiagnostics(workspace, server, original, true);
 }
 
 TEST_CASE("Receiver dependency capture cancellation retains the latest input",
@@ -3840,6 +4683,8 @@ TEST_CASE("Provisional sync cancels native input admission without publishing st
     auto text = edited();
     change(server, doc.m_uri, 2, text);
     REQUIRE(server.m_methodScope);
+    server.m_driver->deferDocumentSave({.textDocument = {.uri = doc.m_uri}});
+    REQUIRE(server.m_driver->hasDeferredSaveIndexes());
     const auto previous = diagnosticMap(server);
     lsp::RequestContext ctx("textDocument/codeLens", lsp::ID_t{717});
     bool reached = false;
@@ -3851,9 +4696,3360 @@ TEST_CASE("Provisional sync cancels native input admission without publishing st
     });
     CHECK_THROWS_AS(server.onBeforeMessage(ctx), lsp::RequestCancelled);
     REQUIRE(reached);
+    CHECK(server.m_driver->hasDeferredSaveIndexes());
     CHECK(diagnosticMap(server) == previous);
     CHECK(server.m_driver->getDocument(doc.m_uri)->getText() == text + '\0');
     server.onBeforeMessage(lsp::RequestContext("textDocument/codeLens", lsp::ID_t{718}));
+    CHECK_FALSE(server.m_driver->hasDeferredSaveIndexes());
     server.runBackgroundWork({});
     checkNativeDiagnostics(workspace, server, text);
 }
+
+TEST_CASE("Independent completed Native callers certify newly used ordinary methods",
+          "[method-body-diagnostics][independent-native-callee]") {
+    const auto peerKind = GENERATE("live", "extern", "absent", "edited-only", "navigation",
+                                   "static");
+    INFO(peerKind);
+    Workspace workspace;
+    workspace.write(".slang/server.json", certificationConfig());
+    auto original = header;
+    if (std::string_view(peerKind) == "live" || std::string_view(peerKind) == "static")
+        original.insert(original.rfind("endclass"),
+                        "  function int unedited_peer(); return later(7); endfunction\n");
+    else if (std::string_view(peerKind) == "extern") {
+        original.insert(original.rfind("endclass"), "  extern function int unedited_peer();\n");
+        original += "function int Accumulator::unedited_peer(); return later(7); endfunction\n";
+    }
+    if (std::string_view(peerKind) == "static")
+        original.insert(original.find("function int later"), "static ");
+    const std::string previous = "(local_1 + charl)";
+    const std::string next = "(later(local_1) + charl)";
+    const bool removal = std::string_view(peerKind) == "edited-only";
+    if (removal)
+        original.replace(original.find(previous), previous.size(), next);
+    workspace.write("item.svh", original);
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    if (std::string_view(peerKind) == "navigation") {
+        auto hover = server.getDocHover(
+            {.textDocument = {.uri = doc.m_uri},
+             .position = doc.getPosition(original.find("function int later") + 14)});
+        REQUIRE(hover);
+    }
+    auto text = original;
+    text.replace(text.find(removal ? next : previous), removal ? next.size() : previous.size(),
+                 removal ? previous : next);
+    change(server, doc.m_uri, 2, text);
+    server.runBackgroundWork({});
+    const auto status = diagnosticState(server);
+    INFO(status.localDiagnosticDecline);
+    CHECK(status.localDiagnosticUpdates == 1);
+    checkNativeDiagnostics(workspace, server, text, true);
+    // Removing the new call must also retain complete Native diagnostics.
+    change(server, doc.m_uri, 3, original);
+    server.runBackgroundWork({});
+    checkNativeDiagnostics(workspace, server, original, true);
+}
+
+TEST_CASE("Automatic package and module subroutines update local diagnostics",
+          "[method-body-diagnostics][automatic-context-diagnostics]") {
+    const auto context = GENERATE("package", "module");
+    const bool task = GENERATE(false, true);
+    const bool used = GENERATE(false, true);
+    INFO(context << " task=" << task << " used=" << used);
+    Workspace workspace;
+    workspace.write(".slang/server.json", certificationConfig());
+    const std::string original =
+        task ? "task automatic work(input int arg);\n  int local_value = arg;\n  local_value += "
+               "1;\nendtask\n"
+             : "function automatic int work(input int arg);\n  int local_value = arg;\n  return "
+               "local_value + 1;\nendfunction\n";
+    workspace.write("item.svh", original);
+    const bool package = std::string_view(context) == "package";
+    const std::string caller = task ? "always_comb work(runtime_value);\n"
+                                    : "initial result = work(runtime_value);\n";
+    const std::string variables = "int runtime_value; int result;\n";
+    if (package) {
+        workspace.write("owner.sv", "package owner;\n`include \"item.svh\"\nendpackage\n");
+        workspace.write("tail.sv", "module tail; import owner::*;\n" + variables +
+                                       (used ? caller : "") + "endmodule\n");
+    }
+    else {
+        workspace.write("owner.sv", "module owner;\n" + variables + "`include \"item.svh\"\n" +
+                                        (used ? caller : "") + "endmodule\n");
+    }
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    const std::vector<std::string> replacements =
+        task ? std::vector<std::string>{"#1; local_value += 2;", "#3;\n  local_value += 3;",
+                                        "local_value += 4;"}
+             : std::vector<std::string>{"return local_value + 2;",
+                                        "return local_value +\n    unknown_user_value;",
+                                        "return local_value + 4;"};
+    const std::string old = task ? "local_value += 1;" : "return local_value + 1;";
+    uint64_t updates = 0;
+    for (const auto& replacement : replacements) {
+        auto text = original;
+        text.replace(text.find(old), old.size(), replacement);
+        change(server, doc.m_uri, int(++updates) + 1, text);
+        server.runBackgroundWork({});
+        const auto status = diagnosticState(server);
+        INFO(status.localDiagnosticDecline);
+        CHECK(status.localDiagnosticUpdates == updates);
+        checkNativeDiagnostics(workspace, server, text, true);
+    }
+}
+
+TEST_CASE("Automatic nonclass diagnostics preserve external dependency boundaries",
+          "[method-body-diagnostics][automatic-context-diagnostics]") {
+    const auto boundary = GENERATE("static-lifetime", "ref-formal", "output-formal", "inout-formal",
+                                   "persistent-write", "constant-evaluation", "multiple-instances",
+                                   "interface-context", "program-context");
+    INFO(boundary);
+    Workspace workspace;
+    workspace.write(".slang/server.json", certificationConfig());
+    std::string original = "function automatic int work(input int arg);\n  int local_value = "
+                           "arg;\n  return local_value + 1;\nendfunction\n";
+    const auto kind = std::string_view(boundary);
+    if (kind == "static-lifetime")
+        original.replace(original.find("automatic "), 10, "");
+    else if (kind == "ref-formal")
+        original.replace(original.find("input int"), 9, "ref int");
+    else if (kind == "output-formal")
+        original.replace(original.find("input int"), 9, "output int");
+    else if (kind == "inout-formal")
+        original.replace(original.find("input int"), 9, "inout int");
+    else if (kind == "persistent-write")
+        original.insert(original.find("  return"), "  global_value = arg;\n");
+    workspace.write("item.svh", original);
+    if (kind == "persistent-write" || kind == "multiple-instances") {
+        workspace.write("owner.sv",
+                        "module owner; int global_value;\n`include \"item.svh\"\nendmodule\n");
+        if (kind == "multiple-instances")
+            workspace.write("tail.sv", "module tail; owner first(); owner second(); endmodule\n");
+    }
+    else if (kind == "interface-context" || kind == "program-context") {
+        const std::string keyword = kind == "interface-context" ? "interface" : "program";
+        workspace.write("owner.sv",
+                        keyword + " owner;\n`include \"item.svh\"\nend" + keyword + "\n");
+        workspace.write("tail.sv", "module tail; owner environment(); endmodule\n");
+    }
+    else {
+        workspace.write("owner.sv", "package owner;\n`include \"item.svh\"\nendpackage\n");
+        if (kind == "constant-evaluation")
+            workspace.write("tail.sv",
+                            "module tail; localparam int VALUE = owner::work(3); endmodule\n");
+    }
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    auto text = original;
+    text.replace(text.find("local_value + 1"), 15, "local_value + 2");
+    change(server, doc.m_uri, 2, text);
+    server.runBackgroundWork({});
+    CHECK(diagnosticState(server).localDiagnosticUpdates == (kind == "persistent-write" ? 1 : 0));
+    checkNativeDiagnostics(workspace, server, text, true);
+}
+
+TEST_CASE("Automatic nonclass edits preserve caller static-driver diagnostics",
+          "[method-body-diagnostics][automatic-context-driver-closure]") {
+    const auto context = GENERATE("package", "module");
+    const bool initializer = GENERATE(false, true);
+    const bool transitive = GENERATE(false, true);
+    INFO(context << " initializer=" << initializer << " transitive=" << transitive);
+    Workspace workspace;
+    workspace.write(".slang/server.json", certificationConfig());
+    const std::string original = "function automatic int work(input int arg);\n"
+                                 "  static int saved;\n"
+                                 "  return arg;\n"
+                                 "endfunction\n";
+    workspace.write("item.svh", original);
+    const std::string callee = transitive ? "wrapper" : "work";
+    const std::string wrapper =
+        transitive
+            ? "function automatic int wrapper(input int value); return work(value); endfunction\n"
+            : "";
+    const std::string initializerCaller = initializer
+                                              ? "int boot_result = " + callee + "(first_input);\n"
+                                              : "";
+    const std::string caller = "int first_input, second_input, first_result, second_result;\n"
+                               "always_comb first_result = " +
+                               callee +
+                               "(first_input);\n"
+                               "always_comb second_result = " +
+                               callee + "(second_input);\n";
+    if (std::string_view(context) == "package") {
+        workspace.write("owner.sv",
+                        "package owner;\n`include \"item.svh\"\n" + wrapper + "endpackage\n");
+        workspace.write("tail.sv", "module tail; import owner::*;\n" + caller + initializerCaller +
+                                       "endmodule\n");
+    }
+    else {
+        workspace.write("owner.sv", "module owner;\n`include \"item.svh\"\n" + wrapper + caller +
+                                        initializerCaller + "endmodule\n");
+    }
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    auto text = original;
+    text.replace(text.find("return arg;"), 11, "saved = arg; return saved;");
+    change(server, doc.m_uri, 2, text);
+    server.runBackgroundWork({});
+    CHECK(diagnosticState(server).localDiagnosticUpdates == 1);
+    checkNativeDiagnostics(workspace, server, text, true);
+    bool conflict = false;
+    for (const auto& uri : server.client.diagnosticPublications)
+        for (const auto& diagnostic : server.client.getDiagnostics(uri))
+            conflict |= diagnostic.code &&
+                        rfl::json::write(*diagnostic.code) == "\"multiple-always-assigns\"";
+    CHECK(conflict);
+    auto changed = text;
+    changed.replace(changed.find("saved = arg;"), 12, "saved = arg + 1;");
+    change(server, doc.m_uri, 3, changed);
+    const auto beforeCancellation = diagnosticMap(server);
+    lsp::RequestContext cancellation("effect replay cancellation", 991);
+    bool reached = false;
+    cancellation.setCheckpointObserverForTesting([&](std::string_view phase) {
+        if (phase == "local effect replay procedure") {
+            reached = true;
+            cancellation.cancel();
+        }
+    });
+    CHECK_THROWS_AS(server.runBackgroundWork(cancellation), lsp::RequestCancelled);
+    CHECK(reached);
+    CHECK(diagnosticMap(server) == beforeCancellation);
+    CHECK(server.m_driver->getDocument(doc.m_uri)->textMatches(changed));
+    server.runBackgroundWork({});
+    CHECK(diagnosticState(server).localDiagnosticUpdates == 2);
+    checkNativeDiagnostics(workspace, server, changed, true);
+    change(server, doc.m_uri, 4, original);
+    server.runBackgroundWork({});
+    CHECK(diagnosticState(server).localDiagnosticUpdates == 3);
+    checkNativeDiagnostics(workspace, server, original, true);
+    change(server, doc.m_uri, 5, text);
+    server.runBackgroundWork({});
+    CHECK(diagnosticState(server).localDiagnosticUpdates == 4);
+    checkNativeDiagnostics(workspace, server, text, true);
+}
+
+TEST_CASE("Automatic body edits update previously unresolved external local lookups",
+          "[method-body-diagnostics][automatic-context-external-lookup]") {
+    Workspace workspace;
+    workspace.write(".slang/server.json", certificationConfig());
+    const std::string original = "function automatic int work(input int arg);\n"
+                                 "  return arg;\n"
+                                 "endfunction\n";
+    workspace.write("item.svh", original);
+    workspace.write("owner.sv", "module owner;\n`include \"item.svh\"\nendmodule\n");
+    workspace.write("tail.sv", "module tail; owner unit(); int result;\n"
+                               "initial result = unit.work.introduced;\nendmodule\n");
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    auto text = original;
+    text.insert(text.find("  return"), "  static int introduced;\n");
+    change(server, doc.m_uri, 2, text);
+    server.runBackgroundWork({});
+    checkNativeDiagnostics(workspace, server, text, true);
+    change(server, doc.m_uri, 3, original);
+    server.runBackgroundWork({});
+    checkNativeDiagnostics(workspace, server, original, true);
+}
+
+TEST_CASE("Package body line edits retain independent later class macros",
+          "[method-body-diagnostics][later-declaration-macros]") {
+    Workspace workspace;
+    workspace.write(".slang/server.json", certificationConfig());
+    const auto declaration =
+        GENERATE("typedef int member_t;",
+                 "typedef int member_t; static function int get_kind(); return 0; endfunction",
+                 "localparam string FILE_NAME = `__FILE__; typedef int member_t;");
+    const std::string original =
+        "`define MEMBER_TYPE " + std::string(declaration) +
+        "\n"
+        "`define REPORT(MSG) report(MSG, `__LINE__);\n"
+        "function automatic int work(input int arg);\n"
+        "  int local_value = arg;\n"
+        "  return local_value + 1;\n"
+        "endfunction\n"
+        "class Later;\n"
+        "  `MEMBER_TYPE\n"
+        "  function void report(input string msg, input int line_number); endfunction\n"
+        "  function void later(); `REPORT(\"hello\") endfunction\n"
+        "endclass\n";
+    workspace.write("item.svh", original);
+    workspace.write("tail.sv", "module tail; int value, result;\n"
+                               "initial result = owner::work(value); endmodule\n");
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    const std::string replaced = "return local_value + 1;";
+    uint64_t updates = 0;
+    for (const std::string replacement :
+         {"return local_value +\n    2;", "return local_value +\n    unknown_user_value;",
+          "return local_value + 3;"}) {
+        auto text = original;
+        text.replace(text.find(replaced), replaced.size(), replacement);
+        change(server, doc.m_uri, int(++updates) + 1, text);
+        server.runBackgroundWork({});
+        const auto status = diagnosticState(server);
+        INFO(status.localDiagnosticDecline);
+        CHECK(status.localDiagnosticUpdates == updates);
+        CHECK(state(server).active);
+        checkNativeDiagnostics(workspace, server, text, true);
+    }
+}
+
+TEST_CASE("Later declaration macro proof preserves semantic line dependencies",
+          "[method-body-diagnostics][later-declaration-macros]") {
+    const auto kind = GENERATE("direct", "indirect", "default-argument", "actual-argument",
+                               "redefined", "dynamic-name", "dynamic-name-collision");
+    INFO(kind);
+    Workspace workspace;
+    workspace.write(".slang/server.json", certificationConfig());
+    std::string definitions, invocation = "`MEMBER";
+    const std::string width = "localparam int WIDTH = ";
+    if (std::string_view(kind) == "direct")
+        definitions = "`define MEMBER " + width + "`__LINE__; typedef logic[WIDTH-1:0] word_t;\n";
+    else if (std::string_view(kind) == "indirect" || std::string_view(kind) == "redefined") {
+        definitions = "`define LINE_VALUE `__LINE__\n`define MEMBER " + width +
+                      "`LINE_VALUE; typedef logic[WIDTH-1:0] word_t;\n";
+    }
+    else if (std::string_view(kind) == "default-argument") {
+        definitions = "`define MEMBER(W=`__LINE__) " + width +
+                      "W; typedef logic[WIDTH-1:0] word_t;\n";
+        invocation = "`MEMBER()";
+    }
+    else if (std::string_view(kind) == "actual-argument") {
+        definitions = "`define MEMBER(W) " + width + "W; typedef logic[WIDTH-1:0] word_t;\n";
+        invocation = "`MEMBER(`__LINE__)";
+    }
+    else {
+        definitions = (std::string_view(kind) == "dynamic-name-collision" ? "`define M 1\n" : "") +
+                      std::string("`define MEMBER(M) ") + width +
+                      "`M; typedef logic[WIDTH-1:0] word_t;\n";
+        invocation = "`MEMBER(__LINE__)";
+    }
+    const std::string original =
+        definitions +
+        "function automatic int work(input int arg);\n  return arg + 1;\nendfunction\n"
+        "class Later;\n" +
+        invocation +
+        "\nfunction void sink(input word_t value); logic dst; dst = value; "
+        "endfunction\nendclass\n" +
+        (std::string_view(kind) == "redefined" ? "`undef LINE_VALUE\n`define LINE_VALUE 8\n" : "");
+    workspace.write("item.svh", original);
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    auto text = original;
+    const std::string replaced = "return arg + 1;";
+    text.replace(text.find(replaced), replaced.size(), "return arg +\n    2;");
+    change(server, doc.m_uri, 2, text);
+    server.runBackgroundWork({});
+    if (std::string_view(kind) == "default-argument") {
+        // A default macro argument retains its definition-site line. Prove the
+        // unchanged type independently with two fresh native compilations.
+        auto freshWidth = [](const std::string& content) {
+            SourceManager sources;
+            auto tree = syntax::SyntaxTree::fromText("package owner;\n" + content + "endpackage\n",
+                                                     sources);
+            ast::Compilation compilation;
+            compilation.addSyntaxTree(tree);
+            (void)compilation.getSemanticDiagnostics();
+            auto package = compilation.getPackage("owner");
+            REQUIRE(package);
+            auto cls = package->find("Later");
+            REQUIRE(cls);
+            auto alias = cls->as<ast::ClassType>().find("word_t");
+            REQUIRE(alias);
+            return alias->as<ast::TypeAliasType>().getCanonicalType().getBitWidth();
+        };
+        CHECK(freshWidth(original) == freshWidth(text));
+        CHECK(state(server).active);
+        CHECK(diagnosticState(server).localDiagnosticUpdates == 1);
+    }
+    else {
+        CHECK_FALSE(state(server).active);
+        CHECK(diagnosticState(server).localDiagnosticUpdates == 0);
+    }
+    checkNativeDiagnostics(workspace, server, text, true);
+}
+
+TEST_CASE("Later declaration journal cancellation preserves the newest editor text",
+          "[method-body-diagnostics][later-declaration-macros][foreground-cancellation]") {
+    Workspace workspace;
+    workspace.write(".slang/server.json", certificationConfig());
+    const std::string original =
+        "`define MEMBER typedef int word_t;\n"
+        "function automatic int work(input int value); return value; endfunction\n"
+        "class Later; `MEMBER endclass\n";
+    workspace.write("item.svh", original);
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    auto text = original;
+    const std::string old = "return value;";
+    text.replace(text.find(old), old.size(), "return value +\n  2;");
+    bool reached = false;
+    lsp::RequestContext ctx("textDocument/didChange", std::nullopt);
+    ctx.setCheckpointObserverForTesting([&](std::string_view where) {
+        if (where == "later macro definition journal") {
+            reached = true;
+            ctx.cancelForContentChange();
+        }
+    });
+    CHECK_THROWS_AS(change(server, doc.m_uri, 2, text, ctx), lsp::RequestCancelled);
+    CHECK(reached);
+    CHECK(server.m_driver->getDocument(doc.m_uri)->getVersion() == 2);
+    CHECK(server.m_driver->getDocument(doc.m_uri)->getText() == text + '\0');
+    change(server, doc.m_uri, 3, original);
+    server.runBackgroundWork({});
+    checkNativeDiagnostics(workspace, server, original, true);
+}
+TEST_CASE("Package edits update methods generated across macro invocations",
+          "[method-body-diagnostics][generated-macro-methods]") {
+    const bool semanticLine = GENERATE(false, true);
+    Workspace workspace;
+    workspace.write(".slang/server.json", certificationConfig());
+    const std::string type = semanticLine ? "typedef logic[`__LINE__-1:0] word_t; "
+                                          : "typedef int word_t; ";
+    const std::string original =
+        "`define FACTORY_BEGIN(T) " + type +
+        "static function int get_kind(); return 0; endfunction "
+        "function void automate(input int op);\n"
+        "`define FIELD(V) report(\"field\", `__LINE__); V += op;\n"
+        "`define FACTORY_END endfunction\n"
+        "function automatic int work(input int arg);\n"
+        "  return arg + 1;\nendfunction\n"
+        "class Later;\nint state;\n"
+        "function void report(input string msg, input int line_number); endfunction\n"
+        "`FACTORY_BEGIN(Later)\n`FIELD(state)\n`FACTORY_END\n"
+        "function void sink(input word_t value); logic dst; dst = value; endfunction\n"
+        "endclass\n";
+    workspace.write("item.svh", original);
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    const std::string old = "return arg + 1;";
+    uint64_t updates = 0;
+    for (const std::string replacement :
+         {"return arg +\n  2;", "return arg +\n  missing_user_value;", "return arg + 3;"}) {
+        auto text = original;
+        text.replace(text.find(old), old.size(), replacement);
+        change(server, doc.m_uri, int(++updates) + 1, text);
+        server.runBackgroundWork({});
+        if (!semanticLine) {
+            INFO(diagnosticState(server).localDiagnosticDecline);
+            CHECK(state(server).active);
+            CHECK(diagnosticState(server).localDiagnosticUpdates == updates);
+        }
+        else if (updates == 1) {
+            CHECK_FALSE(state(server).active);
+            CHECK(diagnosticState(server).localDiagnosticUpdates == 0);
+        }
+        checkNativeDiagnostics(workspace, server, text, true);
+    }
+}
+
+TEST_CASE("Generated macro line proof rejects a recovered syntax baseline",
+          "[method-body-diagnostics][generated-macro-methods]") {
+    Workspace workspace;
+    workspace.write(".slang/server.json", certificationConfig());
+    const std::string original =
+        "`define START function void automate();\n"
+        "`define FIELD report(`__LINE__) report(1);\n"
+        "`define FINISH endfunction\n"
+        "function automatic int work(input int arg); return arg + 1; endfunction\n"
+        "class Later;\nfunction void report(input int line_number); endfunction\n"
+        "`START\n`FIELD\n`FINISH\nendclass\n";
+    workspace.write("item.svh", original);
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    auto text = original;
+    const std::string old = "return arg + 1;";
+    text.replace(text.find(old), old.size(), "return arg +\n  2;");
+    change(server, doc.m_uri, 2, text);
+    server.runBackgroundWork({});
+    CHECK_FALSE(state(server).active);
+    CHECK(diagnosticState(server).localDiagnosticUpdates == 0);
+    checkNativeDiagnostics(workspace, server, text, true);
+}
+
+TEST_CASE("Generated macro line proof checks every generic specialization",
+          "[method-body-diagnostics][generated-macro-methods]") {
+    const bool narrowed = GENERATE(false, true);
+    Workspace workspace;
+    workspace.write(".slang/server.json", certificationConfig());
+    const std::string original =
+        "`define START function void automate();\n"
+        "`define FIELD report(`__LINE__);\n"
+        "`define FINISH endfunction\n"
+        "function automatic int work(input int arg); return arg + 1; endfunction\n"
+        "class Later #(type T=int, int ID=0);\n"
+        "function void report(input T line_number); endfunction\n"
+        "`START\n`FIELD\n`FINISH\nendclass\n"
+        "Later#(int) first;\nLater#(" +
+        std::string(narrowed ? "byte" : "int") +
+        ", 1) second;\n"
+        "function automatic void invoke(); first.automate(); second.automate(); endfunction\n";
+    workspace.write("item.svh", original);
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    const std::string old = "return arg + 1;";
+    uint64_t updates = 0;
+    for (const std::string replacement :
+         {"return arg +\n  2;", "return arg +\n  missing_user_value;", "return arg + 3;"}) {
+        auto text = original;
+        text.replace(text.find(old), old.size(), replacement);
+        change(server, doc.m_uri, int(++updates) + 1, text);
+        server.runBackgroundWork({});
+        INFO(diagnosticState(server).localDiagnosticDecline);
+        const auto overlay = state(server);
+        if (narrowed && updates == 1) {
+            CHECK_FALSE(overlay.active);
+            CHECK(diagnosticState(server).localDiagnosticUpdates == 0);
+            CHECK(overlay.decline == "macro line value changes semantic structure");
+        }
+        else if (!narrowed) {
+            CHECK(overlay.active);
+            CHECK(diagnosticState(server).localDiagnosticUpdates == updates);
+        }
+        checkNativeDiagnostics(workspace, server, text, true);
+    }
+}
+
+TEST_CASE("Generated macro replay cancellation preserves the latest text",
+          "[method-body-diagnostics][generated-macro-methods][foreground-cancellation]") {
+    const auto boundary = GENERATE("native generated macro contexts", "macro replay environment",
+                                   "native macro expansion token evidence",
+                                   "macro replay preprocessing");
+    Workspace workspace;
+    workspace.write(".slang/server.json", certificationConfig());
+    const std::string original =
+        "`define START function void automate();\n"
+        "`define FIELD report(`__LINE__);\n"
+        "`define FINISH endfunction\n"
+        "function automatic int work(input int arg); return arg + 1; endfunction\n"
+        "class Later;\nfunction void report(input int line_number); endfunction\n"
+        "`START\n`FIELD\n`FINISH\nendclass\n";
+    workspace.write("item.svh", original);
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    auto text = original;
+    const std::string old = "return arg + 1;";
+    text.replace(text.find(old), old.size(), "return arg +\n  2;");
+    bool reached = false;
+    lsp::RequestContext ctx("textDocument/didChange", std::nullopt);
+    ctx.setCheckpointObserverForTesting([&](std::string_view where) {
+        if (where == boundary) {
+            reached = true;
+            ctx.cancelForContentChange();
+        }
+    });
+    CHECK_THROWS_AS(change(server, doc.m_uri, 2, text, ctx), lsp::RequestCancelled);
+    REQUIRE(reached);
+    CHECK(server.m_driver->getDocument(doc.m_uri)->getVersion() == 2);
+    CHECK(server.m_driver->getDocument(doc.m_uri)->getText() == text + '\0');
+    change(server, doc.m_uri, 3, original);
+    server.runBackgroundWork({});
+    checkNativeDiagnostics(workspace, server, original, true);
+}
+
+TEST_CASE("Generic macro syntax identity cancellation retains current input",
+          "[method-body-diagnostics][generated-macro-methods][foreground-cancellation]") {
+    const auto boundary = GENERATE("generated macro query syntax identity",
+                                   "before generated macro query syntax witness commit");
+    const bool nativeView = GENERATE(false, true);
+    CAPTURE(boundary, nativeView);
+    bool declined = false;
+    Workspace workspace;
+    workspace.write(".slang/server.json", certificationConfig());
+    const std::string original =
+        "`define START function void automate();\n"
+        "`define FIELD report(`__LINE__);\n"
+        "`define FINISH endfunction\n"
+        "function automatic int work(input int arg); return arg + 1; endfunction\n"
+        "class Later #(int N=0);\nfunction void report(input int line_number); endfunction\n"
+        "`START\n`FIELD\n`FINISH\nendclass\n"
+        "Later#(0) first; Later#(1) second;\n";
+    workspace.write("item.svh", original);
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    auto text = original;
+    const std::string old = "return arg + 1;";
+    text.replace(text.find(old), old.size(), "return arg +\n  2;");
+    bool reached = false;
+    lsp::RequestContext ctx("textDocument/didChange", std::nullopt);
+    ctx.setCheckpointObserverForTesting([&](std::string_view where) {
+        if (!nativeView && !declined && where == "before completed body query context indexing") {
+            declined = true;
+            throw std::runtime_error("injected unavailable Native query view");
+        }
+        if (where == boundary) {
+            reached = true;
+            ctx.cancelForContentChange();
+        }
+    });
+    CHECK_THROWS_AS(change(server, doc.m_uri, 2, text, ctx), lsp::RequestCancelled);
+    REQUIRE(reached);
+    CHECK(declined == !nativeView);
+    CHECK(server.m_driver->getDocument(doc.m_uri)->getVersion() == 2);
+    CHECK(server.m_driver->getDocument(doc.m_uri)->getText() == text + '\0');
+    change(server, doc.m_uri, 3, original);
+    server.runBackgroundWork({});
+    checkNativeDiagnostics(workspace, server, original, true);
+}
+
+TEST_CASE("Generic macro syntax witnesses batch declarations and retain input admission",
+          "[method-body-diagnostics][generated-macro-methods][macro-syntax-witness]") {
+    const bool nativeView = GENERATE(false, true);
+    CAPTURE(nativeView);
+    bool declined = false;
+    Workspace workspace;
+    workspace.write(".slang/server.json", certificationConfig());
+    const std::string original =
+        "`define START function void automate();\n"
+        "`define FIELD report(`__LINE__);\n"
+        "`define FINISH endfunction\n"
+        "function automatic int work(input int arg); return arg + 1; endfunction\n"
+        "class First #(int N=0);\nfunction void report(input int line_number); endfunction\n"
+        "`START\n`FIELD\n`FINISH\nendclass\n"
+        "class Second #(int N=0);\nfunction void report(input int line_number); endfunction\n"
+        "`START\n`FIELD\n`FINISH\nendclass\n"
+        "First#(0) first; Second#(1) second;\n";
+    workspace.write("item.svh", original);
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    const std::string old = "return arg + 1;";
+    uint64_t updates = 0;
+    for (const std::string replacement :
+         {"return arg +\n  2;", "return arg +\n  missing_user_value;", "return arg +\n\n  3;"}) {
+        auto text = original;
+        text.replace(text.find(old), old.size(), replacement);
+        size_t traversals = 0, identityChecks = 0;
+        lsp::RequestContext ctx("textDocument/didChange", std::nullopt);
+        ctx.setCheckpointObserverForTesting([&](std::string_view where) {
+            if (!nativeView && !declined &&
+                where == "before completed body query context indexing") {
+                declined = true;
+                throw std::runtime_error("injected unavailable Native query view");
+            }
+            if (where == "generated macro query syntax identity")
+                ++identityChecks;
+            if (where == "generated macro query syntax identity walk")
+                ++traversals;
+        });
+        change(server, doc.m_uri, int(++updates) + 1, text, ctx);
+        server.runBackgroundWork({});
+        CHECK(declined == !nativeView);
+        CHECK(traversals == (!nativeView && updates == 1 ? 1 : 0));
+        if (nativeView)
+            CHECK((identityChecks > 0) == (updates == 1));
+        REQUIRE(state(server).active);
+        CHECK(diagnosticState(server).localDiagnosticUpdates == updates);
+        checkNativeDiagnostics(workspace, server, text, true);
+    }
+    // A structural CST witness must not certify fresh physical dependency bytes.
+    workspace.write("prelude.sv", "package prelude; int changed_dependency; endpackage\n");
+    auto text = original;
+    text.replace(text.find(old), old.size(), "return arg +\n\n  4;");
+    change(server, doc.m_uri, 5, text);
+    server.runBackgroundWork({});
+    CHECK_FALSE(state(server).active);
+    checkNativeDiagnostics(workspace, server, text, true);
+}
+
+TEST_CASE("Macro evidence retains include ancestors and external macro definitions",
+          "[method-body-diagnostics][generated-macro-methods][macro-source-reachability]") {
+    Workspace workspace;
+    workspace.write(".slang/server.json", certificationConfig());
+    workspace.write("macros.svh", "`define START function void automate();\n"
+                                  "`define FIELD report(`__LINE__);\n"
+                                  "`define FINISH endfunction\n");
+    workspace.write("unrelated.svh", "class Unrelated; function int value(); return `__LINE__; "
+                                     "endfunction endclass\n");
+    workspace.write("owner.sv", "`include \"macros.svh\"\npackage owner;\n"
+                                "`include \"unrelated.svh\"\n`include \"item.svh\"\nendpackage\n");
+    const std::string original =
+        "function automatic int work(input int arg); return arg + 1; endfunction\n"
+        "class Later #(int N=0);\nfunction void report(input int line_number); endfunction\n"
+        "`START\n`FIELD\n`FINISH\nendclass\nLater#(0) handle;\n";
+    workspace.write("item.svh", original);
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    auto text = original;
+    const std::string old = "return arg + 1;";
+    text.replace(text.find(old), old.size(), "return arg +\n  2;");
+    size_t excluded = 0;
+    lsp::RequestContext ctx("textDocument/didChange", std::nullopt);
+    ctx.setCheckpointObserverForTesting([&](std::string_view where) {
+        if (where == "native macro evidence excludes unrelated declaration")
+            ++excluded;
+    });
+    change(server, doc.m_uri, 2, text, ctx);
+    server.runBackgroundWork({});
+    CHECK(excluded > 0);
+    REQUIRE(state(server).active);
+    CHECK(diagnosticState(server).localDiagnosticUpdates == 1);
+    checkNativeDiagnostics(workspace, server, text, true);
+}
+
+TEST_CASE("Queries certify inputs without computing pending local diagnostics",
+          "[body-certification][query-background]") {
+    const auto kind = GENERATE("hover", "completion", "definition");
+    const bool cancel = GENERATE(false, true);
+    Workspace workspace;
+    auto config = localDiagnosticConfig;
+    config.insert(config.size() - 1, ",\"experimentalMethodBodyCertification\":true");
+    workspace.write(".slang/server.json", config);
+    BodyTestServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", header);
+    doc.doc->getAnalysis();
+    auto text = edited();
+    change(server, doc.m_uri, 2, text);
+    doc.m_text = text;
+    REQUIRE(server.getDocHover({.textDocument = {.uri = doc.m_uri},
+                                .position = doc.getPosition(text.rfind("local_0") + 3)}));
+    // Cold diagnostic certification remains off the query path.
+    CHECK(diagnosticState(server).localDiagnosticUpdates == 0);
+    server.runBackgroundWork({});
+    REQUIRE(diagnosticState(server).localDiagnosticUpdates == 1);
+    const auto before = diagnosticMap(server);
+    text = header;
+    text.replace(text.find("local_1 + charl"), 15, "local_0 + absent_local");
+    change(server, doc.m_uri, 3, text);
+    doc.m_text = text;
+    const auto position = doc.getPosition(text.rfind("local_0") + 3);
+    auto query = [&](const lsp::RequestContext& ctx) {
+        if (std::string_view(kind) == "hover") {
+            const auto hover =
+                server.getDocHover({.textDocument = {.uri = doc.m_uri}, .position = position}, ctx);
+            REQUIRE(hover);
+        }
+        else if (std::string_view(kind) == "completion")
+            (void)server.getDocCompletion(
+                {.textDocument = {.uri = doc.m_uri}, .position = position}, ctx);
+        else
+            (void)server.getDocDefinition(
+                {.textDocument = {.uri = doc.m_uri}, .position = position}, ctx);
+    };
+    int proofs = 0, publications = 0, procedures = 0;
+    lsp::RequestContext ctx("query-before-diagnostics", 301);
+    ctx.setCheckpointObserverForTesting([&](std::string_view phase) {
+        if (phase == "method inputs certified")
+            ++proofs;
+        if (phase == "before local diagnostic publication")
+            ++publications;
+        if (phase == "after local diagnostic procedure")
+            ++procedures;
+    });
+    query(ctx);
+    CHECK(proofs == 1);
+    CHECK(publications == 0);
+    CHECK(procedures == 0);
+    CHECK(diagnosticMap(server) == before);
+    CHECK(server.client.diagnosticVersions.at(doc.m_uri) == 2);
+    CHECK_FALSE(server.m_driver->hasCertifiedLocalDiagnostics());
+    CHECK(server.m_driver->hasPendingDiagnostics());
+    CHECK(diagnosticState(server).localDiagnosticUpdates == 1);
+    int diagnosticProofs = 0;
+    lsp::RequestContext diagnostic("independent-local-diagnostics", 303);
+    diagnostic.setCheckpointObserverForTesting([&](std::string_view phase) {
+        if (phase == "method inputs certified")
+            ++diagnosticProofs;
+        if (phase == "before local diagnostic publication") {
+            ++publications;
+            if (cancel)
+                diagnostic.cancel();
+        }
+    });
+    if (cancel) {
+        CHECK_THROWS_AS(server.runBackgroundWork(diagnostic), lsp::RequestCancelled);
+        CHECK(diagnosticMap(server) == before);
+        CHECK(server.client.diagnosticVersions.at(doc.m_uri) == 2);
+        server.runBackgroundWork({});
+    }
+    else
+        server.runBackgroundWork(diagnostic);
+    CHECK(diagnosticProofs == 1); // The background dispatch proves its inputs afresh.
+    CHECK(publications == 1);
+    CHECK(server.client.diagnosticVersions.at(doc.m_uri) == 3);
+    CHECK(diagnosticState(server).localDiagnosticUpdates == 2);
+    int nextProofs = 0;
+    lsp::RequestContext next("joint-publication-next", 302);
+    next.setCheckpointObserverForTesting([&](std::string_view phase) {
+        if (phase == "method inputs certified")
+            ++nextProofs;
+    });
+    query(next);
+    CHECK(nextProofs == 1); // A later request must perform a new full input proof.
+    CHECK(diagnosticState(server).localDiagnosticUpdates == 2);
+    checkNativeDiagnostics(workspace, server, text);
+}
+
+TEST_CASE("Superseded certified transport cannot label old diagnostics with a new version",
+          "[body-certification][joint-publication][diagnostic-transport]") {
+    const bool indexOnly = GENERATE(false, true);
+    Workspace workspace;
+    auto config = localDiagnosticConfig;
+    config.insert(config.size() - 1, ",\"experimentalMethodBodyCertification\":true");
+    workspace.write(".slang/server.json", config);
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", header);
+    doc.doc->getAnalysis();
+    auto text = edited();
+    change(server, doc.m_uri, 2, text);
+    server.runBackgroundWork({});
+    REQUIRE(diagnosticState(server).localDiagnosticUpdates == 1);
+    text.replace(text.find("local_0 + charl"), 15, "local_0 + absent_local");
+    change(server, doc.m_uri, 3, text);
+    doc.m_text = text;
+    REQUIRE(server.getDocHover({.textDocument = {.uri = doc.m_uri},
+                                .position = doc.getPosition(text.rfind("local_0") + 3)}));
+    REQUIRE(server.m_methodScope);
+    REQUIRE(server.m_methodScope->publishLocalDiagnostics(server.m_config, {}, true));
+    REQUIRE(server.m_driver->hasCertifiedLocalDiagnostics());
+    CHECK(server.client.diagnosticVersions.at(doc.m_uri) == 2);
+    auto repaired = edited();
+    if (indexOnly) {
+        const auto revision = server.m_driver->getContextInputRevision();
+        const auto index = server.m_indexer.getRevision();
+        auto prelude = server.m_driver->getDocument(URI::fromFile(workspace.root / "prelude.sv"));
+        REQUIRE(prelude);
+        server.m_indexer.updateDocument(prelude->getPath(), *prelude->getSyntaxTree(),
+                                        prelude->getBuffer());
+        REQUIRE(server.m_indexer.getRevision() != index);
+        CHECK(server.m_driver->getContextInputRevision() == revision);
+    }
+    else
+        change(server, doc.m_uri, 4, repaired);
+    server.m_driver->flushCertifiedLocalDiagnostics();
+    CHECK_FALSE(server.m_driver->hasCertifiedLocalDiagnostics());
+    CHECK(server.client.diagnosticVersions.at(doc.m_uri) == 2);
+    CHECK(server.m_driver->hasPendingDiagnostics());
+    server.runBackgroundWork({});
+    CHECK(server.client.diagnosticVersions.at(doc.m_uri) == (indexOnly ? 3 : 4));
+    checkNativeDiagnostics(workspace, server, indexOnly ? text : repaired);
+}
+
+TEST_CASE("Current generated macro evidence is reused only after complete private binding",
+          "[generated-macro-methods][current-macro-witness]") {
+    const bool cancelBinding = GENERATE(false, true);
+    Workspace workspace;
+    workspace.write(".slang/server.json", certificationConfig());
+    const std::string original =
+        "`define START function void automate();\n"
+        "`define FIELD report(`__LINE__);\n"
+        "`define FINISH endfunction\n"
+        "function automatic int work(input int arg); return arg + 1; endfunction\n"
+        "class Later; function void report(input int line_number); endfunction\n"
+        "`START\n`FIELD\n`FINISH\nendclass\n";
+    workspace.write("item.svh", original);
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    const std::string old = "return arg + 1;";
+    for (int version = 2; version <= 3; ++version) {
+        auto text = original;
+        text.replace(text.find(old), old.size(),
+                     version == 2 ? "return arg +\n 2;" : "return arg +\n missing_user_value;");
+        // Keep the latest text, but defer binding as the protocol does for
+        // superseded notifications. Observe the private binding separately.
+        lsp::RequestContext edit("textDocument/didChange", version + 100);
+        edit.setCheckpointObserverForTesting([&](std::string_view phase) {
+            if (phase == "before method edit work")
+                edit.cancel();
+        });
+        CHECK_THROWS_AS(change(server, doc.m_uri, version, text, edit), lsp::RequestCancelled);
+        lsp::RequestContext ctx("macro-witness", version);
+        size_t replays = 0, reuses = 0;
+        bool cancel = cancelBinding && version == 2;
+        ctx.setCheckpointObserverForTesting([&](std::string_view phase) {
+            if (phase == "macro replay preprocessing")
+                ++replays;
+            if (phase == "reuse current macro syntax proof")
+                ++reuses;
+            if (cancel && phase == "before current macro proof witness commit")
+                ctx.cancel();
+        });
+        if (cancel) {
+            CHECK_THROWS_AS(server.runBackgroundWork(ctx), lsp::RequestCancelled);
+            CHECK(replays > 0);
+            CHECK(reuses == 0);
+            CHECK(server.client.diagnosticVersions.at(doc.m_uri) == 1);
+            replays = reuses = 0;
+            ctx = lsp::RequestContext("macro-witness-retry", 99);
+            ctx.setCheckpointObserverForTesting([&](std::string_view phase) {
+                if (phase == "macro replay preprocessing")
+                    ++replays;
+                if (phase == "reuse current macro syntax proof")
+                    ++reuses;
+            });
+        }
+        server.runBackgroundWork(ctx);
+        CHECK(replays > 0); // Every new edited syntax must receive a fresh replay.
+        CHECK(reuses == 1); // Its diagnostic stage can reuse that exact syntax evidence.
+        CHECK(server.client.diagnosticVersions.at(doc.m_uri) == version);
+        checkNativeDiagnostics(workspace, server, text);
+    }
+}
+
+TEST_CASE("Private effect replay follows added and removed initializer calls",
+          "[method-body-diagnostics][caller-effect-replay]") {
+    const bool module = GENERATE(false, true);
+    const bool transitive = GENERATE(false, true);
+    const bool initializer = GENERATE(false, true);
+    CAPTURE(module, transitive, initializer);
+    Workspace workspace;
+    workspace.write(".slang/server.json", certificationConfig());
+    const std::string original =
+        "function automatic int work(input int arg); return arg; endfunction\n";
+    workspace.write("item.svh", original);
+    const std::string helpers =
+        "int shared_effect;\n"
+        "function automatic int bump(input int arg); shared_effect=arg; return arg; endfunction\n"
+        "function automatic int bridge(input int arg); return bump(arg); endfunction\n"
+        "function automatic int peer(input int arg); return bridge(arg); endfunction\n";
+    const std::string callers = "int first_input, second_input, first_result, second_result;\n"
+                                "int boot_result=work(first_input);\n"
+                                "always_comb first_result=work(first_input);\n"
+                                "always_comb second_result=work(second_input);\n";
+    workspace.write("owner.sv", std::string(module ? "module owner;\n" : "package owner;\n") +
+                                    "`include \"item.svh\"\n" + helpers +
+                                    (module ? callers + "endmodule\n" : "endpackage\n"));
+    if (!module)
+        workspace.write("tail.sv", "module tail; import owner::*;\n" + callers + "endmodule\n");
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    const std::string callee = transitive ? "bridge" : "bump";
+    const std::string statement = initializer
+                                      ? "int local_value=" + callee + "(arg); return local_value;"
+                                      : callee + "(arg); return arg;";
+    auto called = original;
+    called.replace(called.find("return arg;"), 11, statement);
+    uint64_t updates = 0;
+    int version = 1;
+    for (const auto& text : {called, original, called}) {
+        change(server, doc.m_uri, ++version, text);
+        server.runBackgroundWork({});
+        const auto status = diagnosticState(server);
+        INFO(status.localDiagnosticDecline);
+        CHECK(status.localDiagnosticUpdates == ++updates);
+        checkNativeDiagnostics(workspace, server, text, true);
+        bool conflict = false;
+        for (const auto& uri : server.client.diagnosticPublications)
+            for (const auto& diagnostic : server.client.getDiagnostics(uri))
+                conflict |= diagnostic.code &&
+                            rfl::json::write(*diagnostic.code) == "\"multiple-always-assigns\"";
+        CHECK(conflict == (text != original));
+    }
+}
+
+TEST_CASE("Self-call changes update the declaration's Native reference diagnostics",
+          "[method-body-diagnostics][caller-reference-replay]") {
+    const bool classMethod = GENERATE(false, true);
+    const bool removal = GENERATE(false, true);
+    CAPTURE(classMethod, removal);
+    Workspace workspace;
+    workspace.write(".slang/server.json", certificationConfig());
+    auto source = [&](bool recursive) {
+        return std::string(classMethod ? "class Recursive;\n" : "") +
+               "function automatic int work(input int arg);\n" +
+               (recursive ? "if (arg > 0) return work(arg-1); return 0;\n" : "return 0;\n") +
+               "endfunction\n" + (classMethod ? "endclass\n" : "");
+    };
+    const auto original = source(removal);
+    workspace.write("item.svh", original);
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    const auto changed = source(!removal);
+    change(server, doc.m_uri, 2, changed);
+    server.runBackgroundWork({});
+    CHECK(diagnosticState(server).localDiagnosticUpdates == 1);
+    checkNativeDiagnostics(workspace, server, changed, true);
+}
+
+TEST_CASE("Private reference replay updates sole uses without losing signature uses",
+          "[method-body-diagnostics][sole-reference-replay]") {
+    const bool classMethod = GENERATE(false, true);
+    const auto kind = GENERATE("read", "write", "call", "initializer", "wildcard");
+    CAPTURE(classMethod, kind);
+    Workspace workspace;
+    workspace.write(".slang/server.json", certificationConfig());
+    workspace.write("prelude.sv",
+                    "package prelude; typedef int param_t;\n"
+                    "int header_value, read_value, write_value;\n"
+                    "function automatic int helper(input int arg); return arg; endfunction\n"
+                    "endpackage\n");
+    auto source = [&](std::string_view body) {
+        return std::string(std::string_view(kind) == "wildcard" ? "import prelude::*;\n" : "") +
+               (classMethod ? "class Client;\n" : "") +
+               "function automatic int work(input prelude::param_t arg=prelude::header_value);\n" +
+               std::string(body) + "\nendfunction\n" + (classMethod ? "endclass\n" : "");
+    };
+    const auto original = source("return arg;");
+    const auto body = std::string_view(kind) == "read"    ? "return arg+prelude::read_value;"
+                      : std::string_view(kind) == "write" ? "prelude::write_value=arg; return arg;"
+                      : std::string_view(kind) == "call"  ? "return prelude::helper(arg);"
+                      : std::string_view(kind) == "initializer"
+                          ? "int local_value=prelude::helper(arg); return local_value;"
+                          : "return arg+read_value;";
+    const auto edited = source(body);
+    const auto invalid = source("return arg+missing_user_value;");
+    workspace.write("item.svh", original);
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    uint64_t updates = 0;
+    int version = 1;
+    for (const auto& text : {edited, original, invalid, edited}) {
+        change(server, doc.m_uri, ++version, text);
+        server.runBackgroundWork({});
+        const auto status = diagnosticState(server);
+        INFO(status.localDiagnosticDecline);
+        CHECK(status.localDiagnosticUpdates == ++updates);
+        checkNativeDiagnostics(workspace, server, text, true);
+    }
+}
+
+TEST_CASE("Stable task calls keep local diagnostics without whole-design dataflow replay",
+          "[method-body-diagnostics][stable-task-effects]") {
+    const bool package = GENERATE(false, true);
+    Workspace workspace;
+    const std::string original =
+        package ? "task automatic helper(input int arg); #1; $display(arg); endtask\n"
+                  "task automatic work(input int arg);\n int local_value = arg;\n"
+                  " helper(arg); local_value += 1;\nendtask\n"
+                : "class Base; task helper(input int arg); #1; $display(arg); endtask endclass\n"
+                  "class C extends Base; task work(input int arg);\n int local_value = arg;\n"
+                  " super.helper(arg); local_value += 1;\nendtask\n"
+                  "task wrapper(input int arg); work(arg); endtask endclass\n";
+    workspace.write("item.svh", original);
+    workspace.write(
+        "tail.sv", package
+                       ? "module tail; import owner::*; bit arg; always_comb work(arg); endmodule\n"
+                       : "module tail; import owner::*; bit arg; C c; always_comb c.wrapper(arg); "
+                         "endmodule\n");
+    auto config = localDiagnosticConfig;
+    config.insert(config.size() - 1, ",\"experimentalMethodBodyCertification\":true");
+    workspace.write(".slang/server.json", config);
+    BodyTestServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    int version = 1;
+    for (const auto* statement : {"local_value += 2;", "local_value +=\n 3;",
+                                  "local_value += missing_value;", "local_value += 1;"}) {
+        auto text = original;
+        text.replace(text.find("local_value += 1;"), 17, statement);
+        unsigned fullFlow = 0;
+        lsp::RequestContext ctx("background", 177);
+        ctx.setCheckpointObserverForTesting([&](std::string_view phase) {
+            if (phase == "before local effect replay")
+                ++fullFlow;
+        });
+        change(server, doc.m_uri, ++version, text, ctx);
+        server.runBackgroundWork(ctx);
+        INFO(package << " " << statement);
+        CHECK(fullFlow == 0);
+        CHECK(diagnosticState(server).localDiagnosticUpdates == uint64_t(version - 1));
+        CHECK(server.client.diagnosticVersions.at(doc.m_uri) == version);
+        checkNativeDiagnostics(workspace, server, text, true);
+    }
+}
+
+TEST_CASE("Large local and effect replay cancellation preserves published diagnostics",
+          "[method-body-diagnostics][procedure-cancellation]") {
+    const bool effect = GENERATE(false, true);
+    Workspace workspace;
+    workspace.write("prelude.sv", "package prelude; int value, extra; endpackage\n");
+    auto original = std::string("class C; function void work(input int arg);\n"
+                                "int local_value = arg;\n");
+    for (unsigned i = 0; i < 2000; ++i)
+        original += "local_value += arg;\n";
+    if (effect)
+        original += "prelude::value = local_value;\n";
+    original += "endfunction endclass\n";
+    workspace.write("item.svh", original);
+    workspace.write(".slang/server.json", localDiagnosticConfig);
+    BodyTestServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    const auto before = diagnosticMap(server);
+    auto text = original;
+    text.replace(text.find("local_value = arg;"), 18, "local_value = missing_arg;");
+    if (effect)
+        text.insert(text.find("endfunction"), "prelude::extra = local_value;\n");
+    change(server, doc.m_uri, 2, text);
+    lsp::RequestContext ctx("background", 178);
+    unsigned polls = 0;
+    const auto boundary = effect ? "during local effect procedure"
+                                 : "during local diagnostic procedure";
+    ctx.setCheckpointObserverForTesting([&](std::string_view phase) {
+        if (phase == boundary && ++polls == 3)
+            ctx.cancel();
+    });
+    CHECK_THROWS_AS(server.runBackgroundWork(ctx), lsp::RequestCancelled);
+    CHECK(polls == 3);
+    CHECK(diagnosticMap(server) == before);
+    CHECK(server.client.diagnosticVersions.at(doc.m_uri) == 1);
+    CHECK(diagnosticState(server).localDiagnosticUpdates == 0);
+    CHECK(doc.doc->getVersion() == 2);
+    server.runBackgroundWork({});
+    CHECK(diagnosticState(server).localDiagnosticUpdates == 1);
+    CHECK(server.client.diagnosticVersions.at(doc.m_uri) == 2);
+    checkNativeDiagnostics(workspace, server, text, true);
+}
+
+TEST_CASE("Caller effect diagnostics reuse unchanged peers with intrinsic warnings",
+          "[method-body-diagnostics][procedure-summary-reuse]") {
+    const bool package = GENERATE(false, true);
+    CAPTURE(package);
+    Workspace workspace;
+    const std::string original =
+        std::string(package ? "" : "class C;\n") +
+        " function automatic int peer(input int arg); if (arg) return 1; endfunction\n"
+        " function automatic void work(input int arg);\n"
+        "  int local_value = arg; prelude::value = local_value + 1;\n"
+        " endfunction\n" +
+        (package ? "" : "endclass\n");
+    workspace.write("item.svh", original);
+    workspace.write(".slang/server.json", certificationConfig());
+    BodyTestServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    int version = 1;
+    for (const auto* statement :
+         {"prelude::value = local_value + 2;", "prelude::value = local_value + missing_value;",
+          "prelude::value = local_value +\n 3;", "prelude::value = local_value + 1;"}) {
+        auto text = original;
+        const auto expression = std::string("prelude::value = local_value + 1;");
+        text.replace(text.find(expression), expression.size(), statement);
+        change(server, doc.m_uri, ++version, text);
+        server.runBackgroundWork({});
+        CHECK(diagnosticState(server).localDiagnosticUpdates == uint64_t(version - 1));
+        struct Counts {
+            uint64_t localDiagnosticProceduresReused, localDiagnosticProceduresRecomputed;
+        };
+        auto counts =
+            rfl::from_generic<Counts>(
+                *server.executeCommand({.command = "slang.methodScopeStatus",
+                                        .arguments = std::vector<lsp::LSPAny>{rfl::to_generic(
+                                            std::string("compact"))}}))
+                .value();
+        if (package) {
+            CHECK(counts.localDiagnosticProceduresReused >= 1);
+            CHECK(counts.localDiagnosticProceduresRecomputed >= 1);
+        }
+        else {
+            CHECK(counts.localDiagnosticProceduresReused == 0);
+            CHECK(counts.localDiagnosticProceduresRecomputed == 0);
+        }
+        checkNativeDiagnostics(workspace, server, text, true);
+    }
+}
+
+TEST_CASE("Large diagnostic ordering cancels without changing the published map",
+          "[method-body-diagnostics][diagnostic-order-cancellation]") {
+    Workspace workspace;
+    std::string original = "class C;\n";
+    for (unsigned i = 0; i < 500; ++i)
+        original += "function int peer" + std::to_string(i) +
+                    "(input int arg); if(arg) return 1; endfunction\n";
+    original += "function void work(input int arg);\n"
+                "int local_value=arg; prelude::value=local_value;\n"
+                "endfunction endclass\n";
+    workspace.write("item.svh", original);
+    workspace.write(".slang/server.json", localDiagnosticConfig);
+    BodyTestServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    const auto before = diagnosticMap(server);
+    auto text = original;
+    text.replace(text.find("local_value=arg;"), 16, "local_value=missing_arg;");
+    change(server, doc.m_uri, 2, text);
+    lsp::RequestContext ctx("background", 179);
+    bool reached = false;
+    ctx.setCheckpointObserverForTesting([&](std::string_view phase) {
+        if (phase == "during local diagnostic ordering") {
+            reached = true;
+            ctx.cancel();
+        }
+    });
+    CHECK_THROWS_AS(server.runBackgroundWork(ctx), lsp::RequestCancelled);
+    REQUIRE(reached);
+    CHECK(diagnosticMap(server) == before);
+    CHECK(server.client.diagnosticVersions.at(doc.m_uri) == 1);
+    CHECK(diagnosticState(server).localDiagnosticUpdates == 0);
+    server.runBackgroundWork({});
+    CHECK(diagnosticState(server).localDiagnosticUpdates == 1);
+    CHECK(server.client.diagnosticVersions.at(doc.m_uri) == 2);
+    checkNativeDiagnostics(workspace, server, text, true);
+}
+
+TEST_CASE("Formatted native siblings are reused while target-related notes track edits",
+          "[method-body-diagnostics][formatted-diagnostic-reuse]") {
+    Workspace workspace;
+    workspace.write(
+        "prelude.sv",
+        "package prelude; int value;\n"
+        "class Stable; function int peer(input int arg); if(arg) return 1; endfunction endclass\n"
+        "endpackage\n");
+    workspace.write("owner.sv", "package owner; `include \"item.svh\"\nendpackage\n");
+    workspace.write("tail.sv", "module tail; import owner::*; int a,b,x,y;\n"
+                               "always_comb x=work(a); always_comb y=work(b); endmodule\n");
+    const std::string original = "function automatic int work(input int arg);\n"
+                                 "static int saved; int local_value=arg;\n"
+                                 "saved=local_value + 1; return saved;\nendfunction\n";
+    workspace.write("item.svh", original);
+    workspace.write(".slang/server.json", certificationConfig());
+    BodyTestServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    bool sawRelatedTarget = false;
+    for (const auto& diagnostic :
+         server.client.getDiagnostics(URI::fromFile(workspace.root / "tail.sv")))
+        if (diagnostic.relatedInformation)
+            for (const auto& note : *diagnostic.relatedInformation)
+                sawRelatedTarget |= note.location.uri == doc.m_uri;
+    REQUIRE(sawRelatedTarget);
+    int version = 1;
+    for (const auto* expression : {"local_value + 2", "local_value + missing_value",
+                                   "local_value +\n 3", "local_value + 1"}) {
+        auto text = original;
+        text.replace(text.find("local_value + 1"), 15, expression);
+        change(server, doc.m_uri, ++version, text);
+        server.runBackgroundWork({});
+        CHECK(diagnosticState(server).localDiagnosticUpdates == uint64_t(version - 1));
+        struct Counts {
+            uint64_t localDiagnosticRenderingsReused, localDiagnosticRenderingsFresh;
+        };
+        auto counts =
+            rfl::from_generic<Counts>(
+                *server.executeCommand({.command = "slang.methodScopeStatus",
+                                        .arguments = std::vector<lsp::LSPAny>{rfl::to_generic(
+                                            std::string("compact"))}}))
+                .value();
+        CHECK(counts.localDiagnosticRenderingsReused > 0);
+        CHECK(counts.localDiagnosticRenderingsFresh > 0);
+        checkNativeDiagnostics(workspace, server, text, true);
+    }
+}
+
+TEST_CASE("Unchanged direct class effects keep local diagnostics off global replay",
+          "[method-body-diagnostics][stable-class-effects]") {
+    const auto effect = GENERATE("field", "package", "static-call");
+    CAPTURE(effect);
+    Workspace workspace;
+    workspace.write(".slang/server.json", certificationConfig());
+    workspace.write("prelude.sv",
+                    "package prelude; int value;\n"
+                    "function automatic int bump(input int arg); value=arg; return arg; "
+                    "endfunction\nendpackage\n");
+    const std::string statement = std::string_view(effect) == "field"     ? "field=arg;\n"
+                                  : std::string_view(effect) == "package" ? "prelude::value=arg;\n"
+                                                                          : "prelude::bump(arg);\n";
+    const std::string original = "class C; int field;\n"
+                                 "function int peer(); return field; endfunction\n"
+                                 "function int work(input int arg);\n" +
+                                 statement + "return arg + 1;\nendfunction\nendclass\n";
+    workspace.write("item.svh", original);
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    int version = 1;
+    for (const auto* expression : {"arg + 2", "arg + missing_value", "arg +\n 3", "arg + 1"}) {
+        auto text = original;
+        text.replace(text.find("arg + 1"), 7, expression);
+        change(server, doc.m_uri, ++version, text);
+        unsigned replays = 0, indexes = 0;
+        lsp::RequestContext ctx("stable class effects", version);
+        ctx.setCheckpointObserverForTesting([&](std::string_view phase) {
+            if (phase == "before local effect replay")
+                ++replays;
+            if (phase == "before immutable diagnostic rendering index")
+                ++indexes;
+        });
+        server.runBackgroundWork(ctx);
+        CHECK(diagnosticState(server).localDiagnosticUpdates == uint64_t(version - 1));
+        if (std::string_view(expression).find("missing_value") == std::string_view::npos) {
+            CHECK(replays == 0);
+            CHECK(indexes == 0);
+        }
+        checkNativeDiagnostics(workspace, server, text, true);
+    }
+}
+
+TEST_CASE("Changed class driver bounds and existing notes retain complete diagnostics",
+          "[method-body-diagnostics][stable-class-effects]") {
+    const auto kind = GENERATE("new-write", "new-bound", "existing-conflict");
+    CAPTURE(kind);
+    Workspace workspace;
+    workspace.write(".slang/server.json", certificationConfig());
+    workspace.write("tail.sv", "module tail; assign prelude::value[0]=1'b0; endmodule\n");
+    const std::string write = std::string_view(kind) == "new-write"   ? ""
+                              : std::string_view(kind) == "new-bound" ? "prelude::value[1]=arg;\n"
+                                                                      : "prelude::value[0]=arg;\n";
+    const std::string original = "class C; function int work(input int arg);\n" + write +
+                                 "return arg + 1;\nendfunction endclass\n";
+    workspace.write("item.svh", original);
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    auto text = original;
+    if (std::string_view(kind) == "new-write")
+        text.insert(text.find("return arg"), "prelude::value[0]=arg;\n");
+    else if (std::string_view(kind) == "new-bound")
+        text.replace(text.find("value[1]"), 8, "value[0]");
+    else
+        text.insert(text.find("prelude::value"), "\n\n");
+    change(server, doc.m_uri, 2, text);
+    unsigned replays = 0, proofs = 0;
+    lsp::RequestContext ctx("changed class effects", 201);
+    ctx.setCheckpointObserverForTesting([&](std::string_view phase) {
+        replays += phase == "before local effect replay";
+        proofs += phase == "class external driver effects unchanged";
+    });
+    server.runBackgroundWork(ctx);
+    if (std::string_view(kind) == "existing-conflict")
+        CHECK(proofs == 0);
+    else {
+        CHECK(replays > 0);
+        CHECK(diagnosticState(server).localDiagnosticUpdates == 1);
+    }
+    checkNativeDiagnostics(workspace, server, text, true);
+    change(server, doc.m_uri, 3, original);
+    server.runBackgroundWork({});
+    checkNativeDiagnostics(workspace, server, original, true);
+}
+
+TEST_CASE("Deferred rendering indexes cancel promotion and retry without partial state",
+          "[method-body-diagnostics][lazy-diagnostic-index]") {
+    const auto boundary = GENERATE("prepare immutable diagnostic rendering",
+                                   "commit immutable diagnostic rendering index");
+    CAPTURE(boundary);
+    Workspace workspace;
+    workspace.write(".slang/server.json", certificationConfig());
+    workspace.write("prelude.sv", "package prelude; function automatic int helper(input int arg); "
+                                  "return arg; endfunction endpackage\n");
+    const std::string original = "class C; function int work(input int arg);\n"
+                                 "return arg + 1;\nendfunction endclass\n";
+    workspace.write("item.svh", original);
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    auto local = original;
+    local.replace(local.find("arg + 1"), 7, "arg + 2");
+    change(server, doc.m_uri, 2, local);
+    server.runBackgroundWork({});
+    REQUIRE(diagnosticState(server).localDiagnosticUpdates == 1);
+    const auto before = diagnosticMap(server);
+    auto called = original;
+    called.replace(called.find("arg + 1"), 7, "prelude::helper(arg)");
+    change(server, doc.m_uri, 3, called);
+    bool reached = false;
+    lsp::RequestContext ctx("lazy rendering promotion", 202);
+    ctx.setCheckpointObserverForTesting([&](std::string_view phase) {
+        if (phase == boundary) {
+            reached = true;
+            ctx.cancel();
+        }
+    });
+    CHECK_THROWS_AS(server.runBackgroundWork(ctx), lsp::RequestCancelled);
+    REQUIRE(reached);
+    CHECK(diagnosticMap(server) == before);
+    CHECK(server.client.diagnosticVersions.at(doc.m_uri) == 2);
+    CHECK(diagnosticState(server).localDiagnosticUpdates == 1);
+    unsigned retries = 0;
+    lsp::RequestContext retry("lazy rendering retry", 203);
+    retry.setCheckpointObserverForTesting([&](std::string_view phase) {
+        retries += phase == "before immutable diagnostic rendering index";
+    });
+    server.runBackgroundWork(retry);
+    CHECK(retries == 1);
+    CHECK(diagnosticState(server).localDiagnosticUpdates == 2);
+    checkNativeDiagnostics(workspace, server, called, true);
+    change(server, doc.m_uri, 4, local);
+    server.runBackgroundWork({});
+    CHECK(diagnosticState(server).localDiagnosticUpdates == 3);
+    checkNativeDiagnostics(workspace, server, local, true);
+}
+
+TEST_CASE("Every generic class function context participates in local diagnostics",
+          "[method-body-diagnostics][multiple-body-contexts]") {
+    const bool differentTypes = GENERATE(false, true);
+    const bool externalConsumers = GENERATE(false, true);
+    CAPTURE(differentTypes, externalConsumers);
+    Workspace workspace;
+    workspace.write(".slang/server.json", certificationConfig());
+    const std::string consumers =
+        "C#(int,0) first; C#(" + std::string(differentTypes ? "byte" : "int") +
+        ",1) second;\n"
+        "function automatic void invoke(); void'(first.work(1)); void'(second.work(2)); "
+        "endfunction\n";
+    const std::string original = "class C #(type T=int, int ID=0);\n"
+                                 "function int work(input T arg);\n"
+                                 "int local_value=arg; return local_value + 1;\n"
+                                 "endfunction endclass\n" +
+                                 (externalConsumers ? std::string{} : consumers);
+    workspace.write("item.svh", original);
+    if (externalConsumers)
+        workspace.write("tail.sv", "module tail; import owner::*;\n" + consumers + "endmodule\n");
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    int version = 1;
+    for (const auto* expression : {"local_value + 2", "local_value + missing_value",
+                                   "local_value +\n 3", "local_value + 1"}) {
+        auto text = original;
+        text.replace(text.find("local_value + 1"), 15, expression);
+        change(server, doc.m_uri, ++version, text);
+        server.runBackgroundWork({});
+        INFO(state(server).decline);
+        INFO(diagnosticState(server).localDiagnosticDecline);
+        CHECK(diagnosticState(server).localDiagnosticUpdates == uint64_t(version - 1));
+        checkNativeDiagnostics(workspace, server, text, true);
+    }
+}
+
+TEST_CASE("Module function contexts coalesce all and instance-specific warnings",
+          "[method-body-diagnostics][multiple-body-contexts]") {
+    const bool differentWidths = GENERATE(false, true);
+    CAPTURE(differentWidths);
+    Workspace workspace;
+    workspace.write(".slang/server.json", certificationConfig());
+    workspace.write("owner.sv", "module owner #(parameter int WIDTH=8);\n"
+                                "`include \"item.svh\"\nendmodule\n");
+    workspace.write("tail.sv", "module tail; owner#(8) first(); owner#(" +
+                                   std::string(differentWidths ? "16" : "8") +
+                                   ") second(); owner#(" +
+                                   std::string(differentWidths ? "9" : "8") +
+                                   ") third(); int a,b,c;\n"
+                                   "initial begin a=first.work(1); b=second.work(2); "
+                                   "c=third.work(3); end endmodule\n");
+    const std::string original = "function automatic int work(input logic[WIDTH-1:0] arg);\n"
+                                 "int never_used; int local_value=arg;\n"
+                                 "if (WIDTH<=9) begin if(arg) return local_value + 1; end\n"
+                                 "else return local_value + 1;\nendfunction\n";
+    workspace.write("item.svh", original);
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    int version = 1;
+    for (const auto* expression : {"local_value + 2", "local_value + missing_value",
+                                   "local_value +\n 3", "local_value + 1"}) {
+        auto text = original;
+        text.replace(text.find("local_value + 1"), 15, expression);
+        change(server, doc.m_uri, ++version, text);
+        server.runBackgroundWork({});
+        INFO(state(server).decline);
+        INFO(diagnosticState(server).localDiagnosticDecline);
+        CHECK(diagnosticState(server).localDiagnosticUpdates == uint64_t(version - 1));
+        checkNativeDiagnostics(workspace, server, text, true);
+    }
+}
+
+TEST_CASE("Module task contexts replace transitive timing summaries together",
+          "[method-body-diagnostics][multiple-body-contexts][task-timing-closure]") {
+    const bool cancelFirst = GENERATE(false, true);
+    Workspace workspace;
+    workspace.write(".slang/server.json", certificationConfig());
+    workspace.write("owner.sv", "module owner #(parameter int WIDTH=8);\n"
+                                "`include \"item.svh\"\nendmodule\n");
+    workspace.write("tail.sv", "module tail; owner#(8) first(); owner#(16) second(); "
+                               "owner#(9) third(); bit arg;\n"
+                               "always_comb first.wrapper(arg);\n"
+                               "always_comb second.wrapper(arg);\n"
+                               "always_comb third.wrapper(arg); endmodule\n");
+    const std::string original = "task automatic work(input int arg);\n"
+                                 "int local_value=arg; $display(local_value);\n"
+                                 "endtask\n"
+                                 "task automatic wrapper(input int arg); work(arg); endtask\n";
+    workspace.write("item.svh", original);
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    int version = 1;
+    for (const auto* statement :
+         {"if(WIDTH<=9) #1; $display(local_value);", "#2; $display(local_value);",
+          "if(WIDTH==16) #3;\n $display(local_value);", "$display(local_value);"}) {
+        auto text = original;
+        text.replace(text.find("$display(local_value);"), 22, statement);
+        change(server, doc.m_uri, ++version, text);
+        if (cancelFirst && version == 2) {
+            const auto before = diagnosticMap(server);
+            lsp::RequestContext ctx("multiple-task-callers", 201);
+            bool reached = false;
+            ctx.setCheckpointObserverForTesting([&](std::string_view phase) {
+                if (phase == "task diagnostic caller update") {
+                    reached = true;
+                    ctx.cancel();
+                }
+            });
+            CHECK_THROWS_AS(server.runBackgroundWork(ctx), lsp::RequestCancelled);
+            REQUIRE(reached);
+            CHECK(diagnosticMap(server) == before);
+            CHECK(server.client.diagnosticVersions.at(doc.m_uri) == 1);
+        }
+        server.runBackgroundWork({});
+        INFO(state(server).decline);
+        INFO(diagnosticState(server).localDiagnosticDecline);
+        CHECK(diagnosticState(server).localDiagnosticUpdates == uint64_t(version - 1));
+        checkNativeDiagnostics(workspace, server, text, true);
+    }
+}
+
+TEST_CASE("Local virtual interface declarations finalize in the private body context",
+          "[method-body-diagnostics][body-virtual-interface]") {
+    const bool interfacePort = GENERATE(false, true);
+    const unsigned cancelAt = GENERATE(0u, 1u, 2u);
+    const bool genericBody = GENERATE(false, true);
+    CAPTURE(interfacePort, cancelAt, genericBody);
+    Workspace workspace;
+    workspace.write(".slang/server.json", certificationConfig());
+    workspace.write("tail.sv", "interface endpoint; endinterface\n"
+                               "interface channel #(parameter int WIDTH=8)" +
+                                   std::string(interfacePort ? "(endpoint ep)" : "") +
+                                   "; logic [WIDTH-1:0] data; modport sink(input data); " +
+                                   (genericBody ? std::string("if (WIDTH==16) begin:g "
+                                                              "class Hidden #(int P=0); "
+                                                              "function int bad(); "
+                                                              "return missing_in_iface; "
+                                                              "endfunction endclass end ")
+                                                : std::string{}) +
+                                   "endinterface\n"
+                                   "module tail; import owner::*; C c; "
+                                   "initial void'(c.work(1)); endmodule\n");
+    const std::string original = "class Resource #(type T=int); function new(); "
+                                 "byte signed_value=-1; bit[7:0] unsigned_value=signed_value; "
+                                 "endfunction endclass\n"
+                                 "class C; function int work(input int arg);\n"
+                                 "Resource#(int) unrelated;\n"
+                                 "int result=arg; result += 1; return result;\n"
+                                 "endfunction endclass\n";
+    workspace.write("item.svh", original);
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    CHECK(std::ranges::any_of(server.client.getDiagnostics(doc.m_uri), [](const auto& d) {
+        return d.message.find("implicit conversion changes signedness") != std::string::npos;
+    }));
+    int version = 1;
+    const std::string old = "int result=arg; result += 1; return result;";
+    for (const auto* statement :
+         {"virtual channel#(8) local_vif; int result=arg; result += 2; return result;",
+          "virtual channel#(16) local_vif; int result=local_vif.missing; return result;",
+          "virtual channel#(16).sink local_vif;\n int result=arg; return result;",
+          "virtual channel#(8).missing local_vif; int result=arg; return result;",
+          "int result=arg; result += 1; return result;"}) {
+        auto text = original;
+        text.replace(text.find(old), old.size(), statement);
+        change(server, doc.m_uri, ++version, text);
+        if (cancelAt && version == 2) {
+            const auto before = diagnosticMap(server);
+            lsp::RequestContext ctx("private-virtual-interface", 202);
+            bool reached = false;
+            unsigned callbacks = 0;
+            ctx.setCheckpointObserverForTesting([&](std::string_view phase) {
+                if (phase == "during local virtual interface finalization" &&
+                    ++callbacks == cancelAt) {
+                    reached = true;
+                    ctx.cancel();
+                }
+            });
+            CHECK_THROWS_AS(server.runBackgroundWork(ctx), lsp::RequestCancelled);
+            REQUIRE(reached);
+            CHECK(diagnosticMap(server) == before);
+            CHECK(server.client.diagnosticVersions.at(doc.m_uri) == 1);
+        }
+        server.runBackgroundWork({});
+        INFO(state(server).decline);
+        INFO(diagnosticState(server).localDiagnosticDecline);
+        CHECK(diagnosticState(server).localDiagnosticUpdates == uint64_t(version - 1));
+        if (interfacePort && version == 2)
+            CHECK(std::ranges::any_of(server.client.getDiagnostics(doc.m_uri), [](const auto& d) {
+                return d.message.find("ports that reference other interfaces") != std::string::npos;
+            }));
+        checkNativeDiagnostics(workspace, server, text, true);
+    }
+}
+
+TEST_CASE("Generic class task contexts update every procedural caller",
+          "[method-body-diagnostics][multiple-body-contexts][task-timing-closure]") {
+    const bool externalConsumers = GENERATE(false, true);
+    CAPTURE(externalConsumers);
+    Workspace workspace;
+    workspace.write(".slang/server.json", certificationConfig());
+    const std::string consumers = "C#(int,0) first; C#(byte,1) second;\n";
+    const std::string original =
+        "class C #(type T=int, int ID=0);\n"
+        "task work(input T arg); int local_value=arg; $display(local_value); endtask\n"
+        "task wrapper(input T arg); work(arg); endtask endclass\n" +
+        (externalConsumers ? std::string{} : consumers);
+    workspace.write("item.svh", original);
+    workspace.write("tail.sv", "module tail; import owner::*; bit arg;\n" +
+                                   (externalConsumers ? consumers : std::string{}) +
+                                   "always_comb first.wrapper(arg); "
+                                   "always_comb second.wrapper(arg); endmodule\n");
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    int version = 1;
+    const std::string old = "$display(local_value);";
+    for (const auto* statement :
+         {"if(ID==0) #1; $display(local_value);", "#2; $display(local_value);",
+          "if(ID==1) #3;\n $display(local_value);", "$display(local_value);"}) {
+        auto text = original;
+        text.replace(text.find(old), old.size(), statement);
+        change(server, doc.m_uri, ++version, text);
+        server.runBackgroundWork({});
+        INFO(state(server).decline);
+        INFO(diagnosticState(server).localDiagnosticDecline);
+        CHECK(diagnosticState(server).localDiagnosticUpdates == uint64_t(version - 1));
+        checkNativeDiagnostics(workspace, server, text, true);
+    }
+}
+
+TEST_CASE("Cancelling generic query context preparation preserves current input",
+          "[body-certification][multiple-body-contexts][diagnostic-cancellation]") {
+    const bool duringIndex = GENERATE(false, true);
+    const bool externalConsumers = GENERATE(false, true);
+    CAPTURE(duringIndex, externalConsumers);
+    Workspace workspace;
+    workspace.write(".slang/server.json", certificationConfig());
+    const std::string consumers = "C#(int,0) first; C#(byte,1) second;\n"
+                                  "function automatic void invoke(); void'(first.work(1)); "
+                                  "void'(second.work(2)); endfunction\n";
+    const std::string original =
+        "class C #(type T=int, int ID=0);\n"
+        "function int work(input T arg); return arg + 1; endfunction endclass\n" +
+        (externalConsumers ? std::string{} : consumers);
+    workspace.write("item.svh", original);
+    if (externalConsumers)
+        workspace.write("tail.sv", "module tail; import owner::*;\n" + consumers + "endmodule\n");
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    const auto before = diagnosticMap(server);
+    auto text = original;
+    text.replace(text.find("arg + 1"), 7, "arg + 2");
+    lsp::RequestContext ctx("generic-context-preparation", 203);
+    bool reached = false;
+    ctx.setCheckpointObserverForTesting([&](std::string_view phase) {
+        const bool selectedBoundary =
+            externalConsumers
+                ? phase == (duringIndex ? "after completed generic query context indexing"
+                                        : "before completed generic query context indexing")
+                : (!duringIndex && phase == "bind generic query context declarations") ||
+                      (duringIndex && (phase == "index generic method contexts" ||
+                                       phase == "index imported generic method contexts"));
+        if (selectedBoundary) {
+            reached = true;
+            ctx.cancel();
+        }
+    });
+    CHECK_THROWS_AS(change(server, doc.m_uri, 2, text, ctx), lsp::RequestCancelled);
+    REQUIRE(reached);
+    CHECK(diagnosticMap(server) == before);
+    CHECK(server.m_driver->getDocument(doc.m_uri)->getText() == text + '\0');
+    CHECK(server.m_driver->getDocument(doc.m_uri)->getVersion() == 2);
+    // Cancellation happened before the certificate existed. Background work
+    // may establish the latest Native baseline; the next edit must still use
+    // the local path rather than retaining a cancelled preparation forever.
+    server.runBackgroundWork({});
+    checkNativeDiagnostics(workspace, server, text, true);
+    // Edit admission deliberately requires an already queried current view.
+    // Diagnostics alone do not populate the per-file query cache.
+    server.m_driver->getDocument(doc.m_uri)->getAnalysis();
+    text.replace(text.find("arg + 2"), 7, "arg + missing_generic_value");
+    change(server, doc.m_uri, 3, text);
+    server.runBackgroundWork({});
+    INFO(state(server).decline);
+    INFO(diagnosticState(server).localDiagnosticDecline);
+    CHECK(diagnosticState(server).localDiagnosticUpdates == 1);
+    checkNativeDiagnostics(workspace, server, text, true);
+}
+
+TEST_CASE("Method-local nominal types keep complete private diagnostics",
+          "[method-body-diagnostics][body-local-types]") {
+    const auto context = GENERATE("class", "package", "module");
+    const auto kind = GENERATE("alias", "enum", "struct", "union", "unpacked-struct",
+                               "unpacked-union", "unused");
+    const bool task = GENERATE(false, true);
+    const bool initialType = GENERATE(false, true);
+    const bool cancelFirst = GENERATE(false, true);
+    CAPTURE(context, kind, task, initialType, cancelFirst);
+    Workspace workspace;
+    workspace.write(".slang/server.json", certificationConfig());
+    const bool cls = std::string_view(context) == "class";
+    const bool module = std::string_view(context) == "module";
+    auto taskify = [task](std::string text) {
+        if (task) {
+            size_t offset = 0;
+            while ((offset = text.find("return ", offset)) != std::string::npos) {
+                auto semi = text.find(';', offset);
+                auto replacement = "$display(" + text.substr(offset + 7, semi - offset - 7) +
+                                   "); return;";
+                text.replace(offset, semi - offset + 1, replacement);
+                offset += replacement.size();
+            }
+        }
+        return text;
+    };
+    if (module)
+        workspace.write("owner.sv", "module owner;\n`include \"item.svh\"\nendmodule\n");
+    std::string call = cls ? "c.work(1)" : module ? "dut.work(1)" : "owner::work(1)";
+    workspace.write("tail.sv", std::string(cls      ? "module tail; import owner::*; C c; "
+                                           : module ? "module tail; owner dut(); "
+                                                    : "module tail; ") +
+                                   "initial " + (task ? call : "void'(" + call + ")") +
+                                   "; endmodule\n");
+    const std::string type = kind;
+    std::string valid = type == "alias"
+                            ? "typedef logic[7:0] local_t; local_t result=arg; return int'(result);"
+                        : type == "enum"   ? "typedef enum int {READY=0,DONE=1} local_t; "
+                                             "local_t result=READY; return int'(result);"
+                        : type == "struct" ? "typedef struct packed {int data;} local_t; "
+                                             "local_t result; result.data=arg; return result.data;"
+                        : type == "union"
+                            ? "typedef union packed {int data; bit[31:0] bits;} local_t; "
+                              "local_t result; result.data=arg; return result.data;"
+                        : type == "unpacked-struct" ? "typedef struct {int data;} local_t; local_t "
+                                                      "result; result.data=arg; return result.data;"
+                        : type == "unpacked-union"
+                            ? "typedef union {int data; bit[31:0] bits;} local_t; local_t result; "
+                              "result.data=arg; return result.data;"
+                            : "typedef int local_t; return arg;";
+    std::string invalid =
+        type == "alias"  ? "typedef missing_local_type local_t; local_t result=arg; return result;"
+        : type == "enum" ? "typedef enum int {READY=0,DONE=0} local_t; "
+                           "local_t result=READY; return int'(result);"
+        : type == "struct" ? "typedef struct packed {int data;} local_t; "
+                             "local_t result; return result.missing;"
+        : type == "union"  ? "typedef union packed {int data; bit[7:0] bits;} local_t; "
+                             "local_t result; return result.data;"
+        : type == "unpacked-struct"
+            ? "typedef struct {int data;} local_t; local_t result; return result.missing;"
+        : type == "unpacked-union"
+            ? "typedef union {int data; int data;} local_t; local_t result; return result.data;"
+            : "typedef struct packed {missing_local_type field;} local_t; return arg;";
+    valid = taskify(std::move(valid));
+    invalid = taskify(std::move(invalid));
+    const std::string old = taskify("int result=arg; return result;");
+    std::string original = (cls ? std::string("class C; ") : std::string{}) +
+                           (task ? std::string(cls ? "task " : "task automatic ")
+                                 : std::string(cls ? "function int " : "function automatic int ")) +
+                           "work(input int arg);\n" + old + "\n" +
+                           (task ? "endtask\n" : "endfunction\n") + (cls ? "endclass\n" : "");
+    if (initialType)
+        original.replace(original.find(old), old.size(), valid);
+    workspace.write("item.svh", original);
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    int version = 1;
+    for (const auto& statement : {valid + " ", invalid, valid + "\n", taskify("return arg;")}) {
+        auto text = original;
+        const auto& previous = initialType ? valid : old;
+        text.replace(text.find(previous), previous.size(), statement);
+        change(server, doc.m_uri, ++version, text);
+        if (cancelFirst && version == 2) {
+            auto before = diagnosticMap(server);
+            lsp::RequestContext ctx("local-type-analysis", 204);
+            bool reached = false;
+            ctx.setCheckpointObserverForTesting([&](std::string_view phase) {
+                if (phase == "after local diagnostic procedure") {
+                    reached = true;
+                    ctx.cancel();
+                }
+            });
+            CHECK_THROWS_AS(server.runBackgroundWork(ctx), lsp::RequestCancelled);
+            REQUIRE(reached);
+            CHECK(diagnosticMap(server) == before);
+            CHECK(server.client.diagnosticVersions.at(doc.m_uri) == 1);
+        }
+        server.runBackgroundWork({});
+        INFO(state(server).decline);
+        INFO(diagnosticState(server).localDiagnosticDecline);
+        CHECK(diagnosticState(server).localDiagnosticUpdates == uint64_t(version - 1));
+        auto hoverOffset = text.find("local_t");
+        if (hoverOffset == std::string::npos)
+            hoverOffset = text.rfind("arg");
+        // change() sends directly to the server; DocumentHandle still stores
+        // the initial text and cannot compute coordinates for a longer body.
+        const auto position = server::toPosition(
+            slang::SourceLocation(server.m_driver->getDocument(doc.m_uri)->getBuffer(),
+                                  hoverOffset),
+            server.m_driver->sm);
+        checkNativeDiagnostics(workspace, server, text, true, position);
+    }
+}
+
+TEST_CASE("Local imports and new package references preserve private semantic closure",
+          "[method-body-diagnostics][body-local-imports]") {
+    const auto context = GENERATE("class", "package", "module");
+    const auto style = GENERATE("explicit", "wildcard", "qualified");
+    const bool task = GENERATE(false, true);
+    const bool initialImport = GENERATE(false, true);
+    const bool cancelFirst = GENERATE(false, true);
+    CAPTURE(context, style, task, initialImport, cancelFirst);
+    Workspace workspace;
+    workspace.write(".slang/server.json", certificationConfig());
+    workspace.write("prelude.sv",
+                    "package prelude; typedef struct packed {int value;} word_t; "
+                    "function automatic int helper(int arg); return arg+1; endfunction "
+                    "endpackage\n"
+                    "package alternate; typedef struct packed {byte value;} word_t; "
+                    "function automatic int helper(int arg); return arg-1; endfunction "
+                    "endpackage\n");
+    auto statement = [&](std::string_view package) {
+        std::string prefix;
+        if (std::string_view(style) == "explicit")
+            prefix = "import " + std::string(package) + "::word_t; import " + std::string(package) +
+                     "::helper; ";
+        else if (std::string_view(style) == "wildcard")
+            prefix = "import " + std::string(package) + "::*; ";
+        const std::string qualifier = std::string_view(style) == "qualified"
+                                          ? std::string(package) + "::"
+                                          : "";
+        return prefix + qualifier + "word_t local_word; local_word.value=arg; " +
+               (task ? "$display(" : "return ") + qualifier + "helper(local_word.value)" +
+               (task ? "); return;" : ";");
+    };
+    const auto valid = statement("prelude");
+    const auto alternate = statement("alternate");
+    const auto invalid = statement("missing_package");
+    const std::string removed = task ? "$display(arg); return;" : "return arg;";
+    const auto old = initialImport ? valid : removed;
+    const bool cls = std::string_view(context) == "class";
+    const bool module = std::string_view(context) == "module";
+    const std::string original = (cls ? std::string("class C; ") : std::string{}) +
+                                 (task ? std::string(cls ? "task " : "task automatic ")
+                                       : std::string(cls ? "function int "
+                                                         : "function automatic int ")) +
+                                 "work(input int arg);\n" + old + "\n" +
+                                 (task ? "endtask\n" : "endfunction\n") + (cls ? "endclass\n" : "");
+    workspace.write("item.svh", original);
+    if (module)
+        workspace.write("owner.sv", "module owner;\n`include \"item.svh\"\nendmodule\n");
+    const std::string call = cls ? "c.work(1)" : module ? "dut.work(1)" : "owner::work(1)";
+    workspace.write("tail.sv", std::string(cls      ? "module tail; import owner::*; C c; "
+                                           : module ? "module tail; owner dut(); "
+                                                    : "module tail; ") +
+                                   "initial " + (task ? call : "void'(" + call + ")") +
+                                   "; endmodule\n");
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    auto checkOrigin = [&](std::string_view phase) {
+        if (!initialImport)
+            return;
+        INFO(phase);
+        auto design = server.m_driver->comp->createActiveDesignContext({});
+        auto owner = design.retainCompilation();
+        std::vector<const ast::SubroutineSymbol*> bodies;
+        for (auto fn : design.getAnalysis().getAnalysisManager().getAnalyzedSubroutines())
+            if (fn->name == "work")
+                bodies.push_back(fn);
+        REQUIRE(!bodies.empty());
+        auto outside = owner->getReferenceUsageExcludingBodies(bodies);
+        REQUIRE(outside);
+        const auto* syntax = owner->getPackage("prelude")->find("word_t")->getSyntax();
+        auto found = outside->find(syntax);
+        CHECK((found == outside->end() ? std::pair{false, false} : found->second) ==
+              std::pair{false, false});
+    };
+    checkOrigin("before query indexing");
+    doc.doc->getAnalysis();
+    checkOrigin("after query indexing");
+    int version = 1;
+    for (const auto& current : {valid + " ", alternate, invalid, valid + "\n", removed, valid}) {
+        auto text = original;
+        text.replace(text.find(old), old.size(), current);
+        change(server, doc.m_uri, ++version, text);
+        if (cancelFirst && version == 2) {
+            const auto before = diagnosticMap(server);
+            lsp::RequestContext ctx("local-import-analysis", 206);
+            bool reached = false;
+            ctx.setCheckpointObserverForTesting([&](std::string_view phase) {
+                if (phase == "after local diagnostic procedure") {
+                    reached = true;
+                    ctx.cancel();
+                }
+            });
+            CHECK_THROWS_AS(server.runBackgroundWork(ctx), lsp::RequestCancelled);
+            REQUIRE(reached);
+            CHECK(diagnosticMap(server) == before);
+            CHECK(server.client.diagnosticVersions.at(doc.m_uri) == 1);
+        }
+        server.runBackgroundWork({});
+        INFO(state(server).decline);
+        INFO(diagnosticState(server).localDiagnosticDecline);
+        CHECK(diagnosticState(server).localDiagnosticUpdates == uint64_t(version - 1));
+        auto offset = text.find("local_word");
+        if (offset == std::string::npos)
+            offset = text.rfind("arg");
+        const auto position = server::toPosition(
+            slang::SourceLocation(server.m_driver->getDocument(doc.m_uri)->getBuffer(), offset),
+            server.m_driver->sm);
+        checkNativeDiagnostics(workspace, server, text, true, position);
+    }
+}
+
+TEST_CASE("New package references preserve the selected module parameter context",
+          "[method-body-diagnostics][body-local-imports][multiple-body-contexts]") {
+    const auto instance = GENERATE("tail.first", "tail.second");
+    CAPTURE(instance);
+    Workspace workspace;
+    workspace.write(".slang/server.json", certificationConfig());
+    workspace.write("prelude.sv", "package prelude; typedef int word_t; endpackage\n");
+    workspace.write("tail.sv", "module tail; owner#(8) first(); owner#(16) second(); "
+                               "initial begin void'(first.work(1)); void'(second.work(2)); "
+                               "end endmodule\n");
+    const std::string old = "logic[WIDTH-1:0] local_word=arg; return local_word;";
+    const std::string original =
+        "module owner #(parameter int WIDTH=8);\nfunction automatic logic[WIDTH-1:0] work("
+        "input logic[WIDTH-1:0] arg);\n" +
+        old + "\nendfunction\nendmodule\n";
+    workspace.write("owner.sv", original);
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    REQUIRE(server.setActiveInstance(instance));
+    auto doc = server.openFile("owner.sv", original);
+    doc.doc->getAnalysis();
+    int version = 1;
+    for (const auto* statement :
+         {"import prelude::word_t; word_t imported=arg; "
+          "logic[WIDTH-1:0] local_word=arg; return local_word+imported;",
+          "import prelude::missing_type; logic[WIDTH-1:0] local_word=arg; return local_word;",
+          "import prelude::*;\n word_t imported=arg; "
+          "logic[WIDTH-1:0] local_word=arg; return local_word+imported;",
+          "logic[WIDTH-1:0] local_word=arg; return local_word;"}) {
+        auto text = original;
+        text.replace(text.find(old), old.size(), statement);
+        change(server, doc.m_uri, ++version, text);
+        server.runBackgroundWork({});
+        INFO(state(server).decline);
+        INFO(diagnosticState(server).localDiagnosticDecline);
+        CHECK(diagnosticState(server).localDiagnosticUpdates == uint64_t(version - 1));
+        const auto position = server::toPosition(
+            slang::SourceLocation(server.m_driver->getDocument(doc.m_uri)->getBuffer(),
+                                  text.rfind("local_word")),
+            server.m_driver->sm);
+        auto hover = server.getDocHover({.textDocument = {.uri = doc.m_uri}, .position = position});
+        REQUIRE(hover);
+        CHECK(rfl::json::write(hover).find(std::string_view(instance) == "tail.first"
+                                               ? "Width: `8`"
+                                               : "Width: `16`") != std::string::npos);
+        checkNativeDiagnostics(workspace, server, text, true, position, instance, "owner.sv");
+    }
+}
+
+TEST_CASE("Changed generic instances update their complete diagnostic closure",
+          "[method-body-diagnostics][body-generic-closure]") {
+    const bool cls = GENERATE(false, true);
+    const auto initial = GENERATE("none", "int", "byte");
+    const bool independentConsumer = GENERATE(false, true);
+    CAPTURE(cls, initial, independentConsumer);
+    Workspace workspace;
+    workspace.write(".slang/server.json", certificationConfig());
+    workspace.write("prelude.sv",
+                    std::string("package prelude; class Box #(type T=int); T value; "
+                                "function T read(input int arg); return arg; endfunction "
+                                "endclass\n") +
+                        (independentConsumer ? "Box#(byte) independent_box;\n" : "") +
+                        "endpackage\n");
+    const auto body = [](std::string_view parameter) {
+        return parameter == "none"
+                   ? std::string("return arg;")
+                   : "prelude::Box#(" + std::string(parameter) + ") local_box; return arg;";
+    };
+    const auto old = body(initial);
+    const std::string original = std::string(
+                                     cls ? "class C; function int work(input int arg);\n"
+                                         : "function automatic int work(input int arg);\n") +
+                                 old + "\nendfunction\n" + (cls ? "endclass\n" : "");
+    workspace.write("item.svh", original);
+    workspace.write("tail.sv", cls ? "module tail; import owner::*; C c; "
+                                     "initial void'(c.work(1)); endmodule\n"
+                                   : "module tail; initial void'(owner::work(1)); endmodule\n");
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    int version = 1;
+    for (const auto& replacement : {body("int") + " ", body("byte"), body("byte") + "\n",
+                                    body("missing_type"), body("none"), body("int")}) {
+        auto text = original;
+        text.replace(text.find(old), old.size(), replacement);
+        change(server, doc.m_uri, ++version, text);
+        server.runBackgroundWork({});
+        INFO(state(server).decline);
+        INFO(diagnosticState(server).localDiagnosticDecline);
+        CHECK(diagnosticState(server).localDiagnosticUpdates == uint64_t(version - 1));
+        auto offset = text.find("local_box");
+        if (offset == std::string::npos)
+            offset = text.rfind("arg");
+        const auto position = server::toPosition(
+            slang::SourceLocation(server.m_driver->getDocument(doc.m_uri)->getBuffer(), offset),
+            server.m_driver->sm);
+        checkNativeDiagnostics(workspace, server, text, true, position);
+    }
+}
+
+TEST_CASE("Method-local generic arguments retain private nominal types and current values",
+          "[method-body-diagnostics][body-local-generic-arguments]") {
+    const auto context = GENERATE("class", "package", "module");
+    const auto kind = GENERATE("alias", "enum", "packed", "unpacked", "value");
+    const bool task = GENERATE(false, true);
+    const bool cancelFirst = GENERATE(false, true);
+    CAPTURE(context, kind, task, cancelFirst);
+    const bool cls = std::string_view(context) == "class";
+    const bool module = std::string_view(context) == "module";
+    Workspace workspace;
+    workspace.write(".slang/server.json", certificationConfig());
+    workspace.write("prelude.sv", "package prelude; class Box #(type T=int, int N=1); T value;\n"
+                                  "function int width(); return $bits(T)+N; endfunction\n"
+                                  "endclass endpackage\n");
+    if (module)
+        workspace.write("owner.sv", "module owner;\n`include \"item.svh\"\nendmodule\n");
+    const std::string call = cls ? "c.work(1)" : module ? "dut.work(1)" : "owner::work(1)";
+    workspace.write("tail.sv", std::string(cls      ? "module tail; import owner::*; C c; "
+                                           : module ? "module tail; owner dut(); "
+                                                    : "module tail; ") +
+                                   "initial " + (task ? call : "void'(" + call + ")") +
+                                   "; endmodule\n");
+    auto body = [&](bool wider, bool invalid) {
+        const std::string count = invalid ? "missing_local_count" : wider ? "2" : "1";
+        const std::string width = wider ? "15" : "7";
+        const std::string type = kind;
+        const std::string declaration =
+            type == "alias"      ? "typedef logic[" + width + ":0] local_t; "
+            : type == "enum"     ? "typedef enum logic[" + width + ":0] {EMPTY=0,READY=1} local_t; "
+            : type == "packed"   ? "typedef struct packed {logic[" + width + ":0] data;} local_t; "
+            : type == "unpacked" ? "typedef struct {logic[" + width + ":0] data;} local_t; "
+                                 : "";
+        return "localparam int COUNT=" + count + "; " + declaration + "prelude::Box#(" +
+               (type == "value" ? "int" : "local_t") + ",COUNT) local_box; local_box=new; " +
+               (task ? "$display(arg+local_box.width());" : "return arg+local_box.width();");
+    };
+    const std::string old = task ? "$display(arg);" : "return arg;";
+    const std::string original = (cls ? std::string("class C;\n") : std::string{}) +
+                                 (task ? std::string(cls ? "task " : "task automatic ")
+                                       : std::string(cls ? "function int "
+                                                         : "function automatic int ")) +
+                                 "work(input int arg);\n" + old + "\n" +
+                                 (task ? "endtask\n" : "endfunction\n") + (cls ? "endclass\n" : "");
+    workspace.write("item.svh", original);
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    int version = 1;
+    for (const auto& replacement : {body(false, false), body(true, false), body(true, true),
+                                    body(false, false) + "\n", old, body(true, false)}) {
+        auto text = original;
+        text.replace(text.find(old), old.size(), replacement);
+        change(server, doc.m_uri, ++version, text);
+        const auto position = server::toPosition(
+            slang::SourceLocation(server.m_driver->getDocument(doc.m_uri)->getBuffer(),
+                                  text.rfind("arg")),
+            server.m_driver->sm);
+        // Exercise shallow query disposal before completing diagnostics and before
+        // the next nominal type is created with the same local spelling.
+        REQUIRE(server.getDocHover({.textDocument = {.uri = doc.m_uri}, .position = position}));
+        if (cancelFirst && version == 2) {
+            const auto before = diagnosticMap(server);
+            lsp::RequestContext ctx("local-generic-analysis", 205);
+            bool reached = false;
+            ctx.setCheckpointObserverForTesting([&](std::string_view phase) {
+                if (phase == "after local diagnostic binding") {
+                    reached = true;
+                    ctx.cancel();
+                }
+            });
+            CHECK_THROWS_AS(server.runBackgroundWork(ctx), lsp::RequestCancelled);
+            REQUIRE(reached);
+            CHECK(diagnosticMap(server) == before);
+            CHECK(server.client.diagnosticVersions.at(doc.m_uri) == 1);
+        }
+        server.runBackgroundWork({});
+        INFO(state(server).decline);
+        INFO(diagnosticState(server).localDiagnosticDecline);
+        CHECK(diagnosticState(server).localDiagnosticUpdates == uint64_t(version - 1));
+        checkNativeDiagnostics(workspace, server, text, true, position);
+    }
+}
+
+TEST_CASE("Method-local let declarations preserve defaults and unused diagnostics",
+          "[method-body-diagnostics][body-local-let]") {
+    const auto context = GENERATE("class", "package", "module");
+    const auto kind = GENERATE("simple", "default", "unused", "import", "nested", "generic");
+    const bool task = GENERATE(false, true);
+    const bool initialPresent = GENERATE(false, true);
+    const bool cancelFirst = GENERATE(false, true);
+    CAPTURE(context, kind, task, initialPresent, cancelFirst);
+    const bool cls = std::string_view(context) == "class";
+    const bool module = std::string_view(context) == "module";
+    Workspace workspace;
+    workspace.write(".slang/server.json", certificationConfig());
+    workspace.write("prelude.sv",
+                    "package prelude; int shared,other; class Box #(type T=int);\n"
+                    "static function T read(input T value); return value; endfunction\n"
+                    "endclass endpackage\n");
+    if (module)
+        workspace.write("owner.sv", "module owner;\n`include \"item.svh\"\nendmodule\n");
+    const std::string call = cls ? "c.work(1)" : module ? "dut.work(1)" : "owner::work(1)";
+    workspace.write("tail.sv", std::string(cls      ? "module tail; import owner::*; C c; "
+                                           : module ? "module tail; owner dut(); "
+                                                    : "module tail; ") +
+                                   "initial " + (task ? call : "void'(" + call + ")") +
+                                   "; endmodule\n");
+    auto value = [task](std::string expression) {
+        return task ? "$display(" + expression + ");" : "return " + expression + ";";
+    };
+    auto body = [&](bool changed, bool invalid) {
+        const std::string type = kind;
+        const std::string operand = invalid ? "missing_let_name" : changed ? "2" : "1";
+        if (type == "unused")
+            return "let unused=" +
+                   std::string(invalid   ? "missing_let_name"
+                               : changed ? "prelude::other"
+                                         : "prelude::shared") +
+                   "; " + value("arg");
+        if (type == "default")
+            return "let add(x,y=" +
+                   std::string(invalid   ? "missing_let_default"
+                               : changed ? "arg+1"
+                                         : "arg") +
+                   ")=x+y; " + value("add(arg)");
+        if (type == "import")
+            return "import prelude::*; let add(x)=x+" +
+                   std::string(invalid   ? "missing_let_import"
+                               : changed ? "other"
+                                         : "shared") +
+                   "; " + value("add(arg)");
+        if (type == "generic")
+            return "let read(x)=prelude::Box#(" +
+                   std::string(invalid   ? "missing_let_type"
+                               : changed ? "byte"
+                                         : "int") +
+                   ")::read(x); " + value("read(arg)");
+        const auto expression = "let add(x)=x+" + operand + "; " + value("add(arg)");
+        return type == "nested" ? "begin : inner " + expression + " end" : expression;
+    };
+    const auto old = value("arg");
+    const auto valid = body(false, false);
+    const std::string initial = initialPresent ? valid : old;
+    const std::string original = (cls ? std::string("class C;\n") : std::string{}) +
+                                 (task ? std::string(cls ? "task " : "task automatic ")
+                                       : std::string(cls ? "function int "
+                                                         : "function automatic int ")) +
+                                 "work(input int arg);\n" + initial + "\n" +
+                                 (task ? "endtask\n" : "endfunction\n") + (cls ? "endclass\n" : "");
+    workspace.write("item.svh", original);
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    int version = 1;
+    for (const auto& replacement :
+         {valid + " ", body(true, false), body(true, true), valid + "\n", old, body(true, false)}) {
+        auto text = original;
+        text.replace(text.find(initial), initial.size(), replacement);
+        change(server, doc.m_uri, ++version, text);
+        const auto position = server::toPosition(
+            slang::SourceLocation(server.m_driver->getDocument(doc.m_uri)->getBuffer(),
+                                  text.rfind("arg")),
+            server.m_driver->sm);
+        REQUIRE(server.getDocHover({.textDocument = {.uri = doc.m_uri}, .position = position}));
+        if (cancelFirst && version == 2) {
+            const auto before = diagnosticMap(server);
+            lsp::RequestContext ctx("local-let-analysis", 206);
+            bool reached = false;
+            ctx.setCheckpointObserverForTesting([&](std::string_view phase) {
+                if (phase == "after local diagnostic binding") {
+                    reached = true;
+                    ctx.cancel();
+                }
+            });
+            CHECK_THROWS_AS(server.runBackgroundWork(ctx), lsp::RequestCancelled);
+            REQUIRE(reached);
+            CHECK(diagnosticMap(server) == before);
+            CHECK(server.client.diagnosticVersions.at(doc.m_uri) == 1);
+        }
+        server.runBackgroundWork({});
+        INFO(state(server).decline);
+        INFO(diagnosticState(server).localDiagnosticDecline);
+        CHECK(diagnosticState(server).localDiagnosticUpdates == uint64_t(version - 1));
+        checkNativeDiagnostics(workspace, server, text, true, position);
+    }
+}
+
+TEST_CASE("Task expect properties preserve local diagnostics and clock references",
+          "[method-body-diagnostics][body-local-expect]") {
+    const auto context = GENERATE("class", "package", "module");
+    CAPTURE(context);
+    const bool cls = std::string_view(context) == "class";
+    const bool module = std::string_view(context) == "module";
+    Workspace workspace;
+    workspace.write(".slang/server.json", certificationConfig());
+    workspace.write("prelude.sv", "package prelude; bit clk; endpackage\n");
+    if (module)
+        workspace.write("owner.sv", "module owner;\n`include \"item.svh\"\nendmodule\n");
+    workspace.write("tail.sv", std::string(cls      ? "module tail; import owner::*; C c; "
+                                           : module ? "module tail; owner dut(); "
+                                                    : "module tail; ") +
+                                   "initial " +
+                                   (cls      ? "c"
+                                    : module ? "dut"
+                                             : "owner:") +
+                                   (cls || module ? "." : ":") + "work(1); endmodule\n");
+    const std::string old = "$display(arg);";
+    const std::string original = (cls ? std::string("class C;\n") : std::string{}) +
+                                 (cls ? "task " : "task automatic ") + "work(input int arg);\n" +
+                                 old + "\nendtask\n" + (cls ? "endclass\n" : "");
+    workspace.write("item.svh", original);
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    int version = 1;
+    for (const auto& replacement : {"expect (@(posedge prelude::clk) arg>0);",
+                                    "expect (@(posedge prelude::clk) arg>0 ##1 arg>=0);",
+                                    "expect (@(posedge prelude::clk) missing_expect_name>0);",
+                                    "expect (@(negedge prelude::clk) arg>0) $display(arg);",
+                                    "$display(arg);", "expect (@(posedge prelude::clk) arg>0);"}) {
+        auto text = original;
+        text.replace(text.find(old), old.size(), replacement);
+        change(server, doc.m_uri, ++version, text);
+        server.runBackgroundWork({});
+        INFO(state(server).decline);
+        INFO(diagnosticState(server).localDiagnosticDecline);
+        CHECK(diagnosticState(server).localDiagnosticUpdates == uint64_t(version - 1));
+        checkNativeDiagnostics(workspace, server, text, true);
+    }
+}
+
+TEST_CASE("Full-model diagnostic boundaries retain current versions and Native results",
+          "[method-body-diagnostics][body-full-model-boundaries]") {
+    const auto mode = GENERATE("constant-dependency", "error-limit", "fatal-hierarchy");
+    CAPTURE(mode);
+    const bool constant = std::string_view(mode) == "constant-dependency";
+    const bool bounded = std::string_view(mode) == "error-limit";
+    const bool fatal = std::string_view(mode) == "fatal-hierarchy";
+    Workspace workspace;
+    const std::string flags = std::string("--single-unit --threads 1") +
+                              (bounded ? " --error-limit 1" : "") +
+                              (fatal ? " --max-hierarchy-depth 4" : "");
+    auto config = certificationConfig();
+    const auto option = config.find("--single-unit --threads 1");
+    REQUIRE(option != std::string::npos);
+    config.replace(option, std::string("--single-unit --threads 1").size(), flags);
+    const std::string nativeConfig =
+        "{\"indexingThreads\":1,\"flags\":\"" + flags +
+        "\",\"compilationFilelist\":\"design.f\",\"experimentalMethodScopeOverlay\":false,"
+        "\"experimentalMethodBodyQueries\":false,\"experimentalMethodBodyDiagnostics\":false,"
+        "\"experimentalMethodBodyCertification\":false,\"experimentalCooperativeAnalysis\":false}";
+    workspace.write(".slang/server.json", config);
+    const std::string tail = constant
+                                 ? "module tail; localparam int W=owner::work(1); "
+                                   "logic[W-1:0] data; endmodule\n"
+                                 : "module tail; " + std::string(fatal ? "recursive r(); " : "") +
+                                       "initial void'(owner::work(1)); endmodule\n" +
+                                       (fatal ? "module recursive; recursive child(); endmodule\n"
+                                              : "");
+    workspace.write("tail.sv", tail);
+    const std::string initial = constant ? "4" : "arg";
+    const std::string original = "function automatic int work(input int arg);\nreturn " + initial +
+                                 ";\nendfunction\n";
+    workspace.write("item.svh", original);
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    auto tailDoc = server.openFile("tail.sv", tail);
+    (void)doc.doc->getAnalysis();
+    {
+        auto baseline = server.m_driver->comp->createActiveDesignContext({}).retainCompilation();
+        (void)baseline->getAllDiagnostics();
+        CHECK(baseline->hasFatalErrors() == fatal);
+    }
+    if (bounded) {
+        // CLI limits are deliberately disabled by the server. The cache still
+        // rejects bounded engine settings defensively; restore the supported
+        // unlimited setting before testing actual diagnostic publication.
+        CHECK(server.m_driver->diagEngine.captureSettings().errorLimit == 0);
+        server.m_driver->diagEngine.setErrorLimit(1);
+        CHECK_THROWS_WITH(server::BodyDiagnosticCache::capture(*server.m_driver, doc.m_uri, 0,
+                                                               original.size(), {}),
+                          "bounded diagnostic streams require full analysis");
+        server.m_driver->diagEngine.setErrorLimit(0);
+    }
+    int version = 1;
+    for (const auto* expression : {"8", "missing_first+missing_second", "4"}) {
+        auto text = original;
+        text.replace(text.find("return " + initial), 7 + initial.size(),
+                     "return " + std::string(expression));
+        change(server, doc.m_uri, ++version, text);
+        server.runBackgroundWork({});
+        INFO(state(server).decline);
+        INFO(diagnosticState(server).localDiagnosticDecline);
+        CHECK(diagnosticState(server).localDiagnosticUpdates ==
+              (bounded ? uint64_t(version - 1) : 0));
+        REQUIRE(server.client.diagnosticVersions.contains(doc.m_uri));
+        CHECK(server.client.diagnosticVersions.at(doc.m_uri) == version);
+        const auto position =
+            constant ? tailDoc.getPosition(tail.find("data;"))
+                     : server::toPosition(slang::SourceLocation(
+                                              server.m_driver->getDocument(doc.m_uri)->getBuffer(),
+                                              text.find("return ") + 7),
+                                          server.m_driver->sm);
+        const auto hoverUri = constant ? tailDoc.m_uri : doc.m_uri;
+        const auto actualHover = rfl::json::write(
+            server.getDocHover({.textDocument = {.uri = hoverUri}, .position = position}));
+        auto actual = diagnosticMap(server);
+        workspace.write(".slang/server.json", nativeConfig);
+        {
+            BodyTestServer native(workspace.params());
+            native.setBuildFile((workspace.root / "design.f").string());
+            auto oracle = native.openFile("item.svh", text);
+            native.openFile("tail.sv", tail);
+            CHECK(actualHover == rfl::json::write(native.getDocHover(
+                                     {.textDocument = {.uri = hoverUri}, .position = position})));
+            std::unordered_set<URI> keys(server.client.diagnosticPublications.begin(),
+                                         server.client.diagnosticPublications.end());
+            keys.insert(native.client.diagnosticPublications.begin(),
+                        native.client.diagnosticPublications.end());
+            auto published = [](auto& client, const URI& uri) {
+                std::vector<std::string> result;
+                for (const auto& diagnostic : client.getDiagnostics(uri))
+                    result.push_back(rfl::json::write(diagnostic));
+                std::sort(result.begin(), result.end());
+                return result;
+            };
+            for (const auto& uri : keys)
+                CHECK(published(server.client, uri) == published(native.client, uri));
+            auto expected = diagnosticMap(native);
+            std::erase_if(actual, [](const auto& item) { return item.second.empty(); });
+            std::erase_if(expected, [](const auto& item) { return item.second.empty(); });
+            INFO(rfl::json::write(actual));
+            INFO(rfl::json::write(expected));
+            CHECK(actual == expected);
+        }
+        workspace.write(".slang/server.json", config);
+    }
+}
+
+TEST_CASE("Completed contexts reuse syntax only for the same included occurrence",
+          "[body-syntax-index-reuse]") {
+    using namespace slang;
+    Workspace workspace;
+    workspace.write("item.svh",
+                    "function automatic int work(input int arg); return arg; endfunction\n");
+    workspace.write("owner.sv", "package first;\n`include \"item.svh\"\nendpackage\n"
+                                "package second;\n`include \"item.svh\"\nendpackage\n");
+    SourceManager sm;
+    auto parsed = syntax::SyntaxTree::fromFile((workspace.root / "owner.sv").string(), sm);
+    REQUIRE(parsed);
+    auto tree = *parsed;
+    auto owner = std::make_shared<ast::Compilation>();
+    owner->addSyntaxTree(tree);
+    REQUIRE(owner->getSemanticDiagnostics().empty());
+    const auto& first = owner->getPackage("first")->find<ast::SubroutineSymbol>("work");
+    const auto& second = owner->getPackage("second")->find<ast::SubroutineSymbol>("work");
+    REQUIRE(first.location.buffer() != second.location.buffer());
+    const ast::SubroutineSymbol* a[] = {&first};
+    const ast::SubroutineSymbol* b[] = {&second};
+    auto originalUnit = std::make_shared<server::ShallowCompilation>(sm, tree, owner, a);
+    auto original = std::make_shared<server::ShallowAnalysis>(first.location.buffer(),
+                                                              originalUnit);
+    auto nextUnit = std::make_shared<server::ShallowCompilation>(sm, tree, owner, b);
+    auto next = std::make_shared<server::ShallowAnalysis>(second.location.buffer(), nextUnit,
+                                                          lsp::RequestContext{}, original.get());
+    auto token = next->syntaxes.getWordTokenAt(second.location);
+    REQUIRE(token);
+    CHECK(token->location().buffer() == second.location.buffer());
+    CHECK(token != original->syntaxes.getWordTokenAt(first.location));
+    auto reused = std::make_shared<server::ShallowAnalysis>(second.location.buffer(), nextUnit,
+                                                            lsp::RequestContext{}, next.get());
+    CHECK(reused->syntaxes.getWordTokenAt(second.location) == token);
+    const auto& syntax = second.getSyntax()->as<syntax::FunctionDeclarationSyntax>();
+    auto contexts = reused->getSubroutines(syntax);
+    REQUIRE(contexts.size() == 1);
+    CHECK(contexts.front() == &second);
+    original.reset();
+    next.reset();
+    CHECK(reused->syntaxes.getWordTokenAt(second.location) == token);
+    CHECK(reused->getSubroutines(syntax).front() == &second);
+}
+
+TEST_CASE("Local nominal class arguments never escape into the retained compilation",
+          "[body-local-generic-ownership]") {
+    using namespace slang;
+    const auto kind = GENERATE("enum", "packed", "unpacked", "value");
+    CAPTURE(kind);
+    ast::CompilationOptions options;
+    options.flags |= ast::CompilationFlags::TrackSubroutineBodyDependencies;
+    const std::string prefix = "package p;\nclass Box #(type T=int,int N=1); T value;\n"
+                               "function int width(); return $bits(T)+N; endfunction\nendclass\n";
+    auto function = [&](int width, int count) {
+        const std::string type = kind;
+        const std::string declaration =
+            type == "enum"     ? "typedef enum logic[" + std::to_string(width - 1) +
+                                     ":0] {ZERO=0,ONE=1} local_t;\n"
+            : type == "packed" ? "typedef struct packed {logic[" + std::to_string(width - 1) +
+                                     ":0] data;} local_t;\n"
+            : type == "unpacked"
+                ? "typedef struct {logic[" + std::to_string(width - 1) + ":0] data;} local_t;\n"
+                : "";
+        return "function automatic int work(input int arg);\n" + declaration +
+               "localparam int COUNT=" + std::to_string(count) + ";\n" + "p::Box#(" +
+               (type == "value" ? "int" : "local_t") +
+               ",COUNT) local_box;\nreturn arg+$bits(local_box.value);\nendfunction\n";
+    };
+    SourceManager sm;
+    auto owner = std::make_shared<ast::Compilation>(options);
+    owner->addSyntaxTree(
+        syntax::SyntaxTree::fromText(prefix + function(8, 1) + "endpackage\n", sm));
+    REQUIRE(owner->getSemanticDiagnostics().empty());
+    auto& definition = owner->getPackage("p")->find<ast::GenericClassDefSymbol>("Box");
+    const auto& original = owner->getPackage("p")->find<ast::SubroutineSymbol>("work");
+    const auto count = definition.numSpecializations();
+    const auto bytes = owner->getTotalBytesAllocated();
+    const auto references = owner->getReferenceUsageExcludingBodies({});
+    REQUIRE(references);
+    auto padding = prefix;
+    for (auto& c : padding)
+        if (c != '\n')
+            c = ' ';
+    for (const auto [width, value] : {std::pair{16, 2}, {8, 3}, {32, 4}, {16, 2}}) {
+        CAPTURE(width, value);
+        std::weak_ptr<ast::Compilation> released;
+        {
+            const auto current = function(width, value);
+            auto tree = syntax::SyntaxTree::fromText(padding + current, sm);
+            REQUIRE(tree->diagnostics().empty());
+            const syntax::FunctionDeclarationSyntax* fn = nullptr;
+            auto find = [&](auto&& self, const syntax::SyntaxNode& node) -> void {
+                if (auto found = node.as_if<syntax::FunctionDeclarationSyntax>()) {
+                    fn = found;
+                    return;
+                }
+                for (uint32_t i = 0; i < node.getChildCount(); ++i)
+                    if (auto child = node.childNode(i))
+                        self(self, *child);
+            };
+            find(find, tree->root());
+            REQUIRE(fn);
+            auto query = std::make_shared<ast::Compilation>(options);
+            released = query;
+            query->setBodyQueryContext(owner, tree);
+            {
+                ast::BodyQueryReferenceGuard guard(*query);
+                const auto& replacement = ast::SubroutineSymbol::createBodyQuery(*query, *fn,
+                                                                                 original);
+                query->forceElaborate(replacement);
+                const auto& cls = replacement.find<ast::VariableSymbol>("local_box")
+                                      .getType()
+                                      .as<ast::ClassType>();
+                CHECK(&cls.getCompilation() == query.get());
+                const auto& argument = cls.find<ast::VariableSymbol>("value").getType();
+                if (std::string_view(kind) != "value") {
+                    REQUIRE(argument.getCanonicalType().getParentScope());
+                    CHECK(&argument.getCanonicalType().getParentScope()->getCompilation() ==
+                          query.get());
+                    CHECK(argument.getBitstreamWidth() == uint64_t(width));
+                }
+                const ast::SubroutineSymbol* replaced[] = {&original};
+                auto roots = query->getClassSpecializationUses();
+                REQUIRE(roots);
+                auto unused = owner->getUnusedClassSpecializationsExcludingBodies(replaced, {},
+                                                                                  *roots);
+                REQUIRE(unused);
+                const auto view = query->getBodyQuerySemanticView(replacement, replaced, *unused);
+                CHECK(view.diagnostics.empty());
+                REQUIRE(view.references);
+                CHECK(cls.hasCompletedSemanticAnalysis());
+            }
+            ast::Compilation fresh(options);
+            fresh.addSyntaxTree(
+                syntax::SyntaxTree::fromText(prefix + current + "endpackage\n", sm));
+            CHECK(fresh.getSemanticDiagnostics().empty());
+        }
+        CHECK(released.expired());
+        CHECK(definition.numSpecializations() == count);
+        CHECK(owner->getTotalBytesAllocated() == bytes);
+        CHECK(owner->getSemanticDiagnostics().empty());
+        CHECK(owner->getReferenceUsageExcludingBodies({}) == references);
+    }
+}
+
+TEST_CASE("Class value specialization keys preserve inferred parameter types",
+          "[body-generic-value-types]") {
+    using namespace slang;
+    const auto kind = GENERATE("width", "sign", "state");
+    const bool typed = GENERATE(false, true);
+    const bool reverse = GENERATE(false, true);
+    CAPTURE(kind, typed, reverse);
+    const std::string shape = kind;
+    std::string arguments[] = {shape == "state" ? "bit'(1)" : "32'd2", shape == "width" ? "64'd2"
+                                                                       : shape == "sign"
+                                                                           ? "32'sd2"
+                                                                           : "logic'(1)"};
+    if (reverse)
+        std::swap(arguments[0], arguments[1]);
+    SourceManager sm;
+    ast::Compilation compilation;
+    const std::string definition = "package p; class Box #(parameter " +
+                                   std::string(typed ? "int " : "") +
+                                   "N=1); logic[$bits(N)-1:0] payload; endclass\n";
+    compilation.addSyntaxTree(syntax::SyntaxTree::fromText(definition + "Box#(" + arguments[0] +
+                                                               ") first; Box#(" + arguments[1] +
+                                                               ") second; endpackage\n",
+                                                           sm));
+    for (const auto& diagnostic : compilation.getSemanticDiagnostics())
+        REQUIRE_FALSE(diagnostic.isError());
+    const auto* package = compilation.getPackage("p");
+    const auto& first = package->find<ast::VariableSymbol>("first").getType().as<ast::ClassType>();
+    const auto& second =
+        package->find<ast::VariableSymbol>("second").getType().as<ast::ClassType>();
+    const ast::ClassType* classes[] = {&first, &second};
+    std::unique_ptr<ast::Compilation> oracles[2];
+    const ast::Type* expectedTypes[2] = {};
+    for (unsigned i = 0; i < 2; ++i) {
+        const bool latter = reverse ? i == 0 : i == 1;
+        const auto& type =
+            classes[i]->genericParameters.front()->as<ast::ParameterSymbol>().getType();
+        // Use an independent single-specialization compilation as the oracle
+        // for inferred types of known constant parameters.
+        oracles[i] = std::make_unique<ast::Compilation>();
+        auto& fresh = *oracles[i];
+        fresh.addSyntaxTree(syntax::SyntaxTree::fromText(
+            definition + "Box#(" + arguments[i] + ") only; endpackage\n", sm));
+        for (const auto& diagnostic : fresh.getSemanticDiagnostics())
+            REQUIRE_FALSE(diagnostic.isError());
+        const auto& expected = fresh.getPackage("p")
+                                   ->find<ast::VariableSymbol>("only")
+                                   .getType()
+                                   .as<ast::ClassType>()
+                                   .genericParameters.front()
+                                   ->as<ast::ParameterSymbol>()
+                                   .getType();
+        expectedTypes[i] = &expected;
+        const uint64_t width = typed              ? 32
+                               : shape == "width" ? (latter ? 64 : 32)
+                               : shape == "state" ? 1
+                                                  : 32;
+        CHECK(type.getBitWidth() == width);
+        CHECK(type.isSigned() == expected.isSigned());
+        CHECK(type.isFourState() == expected.isFourState());
+        CHECK(classes[i]->find<ast::VariableSymbol>("payload").getType().getBitWidth() == width);
+    }
+    // Inference can erase the distinction between known bit/logic cast values.
+    // Reuse follows the inferred types, rather than their source spellings.
+    CHECK((&first == &second) == expectedTypes[0]->isMatching(*expectedTypes[1]));
+}
+
+TEST_CASE("Edits creating their own generic class use current methods in every specialization",
+          "[method-body-diagnostics][body-generic-self-closure]") {
+    const bool task = GENERATE(false, true);
+    const bool external = GENERATE(false, true);
+    const auto initial = GENERATE("none", "int", "byte");
+    CAPTURE(task, external, initial);
+    Workspace workspace;
+    workspace.write(".slang/server.json", certificationConfig());
+    const auto body = [&](std::string_view parameter) {
+        std::string result;
+        if (parameter != "none")
+            result = "C#(" + std::string(parameter) + ") local_box; ";
+        return result + (task ? "arg++;" : "return arg;");
+    };
+    const auto old = body(initial);
+    const std::string signature = task ? "task" : "function int";
+    const std::string end = task ? "endtask" : "endfunction";
+    const std::string method = signature + (external ? " C::work" : " work") +
+                               "(input int arg);\n" + old + "\n" + end + "\n";
+    const std::string original = "class C #(type T=int);\n" +
+                                 (external ? "extern " + signature +
+                                                 " work(input int arg); endclass\n" + method
+                                           : method + "endclass\n");
+    workspace.write("item.svh", original);
+    workspace.write("tail.sv", "module tail; import owner::*; C#(int) c; initial " +
+                                   std::string(task ? "c.work(1);" : "void'(c.work(1));") +
+                                   " endmodule\n");
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    int version = 1;
+    for (const auto& replacement : {body("int") + " ", body("byte"), body("byte") + "\n",
+                                    body("missing_type"), body("none"), body("int")}) {
+        auto text = original;
+        text.replace(text.find(old), old.size(), replacement);
+        change(server, doc.m_uri, ++version, text);
+        server.runBackgroundWork({});
+        INFO(state(server).decline);
+        INFO(diagnosticState(server).localDiagnosticDecline);
+        CHECK(diagnosticState(server).localDiagnosticUpdates == uint64_t(version - 1));
+        auto offset = text.find("local_box");
+        if (offset == std::string::npos)
+            offset = text.rfind("arg");
+        const auto position = server::toPosition(
+            slang::SourceLocation(server.m_driver->getDocument(doc.m_uri)->getBuffer(), offset),
+            server.m_driver->sm);
+        // Native hover does not select a generic class context here (it returns
+        // null even for the unchanged argument). Compare all diagnostics with
+        // Native and assert the supported private hover independently.
+        const auto hover = rfl::json::write(
+            server.getDocHover({.textDocument = {.uri = doc.m_uri}, .position = position}));
+        CHECK(hover != "null");
+        CHECK(hover.find(offset == text.rfind("arg") ? "arg" : "local_box") != std::string::npos);
+        if (replacement.find("C#(byte)") != std::string::npos)
+            CHECK(hover.find("C#(byte)") != std::string::npos);
+        if (replacement.find("C#(int)") != std::string::npos)
+            CHECK(hover.find("C#(int)") != std::string::npos);
+        checkNativeDiagnostics(workspace, server, text, true);
+    }
+}
+
+TEST_CASE("Hover before generic diagnostics releases old query imports safely",
+          "[method-body-diagnostics][body-query-origin-lifetime]") {
+    Workspace workspace;
+    workspace.write(".slang/server.json", certificationConfig());
+    workspace.write("prelude.sv",
+                    "package prelude; int imported_value; class Box #(type T=int); "
+                    "T value; function T read(input int arg); return arg; endfunction "
+                    "endclass endpackage\n");
+    const auto body = [](std::string_view parameter) {
+        return std::string(
+                   parameter == "none" ? "" : "Box#(" + std::string(parameter) + ") local_box; ") +
+               "int local_value=imported_value; return local_value+arg;";
+    };
+    const auto old = body("none");
+    const std::string original = "import prelude::*; class C #(type T=int); "
+                                 "function int work(input int arg);\n" +
+                                 old + "\nendfunction endclass\n";
+    workspace.write("item.svh", original);
+    workspace.write("tail.sv", "module tail; import owner::*; C#(int) c; "
+                               "initial void'(c.work(1)); endmodule\n");
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    int version = 1;
+    for (const auto* parameter : {"int", "byte", "missing_type", "none", "byte", "int"}) {
+        auto text = original;
+        const auto replacement = body(parameter);
+        text.replace(text.find(old), old.size(), replacement);
+        change(server, doc.m_uri, ++version, text);
+        auto offset = text.find("local_box");
+        if (offset == std::string::npos)
+            offset = text.rfind("arg");
+        const auto position = server::toPosition(
+            slang::SourceLocation(server.m_driver->getDocument(doc.m_uri)->getBuffer(), offset),
+            server.m_driver->sm);
+        // Match the real LSP order: query first, then publish diagnostics, then
+        // the next change destroys this query before another reference replay.
+        const auto hover = server.getDocHover(
+            {.textDocument = {.uri = doc.m_uri}, .position = position});
+        CHECK(rfl::json::write(hover) != "null");
+        server.runBackgroundWork({});
+        INFO(diagnosticState(server).localDiagnosticDecline);
+        CHECK(diagnosticState(server).localDiagnosticUpdates == uint64_t(version - 1));
+        checkNativeDiagnostics(workspace, server, text, true);
+    }
+}
+
+namespace {
+struct LineSyntaxFixture {
+    Workspace workspace;
+    std::string original = header;
+    CertificationServer server;
+    std::shared_ptr<ast::Compilation> owner;
+    const ast::SubroutineSymbol* edited = nullptr;
+    const ast::SubroutineSymbol* later = nullptr;
+    size_t originalEnd = 0;
+    slang::BufferID originalBuffer;
+
+    lsp::InitializeParams configure() {
+        original.insert(original.find("  function int combine"),
+                        "  function void report(input string message, input int line_number); "
+                        "endfunction\n");
+        original.replace(original.rfind("return value;"), 13,
+                         "report(\"test\", `__LINE__); return value;");
+        workspace.write("item.svh", original);
+        workspace.write(".slang/server.json", certificationConfig());
+        return workspace.params();
+    }
+
+    LineSyntaxFixture() : server(configure()) {
+        server.setBuildFile((workspace.root / "design.f").string());
+        auto doc = server.openFile("item.svh", original);
+        (void)doc.doc->getAnalysis();
+        auto design = server.m_driver->comp->createActiveDesignContext({});
+        owner = design.retainCompilation();
+        for (auto fn : design.getAnalysis().getAnalysisManager().getAnalyzedSubroutines()) {
+            if (fn->name == "combine")
+                edited = fn;
+            else if (fn->name == "later")
+                later = fn;
+        }
+        REQUIRE(edited);
+        REQUIRE(later);
+        originalBuffer = edited->getSyntax()->getFirstToken().location().buffer();
+        originalEnd = edited->getSyntax()->getLastToken().range().end().offset();
+    }
+
+    std::string text(std::string_view expression) const {
+        auto result = original;
+        result.replace(result.find("local_1 + charl"), 15, expression);
+        return result;
+    }
+    size_t end(const std::string& current) const {
+        return size_t(int64_t(originalEnd) + int64_t(current.size()) - int64_t(original.size()));
+    }
+    size_t endLine(const std::string& current) const {
+        return size_t(std::count(current.begin(), current.begin() + end(current), '\n')) + 1;
+    }
+    auto proof(size_t budget) {
+        return std::make_unique<server::BodyLineProof>(
+            server.m_driver->sm, *owner, *edited, originalBuffer, originalEnd, original,
+            (workspace.root / "item.svh").string(), lsp::RequestContext{}, budget);
+    }
+    size_t entries() const { return server.m_driver->sm.getSourceLocationEntryCount(); }
+};
+} // namespace
+
+TEST_CASE("Neighbour syntax memo bounds replay storage while line coordinates change",
+          "[method-body-diagnostics][body-line-syntax-cache]") {
+    const size_t budget = GENERATE(size_t(0), size_t(1), size_t(1024 * 1024));
+    LineSyntaxFixture fixture;
+    auto proof = fixture.proof(budget);
+    const auto first = fixture.text("local_0 +\n charl");
+    const auto sameHeight = fixture.text("local_0 + 12 +\n charl");
+    const auto newHeight = fixture.text("local_0 +\n 12 +\n charl");
+    const auto before = fixture.entries();
+    proof->validate(first, fixture.end(first), {}, fixture.endLine(first));
+    const auto afterFirst = fixture.entries();
+    CHECK(afterFirst > before);
+    proof->validate(sameHeight, fixture.end(sameHeight), {}, fixture.endLine(sameHeight));
+    const auto afterSame = fixture.entries();
+    if (budget == 1024 * 1024)
+        CHECK(afterSame == afterFirst);
+    else
+        CHECK(afterSame > afterFirst);
+    proof->validate(newHeight, fixture.end(newHeight), {}, fixture.endLine(newHeight));
+    const auto afterNewHeight = fixture.entries();
+    CHECK(afterNewHeight > afterSame);
+    // One cached coordinate, never a growing history of successful edits.
+    proof->validate(sameHeight, fixture.end(sameHeight), {}, fixture.endLine(sameHeight));
+    CHECK(fixture.entries() > afterNewHeight);
+}
+
+TEST_CASE("Neighbour syntax memo rejects changed suffixes and late semantic dependents",
+          "[method-body-diagnostics][body-line-syntax-cache]") {
+    LineSyntaxFixture fixture;
+    auto proof = fixture.proof(1024 * 1024);
+    const auto first = fixture.text("local_0 +\n charl");
+    auto sameHeight = fixture.text("local_0 + 12 +\n charl");
+    proof->validate(first, fixture.end(first), {}, fixture.endLine(first));
+    const auto before = fixture.entries();
+    fixture.later->bodyHasExternalDependents.store(true, std::memory_order_relaxed);
+    auto restore = slang::ScopeGuard([&] {
+        fixture.later->bodyHasExternalDependents.store(false, std::memory_order_relaxed);
+    });
+    CHECK_THROWS(proof->validate(sameHeight, fixture.end(sameHeight), {},
+                                 fixture.endLine(sameHeight)));
+    CHECK(fixture.entries() == before);
+    fixture.later->bodyHasExternalDependents.store(false, std::memory_order_relaxed);
+    sameHeight.replace(sameHeight.rfind("report(\"test\""), 6, "retort");
+    CHECK_THROWS(proof->validate(sameHeight, fixture.end(sameHeight), {},
+                                 fixture.endLine(sameHeight)));
+}
+
+TEST_CASE("Cancelled neighbour replay cannot commit a partially checked syntax key",
+          "[method-body-diagnostics][body-line-syntax-cache]") {
+    LineSyntaxFixture fixture;
+    auto proof = fixture.proof(1024 * 1024);
+    const auto first = fixture.text("local_0 +\n charl");
+    lsp::RequestContext cancelled("line-proof", 810);
+    bool reached = false;
+    cancelled.setCheckpointObserverForTesting([&](std::string_view checkpoint) {
+        if (checkpoint == "before later macro syntax cache commit") {
+            reached = true;
+            cancelled.cancel();
+        }
+    });
+    CHECK_THROWS_AS(proof->validate(first, fixture.end(first), cancelled, fixture.endLine(first)),
+                    lsp::RequestCancelled);
+    REQUIRE(reached);
+    const auto afterCancelled = fixture.entries();
+    proof->validate(first, fixture.end(first), {}, fixture.endLine(first));
+    const auto afterCompleted = fixture.entries();
+    CHECK(afterCompleted > afterCancelled);
+    lsp::RequestContext reuse("line-proof", 811);
+    reached = false;
+    reuse.setCheckpointObserverForTesting([&](std::string_view checkpoint) {
+        if (checkpoint == "reuse later macro syntax proof") {
+            reached = true;
+            reuse.cancel();
+        }
+    });
+    CHECK_THROWS_AS(proof->validate(first, fixture.end(first), reuse, fixture.endLine(first)),
+                    lsp::RequestCancelled);
+    REQUIRE(reached);
+    CHECK(fixture.entries() == afterCompleted);
+    proof->validate(first, fixture.end(first), {}, fixture.endLine(first));
+    CHECK(fixture.entries() == afterCompleted);
+}
+
+
+TEST_CASE("Withdrawn query diagnostic option keeps foreground work separate and certified",
+          "[body-certification][query-diagnostic-transaction]") {
+    const auto operation = GENERATE("hover", "complete", "define", "resolve");
+    const auto mode = GENERATE("success", "cancel", "changed");
+    INFO(operation << " / " << mode);
+    Workspace workspace;
+    auto config = certificationConfig();
+    config.insert(config.size() - 1, ",\"experimentalQueryDiagnosticTransactions\":true");
+    workspace.write(".slang/server.json", config);
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", header);
+    doc.doc->getAnalysis();
+    auto text = edited();
+    change(server, doc.m_uri, 2, text);
+    doc.m_text = text;
+    // An opt-in query must still leave cold diagnostic preparation in background.
+    size_t coldPreparations = 0;
+    lsp::RequestContext cold("textDocument/hover", 700);
+    cold.setCheckpointObserverForTesting([&](std::string_view phase) {
+        coldPreparations += phase == "before optional diagnostic preparation";
+    });
+    REQUIRE(server.getDocHover({.textDocument = {.uri = doc.m_uri},
+                                .position = doc.getPosition(text.rfind("local_0") + 3)}, cold));
+    CHECK(coldPreparations == 0);
+    CHECK(diagnosticState(server).localDiagnosticUpdates == 0);
+    server.runBackgroundWork({});
+    REQUIRE(diagnosticState(server).localDiagnosticUpdates == 1);
+    text = header;
+    text.replace(text.find("local_1 + charl"), 15, "local_0 + absent_local");
+    change(server, doc.m_uri, 3, text);
+    doc.m_text = text;
+    REQUIRE(server.m_methodScope);
+    REQUIRE(server.m_methodScope->hasPreparedLocalDiagnostics());
+    const auto at = doc.getPosition(text.rfind("local_0") + 3);
+    auto items = server.m_methodScope->complete(
+        {.textDocument = {.uri = doc.m_uri}, .position = at}, server.m_config, {});
+    REQUIRE(items);
+    auto found = std::ranges::find_if(*items, [](const auto& item) { return item.label == "charl"; });
+    REQUIRE(found != items->end());
+    const auto item = *found;
+    const auto before = diagnosticMap(server);
+    const auto clientBefore = rfl::json::write(server.client.getDiagnostics(doc.m_uri));
+    const auto stamp = std::filesystem::last_write_time(workspace.root / "prelude.sv");
+    size_t proofs = 0, publications = 0, preparation = 0;
+    bool changed = false;
+    lsp::RequestContext ctx("transaction-query", 701);
+    ctx.setCheckpointObserverForTesting([&](std::string_view phase) {
+        proofs += phase == "method inputs certified";
+        publications += phase == "before local diagnostic publication";
+        preparation += phase == "before optional diagnostic preparation";
+        if (phase == "method input validation" && std::string_view(mode) == "cancel")
+            ctx.cancelForContentChange();
+        if (phase == "method input validation" && std::string_view(mode) == "changed" &&
+            !changed) {
+            changed = true;
+            workspace.write("prelude.sv", "package prelude; int other; endpackage\n");
+            std::filesystem::last_write_time(workspace.root / "prelude.sv", stamp);
+        }
+    });
+    auto query = [&](const lsp::RequestContext& request) {
+        if (std::string_view(operation) == "hover")
+            return server.m_methodScope->hover(doc.m_uri, at, server.m_config, request).has_value();
+        if (std::string_view(operation) == "complete")
+            return server.m_methodScope->complete(
+                {.textDocument = {.uri = doc.m_uri}, .position = at}, server.m_config, request).has_value();
+        if (std::string_view(operation) == "define")
+            return server.m_methodScope->define(
+                {.textDocument = {.uri = doc.m_uri}, .position = at}, server.m_config, request).has_value();
+        return server.m_methodScope->resolve(item, server.m_config, request).has_value();
+    };
+    if (std::string_view(mode) == "cancel") {
+        CHECK_THROWS_AS(query(ctx), lsp::RequestCancelled);
+        CHECK(ctx.isContentModified());
+        CHECK(proofs == 0);
+    }
+    else {
+        CHECK(query(ctx) == (std::string_view(mode) != "changed"));
+        CHECK_FALSE(ctx.isCancelled());
+        CHECK(proofs == (std::string_view(mode) == "changed" ? 0 : 1));
+    }
+    CHECK(preparation == 0);
+    CHECK(publications == 0);
+    CHECK(diagnosticMap(server) == before);
+    CHECK(rfl::json::write(server.client.getDiagnostics(doc.m_uri)) == clientBefore);
+    CHECK(server.client.diagnosticVersions.at(doc.m_uri) == 2);
+    CHECK(diagnosticState(server).localDiagnosticUpdates == 1);
+    CHECK_FALSE(server.m_driver->hasCertifiedLocalDiagnostics());
+    CHECK(server.m_driver->hasPendingDiagnostics());
+    if (std::string_view(mode) != "changed") {
+        size_t backgroundProofs = 0;
+        lsp::RequestContext background("independent diagnostics", std::nullopt);
+        background.setCheckpointObserverForTesting([&](std::string_view phase) {
+            backgroundProofs += phase == "method inputs certified";
+        });
+        server.runBackgroundWork(background);
+        CHECK(backgroundProofs == 1);
+        CHECK(diagnosticState(server).localDiagnosticUpdates == 2);
+        CHECK(server.client.diagnosticVersions.at(doc.m_uri) == 3);
+        size_t nextProofs = 0;
+        lsp::RequestContext next("later-query", 702);
+        next.setCheckpointObserverForTesting([&](std::string_view phase) {
+            nextProofs += phase == "method inputs certified";
+        });
+        CHECK(query(next));
+        CHECK(nextProofs == 1);
+        checkNativeDiagnostics(workspace, server, text, true);
+    }
+    else
+        CHECK(changed);
+}
+
+TEST_CASE("Stable target prefix renderings reuse Native payloads across body line edits",
+          "[method-body-diagnostics][prefix-diagnostic-reuse]") {
+    const bool cancel = GENERATE(false, true);
+    Workspace workspace;
+    auto config = certificationConfig();
+    config.insert(config.size() - 1, ",\"methodBodyRenderingCacheKiB\":0");
+    workspace.write(".slang/server.json", config);
+    const std::string original =
+        "class C;\n"
+        "function int earlier(input int arg); if(arg) return 1; endfunction\n"
+        "function int work(input int arg);\n return arg + 1;\nendfunction\n"
+        "function int later(input int arg); if(arg) return 2; endfunction\n"
+        "endclass\n";
+    workspace.write("item.svh", original);
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    const auto before = diagnosticMap(server);
+    size_t version = 1;
+    for (const auto* expression : {"arg +\n 2", "arg + missing_name", "arg + 3", "arg + 1"}) {
+        auto text = original;
+        text.replace(text.find("arg + 1"), 7, expression);
+        change(server, doc.m_uri, ++version, text);
+        if (cancel && version == 2) {
+            bool reached = false;
+            lsp::RequestContext interrupted("prefix rendering", 850);
+            interrupted.setCheckpointObserverForTesting([&](std::string_view phase) {
+                if (phase == "before prefix diagnostic rendering commit") {
+                    reached = true;
+                    interrupted.cancel();
+                }
+            });
+            CHECK_THROWS_AS(server.runBackgroundWork(interrupted), lsp::RequestCancelled);
+            REQUIRE(reached);
+            CHECK(diagnosticMap(server) == before);
+            CHECK(server.client.diagnosticVersions.at(doc.m_uri) == 1);
+        }
+        server.runBackgroundWork({});
+        REQUIRE(server.m_methodScope);
+        auto counts = server.m_methodScope->localDiagnosticRenderingCounts();
+        CHECK(counts.first > 0); // Only the earlier function's immutable rendering.
+        CHECK(counts.second > 0); // Later ranges still use the current projection.
+        CHECK(diagnosticState(server).localDiagnosticUpdates == version - 1);
+        checkNativeDiagnostics(workspace, server, text, true);
+    }
+}
+
+
+TEST_CASE("Retained target display memo follows exact current end coordinates within its budget",
+          "[method-body-diagnostics][target-rendering-memo]") {
+    const auto budget = GENERATE(0u, 1u, 256u);
+    const bool crlf = GENERATE(false, true);
+    Workspace workspace;
+    auto config = certificationConfig();
+    config.insert(config.size() - 1, ",\"methodBodyRenderingCacheKiB\":" + std::to_string(budget));
+    workspace.write(".slang/server.json", config);
+    std::string original =
+        "class C;\n"
+        "function int earlier(input int arg); if(arg) return 1; endfunction\n"
+        "function int work(input int arg); return arg + 1; endfunction\n"
+        "function int later(input int arg); if(arg) return 2; endfunction\n"
+        "endclass\n";
+    if (crlf)
+        for (size_t at = 0; (at = original.find('\n', at)) != std::string::npos; at += 2)
+            original.insert(at, 1, '\r');
+    workspace.write("item.svh", original);
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    int version = 1;
+    std::optional<lsp::Position> previous;
+    for (auto expression : {std::string("arg + 2"), std::string("arg + 3"),
+                            std::string("arg + 100"), std::string("arg + 200"),
+                            std::string("arg + 2 /*界*/"), std::string("arg + 3 /*語*/"),
+                            std::string("arg + 2 /*🚀*/"), std::string("arg + 3 /*😀*/"),
+                            std::string("arg +\n 4"), std::string("arg +\n 5"), std::string("arg + 1")}) {
+        if (crlf)
+            for (size_t at = 0; (at = expression.find('\n', at)) != std::string::npos; at += 2)
+                expression.insert(at, 1, '\r');
+        auto text = original;
+        text.replace(text.find("arg + 1"), 7, expression);
+        change(server, doc.m_uri, ++version, text);
+        const auto end = text.find("endfunction", text.find("function int work")) + 11;
+        auto coordinate = server::toPosition(slang::SourceLocation(doc.doc->getBuffer(), end),
+                                             server.m_driver->sm);
+        size_t drafts = 0;
+        lsp::RequestContext ctx("target memo background", version);
+        ctx.setCheckpointObserverForTesting([&](std::string_view phase) {
+            drafts += phase == "before target rendering memo publication";
+        });
+        server.runBackgroundWork(ctx);
+        REQUIRE(server.m_methodScope);
+        auto usage = server.m_methodScope->localDiagnosticRenderingCacheUsage();
+        CHECK(usage.first <= size_t(budget) * 1024);
+        if (budget == 256) {
+            REQUIRE(usage.second > 0);
+            const bool same = previous && previous->line == coordinate.line &&
+                              previous->character == coordinate.character;
+            CHECK(drafts == (same ? 0 : 1));
+            if (same)
+                CHECK(server.m_methodScope->localDiagnosticRenderingCounts().first >= 2);
+        }
+        else
+            CHECK(usage.second == 0);
+        previous = coordinate;
+        checkNativeDiagnostics(workspace, server, text, true);
+    }
+}
+
+TEST_CASE("Target display memo publishes atomically after cancellation and rejects oversized data",
+          "[method-body-diagnostics][target-rendering-memo]") {
+    const auto boundary = GENERATE("before target rendering memo publication",
+                                   "before local diagnostic publication");
+    Workspace workspace;
+    workspace.write(".slang/server.json", certificationConfig());
+    const std::string original =
+        "class C;\nfunction int work(input int arg); return arg + 1; endfunction\n"
+        "function int later(input int arg); if(arg) return 2; endfunction\nendclass\n";
+    workspace.write("item.svh", original);
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    auto text = original;
+    text.replace(text.find("arg + 1"), 7, "arg + 2");
+    change(server, doc.m_uri, 2, text);
+    server.runBackgroundWork({});
+    REQUIRE(server.m_methodScope);
+    auto priorUsage = server.m_methodScope->localDiagnosticRenderingCacheUsage();
+    REQUIRE(priorUsage.second > 0);
+    const auto before = diagnosticMap(server);
+    text.replace(text.find("arg + 2"), 7, "arg + 33333");
+    change(server, doc.m_uri, 3, text);
+    bool reached = false;
+    lsp::RequestContext ctx("cancel target memo", 900);
+    ctx.setCheckpointObserverForTesting([&](std::string_view phase) {
+        if (phase == boundary) {
+            reached = true;
+            ctx.cancelForContentChange();
+        }
+    });
+    CHECK_THROWS_AS(server.runBackgroundWork(ctx), lsp::RequestCancelled);
+    REQUIRE(reached);
+    CHECK(diagnosticMap(server) == before);
+    CHECK(server.client.diagnosticVersions.at(doc.m_uri) == 2);
+    CHECK(server.m_methodScope->localDiagnosticRenderingCacheUsage() == priorUsage);
+    size_t rebuilt = 0;
+    lsp::RequestContext retry("retry target memo", 901);
+    retry.setCheckpointObserverForTesting([&](std::string_view phase) {
+        rebuilt += phase == "before target rendering memo publication";
+    });
+    server.runBackgroundWork(retry);
+    CHECK(rebuilt == 1);
+    CHECK(server.client.diagnosticVersions.at(doc.m_uri) == 3);
+    checkNativeDiagnostics(workspace, server, text, true);
+}
+
+TEST_CASE("Target display memo abandons a payload that exceeds its charged allowance",
+          "[method-body-diagnostics][target-rendering-memo]") {
+    Workspace workspace;
+    auto config = certificationConfig();
+    config.insert(config.size() - 1, ",\"methodBodyRenderingCacheKiB\":4");
+    workspace.write(".slang/server.json", config);
+    const std::string original =
+        "class C;\nfunction int work(input int arg); return arg + 1; endfunction\n"
+        "function int " + std::string(900, 'w') + "(); endfunction\nendclass\n";
+    workspace.write("item.svh", original);
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    auto text = original;
+    text.replace(text.find("arg + 1"), 7, "arg + 2");
+    change(server, doc.m_uri, 2, text);
+    server.runBackgroundWork({});
+    REQUIRE(server.m_methodScope);
+    auto usage = server.m_methodScope->localDiagnosticRenderingCacheUsage();
+    CHECK(usage.first > 0);
+    CHECK(usage.first <= 4096);
+    CHECK(usage.second == 0);
+    text.replace(text.find("arg + 2"), 7, "arg + 3");
+    change(server, doc.m_uri, 3, text);
+    size_t drafts = 0;
+    lsp::RequestContext ctx("oversized memo retry", 902);
+    ctx.setCheckpointObserverForTesting([&](std::string_view phase) {
+        drafts += phase == "before target rendering memo publication";
+    });
+    server.runBackgroundWork(ctx);
+    CHECK(drafts == 0); // One bounded negative entry, no repeated allocation for this coordinate.
+    CHECK(server.m_methodScope->localDiagnosticRenderingCacheUsage() == usage);
+    checkNativeDiagnostics(workspace, server, text, true);
+}
+
+
+TEST_CASE("Fixed Native bit-vector type formatting is reused while edited local types stay fresh",
+          "[method-body-diagnostics][target-rendering-memo][fixed-native-type-rendering]") {
+    const bool alias = GENERATE(false, true);
+    Workspace workspace;
+    auto config = certificationConfig();
+    config.insert(config.size() - 1, ",\"methodBodyRenderingCacheKiB\":0");
+    workspace.write(".slang/server.json", config);
+    const std::string original =
+        "class C; typedef logic[31:0] NativeWord;\n"
+        "function void earlier(); NativeWord bits; int word; bits=bits|word; endfunction\n"
+        "function void work();\n" +
+        std::string(alias ? "typedef logic[7:0] LocalWord; LocalWord bits;"
+                          : "logic[7:0] bits;") +
+        " int word; bits=bits|word;\nendfunction\n"
+        "endclass\n";
+    workspace.write("item.svh", original);
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    int version = 1;
+    for (const auto* width : {"15:0", "31:0", "7:0"}) {
+        auto text = original;
+        text.replace(text.find("7:0"), 3, width);
+        change(server, doc.m_uri, ++version, text);
+        size_t cachedTypes = 0;
+        lsp::RequestContext ctx("fixed type rendering", version);
+        ctx.setCheckpointObserverForTesting([&](std::string_view phase) {
+            cachedTypes += phase == "retain fixed Native type rendering";
+        });
+        server.runBackgroundWork(ctx);
+        if (version == 2)
+            CHECK(cachedTypes > 0);
+        REQUIRE(server.m_methodScope);
+        const auto counts = server.m_methodScope->localDiagnosticRenderingCounts();
+        CHECK(counts.first > 0);
+        CHECK(counts.second > 0); // The changed work() Type* is never reused from Native.
+        CHECK(diagnosticState(server).localDiagnosticUpdates == uint64_t(version - 1));
+        checkNativeDiagnostics(workspace, server, text, true);
+    }
+}
+
+TEST_CASE("Retained frozen enum displays reuse provider ownership while local enums stay fresh",
+          "[method-body-diagnostics][target-rendering-memo][fixed-native-type-rendering]") {
+    const bool frozen = GENERATE(false, true);
+    Workspace workspace;
+    auto config = certificationConfig();
+    config.insert(config.size() - 1, ",\"methodBodyRenderingCacheKiB\":0");
+    if (frozen)
+        config.insert(config.size() - 1,
+                      ",\"experimentalScopeSemanticCache\":true,"
+                      "\"frozenSources\":{\"packages\":[\"provider\"],\"maxMiB\":256}");
+    workspace.write(".slang/server.json", config);
+    // A signed enum and unsigned vector produce the real bitwise mismatch;
+    // equal-width unsigned operands are deliberately not diagnosed by Native.
+    workspace.write("prelude.sv",
+                    "package provider; typedef enum int {Mode0=0,Mode1=1} Mode; "
+                    "endpackage\n");
+    const std::string original =
+        "class C;\n"
+        "function void earlier(); logic[31:0] bits; provider::Mode value; "
+        "bits=bits|value; endfunction\n"
+        "function int work(input int arg);\n"
+        "typedef enum logic[7:0] {Local0=0,Local1=1} LocalMode;\n"
+        "logic[31:0] bits; LocalMode value; bits=bits|value;\n"
+        "return arg + 1;\nendfunction\nendclass\n";
+    workspace.write("item.svh", original);
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    if (frozen) {
+        auto status = server.executeCommand(
+            {.command = "slang.scopeLibraryStatus", .arguments = std::vector<lsp::LSPAny>{}});
+        REQUIRE(status);
+        REQUIRE(rfl::json::write(*status).find("\"prepared\":true") != std::string::npos);
+    }
+    int version = 1;
+    for (const auto* width : {"15:0", "31:0", "7:0"}) {
+        auto text = original;
+        text.replace(text.find("7:0"), 3, width);
+        change(server, doc.m_uri, ++version, text);
+        size_t cachedEnums = 0;
+        lsp::RequestContext ctx("frozen enum rendering", version);
+        ctx.setCheckpointObserverForTesting([&](std::string_view phase) {
+            cachedEnums += phase == "retain frozen enum rendering";
+        });
+        server.runBackgroundWork(ctx);
+        REQUIRE(server.m_methodScope);
+        if (version == 2) {
+            INFO(rfl::json::write(diagnosticMap(server)));
+            CHECK((cachedEnums > 0) == frozen);
+        }
+        CHECK(server.m_methodScope->localDiagnosticRenderingCounts().second > 0);
+        CHECK(diagnosticState(server).localDiagnosticUpdates == uint64_t(version - 1));
+        checkNativeDiagnostics(workspace, server, text, true);
+    }
+    if (frozen) {
+        workspace.write("prelude.sv",
+                        "package provider; typedef enum logic signed[15:0] {Mode0=0,Mode1=1} Mode; "
+                        "endpackage\n");
+        auto rebuilt = server.executeCommand(
+            {.command = "slang.rebuildScopeLibrary", .arguments = std::vector<lsp::LSPAny>{}});
+        REQUIRE(rebuilt);
+        auto reopened = server.openFile("item.svh", original);
+        reopened.doc->getAnalysis();
+        auto text = original;
+        text.replace(text.find("arg + 1"), 7, "arg + 2");
+        change(server, reopened.m_uri, 2, text);
+        server.runBackgroundWork({});
+        checkNativeDiagnostics(workspace, server, text, true);
+    }
+}
+
+#if defined(__APPLE__)
+TEST_CASE("Method directory leases preserve serial retry and final mutable dependency proof",
+          "[directory-proof-integration][body-certification]") {
+    const auto budget = GENERATE(0, 512);
+    const auto mode = GENERATE("success", "serial", "cancel", "changed", "serial-changed");
+    CAPTURE(budget, mode);
+    Workspace workspace;
+    std::filesystem::create_directory(workspace.root / "defs");
+    std::string prelude = "package prelude; int value;\n";
+    for (int i = 0; i < 64; ++i) {
+        const auto name = "stub" + std::to_string(i) + ".svh";
+        workspace.write(name, "// mutable dependency\n");
+        prelude += "`include \"" + name + "\"\n";
+    }
+    prelude += "endpackage\n";
+    workspace.write("defs/prelude.sv", prelude);
+    workspace.write("design.f", "+incdir+.\ndefs/prelude.sv\nowner.sv\ntail.sv\n");
+    auto config = certificationConfig();
+    config.insert(config.size() - 1, ",\"methodBodyDirectoryProofCacheKiB\":" +
+                                      std::to_string(budget));
+    workspace.write(".slang/server.json", config);
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", header);
+    doc.doc->getAnalysis();
+    auto text = edited();
+    change(server, doc.m_uri, 2, text);
+    doc.m_text = text;
+    REQUIRE(server.m_methodScope);
+    const auto position = doc.getPosition(text.rfind("local_0") + 3);
+    const std::string scenario = mode;
+    bool injected = false, retried = false, changed = false;
+    size_t scans = 0;
+    lsp::RequestContext ctx("textDocument/hover", 860);
+    ctx.setCheckpointObserverForTesting([&](std::string_view phase) {
+        if (phase == "before missing input directory scan") {
+            ++scans;
+            if (scenario.starts_with("serial") && !injected) {
+                injected = true;
+                throw server::DirectoryProofUnavailable();
+            }
+        }
+        if (phase == "before serial directory proof retry") {
+            retried = true;
+            if (scenario == "serial-changed") {
+                workspace.write("defs/stub0.svh", "// appeared before complete retry\n");
+                changed = true;
+            }
+        }
+        if (phase == "method input validation") {
+            if (scenario == "cancel") ctx.cancel();
+            if (scenario == "changed" && !changed) {
+                workspace.write("defs/stub0.svh", "// appeared during proof\n");
+                changed = true;
+            }
+        }
+    });
+    auto query = [&](const auto& request) {
+        return server.m_methodScope->hover(doc.m_uri, position, server.m_config, request);
+    };
+    if (scenario == "cancel") {
+        CHECK_THROWS_AS(query(ctx), lsp::RequestCancelled);
+        REQUIRE(query(lsp::RequestContext("retry", 861)));
+    }
+    else if (scenario == "changed" || (scenario == "serial-changed" && budget)) {
+        CHECK_FALSE(query(ctx));
+        CHECK(changed);
+        CHECK(server.m_methodScope->observedInputChange());
+    }
+    else {
+        REQUIRE(query(ctx));
+    }
+    CHECK((scans > 0) == (budget != 0));
+    CHECK(retried == (budget != 0 && scenario.starts_with("serial")));
+    CHECK(injected == retried);
+    if (!changed) {
+        server.runBackgroundWork({});
+        checkNativeDiagnostics(workspace, server, text, true, position);
+    }
+}
+#endif

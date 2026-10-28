@@ -45,6 +45,11 @@ public:
     ShallowCompilation(slang::SourceManager&, std::shared_ptr<slang::syntax::SyntaxTree>,
                        std::shared_ptr<ShallowCompilation> owner,
                        std::span<const slang::ast::SubroutineSymbol* const> originals);
+    /// Readonly index of completed Native contexts absent from a package-only view.
+    /// The supplied owner must retain the completed analysis, not just raw symbols.
+    ShallowCompilation(slang::SourceManager&, std::shared_ptr<slang::syntax::SyntaxTree>,
+                       std::shared_ptr<slang::ast::Compilation> completedOwner,
+                       std::span<const slang::ast::SubroutineSymbol* const> originals);
     const std::vector<const slang::ast::SubroutineSymbol*>& getBodyQueryRoots() const {
         return m_bodyQueryRoots;
     }

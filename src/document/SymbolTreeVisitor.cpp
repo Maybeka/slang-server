@@ -31,26 +31,35 @@ SymbolTreeVisitor::SymbolTreeVisitor(const slang::SourceManager& sourceManager,
 }
 
 std::vector<lsp::DocumentSymbol> SymbolTreeVisitor::getSymbols(
-    std::shared_ptr<slang::syntax::SyntaxTree> tree, const bool macros, slang::BufferID buffer) {
-    m_buffer = buffer ? buffer : tree->getSourceBufferIds()[0];
-    if (m_symbols.empty()) {
-        visit(tree->root());
-
+    std::shared_ptr<slang::syntax::SyntaxTree> tree, const bool macros, slang::BufferID buffer,
+    const lsp::RequestContext& ctx) {
+    ctx.checkpoint("before document symbols");
+    buffer = buffer ? buffer : tree->getSourceBufferIds()[0];
+    if (!m_symbolsValid || m_buffer != buffer || m_includeMacros != macros) {
+        // Recursive traversal points at stack-local child vectors. Never expose a
+        // partially traversed visitor or its pointers if cancellation unwinds it.
+        SymbolTreeVisitor candidate(m_sourceManager, buffer);
+        candidate.m_requestCtx = &ctx;
+        candidate.visit(tree->root());
         if (macros) {
-            auto tree_macros = tree->getDefinedMacros();
-            for (const DefineDirectiveSyntax* const macro : tree_macros) {
+            for (const DefineDirectiveSyntax* macro : tree->getDefinedMacros()) {
+                ctx.checkpoint("during document macro symbol collection");
                 if (macro && macro->name.range().start() != slang::SourceLocation::NoLocation) {
                     lsp::DocumentSymbol symbol{.kind = lsp::SymbolKind::Constant};
-                    bool ok = extractRange(macro->name, symbol, std::nullopt,
-                                           /* allowMacroLocation */ true);
-                    if (ok) {
+                    if (candidate.extractRange(macro->name, symbol, std::nullopt, true)) {
                         symbol.range = toRange(macro->sourceRange(), m_sourceManager);
-                        m_symbols.push_back(symbol);
+                        candidate.m_symbols.push_back(std::move(symbol));
                     }
                 }
             }
         }
+        ctx.checkpoint("before document symbol cache publication");
+        m_symbols = std::move(candidate.m_symbols);
+        m_buffer = buffer;
+        m_includeMacros = macros;
+        m_symbolsValid = true;
     }
+    ctx.checkpoint("before publishing document symbols");
     return m_symbols;
 }
 

@@ -23,6 +23,7 @@
 #include <algorithm>
 #include <cctype>
 #include <charconv>
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
@@ -51,6 +52,8 @@
 #include "slang/util/VersionInfo.h"
 
 #if defined(__APPLE__)
+#    include <mach/mach.h>
+#    include <malloc/malloc.h>
 extern "C" uint64_t slang_server_parser_units() __attribute__((weak_import));
 #elif defined(__GNUC__)
 extern "C" uint64_t slang_server_parser_units() __attribute__((weak));
@@ -59,7 +62,38 @@ extern "C" uint64_t slang_server_parser_units() __attribute__((weak));
 namespace fs = std::filesystem;
 
 namespace server {
+struct ProcessMemoryUsage {
+    uint64_t residentBytes, residentPeakBytes, footprintBytes, footprintPeakBytes;
+    uint64_t internalBytes, externalBytes, reusableBytes, compressedBytes, compressedPeakBytes;
+    std::optional<uint64_t> allocatorInUseBytes, allocatorAllocatedBytes;
+};
 namespace {
+std::optional<ProcessMemoryUsage> processMemoryUsage() {
+#if defined(__APPLE__)
+    task_vm_info_data_t info{};
+    mach_msg_type_number_t count = TASK_VM_INFO_COUNT;
+    if (task_info(mach_task_self(), TASK_VM_INFO, reinterpret_cast<task_info_t>(&info), &count) ==
+            KERN_SUCCESS &&
+        count >= TASK_VM_INFO_REV3_COUNT) {
+        malloc_statistics_t allocator{};
+        malloc_zone_statistics(nullptr, &allocator);
+        const bool allocatorAvailable = allocator.size_allocated != 0;
+        return ProcessMemoryUsage{
+            info.resident_size,
+            info.resident_size_peak,
+            info.phys_footprint,
+            uint64_t(info.ledger_phys_footprint_peak),
+            info.internal,
+            info.external,
+            info.reusable,
+            info.compressed,
+            info.compressed_peak,
+            allocatorAvailable ? std::optional<uint64_t>(allocator.size_in_use) : std::nullopt,
+            allocatorAvailable ? std::optional<uint64_t>(allocator.size_allocated) : std::nullopt};
+    }
+#endif
+    return std::nullopt;
+}
 bool sourceHistoryEnabled(const Config& config) {
     return config.experimentalUvmPrefixCache.value() || config.experimentalFrozenSources.value() ||
            config.experimentalUvmSemanticCache.value() ||
@@ -224,12 +258,18 @@ lsp::InitializeResult SlangServer::getInitialize(const lsp::InitializeParams& pa
             uint32_t historyMaxMiB;
             size_t historyBaseBytes, historySoftLimitBytes, historyHardLimitBytes;
             bool retirementPending;
+            size_t pendingEditorBytes;
+            bool editorAdmissionPending;
+            // Process-wide memory is separate from source-history accounting.
+            // An unavailable platform observation is omitted, never reported as zero.
+            std::optional<ProcessMemoryUsage> processMemory;
         };
         return rfl::to_generic(
             Status{m_driver->sourceStorageUsage(),
                    sourceHistoryEnabled(m_config) && !std::getenv("SLANG_UVM_GENERATION_DISABLE"),
                    m_config.sourceHistoryMaxMiB.value(), m_contextBaseBytes, m_contextBudget,
-                   m_contextHardBudget, m_contextRetirementPending});
+                   m_contextHardBudget, m_contextRetirementPending, m_driver->deferredEditorBytes(),
+                   m_contextAdmissionPending, processMemoryUsage()});
     });
     registerCommand<std::monostate, bool>("slang.rebuildScopeLibrary", [this](std::monostate) {
         m_driver->invalidateUvmParseCache();
@@ -286,6 +326,8 @@ lsp::InitializeResult SlangServer::getInitialize(const lsp::InitializeParams& pa
                     size_t retainedHandles;
                     uint64_t localDiagnosticUpdates;
                     std::string localDiagnosticDecline;
+                    uint64_t localDiagnosticProceduresReused, localDiagnosticProceduresRecomputed;
+                    uint64_t localDiagnosticRenderingsReused, localDiagnosticRenderingsFresh;
                     std::optional<uint64_t> parserUnits;
                     std::vector<DocumentState> documents;
                     std::vector<SourceState> sources;
@@ -296,12 +338,19 @@ lsp::InitializeResult SlangServer::getInitialize(const lsp::InitializeParams& pa
                 if (slang_server_parser_units)
                     count = slang_server_parser_units();
 #endif
+                const auto procedures = m_methodScope
+                                            ? m_methodScope->localDiagnosticProcedureCounts()
+                                            : std::pair<uint64_t, uint64_t>{};
+                const auto renderings = m_methodScope
+                                            ? m_methodScope->localDiagnosticRenderingCounts()
+                                            : std::pair<uint64_t, uint64_t>{};
                 return rfl::to_generic(
                     State{state.active, state.accepted, state.version, m_methodScopeDecline,
                           state.renewals, state.retainedHandles,
                           m_methodScope ? m_methodScope->localDiagnosticUpdates() : 0,
-                          m_methodScope ? m_methodScope->localDiagnosticDecline() : "", count,
-                          documents, sources, m_driver->sm.getMemoryUsageDetails()});
+                          m_methodScope ? m_methodScope->localDiagnosticDecline() : "",
+                          procedures.first, procedures.second, renderings.first, renderings.second,
+                          count, documents, sources, m_driver->sm.getMemoryUsageDetails()});
             });
     }
 
@@ -552,19 +601,34 @@ void SlangServer::refreshContextFileWatches() {
         m_contextWatchDocumentCount == documentCount)
         return;
 
-    auto paths = m_driver->getContextWatchPaths();
-    for (auto& path : paths)
-        path = path.lexically_normal();
-    std::sort(paths.begin(), paths.end());
-    paths.erase(std::unique(paths.begin(), paths.end()), paths.end());
-
+    UvmPhaseTrace phases;
+    std::shared_ptr<const std::vector<std::filesystem::path>> catalogue;
+    std::vector<std::filesystem::path> paths;
+    if (m_config.experimentalMethodBodyQueries.value() &&
+        m_config.experimentalMethodBodyCertification.value())
+        catalogue = m_driver->getContextWatchCatalogue();
+    else
+        paths = m_driver->getContextWatchPaths();
+    phases.mark("watch-collect");
+    // The driver returns the normalized unique catalogue.
+    phases.mark("watch-normalize-sort");
     m_contextWatchesDirty = false;
     m_contextWatchDriver = m_driver.get();
     m_contextWatchRevision = revision;
     m_contextWatchDocumentCount = documentCount;
+    const bool sameCatalogue = sameDriver && catalogue && m_contextWatchCatalogue == catalogue;
+    m_contextWatchCatalogue = std::move(catalogue);
+    if (sameCatalogue) {
+        phases.mark("watch-compare");
+        return;
+    }
+    if (m_contextWatchCatalogue)
+        paths = *m_contextWatchCatalogue;
     // A replacement driver may observe a deleted parent directory even when
     // the target paths are unchanged. Recompute its registration anchors.
-    if (sameDriver && paths == m_contextWatchPaths)
+    const bool samePaths = sameDriver && paths == m_contextWatchPaths;
+    phases.mark("watch-compare");
+    if (samePaths)
         return;
 
     if (!m_contextWatchRegistrationId.empty()) {
@@ -670,6 +734,14 @@ std::monostate SlangServer::setBuildFile(const std::string& path) {
     }
     m_topFile = std::nullopt;
     m_buildfile = path;
+
+    if (m_driver && m_config.experimentalCooperativeAnalysis.value()) {
+        discardMethodScope();
+        if (m_diagnosticProcess)
+            m_diagnosticProcess->cancel();
+        m_activeDiagnosticSnapshot.reset();
+        m_driver->prepareForContextRetirement(true);
+    }
 
     const auto workspacePath = m_workspaceFolder ? std::optional<std::string_view>(
                                                        m_workspaceFolder->uri.getPath())
@@ -1109,6 +1181,7 @@ bool SlangServer::loadConfig(const Config& config, bool forceIndexing, bool requ
     m_cancelObsoleteDocumentQueries.store(config.experimentalMethodBodyQueries.value(),
                                           std::memory_order_relaxed);
     m_driver = std::move(newDriver);
+    m_contextAdmissionPending = false;
     m_contextRetirementPending = false;
     m_contextRetry.reset();
     m_buildfile = std::move(buildfile);
@@ -1630,35 +1703,36 @@ std::optional<lsp::Hover> SlangServer::previewHover(const PreviewHoverArgs& args
 }
 
 std::optional<std::vector<rfl::Variant<lsp::Command, lsp::CodeAction>>> SlangServer::
-    getDocCodeAction(const lsp::CodeActionParams& params) {
-    auto results = m_driver->codeActions.getCodeActions(params);
+    getDocCodeAction(const lsp::CodeActionParams& params, lsp::RequestContext ctx) {
+    auto results = m_driver->codeActions.getCodeActions(params, ctx);
     if (results.empty())
         return std::nullopt;
     return results;
 }
 
 std::optional<std::vector<lsp::DocumentLink>> SlangServer::getDocDocumentLink(
-    const lsp::DocumentLinkParams& params) {
+    const lsp::DocumentLinkParams& params, lsp::RequestContext ctx) {
     auto doc = m_driver->getDocument(params.textDocument.uri);
     if (!doc) {
         return std::nullopt;
     }
-    return doc->getDocLinks();
+    return doc->getDocLinks(ctx);
 }
 
 rfl::Variant<std::vector<lsp::SymbolInformation>, std::vector<lsp::DocumentSymbol>, std::monostate>
-SlangServer::getDocDocumentSymbol(const lsp::DocumentSymbolParams& params) {
+SlangServer::getDocDocumentSymbol(const lsp::DocumentSymbolParams& params,
+                                  lsp::RequestContext ctx) {
     auto doc = m_driver->getDocument(params.textDocument.uri);
     if (doc) {
-        return doc->getSymbols();
+        return doc->getSymbols(ctx);
     }
     ERROR("Document {} not found", params.textDocument.uri.getPath());
     return std::vector<lsp::SymbolInformation>{};
 }
 
 std::optional<std::vector<lsp::DocumentHighlight>> SlangServer::getDocDocumentHighlight(
-    const lsp::DocumentHighlightParams& params) {
-    return m_driver->getDocDocumentHighlight(params.textDocument.uri, params.position);
+    const lsp::DocumentHighlightParams& params, lsp::RequestContext ctx) {
+    return m_driver->getDocDocumentHighlight(params.textDocument.uri, params.position, ctx);
 }
 
 std::monostate SlangServer::onShutdown(const std::nullopt_t&) {
@@ -1675,7 +1749,21 @@ void SlangServer::onProtocolStopped() {
     m_activeDiagnosticSnapshot.reset();
 }
 
+void SlangServer::admitRetirementInputs(const lsp::RequestContext& ctx) {
+    if (m_contextAdmissionPending) {
+        ctx.checkpoint("before deferred editor admission");
+        maybeRetireParsedContext(&ctx);
+        if (m_contextAdmissionPending)
+            throw lsp::RequestFailed(
+                "Pending editor text could not be admitted; retry after fixing inputs");
+        ctx.checkpoint("after deferred editor admission");
+    }
+}
+
 void SlangServer::recoverMethodInputs(const lsp::RequestContext& ctx) {
+    admitRetirementInputs(ctx);
+    if (m_driver && m_driver->hasStaleSyntaxPrefixInputs())
+        m_methodInputReloadPending = true;
     if (m_methodScope && m_driver && m_methodScope->belongsTo(*m_driver) &&
         m_methodScope->observedInputChange())
         m_methodInputReloadPending = true;
@@ -1694,17 +1782,17 @@ void SlangServer::recoverMethodInputs(const lsp::RequestContext& ctx) {
 void SlangServer::certifyMethodInputs(const lsp::RequestContext& ctx) {
     recoverMethodInputs(ctx);
     ensureMethodScopeDriver();
-    if (!m_methodScope || !m_config.experimentalMethodBodyCertification.value())
-        return;
-    // Text synchronization is provisional. A native consumer must not obtain
-    // semantic results from the old filesystem cache without admitting all of
-    // the certificate inputs first. Failed admission reloads privately and keeps
-    // every latest unsaved editor buffer, including on invalid configuration.
-    if (m_methodScope->observedInputChange() || !m_methodScope->valid(m_config, ctx)) {
-        m_methodInputReloadPending = true;
-        discardMethodScope();
-        recoverMethodInputs(ctx);
+    if (m_methodScope && m_config.experimentalMethodBodyCertification.value()) {
+        // Native consumers, including deferred save indexing, must first admit
+        // the complete current inputs of a provisional local body.
+        if (m_methodScope->observedInputChange() || !m_methodScope->valid(m_config, ctx)) {
+            m_methodInputReloadPending = true;
+            discardMethodScope();
+            recoverMethodInputs(ctx);
+        }
     }
+    if (m_driver)
+        m_driver->flushDeferredSaveIndexes(ctx);
 }
 
 void SlangServer::onBeforeMessage(const lsp::RequestContext& ctx) {
@@ -1775,6 +1863,7 @@ void SlangServer::certifyFrozenInputs(const lsp::RequestContext* ctx) {
 }
 
 void SlangServer::onForegroundComplete() {
+    UvmPhaseTrace phases;
     if (m_shutdownRequested) {
         if (m_diagnosticProcess)
             m_diagnosticProcess->requestStop();
@@ -1783,12 +1872,26 @@ void SlangServer::onForegroundComplete() {
     }
     if (m_contextRetirementPending)
         m_contextRetry.noteActivity();
+    if (m_contextAdmissionPending) {
+        if (m_diagnosticProcess)
+            m_diagnosticProcess->cancel();
+        m_activeDiagnosticSnapshot.reset();
+        return;
+    }
+    const bool certifiedLocal = m_driver && m_driver->hasCertifiedLocalDiagnostics() &&
+                                !m_methodInputReloadPending && !m_configReloadPending;
+    if (certifiedLocal)
+        m_driver->flushCertifiedLocalDiagnostics();
+    phases.mark("foreground-local-flush");
     refreshContextFileWatches();
+    phases.mark("foreground-file-watches");
     if (m_activeDiagnosticSnapshot &&
-        (!m_driver || !m_driver->isDiagnosticSnapshotCurrent(*m_activeDiagnosticSnapshot))) {
+        (!m_driver || (certifiedLocal && !m_driver->hasPendingDiagnostics()) ||
+         !m_driver->isDiagnosticSnapshotCurrent(*m_activeDiagnosticSnapshot))) {
         m_diagnosticProcess->cancel();
         m_activeDiagnosticSnapshot.reset();
     }
+    phases.mark("foreground-snapshot-check");
     // A query can allocate source names or complete a previously deferred parse.
     // Observe that growth after publishing the reply, without counting queries
     // as edits or introducing a settling delay. Soft pressure schedules private
@@ -1808,17 +1911,23 @@ void SlangServer::onForegroundComplete() {
                 maybeRetireParsedContext();
         }
     }
+    phases.mark("foreground-source-accounting");
 }
 
 bool SlangServer::retirementIsOnlyBackgroundWork() const {
+    if (m_contextAdmissionPending)
+        return !m_methodInputReloadPending && !m_configReloadPending;
     return m_contextRetirementPending && m_driver && !m_methodInputReloadPending &&
            !m_configReloadPending && !m_activeDiagnosticSnapshot &&
-           !m_diagnosticWake->ready.load() && !m_driver->hasPendingDiagnostics();
+           !m_diagnosticWake->ready.load() && !m_driver->hasPendingDiagnostics() &&
+           !m_driver->hasCertifiedLocalDiagnostics() && !m_driver->hasDeferredSaveIndexes();
 }
 
 bool SlangServer::hasBackgroundWork() const {
     return !m_shutdownRequested && m_driver &&
-           ((m_contextRetirementPending && !m_activeDiagnosticSnapshot &&
+           (m_contextAdmissionPending || m_driver->hasDeferredSaveIndexes() ||
+            m_driver->hasCertifiedLocalDiagnostics() ||
+            (m_contextRetirementPending && !m_activeDiagnosticSnapshot &&
              !m_driver->hasPendingDiagnostics()) ||
             m_diagnosticWake->ready.load() ||
             (!m_activeDiagnosticSnapshot && m_driver->hasPendingDiagnostics()));
@@ -1828,6 +1937,11 @@ std::chrono::milliseconds SlangServer::backgroundGracePeriod() const {
     // Full-design diagnostics bind on the state worker. Exploration snapshots
     // use their existing isolated-worker scheduling without a settling delay.
     auto grace = std::chrono::milliseconds(m_driver && m_driver->comp ? 2 : 0);
+    if (m_driver && m_config.experimentalCooperativeAnalysis.value() &&
+        m_config.experimentalMethodBodyDiagnostics.value() && !m_methodInputReloadPending &&
+        !m_configReloadPending && m_methodScope && m_methodScope->belongsTo(*m_driver) &&
+        m_methodScope->hasPreparedLocalDiagnostics())
+        grace = std::chrono::milliseconds(0);
     // The protocol queue wakes this timed wait immediately on new input. Only
     // maintenance waits for its retry deadline; current diagnostics bypass it.
     return retirementIsOnlyBackgroundWork() ? std::max(grace, m_contextRetry.remaining()) : grace;
@@ -1854,10 +1968,23 @@ void SlangServer::runBackgroundWork(const lsp::RequestContext& ctx) {
         return;
     if (retirementIsOnlyBackgroundWork() && m_contextRetry.remaining().count())
         return;
+    if (m_contextAdmissionPending) {
+        admitRetirementInputs(ctx);
+    }
     recoverMethodInputs(ctx);
     ctx.throwIfCancelled("before frozen input certification");
     certifyFrozenInputs(&ctx);
     ctx.throwIfCancelled("after frozen input certification");
+    const bool certifiedLocal = m_driver->hasCertifiedLocalDiagnostics();
+    m_driver->flushCertifiedLocalDiagnostics();
+    if (certifiedLocal && !m_driver->hasPendingDiagnostics() && m_activeDiagnosticSnapshot) {
+        m_diagnosticProcess->cancel();
+        m_activeDiagnosticSnapshot.reset();
+    }
+    // Local result constructors stay local; save indexing is cancellable native
+    // maintenance and cannot bypass the input proof of a provisional body.
+    if (m_driver->hasDeferredSaveIndexes())
+        certifyMethodInputs(ctx);
     // Publish the current diagnostic generation first. Retirement is opportunistic
     // and must not replace a useful local query owner while foreground work is queued.
     if (retirementIsOnlyBackgroundWork()) {
@@ -1991,6 +2118,10 @@ void SlangServer::runBackgroundWork(const lsp::RequestContext& ctx) {
 }
 
 void SlangServer::onDocDidOpen(const lsp::DidOpenTextDocumentParams& params) {
+    if (m_contextAdmissionPending) {
+        m_driver->deferDocumentOpen(params);
+        return;
+    }
     discardMethodScope();
     if (m_config.experimentalMethodBodyQueries.value())
         m_driver->completions.requireCompletionEpoch();
@@ -1999,6 +2130,8 @@ void SlangServer::onDocDidOpen(const lsp::DidOpenTextDocumentParams& params) {
 }
 
 void SlangServer::resetSourceHistoryBudget(size_t initialBytes) {
+    if (m_driver && !m_driver->deferredEditorBytes())
+        m_contextAdmissionPending = false;
     m_contextEdits = 0;
     m_contextRetirementPending = false;
     m_contextRetry.reset();
@@ -2037,17 +2170,28 @@ void SlangServer::maybeRetireParsedContext(const lsp::RequestContext* retirement
     uint64_t forced = 0;
     if (auto* value = std::getenv("SLANG_UVM_GENERATION_EDIT_LIMIT"))
         forced = std::strtoull(value, nullptr, 10);
-    if (bytes <= m_contextBudget && (!forced || m_contextEdits < forced)) {
+    if (!m_contextAdmissionPending && bytes <= m_contextBudget &&
+        (!forced || m_contextEdits < forced)) {
         ++m_contextEdits;
         m_contextRetirementPending = false;
         m_contextRetry.reset();
         return;
     }
-    if (!retirementContext && m_config.experimentalCooperativeAnalysis.value() &&
-        bytes < m_contextHardBudget) {
-        // Keep a hard high-water mark: endlessly cancelled work must not retain
-        // unbounded source generations. At the full configured growth allowance,
-        // use synchronous retirement and include it in performance accounting.
+    if (!retirementContext && m_config.experimentalCooperativeAnalysis.value()) {
+        // At the hard mark, stop adding editor generations to this namespace.
+        // Subsequent edits retain only their latest owned text until a private,
+        // cancellable replacement admits it. The source allowance is unchanged.
+        if (bytes >= m_contextHardBudget && !m_contextAdmissionPending) {
+            m_contextAdmissionPending = true;
+            // No semantic consumer may use this driver before admission. Drop
+            // unborrowed state now, rather than overlap it with each cancelled
+            // replacement. Consumers that still own a model keep it alive.
+            discardMethodScope();
+            if (m_diagnosticProcess)
+                m_diagnosticProcess->cancel();
+            m_activeDiagnosticSnapshot.reset();
+            m_driver->prepareForContextRetirement(true);
+        }
         m_contextRetirementPending = true;
         ++m_contextEdits;
         return;
@@ -2070,7 +2214,7 @@ void SlangServer::maybeRetireParsedContext(const lsp::RequestContext* retirement
         if (m_diagnosticProcess)
             m_diagnosticProcess->cancel();
         m_activeDiagnosticSnapshot.reset();
-        m_driver->prepareForContextRetirement();
+        m_driver->prepareForContextRetirement(true);
     }
     m_driver->preserveTrustedUvmForRetirement();
     auto clearPreservation = slang::ScopeGuard([this] {
@@ -2127,6 +2271,11 @@ void SlangServer::maybeRetireParsedContext(const lsp::RequestContext* retirement
 
 void SlangServer::onDocDidChange(const lsp::DidChangeTextDocumentParams& params,
                                  lsp::RequestContext ctx) {
+    if (m_contextAdmissionPending) {
+        m_driver->deferDocumentChanges(params);
+        m_contextRetirementPending = true;
+        return;
+    }
     if (!m_methodInputReloadPending &&
         (m_config.experimentalMethodBodyQueries.value() ||
          (m_config.experimentalMethodScopeOverlay.value() && !m_driver->comp))) {
@@ -2203,6 +2352,10 @@ void SlangServer::onDocDidChange(const lsp::DidChangeTextDocumentParams& params,
 }
 
 void SlangServer::onDocDidSave(const lsp::DidSaveTextDocumentParams& params) {
+    if (m_contextAdmissionPending) {
+        m_driver->deferDocumentSave(params);
+        return;
+    }
     discardMethodScope();
     // Only process documents that have been explicitly opened by the client
     if (!m_driver->isDocumentOpen(params.textDocument.uri)) {
@@ -2231,6 +2384,8 @@ void SlangServer::onDocDidSave(const lsp::DidSaveTextDocumentParams& params) {
 }
 
 void SlangServer::onDocDidClose(const lsp::DidCloseTextDocumentParams& params) {
+    // didClose must not be dropped when invalid build inputs prevent admission.
+    // closeDocument removes its deferred overlay; the next candidate reads disk.
     discardMethodScope();
     // TODO: Add method in ServerDriver to check that the rc of the document is 1 before
     // removing (non-compilation mode)
@@ -2476,12 +2631,13 @@ lsp::CompletionItem SlangServer::getCompletionItemResolve(const lsp::CompletionI
 }
 
 std::optional<std::vector<lsp::InlayHint>> SlangServer::getDocInlayHint(
-    const lsp::InlayHintParams& params) {
+    const lsp::InlayHintParams& params, lsp::RequestContext ctx) {
     auto doc = m_driver->getDocument(params.textDocument.uri);
     if (!doc) {
         return {};
     }
-    auto hints = doc->getAnalysis()->getInlayHints(params.range, m_config.inlayHints.get());
+    auto hints = doc->getAnalysis(ctx)->getInlayHints(params.range, m_config.inlayHints.get(), ctx);
+    ctx.checkpoint("before publishing inlay hints");
     INFO("Providing {} inlay hints for {}", hints.size(), doc->getWsRelativePath());
     return hints;
 }
@@ -2654,8 +2810,9 @@ std::optional<std::vector<lsp::Location>> SlangServer::getDocReferences(
     return references;
 }
 
-std::optional<lsp::WorkspaceEdit> SlangServer::getDocRename(const lsp::RenameParams& params) {
-    return m_driver->getDocRename(params.textDocument.uri, params.position, params.newName);
+std::optional<lsp::WorkspaceEdit> SlangServer::getDocRename(const lsp::RenameParams& params,
+                                                            lsp::RequestContext ctx) {
+    return m_driver->getDocRename(params.textDocument.uri, params.position, params.newName, ctx);
 }
 
 SourceManager& SlangServer::sourceManager() {

@@ -1,12 +1,16 @@
 // SPDX-License-Identifier: MIT
 #include "ServerDriver.h"
+#include "ast/ScopeBodyCache.h"
 #include "ast/ServerCompilationAnalysis.h"
 #include "ast/TrustedUvmLibrary.h"
 #include "completions/CompletionContext.h"
 #include "completions/MemberCompletions.h"
 #include "utils/ServerHarness.h"
+#include "util/UvmParseArtifact.h"
+#include "util/QueryText.h"
 #include <catch2/generators/catch_generators.hpp>
 #include <fstream>
+#include <sstream>
 #include <rfl/json.hpp>
 
 #include "slang/analysis/AnalysisManager.h"
@@ -85,6 +89,113 @@ struct LibraryAccess : server::CompletionQuery {
     using CompletionQuery::getIndexedSyntaxTree;
 };
 } // namespace
+
+TEST_CASE("Full-unit macro facts respect opt-in and survive trusted library retirement",
+          "[uvm-library][macro-proof]") {
+    LibraryWorkspace files;
+    const int mode = GENERATE(0, 1, 2, 3);
+    auto config = files.config(false);
+    CHECK_FALSE(config.experimentalMethodBodyMacroProof.value());
+    config.experimentalUvmSemanticCache = true;
+    config.experimentalMethodBodyQueries = true;
+    config.experimentalMethodBodyMacroProof = mode != 0;
+    config.methodBodyMacroProofMaxMiB = mode == 2 ? 0 : mode == 3 ? 1 : 16;
+    config.compilationFilelist = "design.f";
+    files.write(files.root / "design.f",
+                "\"third party/uvm ?sources/vendor_entry.sv\"\nconsumer.sv\n");
+    files.write(files.entry, "`ifdef ABSENT_UVM\n`define UNREACHED 1\n`endif\n" + files.source);
+    files.write(files.root / "consumer.sv",
+                "`ifdef ABSENT_USER\n`define USER_BRANCH 1\n`endif\n"
+                "package user_pkg; class Test extends uvm_pkg::object; "
+                "function int run(); return `PASS(1); endfunction endclass endpackage\n");
+    Indexer indexer;
+    ClientHarness client;
+    auto current = server::ServerDriver::createForExplore(indexer, client, config,
+                                                         files.root.string(), nullptr, true);
+    REQUIRE(current);
+    auto setting = current->options.get<server::TrustedUvmImport>();
+    REQUIRE(setting);
+    auto library = setting->library;
+    REQUIRE(library);
+    REQUIRE(current->driver.precompiledUvm);
+    const auto* root = &current->driver.precompiledUvm->root();
+    const bool tracked = mode == 1 || mode == 3;
+    auto verify = [&] {
+        REQUIRE(current->driver.precompiledUvm);
+        CHECK(&current->driver.precompiledUvm->root() == root);
+        const auto& prefix = current->driver.precompiledUvm->getPreprocessorMetadata();
+        CHECK(prefix.macroAccessTrackingComplete == tracked);
+        CHECK(prefix.macroAccessNames.contains("ABSENT_UVM") == tracked);
+        bool userFound = false;
+        for (const auto& tree : current->driver.syntaxTrees) {
+            if (!tree->getPreprocessorMetadata().macroAccessNames.contains("ABSENT_USER"))
+                continue;
+            userFound = true;
+            CHECK(tree->getPreprocessorMetadata().macroAccessTrackingComplete);
+            CHECK(tree->getPreprocessorMetadata().macroAccessEndedAtEof);
+            CHECK(tree->getPreprocessorMetadata().macroAccessNames.contains("ABSENT_UVM"));
+        }
+        CHECK(userFound == tracked);
+        // A successful private fragment EOF cannot certify the full source unit.
+        auto options = current->driver.createParseOptionBag();
+        server::QueryText fragment(current->sm, (files.root / "fragment.sv").string(),
+                                    "module fragment; endmodule\n");
+        auto tree = fragment.parse(options);
+        CHECK_FALSE(tree->getPreprocessorMetadata().macroAccessTrackingComplete);
+        CHECK(tree->getPreprocessorMetadata().macroAccessNames.empty());
+    };
+    verify();
+    for (int i = 0; i < 3; ++i) {
+        current->preserveTrustedUvmForRetirement();
+        auto next = server::ServerDriver::createForExplore(indexer, client, config,
+                                                           files.root.string(), current.get(),
+                                                           true, true);
+        REQUIRE(next);
+        REQUIRE(next->options.get<server::TrustedUvmImport>());
+        CHECK(next->options.get<server::TrustedUvmImport>()->library == library);
+        current = std::move(next);
+        verify();
+    }
+}
+
+TEST_CASE("Retained UVM macro proof changes preserve the original syntax namespace",
+          "[uvm-library][macro-proof-transition]") {
+    LibraryWorkspace files;
+    auto config = files.config(false);
+    config.experimentalUvmSemanticCache = true;
+    config.experimentalMethodBodyQueries = true;
+    config.compilationFilelist = "design.f";
+    files.write(files.root / "design.f",
+                "\"third party/uvm ?sources/vendor_entry.sv\"\nconsumer.sv\n");
+    Indexer indexer;
+    ClientHarness client;
+    auto current = server::ServerDriver::createForExplore(indexer, client, config,
+                                                         files.root.string(), nullptr, true);
+    REQUIRE(current);
+    REQUIRE(current->options.get<server::TrustedUvmImport>());
+    auto library = current->options.get<server::TrustedUvmImport>()->library;
+    const auto* root = &current->driver.precompiledUvm->root();
+    for (auto budget : {16u, 1u, 0u, 16u}) {
+        config.experimentalMethodBodyMacroProof = true;
+        config.methodBodyMacroProofMaxMiB = budget;
+        for (int repeat = 0; repeat < 2; ++repeat) {
+            current->preserveTrustedUvmForRetirement();
+            auto next = server::ServerDriver::createForExplore(indexer, client, config,
+                                                               files.root.string(), current.get(),
+                                                               true, true);
+            REQUIRE(next);
+            REQUIRE(next->options.get<server::TrustedUvmImport>());
+            CHECK(next->options.get<server::TrustedUvmImport>()->library == library);
+            REQUIRE(next->driver.precompiledUvm);
+            CHECK(&next->driver.precompiledUvm->root() == root);
+            const auto& facts = next->driver.precompiledUvm->getPreprocessorMetadata();
+            CHECK(facts.macroAccessTrackingComplete == (budget != 0));
+            CHECK(facts.macroAccessNames.contains("VALUE") == (budget != 0));
+            CHECK(parameterValue(next->driver.precompiledUvm) == 1);
+            current = std::move(next);
+        }
+    }
+}
 
 TEST_CASE("Trusted UVM retains semantic identities through edits and source retirement",
           "[uvm-library][uvm-semantic]") {
@@ -180,6 +291,356 @@ TEST_CASE("Trusted UVM retains semantic identities through edits and source reti
     CHECK(retiredSourceOwner.expired());
     library.reset();
     CHECK(retiredLibrarySource.expired());
+}
+
+TEST_CASE("Initial fixed provider isolation borrows the native parse and raw read history",
+          "[scope-semantic][scope-initial-source-reuse]") {
+    LibraryWorkspace files;
+    Config config;
+    config.experimentalScopeSemanticCache = true;
+    config.experimentalCooperativeAnalysis = true;
+    config.frozenSources =
+        Config::FrozenSourcesConfig{.modules = std::vector<std::string>{"stable"}, .maxMiB = 64};
+    config.flagsByFile = std::vector<Config::FlagSource>{
+        {(files.root / "server.json").string(), "--single-unit --threads 1 --top top"}};
+    files.write(files.root / "fixed.sv", "module stable; endmodule\n");
+    files.write(files.root / "consumer.sv", "module top; stable u(); endmodule\n");
+    files.write(files.root / "design.f", "fixed.sv\nconsumer.sv\n");
+    Indexer indexer;
+    ClientHarness client;
+    auto bootstrap = std::make_unique<server::ServerDriver>(indexer, client, config,
+                                                            std::vector<std::string>{"design.f"},
+                                                            files.root.string(), true);
+    REQUIRE(bootstrap->options.get<server::TrustedUvmImport>());
+    REQUIRE(bootstrap->driver.syntaxTrees.size() == 1);
+    const auto tree = bootstrap->driver.syntaxTrees.front();
+    auto consumer = std::make_unique<server::ServerDriver>(
+        indexer, client, config, std::vector<std::string>{"design.f"}, files.root.string(), true,
+        bootstrap.get(), nullptr, true, nullptr, true);
+    REQUIRE(consumer->driver.syntaxTrees.size() == 1);
+    CHECK(&consumer->driver.syntaxTrees.front()->root() == &tree->root());
+    CHECK(&consumer->driver.syntaxTrees.front()->sourceManager() == &consumer->sm);
+    CHECK(&consumer->sm != &bootstrap->sm);
+    auto graph = tree->getSourceBufferIds();
+    const auto recorded = consumer->sm.captureSnapshot(graph);
+    CHECK(recorded.files.size() == bootstrap->sm.captureSnapshot(graph).files.size());
+    CHECK_FALSE(consumer->sm.sourceWitnessFailure({}));
+    // Promotion can borrow semantic providers without borrowing their native
+    // parse. It must not create a stitched retirement prefix whose retained
+    // syntax owners inflate admission for the first complete design.
+    auto promotion = std::make_unique<server::ServerDriver>(
+        indexer, client, config, std::vector<std::string>{"design.f"}, files.root.string(), true,
+        bootstrap.get(), nullptr, true);
+    REQUIRE(promotion->driver.syntaxTrees.size() == 1);
+    CHECK(&promotion->driver.syntaxTrees.front()->root() != &tree->root());
+    CHECK(rfl::json::write(promotion->scopeLibraryStatus()).find("\"syntaxResumes\":0") !=
+          std::string::npos);
+    auto* provider = bootstrap->options.get<server::TrustedUvmImport>()
+                         ->library->compilation->getSourceManager();
+    const auto bytes = provider->getMemoryUsage();
+    consumer->sm.assignText("unrelated-edit.sv", std::string(1024 * 1024, 'x'));
+    CHECK(provider->getMemoryUsage() == bytes);
+    files.write(files.root / "consumer.sv", "module top; int changed; endmodule\n");
+    CHECK(consumer->sm.sourceWitnessFailure({}).has_value());
+}
+
+TEST_CASE("Retirement resumes a fixed prefix with current native loader inputs",
+          "[scope-semantic][scope-retirement-prefix]") {
+    const bool reorder = GENERATE(false, true);
+    LibraryWorkspace files;
+    Config config;
+    config.experimentalScopeSemanticCache = true;
+    config.experimentalCooperativeAnalysis = true;
+    config.frozenSources =
+        Config::FrozenSourcesConfig{.modules = std::vector<std::string>{"stable"}, .maxMiB = 64};
+    config.flagsByFile = std::vector<Config::FlagSource>{
+        {(files.root / "server.json").string(), "--single-unit --threads 1 --top top"}};
+    files.write(files.root / "fixed.sv",
+                "`define FIXED_VALUE 37\nmodule stable; endmodule\n");
+    files.write(files.root / "side.sv", "module side; endmodule\n");
+    const std::string disk =
+        "module top; stable u(); localparam int V=`FIXED_VALUE+1; endmodule\n";
+    const std::string edited =
+        "module top; stable u(); localparam int V=`FIXED_VALUE+9; endmodule\n";
+    files.write(files.root / "consumer.sv", disk);
+    files.write(files.root / "design.f", "fixed.sv\nside.sv\nconsumer.sv\n");
+    Indexer indexer;
+    ClientHarness client;
+    auto driver = server::ServerDriver::createFromFileLists(
+        indexer, client, config, {"design.f"}, files.root.string(), nullptr, true);
+    REQUIRE(driver);
+    REQUIRE(driver->options.get<server::TrustedUvmImport>());
+    const auto library = driver->options.get<server::TrustedUvmImport>()->library;
+    auto uri = URI::fromFile(files.root / "consumer.sv");
+    driver->openDocument(uri, edited, 2, true);
+    if (reorder)
+        files.write(files.root / "design.f", "side.sv\nfixed.sv\nconsumer.sv\n");
+    driver->preserveTrustedUvmForRetirement();
+    auto replacement = server::ServerDriver::createFromFileLists(
+        indexer, client, config, {"design.f"}, files.root.string(), driver.get(), true, true);
+    REQUIRE(replacement);
+    CHECK_FALSE(bool(replacement->driver.sourceLoader.singleUnitParseOverride));
+    CHECK(replacement->options.get<server::TrustedUvmImport>()->library == library);
+    INFO(rfl::json::write(replacement->scopeLibraryStatus()));
+    CHECK(rfl::json::write(replacement->scopeLibraryStatus())
+              .find(reorder ? "\"syntaxResumes\":0" : "\"syntaxResumes\":1") !=
+          std::string::npos);
+    auto& body = replacement->comp->getInstancesOfModule("top").front()->body;
+    CHECK(body.find("V")->as<ast::ParameterSymbol>().getValue().integer().as<int>() == 46);
+    CHECK(body.getCompilation().getSemanticDiagnostics().empty());
+    driver.reset();
+    CHECK(body.find("V")->as<ast::ParameterSymbol>().getValue().integer().as<int>() == 46);
+}
+
+TEST_CASE("Native retirement rejects edited fixed roots and included dependencies",
+          "[scope-semantic][scope-retirement-fixed-edit]") {
+    const bool header = GENERATE(false, true);
+    LibraryWorkspace files;
+    Config config;
+    config.experimentalScopeSemanticCache = true;
+    config.experimentalCooperativeAnalysis = true;
+    config.frozenSources =
+        Config::FrozenSourcesConfig{.modules = std::vector<std::string>{"stable"}, .maxMiB = 64};
+    config.flagsByFile = std::vector<Config::FlagSource>{
+        {(files.root / "server.json").string(), "--single-unit --threads 1 --top top"}};
+    const std::string rootText =
+        "module stable;\n`include \"fixed.svh\"\nendmodule\n";
+    const std::string headerText = "localparam int N=37;\n";
+    files.write(files.root / "fixed.sv", rootText);
+    files.write(files.root / "fixed.svh", headerText);
+    files.write(files.root / "consumer.sv", "module top; stable u(); endmodule\n");
+    files.write(files.root / "design.f", "fixed.sv\nconsumer.sv\n");
+    Indexer indexer;
+    ClientHarness client;
+    auto driver = server::ServerDriver::createFromFileLists(
+        indexer, client, config, {"design.f"}, files.root.string(), nullptr, true);
+    REQUIRE(driver);
+    REQUIRE(driver->options.get<server::TrustedUvmImport>());
+    const auto generation = driver->options.get<server::TrustedUvmImport>()->library->generation;
+    const auto uri = URI::fromFile(files.root / (header ? "fixed.svh" : "fixed.sv"));
+    driver->openDocument(uri, header ? headerText : rootText, 1, true);
+    const std::string edited = header ? "localparam int N=99;\n"
+                                      : "module stable; int edited;\n"
+                                        "`include \"fixed.svh\"\nendmodule\n";
+    driver->onDocDidChange(
+        {.textDocument = {.version = 2, .uri = uri},
+         .contentChanges = {lsp::TextDocumentContentChangeWholeDocument{.text = edited}}});
+    driver->preserveTrustedUvmForRetirement();
+    CHECK_THROWS_AS(server::ServerDriver::createFromFileLists(
+                        indexer, client, config, {"design.f"}, files.root.string(), driver.get(),
+                        true, true),
+                    lsp::RequestFailed);
+    CHECK(driver->getDocument(uri)->getText().starts_with(edited));
+    CHECK(driver->options.get<server::TrustedUvmImport>()->library->generation == generation);
+    driver->preserveTrustedUvmForRetirement(false);
+    auto rebuilt = server::ServerDriver::createFromFileLists(
+        indexer, client, config, {"design.f"}, files.root.string(), driver.get(), true, true);
+    REQUIRE(rebuilt);
+    CHECK(rebuilt->options.get<server::TrustedUvmImport>()->library->generation != generation);
+    CHECK(rebuilt->comp->getInstancesOfModule("top").size() == 1);
+}
+
+TEST_CASE("Cancelled RTL consumers release models and evicted source generations",
+          "[scope-semantic][scope-source-lifetime]") {
+    LibraryWorkspace files;
+    Config config;
+    config.experimentalScopeSemanticCache = true;
+    config.experimentalCooperativeAnalysis = true;
+    config.frozenSources =
+        Config::FrozenSourcesConfig{.instances = std::vector<std::string>{"top.u"}, .maxMiB = 1};
+    config.flagsByFile = std::vector<Config::FlagSource>{
+        {(files.root / "server.json").string(), "--single-unit --threads 1 --top top"}};
+    files.write(files.root / "fixed.sv",
+                "module stable #(parameter int N=1)(input int a, output int y);\n"
+                "assign y=a+N; endmodule\n");
+    auto source = [](int n) {
+        return fmt::format("module top(input int a, output int y); "
+                           "stable #(.N({})) u(.*); endmodule\n",
+                           n);
+    };
+    files.write(files.root / "consumer.sv", source(0));
+    files.write(files.root / "design.f", "fixed.sv\nconsumer.sv\n");
+    Indexer indexer;
+    ClientHarness client;
+    constexpr size_t unrelatedBytes = 4 * 1024 * 1024;
+    {
+        // Reproduce the original ownership mechanism without the factory's
+        // isolation step. The real editor factory must never expose this setup
+        // driver to subsequent editing.
+        auto bootstrap = std::make_unique<server::ServerDriver>(
+            indexer, client, config, std::vector<std::string>{"design.f"}, files.root.string(),
+            true);
+        auto imports = bootstrap->options.get<server::TrustedUvmImport>();
+        REQUIRE(imports);
+        auto library = imports->library;
+        auto* sources = library->compilation->getSourceManager();
+        REQUIRE(sources == &bootstrap->sm);
+        std::weak_ptr<const void> sourceOwner = bootstrap->driver.getSourceOwner();
+        const auto before = sources->getMemoryUsage();
+        bootstrap->sm.assignText("baseline-unrelated.sv", std::string(unrelatedBytes, 'x'));
+        bootstrap.reset();
+        CHECK_FALSE(sourceOwner.expired());
+        CHECK(sources->getMemoryUsage() >= before + unrelatedBytes);
+        fmt::print(stderr, "scope-source-lifetime baselineBefore={} baselineAfter={}\n", before,
+                   sources->getMemoryUsage());
+        library.reset();
+        CHECK(sourceOwner.expired());
+    }
+    auto driver = server::ServerDriver::createFromFileLists(indexer, client, config, {"design.f"},
+                                                            files.root.string(), nullptr, true);
+    REQUIRE(driver);
+    auto setting = driver->options.get<server::ScopeBodyImport>();
+    REQUIRE(setting);
+    auto cache = setting->cache.lock();
+    REQUIRE(cache);
+    INFO(rfl::json::write(cache->status()));
+    REQUIRE(cache->status().publications > 0);
+    std::weak_ptr<const void> originalSource = driver->driver.getSourceOwner();
+    const std::string_view names[] = {"stable"};
+    std::weak_ptr<ast::Compilation> originalModel =
+        driver->comp->createActiveDesignContext(names).retainCompilation();
+    std::vector<std::weak_ptr<const void>> cancelledSources;
+    driver->preserveTrustedUvmForRetirement();
+    for (int n = 1; n <= 64; ++n) {
+        CAPTURE(n);
+        files.write(files.root / "consumer.sv", source(n));
+        lsp::RequestContext construction("retirement construction", std::nullopt);
+        auto candidate = server::ServerDriver::createFromFileLists(
+            indexer, client, config, {"design.f"}, files.root.string(), driver.get(), true, true,
+            &construction);
+        REQUIRE(candidate);
+        std::weak_ptr<ast::Compilation> model =
+            candidate->comp->createActiveDesignContext(names).retainCompilation();
+        cancelledSources.emplace_back(candidate->driver.getSourceOwner());
+        const auto publications = cache->status().publications;
+        lsp::RequestContext request("cancel candidate diagnostics", std::nullopt);
+        bool reached = false;
+        request.setCheckpointObserverForTesting([&](std::string_view where) {
+            if (where == "after diagnostic scope") {
+                reached = true;
+                request.cancel();
+            }
+        });
+        CHECK_THROWS_AS(candidate->comp->prepareDiagnostics(request), lsp::RequestCancelled);
+        REQUIRE(reached);
+        REQUIRE(cache->status().publications > publications);
+        candidate.reset();
+        CHECK(model.expired());
+        // The cached body keeps its own namespace, never the cancelled editor's.
+        CHECK(cancelledSources.back().expired());
+        const auto usage = cache->status();
+        CHECK(usage.baseBytes + usage.ownerBytes + usage.pinnedBytes + usage.admissionBytes <=
+              usage.budgetBytes);
+    }
+    CHECK(cache->status().evictions > 0);
+    CHECK(cancelledSources.front().expired());
+    auto original = driver->comp->getActiveInstanceSymbol("stable");
+    REQUIRE(original);
+    CHECK(*original->body.find("N")->as<ast::ParameterSymbol>().getValue().integer().as<int>() ==
+          0);
+    CHECK_FALSE(originalModel.expired());
+    CHECK_FALSE(originalSource.expired());
+    // The provider must have a separate namespace before any editing begins.
+    auto* providerSources =
+        driver->options.get<server::TrustedUvmImport>()->library->compilation->getSourceManager();
+    REQUIRE(providerSources != &driver->sm);
+    const auto sourceBytesBefore = providerSources->getMemoryUsage();
+    driver->sm.assignText("unrelated-generation.sv", std::string(unrelatedBytes, 'x'));
+    CHECK(providerSources->getMemoryUsage() == sourceBytesBefore);
+    files.write(files.root / "consumer.sv", source(100));
+    auto replacement = server::ServerDriver::createFromFileLists(indexer, client, config,
+                                                                 {"design.f"}, files.root.string(),
+                                                                 driver.get(), true, true);
+    REQUIRE(replacement);
+    replacement->comp->prepareDiagnostics({});
+    auto retained = replacement->comp->createActiveDesignContext(names).retainCompilation();
+    std::weak_ptr<const void> replacementSource = replacement->driver.getSourceOwner();
+    driver.reset();
+    CHECK(originalModel.expired());
+    CHECK(originalSource.expired());
+    CHECK(providerSources->getMemoryUsage() == sourceBytesBefore);
+    fmt::print(stderr, "scope-source-lifetime originBefore={} originAfter={} cacheBudget={}\n",
+               sourceBytesBefore, providerSources->getMemoryUsage(), cache->status().budgetBytes);
+    replacement.reset();
+    CHECK_FALSE(replacementSource.expired());
+    CHECK(retained->getSemanticDiagnostics().empty());
+    retained.reset();
+    cache.reset();
+    CHECK(originalSource.expired());
+    CHECK(replacementSource.expired());
+    for (const auto& lease : cancelledSources)
+        CHECK(lease.expired());
+}
+
+TEST_CASE("Stable RTL body reuse does not retain the retired editing source namespace",
+          "[scope-semantic][scope-stable-source-lifetime]") {
+    const bool fullContext = GENERATE(false, true);
+    const bool edited = GENERATE(false, true);
+    CAPTURE(fullContext);
+    CAPTURE(edited);
+    LibraryWorkspace files;
+    Config config;
+    config.experimentalScopeSemanticCache = true;
+    config.experimentalCooperativeAnalysis = true;
+    config.frozenSources =
+        Config::FrozenSourcesConfig{.instances = std::vector<std::string>{"top.u"}, .maxMiB = 64};
+    config.flagsByFile = std::vector<Config::FlagSource>{
+        {(files.root / "server.json").string(),
+         std::string("--single-unit --threads 1 --top top") + (fullContext ? " --top other" : "")}};
+    files.write(files.root / "fixed.sv",
+                "module stable #(parameter int N=1)(input int a, output int y); "
+                "assign y=a+N; endmodule\n");
+    files.write(files.root / "consumer.sv",
+                "module top(input int a, output int y); stable u(.*); endmodule\n"
+                "module other; endmodule\n");
+    files.write(files.root / "design.f", "fixed.sv\nconsumer.sv\n");
+    Indexer indexer;
+    ClientHarness client;
+    auto driver = server::ServerDriver::createFromFileLists(indexer, client, config, {"design.f"},
+                                                            files.root.string(), nullptr, true);
+    REQUIRE(driver);
+    auto cache = driver->options.get<server::ScopeBodyImport>()->cache.lock();
+    REQUIRE(cache);
+    REQUIRE(cache->status().publications > 0);
+    CHECK(cache->status().compactPublications == (fullContext ? 0 : 1));
+    if (edited) {
+        const auto uri = URI::fromFile(files.root / "consumer.sv");
+        const std::string first = "module top(input int a, output int y); stable u(.*); endmodule\n"
+                                  "module other; endmodule\n";
+        driver->openDocument(uri, first, 1, true);
+        driver->onDocDidChange(
+            {.textDocument = {.version = 2, .uri = uri},
+             .contentChanges = {lsp::TextDocumentContentChangeWholeDocument{
+                 .text = "module top(input int a, output int y); stable #(.N(2)) u(.*); "
+                         "endmodule\nmodule other; endmodule\n"}}});
+        driver->comp->prepareDiagnostics({});
+        REQUIRE(cache->status().publications == 2);
+    }
+    std::weak_ptr<const void> source = driver->driver.getSourceOwner();
+    const std::string_view names[] = {"stable"};
+    std::weak_ptr<ast::Compilation> model =
+        driver->comp->createActiveDesignContext(names).retainCompilation();
+    driver->sm.assignText("unrelated-edit.sv", std::string(4 * 1024 * 1024, 'x'));
+    driver->preserveTrustedUvmForRetirement();
+    auto replacement = server::ServerDriver::createFromFileLists(indexer, client, config,
+                                                                 {"design.f"}, files.root.string(),
+                                                                 driver.get(), true);
+    REQUIRE(replacement);
+    REQUIRE(cache->status().hits > 0);
+    driver.reset();
+    CHECK(model.expired());
+    CHECK(source.expired());
+    auto instance = replacement->comp->getActiveInstanceSymbol("stable");
+    REQUIRE(instance);
+    CHECK(*instance->body.find("N")->as<ast::ParameterSymbol>().getValue().integer().as<int>() ==
+          (edited ? 2 : 1));
+    const auto storage = replacement->sourceStorageUsage();
+    CHECK(storage.retained.managers >= 2); // Fixed library and independent RTL body.
+    CHECK(storage.total.source.dataBytes < 4 * 1024 * 1024);
+    CHECK(storage.retained.source.queryBytes == 0);
+    replacement.reset();
+    cache.reset();
+    CHECK(source.expired());
 }
 
 TEST_CASE("Trusted UVM stays opt-in and reports unavailable semantic preparation",
@@ -489,6 +950,21 @@ TEST_CASE("Bundled UVM is explicit and independently supports native and cached 
     CHECK_FALSE(driver->frozenInputWitnessFailure());
     REQUIRE(driver->driver.syntaxTrees.size() == 1);
     REQUIRE(driver->driver.precompiledUvm);
+    CHECK_FALSE(driver->driver.precompiledUvm->getPreprocessorMetadata()
+                    .macroAccessTrackingComplete);
+    CHECK(driver->driver.precompiledUvm->getPreprocessorMetadata().macroAccessNames.empty());
+    const auto root = driver->driver.precompiledUvmRoot;
+    auto artifact = server::uvm_artifact::read(root.parent_path() / "preparsed/default.cst");
+    parsing::PreprocessorOptions traceOptions;
+    traceOptions.trackMacroAccesses = true;
+    traceOptions.precompiledSourceRoot = root;
+    SourceManager restoredSources;
+    std::istringstream proofInput(std::move(artifact.syntax), std::ios::binary);
+    auto withFacts = syntax::SyntaxTree::readParseArchive(proofInput, restoredSources, root,
+                                                         Bag{traceOptions});
+    CHECK(withFacts->getPreprocessorMetadata().macroAccessTrackingComplete);
+    CHECK(withFacts->getPreprocessorMetadata().macroAccessEndedAtEof);
+    CHECK(withFacts->getPreprocessorMetadata().macroAccessNames.contains("uvm_info"));
     // Indexing the installed library consumes its restored macro metadata.
     indexer.startIndexing(
         std::vector<std::string>{(driver->driver.precompiledUvmRoot / "**/*.svh").string()}, {});
@@ -610,6 +1086,18 @@ TEST_CASE("Project UVM parse caches survive restart and require explicit content
         if (item.path().extension() == ".cst")
             cachePath = item.path();
     REQUIRE_FALSE(cachePath.empty());
+    auto artifact = server::uvm_artifact::read(cachePath);
+    parsing::PreprocessorOptions traceOptions;
+    traceOptions.trackMacroAccesses = true;
+    traceOptions.precompiledSourceRoot = files.library;
+    SourceManager restoredSources;
+    std::istringstream proofInput(std::move(artifact.syntax), std::ios::binary);
+    auto withFacts = syntax::SyntaxTree::readParseArchive(proofInput, restoredSources,
+                                                         files.library, Bag{traceOptions}, true);
+    CHECK(withFacts->getPreprocessorMetadata().macroAccessTrackingComplete);
+    CHECK(withFacts->getPreprocessorMetadata().macroAccessEndedAtEof);
+    CHECK(withFacts->getPreprocessorMetadata().macroAccessNames.contains("VALUE"));
+    CHECK(parameterValue(withFacts) == 1);
     auto again = open();
     CHECK(rfl::json::write(again->trustedUvmStatus()).find("\"projectCacheHit\":true") !=
           std::string::npos);
@@ -668,6 +1156,248 @@ TEST_CASE("Custom UVM wrappers with dependent package types retain native identi
     auto compilation = driver->getDocument(uri)->getAnalysis()->getCompilation();
     for (const auto& diagnostic : compilation->getAllDiagnostics())
         CHECK_FALSE(diagnostic.isError());
+}
+
+TEST_CASE("Initial configured promotion reuses only matching fixed library inputs",
+          "[scope-semantic][uvm-semantic][initial-library]") {
+    LibraryWorkspace files;
+    const int libraryMode = GENERATE(0, 1, 2);
+    const bool withUvm = libraryMode != 0;
+    const int change = GENERATE(0, 1, 2, 3, 4);
+    const bool parallel = GENERATE(false, true);
+    INFO("UVM " << withUvm << ", change " << change);
+    Config config = withUvm ? files.config(false) : Config{};
+    config.experimentalUvmSemanticCache = withUvm;
+    config.experimentalParallelDiagnostics = parallel;
+    config.parallelDiagnosticThreads = 2;
+    config.experimentalScopeSemanticCache = libraryMode != 2;
+    config.experimentalCooperativeAnalysis = change != 4;
+    config.frozenSources = Config::FrozenSourcesConfig{
+        .packages = std::vector<std::string>{"stable_pkg"}, .maxMiB = 64};
+    config.compilationFilelist = "design.f";
+    config.flagsByFile = std::vector<Config::FlagSource>{
+        {(files.root / "server.json").string(), "--single-unit --threads 1"}};
+    files.write(files.root / "stable.sv",
+                "package stable_pkg;\n`ifdef SELECT_ALT\nlocalparam int X=2;\n"
+                "`else\nlocalparam int X=`VALUE;\n`endif\nendpackage\n");
+    files.write(files.root / "consumer.sv",
+                "package user_pkg; localparam int Y=stable_pkg::X; endpackage\n");
+    auto filelist = std::string("-DVALUE=1\n") +
+                    (withUvm ? "\"third party/uvm ?sources/vendor_entry.sv\"\n" : "") +
+                    "stable.sv\nconsumer.sv\n";
+    files.write(files.root / "design.f", filelist);
+    Indexer indexer;
+    ClientHarness client;
+    auto initial = server::ServerDriver::createForExplore(indexer, client, config,
+                                                          files.root.string(), nullptr, true);
+    REQUIRE(initial);
+    REQUIRE_FALSE(initial->comp);
+    auto setting = initial->options.get<server::TrustedUvmImport>();
+    REQUIRE(setting);
+    auto library = setting->library;
+    // Consumer bytes are always reparsed, even when the fixed provider is reused.
+    files.write(files.root / "consumer.sv",
+                "package user_pkg; localparam int Y=stable_pkg::X+3; endpackage\n");
+    if (change == 1)
+        files.write(files.root / "design.f", "-DSELECT_ALT\n" + filelist);
+    if (change == 2) {
+        fs::create_directory(files.root / "other-includes");
+        files.write(files.root / "design.f", "+incdir+other-includes\n" + filelist);
+    }
+    if (change == 3)
+        files.write(files.root / "design.f", "--max-constexpr-steps 2048\n" + filelist);
+    auto promoted = server::ServerDriver::createFromFileLists(indexer, client, config,
+                                                              {(files.root / "design.f").string()},
+                                                              files.root.string(), initial.get(),
+                                                              true);
+    REQUIRE(promoted);
+    REQUIRE(promoted->comp);
+    const auto* scheduling = promoted->options.get<server::ParallelDiagnosticOptions>();
+    REQUIRE(scheduling);
+    CHECK(scheduling->enabled == parallel);
+    CHECK(scheduling->workers == 2);
+    setting = promoted->options.get<server::TrustedUvmImport>();
+    REQUIRE(setting);
+    CHECK((setting->library == library) == (change == 0));
+    // The real server destroys the exploration driver immediately after the
+    // factory returns. Reused syntax and semantic owners must survive that.
+    initial.reset();
+    CHECK(promoted->diagClient->publishesOnDestruction());
+    const auto uri = URI::fromFile(files.root / "consumer.sv");
+    auto compilation = promoted->getDocument(uri)->getAnalysis()->getCompilation();
+    auto user = compilation->getPackage("user_pkg");
+    REQUIRE(user);
+    CHECK(*user->find("Y")->as<ast::ParameterSymbol>().getValue().integer().as<int>() ==
+          (change == 1 ? 5 : 4));
+    for (const auto& diagnostic : compilation->getAllDiagnostics())
+        CHECK_FALSE(diagnostic.isError());
+    // A subsequent explicit rebuild must observe changed provider content.
+    auto promotedLibrary = setting->library;
+    files.write(files.root / "stable.sv", "package stable_pkg; localparam int X=43; endpackage\n");
+    auto rebuilt = server::ServerDriver::createFromFileLists(indexer, client, config, {"design.f"},
+                                                             files.root.string(), promoted.get(),
+                                                             true);
+    REQUIRE(rebuilt);
+    setting = rebuilt->options.get<server::TrustedUvmImport>();
+    REQUIRE(setting);
+    CHECK(setting->library != promotedLibrary);
+    compilation = rebuilt->getDocument(uri)->getAnalysis()->getCompilation();
+    user = compilation->getPackage("user_pkg");
+    REQUIRE(user);
+    CHECK(*user->find("Y")->as<ast::ParameterSymbol>().getValue().integer().as<int>() == 46);
+}
+
+TEST_CASE("Configured library filelists keep identical options across rebuild and retirement",
+          "[scope-semantic][uvm-semantic][retained-filelist]") {
+    LibraryWorkspace files;
+    const int mode = GENERATE(0, 1, 2);
+    CAPTURE(mode);
+    auto config = mode ? files.config(false) : Config{};
+    config.experimentalCooperativeAnalysis = true;
+    config.experimentalUvmSemanticCache = mode != 0;
+    config.experimentalScopeSemanticCache = mode != 2;
+    config.frozenSources = Config::FrozenSourcesConfig{
+        .packages = std::vector<std::string>{"stable_pkg"}, .maxMiB = 64};
+    config.compilationFilelist = "design.f";
+    config.flagsByFile = std::vector<Config::FlagSource>{
+        {(files.root / "server.json").string(), "--single-unit --threads 1"}};
+    fs::create_directories(files.root / "includes");
+    const auto filelist = std::string("-DVALUE=1\n+incdir+includes\n") +
+                          (mode ? "\"third party/uvm ?sources/vendor_entry.sv\"\n" : "") +
+                          "stable.sv\nconsumer.sv\n";
+    files.write(files.root / "design.f", filelist);
+    files.write(files.root / "stable.sv",
+                "package stable_pkg; localparam int X=`VALUE; endpackage\n");
+    const std::string text = "package user_pkg; localparam int Y=stable_pkg::X+3; endpackage\n";
+    files.write(files.root / "consumer.sv", text);
+    Indexer indexer;
+    ClientHarness client;
+    auto initial = server::ServerDriver::createForExplore(indexer, client, config,
+                                                          files.root.string(), nullptr, true);
+    REQUIRE(initial);
+    auto current = server::ServerDriver::createFromFileLists(indexer, client, config, {"design.f"},
+                                                             files.root.string(), initial.get(),
+                                                             true);
+    REQUIRE(current);
+    initial.reset();
+    const auto uri = URI::fromFile(files.root / "consumer.sv");
+    const std::string incomplete =
+        "package user_pkg; localparam int Y=stable_pkg::X+; endpackage\n";
+    current->openDocument(uri, incomplete, 7, true);
+    auto retire = [&] {
+        auto setting = current->options.get<server::TrustedUvmImport>();
+        REQUIRE(setting);
+        auto library = setting->library;
+        current->preserveTrustedUvmForRetirement();
+        auto replacement = server::ServerDriver::createFromFileLists(
+            indexer, client, config, {(files.root / "design.f").string()}, files.root.string(),
+            current.get(), true);
+        REQUIRE(replacement);
+        REQUIRE(replacement->options.get<server::TrustedUvmImport>());
+        CHECK(replacement->options.get<server::TrustedUvmImport>()->library == library);
+        CHECK(replacement->getDocument(uri)->textMatches(incomplete));
+        CHECK(replacement->getDocument(uri)->getVersion() == 7);
+        current = std::move(replacement);
+    };
+    retire();
+    auto library = current->options.get<server::TrustedUvmImport>()->library;
+    current->preserveTrustedUvmForRetirement(false);
+    files.write(files.root / "stable.sv", "package stable_pkg; localparam int X=43; endpackage\n");
+    auto rebuilt = server::ServerDriver::createFromFileLists(indexer, client, config, {"design.f"},
+                                                             files.root.string(), current.get(),
+                                                             true);
+    REQUIRE(rebuilt);
+    REQUIRE(rebuilt->options.get<server::TrustedUvmImport>());
+    CHECK(rebuilt->options.get<server::TrustedUvmImport>()->library != library);
+    current = std::move(rebuilt);
+    retire();
+    current->openDocument(uri, text, 8, true);
+    auto design = current->comp->createActiveDesignContext({});
+    auto& compilation = design.getAnalysis().compilation;
+    auto user = compilation.getPackage("user_pkg");
+    REQUIRE(user);
+    CHECK(*user->find("Y")->as<ast::ParameterSymbol>().getValue().integer().as<int>() == 46);
+    for (const auto& diagnostic : compilation.getAllDiagnostics())
+        CHECK_FALSE(diagnostic.isError());
+    // Actual command-line changes still invalidate retained semantic inputs.
+    files.write(files.root / "design.f", "-DCHANGED_CONFIGURATION\n" + filelist);
+    current->preserveTrustedUvmForRetirement();
+    auto rejected = server::ServerDriver::createFromFileLists(indexer, client, config, {"design.f"},
+                                                              files.root.string(), current.get(),
+                                                              true);
+    CHECK_FALSE(rejected);
+    CHECK(current->getDocument(uri)->textMatches(text));
+}
+
+TEST_CASE("Initial promotion separates RTL admission from borrowed exploration bodies",
+          "[scope-semantic][initial-library]") {
+    LibraryWorkspace files;
+    const bool macroTypes = GENERATE(false, true);
+    Config config;
+    config.experimentalScopeSemanticCache = true;
+    config.experimentalCooperativeAnalysis = true;
+    config.compilationFilelist = "design.f";
+    config.flagsByFile = std::vector<Config::FlagSource>{
+        {(files.root / "server.json").string(), "--single-unit --threads 1 --top top"}};
+    config.frozenSources =
+        Config::FrozenSourcesConfig{.modules = std::vector<std::string>{"stable"}, .maxMiB = 64};
+    files.write(files.root / "fixed.sv",
+                "module stable #(parameter type T=logic)(input T a, output wire T y); "
+                "assign y=~a; endmodule\n");
+    auto source = [&](std::string_view expression) {
+        return fmt::format("`define PAYLOAD(N) typedef struct packed {{logic [3:0] bits;}} N;\n"
+                           "module top(input logic [3:0] a, output wire [3:0] y);\n"
+                           "{} stable #(.T(payload_t)) u({},y); endmodule\n",
+                           macroTypes ? "`PAYLOAD(payload_t)"
+                                      : "typedef struct packed {logic [3:0] bits;} payload_t;",
+                           expression);
+    };
+    files.write(files.root / "consumer.sv", source("a"));
+    files.write(files.root / "design.f", "fixed.sv\nconsumer.sv\n");
+    Indexer indexer;
+    ClientHarness client;
+    auto initial = server::ServerDriver::createForExplore(indexer, client, config,
+                                                          files.root.string(), nullptr, true);
+    REQUIRE(initial);
+    REQUIRE_FALSE(initial->comp);
+    auto setting = initial->options.get<server::ScopeBodyImport>();
+    REQUIRE(setting);
+    auto exploration = setting->cache.lock();
+    REQUIRE(exploration);
+    std::unordered_map<std::string, std::shared_ptr<server::SlangDoc>> documents;
+    for (const auto& [uri, doc] : initial->docs)
+        documents.emplace(uri.getPath(), doc);
+    auto borrowed = std::make_shared<server::ServerCompilationAnalysis>(
+        documents, initial->options, initial->sm, lsp::RequestContext{}, false,
+        initial->driver.getSourceOwner());
+    borrowed->getAnalysisManager();
+    INFO(DiagnosticEngine::reportAll(initial->sm, borrowed->compilation.getAllDiagnostics()));
+    REQUIRE(exploration->status().ownerBuilds > 0);
+    auto provider = initial->options.get<server::TrustedUvmImport>()->library;
+    auto promoted = server::ServerDriver::createFromFileLists(indexer, client, config, {"design.f"},
+                                                              files.root.string(), initial.get(),
+                                                              true);
+    REQUIRE(promoted);
+    REQUIRE(promoted->comp);
+    CHECK(promoted->options.get<server::TrustedUvmImport>()->library == provider);
+    setting = promoted->options.get<server::ScopeBodyImport>();
+    REQUIRE(setting);
+    auto current = setting->cache.lock();
+    REQUIRE(current);
+    CHECK(current != exploration);
+    CHECK(current->status().retainedRoots == std::vector<std::string>{"top.u"});
+    initial.reset();
+    documents.clear();
+    // The old compilation owns its source lease independently of the driver.
+    CHECK(borrowed->compilation.getRoot().topInstances.front()->body.find("u"));
+    const auto uri = URI::fromFile(files.root / "consumer.sv");
+    promoted->openDocument(uri, source("a"), 1, true);
+    promoted->onDocDidChange(
+        {.textDocument = {.version = 2, .uri = uri},
+         .contentChanges = {lsp::TextDocumentContentChangeWholeDocument{.text = source("~a")}}});
+    promoted->runPendingDiagnostics();
+    CHECK(current->status().hits > 0);
+    CHECK(current->status().retainedRoots == std::vector<std::string>{"top.u"});
 }
 
 TEST_CASE("Fixed package semantic closure shares nominal types across consumer edits",
@@ -5046,4 +5776,276 @@ TEST_CASE("Independent nominal captures cannot overwrite a current declaration i
     expected->unfreeze();
     CHECK(DiagnosticEngine::reportAll(driver->sm, actualAnalysis.getDiagnostics()) ==
           DiagnosticEngine::reportAll(driver->sm, expectedAnalysis.getDiagnostics()));
+}
+
+TEST_CASE("Configured syntax replay has an independent budget and invalidates edited prefixes",
+          "[scope-semantic][configured-syntax-prefix]") {
+    const int mode = GENERATE(0, 1, 2, 3);
+    const bool directRoot = GENERATE(false, true);
+    INFO(mode);
+    INFO(directRoot); // disabled, zero budget, reusable, over budget
+    LibraryWorkspace files;
+    Config config;
+    CHECK_FALSE(config.experimentalSyntaxPrefixCache.value());
+    CHECK(config.syntaxPrefixCacheMaxMiB.value() == 256);
+    config.experimentalScopeSemanticCache = true;
+    config.experimentalCooperativeAnalysis = true;
+    config.experimentalSyntaxPrefixCache = mode != 0;
+    config.syntaxPrefixCacheMaxMiB = mode == 1 ? 0u : mode == 3 ? 1u : 64u;
+    config.frozenSources = Config::FrozenSourcesConfig{
+        .packages = std::vector<std::string>{"fixed_pkg"}, .maxMiB = 64};
+    config.flagsByFile = std::vector<Config::FlagSource>{
+        {(files.root / "server.json").string(), "--single-unit --threads 1 --top top"}};
+    files.write(files.root / "fixed.sv", "package fixed_pkg; class Base; endclass endpackage\n");
+    auto sharedSource = [&](int macro) {
+        std::string text = "`pragma protect begin\npackage shared_pkg; class C;\n";
+        if (mode == 3)
+            for (int i = 0; i < 12000; ++i)
+                text += "int member_" + std::to_string(i) + ";\n";
+        text += "endclass endpackage\n`pragma protect end\n`define SHARED_VALUE " +
+                std::to_string(macro) + "\n";
+        return text;
+    };
+    files.write(files.root / "shared.sv", sharedSource(7));
+    auto text = [=](int value) {
+        return std::string(directRoot ? "module top;" : "class C;") +
+               " shared_pkg::C obj; localparam int V=`SHARED_VALUE+" +
+               std::to_string(value) + "; int added_" + std::to_string(value) +
+               (directRoot ? "; endmodule\n" : "; endclass\n");
+    };
+    files.write(files.root / "user.svh", text(0));
+    files.write(files.root / "user.sv", directRoot ? text(0) :
+                "package user_pkg;\n`include \"user.svh\"\n"
+                "endpackage\nmodule top; user_pkg::C obj; endmodule\n");
+    files.write(files.root / "design.f", "fixed.sv\nshared.sv\nuser.sv\n");
+    Indexer indexer;
+    ClientHarness client;
+    auto driver = server::ServerDriver::createFromFileLists(
+        indexer, client, config, {"design.f"}, files.root.string(), nullptr, true);
+    REQUIRE(driver);
+    const auto uri = URI::fromFile(files.root / (directRoot ? "user.sv" : "user.svh"));
+    driver->openDocument(uri, text(0), 1, true);
+    auto verify = [&](int version, int value, int expected) {
+        driver->onDocDidChange({.textDocument = {.version = version, .uri = uri},
+            .contentChanges = {lsp::TextDocumentContentChangeWholeDocument{.text = text(value)}}});
+        auto compilation = driver->getDocument(uri)->getAnalysis()->getCompilation();
+        const ast::Symbol* parameter = nullptr;
+        if (directRoot) {
+            REQUIRE(compilation->getRoot().topInstances.size() == 1);
+            parameter = compilation->getRoot().topInstances.front()->body.find("V");
+        }
+        else {
+            REQUIRE(compilation->getPackage("user_pkg"));
+            auto cls = compilation->getPackage("user_pkg")->find("C");
+            REQUIRE(cls);
+            parameter = cls->as<ast::ClassType>().find("V");
+        }
+        REQUIRE(parameter);
+        CHECK(parameter->as<ast::ParameterSymbol>().getValue().integer().as<int>() == expected);
+        CHECK(compilation->getSemanticDiagnostics().empty());
+    };
+    verify(2, 1, 8);
+    if (mode == 2) {
+        driver->onDocDidChange({.textDocument = {.version = 3, .uri = uri},
+            .contentChanges = {lsp::TextDocumentContentChangeWholeDocument{.text = text(2)}}});
+        lsp::RequestContext request("test/syntax-prefix", lsp::ID_t{1});
+        bool reached = false;
+        request.setCheckpointObserverForTesting([&](std::string_view where) {
+            if (where == "during disposable syntax parsing") {
+                reached = true;
+                request.cancel();
+            }
+        });
+        CHECK_THROWS_AS(driver->getDocument(uri)->getAnalysis(request), lsp::RequestCancelled);
+        REQUIRE(reached);
+        const auto cancelled = rfl::json::write(driver->scopeLibraryStatus());
+        CHECK(cancelled.find("\"cachedRoots\":0") != std::string::npos);
+        lsp::RequestContext late("test/syntax-prefix-late", lsp::ID_t{2});
+        bool beforeCommit = false;
+        late.setCheckpointObserverForTesting([&](std::string_view where) {
+            if (where == "before syntax prefix cache commit") {
+                beforeCommit = true;
+                late.cancel();
+            }
+        });
+        CHECK_THROWS_AS(driver->getDocument(uri)->getAnalysis(late), lsp::RequestCancelled);
+        REQUIRE(beforeCommit);
+        const auto afterLateCancel = rfl::json::write(driver->scopeLibraryStatus());
+        CHECK(afterLateCancel.find("\"cachedRoots\":0") != std::string::npos);
+        CHECK(afterLateCancel.find("\"pendingRoots\":2") != std::string::npos);
+    }
+    verify(4, 2, 9);
+    auto status = rfl::json::write(driver->scopeLibraryStatus());
+    INFO(status);
+    if (mode == 2) {
+        CHECK(status.find("\"cachedRoots\":2") != std::string::npos);
+        CHECK(status.find("\"hits\":1") != std::string::npos);
+        driver->prepareForContextRetirement(true);
+        const auto retired = rfl::json::write(driver->scopeLibraryStatus());
+        CHECK(retired.find("\"cachedRoots\":0") != std::string::npos);
+        CHECK(retired.find("\"pendingRoots\":0") != std::string::npos);
+        CHECK(retired.find("\"chargedBytes\":0") != std::string::npos);
+        verify(5, 3, 10);
+        verify(6, 4, 11);
+        CHECK(rfl::json::write(driver->scopeLibraryStatus()).find("\"cachedRoots\":2") !=
+              std::string::npos);
+        const auto sharedUri = URI::fromFile(files.root / "shared.sv");
+        driver->openDocument(sharedUri, sharedSource(13), 7, true);
+        verify(8, 5, 18);
+        auto changed = rfl::json::write(driver->scopeLibraryStatus());
+        CHECK(changed.find("\"cachedRoots\":0") != std::string::npos);
+    }
+    else {
+        CHECK(status.find("\"cachedRoots\":0") != std::string::npos);
+        CHECK(status.find("\"pendingRoots\":0") != std::string::npos);
+        if (mode == 3)
+            CHECK(status.find("\"refusals\":1") != std::string::npos);
+    }
+}
+
+TEST_CASE("Syntax prefix witness failures refuse stale native inputs and preserve editor recovery",
+          "[scope-semantic][syntax-prefix-input-change]") {
+    const int mode = GENERATE(0, 1, 2); // changed bytes, same-byte alias, new negative lookup
+    INFO(mode);
+    LibraryWorkspace files;
+    Config config;
+    config.experimentalScopeSemanticCache = true;
+    config.experimentalCooperativeAnalysis = true;
+    config.experimentalSyntaxPrefixCache = true;
+    config.frozenSources = Config::FrozenSourcesConfig{
+        .packages = std::vector<std::string>{"fixed_pkg"}, .maxMiB = 64};
+    config.flagsByFile = std::vector<Config::FlagSource>{
+        {(files.root / "server.json").string(), "--single-unit --threads 1 --top top"}};
+    files.write(files.root / "fixed.sv", "package fixed_pkg; endpackage\n");
+    files.write(files.root / "first/value.svh", "localparam int N=7;\n");
+    files.write(files.root / "second/value.svh", "localparam int N=7;\n");
+    fs::create_directory_symlink(files.root / "first", files.root / "alias");
+    files.write(files.root / "shared.sv", "package shared_pkg;\n`include \"alias/value.svh\"\nendpackage\n");
+    auto text = [](int value) { return "module top; localparam int V=shared_pkg::N+" +
+        std::to_string(value) + "; int added_" + std::to_string(value) + "; endmodule\n"; };
+    files.write(files.root / "user.sv", text(0));
+    files.write(files.root / "design.f", "fixed.sv\nshared.sv\nuser.sv\n");
+    Indexer indexer;
+    ClientHarness client;
+    auto driver = server::ServerDriver::createFromFileLists(
+        indexer, client, config, {"design.f"}, files.root.string(), nullptr, true);
+    REQUIRE(driver);
+    const auto uri = URI::fromFile(files.root / "user.sv");
+    driver->openDocument(uri, text(0), 1, true);
+    if (mode == 2)
+        REQUIRE_FALSE(driver->sm.readSource(files.root / "later.svh"));
+    auto edit = [&](int value) {
+        driver->onDocDidChange({.textDocument = {.version = value + 1, .uri = uri},
+            .contentChanges = {lsp::TextDocumentContentChangeWholeDocument{.text = text(value)}}});
+    };
+    edit(1);
+    REQUIRE(driver->getDocument(uri)->getAnalysis());
+    edit(2);
+    REQUIRE(driver->getDocument(uri)->getAnalysis());
+    REQUIRE(rfl::json::write(driver->scopeLibraryStatus()).find("\"cachedRoots\":2") !=
+            std::string::npos);
+    if (mode == 0)
+        files.write(files.root / "first/value.svh", "localparam int N=11;\n");
+    else if (mode == 1) {
+        fs::remove(files.root / "alias");
+        fs::create_directory_symlink(files.root / "second", files.root / "alias");
+    }
+    else
+        files.write(files.root / "later.svh", "newly available\n");
+    edit(3);
+    CHECK_THROWS_AS(driver->getDocument(uri)->getAnalysis(), lsp::RequestFailed);
+    const auto failed = rfl::json::write(driver->scopeLibraryStatus());
+    INFO(failed);
+    CHECK(failed.find("\"witnessFailures\":1") != std::string::npos);
+    CHECK(failed.find("\"cachedRoots\":0") != std::string::npos);
+    CHECK(failed.find("\"pendingRoots\":0") != std::string::npos);
+    CHECK(driver->hasStaleSyntaxPrefixInputs());
+    CHECK_THROWS_AS(driver->getDocument(uri)->getAnalysis(), lsp::RequestFailed);
+    // The ordinary recovery path constructs a fresh manager and preserves the
+    // unsaved editor document, rather than parsing through stale failed lookups.
+    auto fresh = server::ServerDriver::createFromFileLists(
+        indexer, client, config, {"design.f"}, files.root.string(), driver.get(), true);
+    REQUIRE(fresh);
+    CHECK(fresh->getDocument(uri)->getText().starts_with(text(3)));
+    auto compilation = fresh->getDocument(uri)->getAnalysis()->getCompilation();
+    REQUIRE(compilation->getRoot().topInstances.size() == 1);
+    CHECK(compilation->getRoot().topInstances.front()->body.find("V")
+              ->as<ast::ParameterSymbol>().getValue().integer().as<int>() == (mode == 0 ? 14 : 10));
+}
+
+TEST_CASE("The server reloads failed syntax inputs without a watcher event or lost editor text",
+          "[scope-semantic][syntax-prefix-input-change][syntax-prefix-server-recovery]") {
+    const int mode = GENERATE(0, 1, 2);
+    INFO(mode);
+    LibraryWorkspace files;
+    files.write(files.root / "fixed.sv", "package fixed_pkg; endpackage\n");
+    fs::create_directories(files.root / "first");
+    if (mode != 2)
+        files.write(files.root / "first/value.svh", "localparam int N=7;\n");
+    files.write(files.root / "second/value.svh", "localparam int N=7;\n");
+    fs::create_directory_symlink(files.root / "first", files.root / "alias");
+    files.write(files.root / "shared.sv", mode == 2 ?
+        "package shared_pkg;\n`include \"value.svh\"\nendpackage\n" :
+        "package shared_pkg;\n`include \"alias/value.svh\"\nendpackage\n");
+    auto text = [](int value) { return "module top; localparam int V=shared_pkg::N+" +
+        std::to_string(value) + "; int added_" + std::to_string(value) + "; endmodule\n"; };
+    files.write(files.root / "user.sv", text(0));
+    files.write(files.root / "design.f", "fixed.sv\nshared.sv\nuser.sv\n");
+    files.write(files.root / ".slang/server.json", R"({
+        "indexingThreads":1,"build":"design.f",
+        "flags":"--single-unit --threads 1 --top top +incdir+first +incdir+second",
+        "experimentalScopeSemanticCache":true,"experimentalCooperativeAnalysis":true,
+        "experimentalSyntaxPrefixCache":true,
+        "frozenSources":{"packages":["fixed_pkg"],"maxMiB":64}})");
+    ServerHarness harness(lsp::InitializeParams{.workspaceFolders = {{
+        lsp::WorkspaceFolder{.uri = URI::fromFile(files.root), .name = "syntax-recovery"}}}});
+    const auto uri = URI::fromFile(files.root / "user.sv");
+    harness.onDocDidOpen({.textDocument = {.uri = uri, .languageId = "systemverilog",
+                                          .version = 1, .text = text(0)}});
+    auto edit = [&](int value) {
+        harness.SlangServer::onDocDidChange(
+            {.textDocument = {.version = value + 1, .uri = uri},
+             .contentChanges = {lsp::TextDocumentContentChangeWholeDocument{.text = text(value)}}});
+    };
+    const lsp::HoverParams hover{.textDocument = {.uri = uri},
+        .position = {0, uint32_t(text(0).find(" V=") + 1)}};
+    edit(1); REQUIRE(harness.getDocHover(hover));
+    edit(2); REQUIRE(harness.getDocHover(hover));
+    REQUIRE(rfl::json::write(harness.m_driver->scopeLibraryStatus()).find("\"cachedRoots\":2") !=
+            std::string::npos);
+    std::weak_ptr<syntax::SyntaxTree> previousTree =
+        harness.m_driver->getDocument(uri)->getCachedSyntaxTree();
+    REQUIRE_FALSE(previousTree.expired());
+    if (mode == 1) {
+        fs::remove(files.root / "alias");
+        fs::create_directory_symlink(files.root / "second", files.root / "alias");
+    }
+    else
+        files.write(files.root / "first/value.svh", "localparam int N=11;\n");
+    edit(3);
+    CHECK_THROWS_AS(harness.getDocHover(hover), lsp::RequestFailed);
+    REQUIRE(harness.m_driver->hasStaleSyntaxPrefixInputs());
+    const auto* previous = harness.m_driver.get();
+    lsp::RequestContext cancelled("test/syntax-input-recovery", lsp::ID_t{7});
+    bool candidateComplete = false;
+    cancelled.setCheckpointObserverForTesting([&](std::string_view where) {
+        if (where == "before retirement commit") {
+            candidateComplete = true;
+            cancelled.cancel();
+        }
+    });
+    CHECK_THROWS_AS(harness.getDocHover(hover, cancelled), lsp::RequestCancelled);
+    REQUIRE(candidateComplete);
+    CHECK(harness.m_driver.get() == previous);
+    CHECK(harness.m_driver->hasStaleSyntaxPrefixInputs());
+    CHECK(harness.m_driver->getDocument(uri)->getText().starts_with(text(3)));
+    REQUIRE(harness.getDocHover(hover));
+    CHECK(harness.m_driver.get() != previous);
+    CHECK(previousTree.expired());
+    CHECK_FALSE(harness.m_driver->hasStaleSyntaxPrefixInputs());
+    CHECK(harness.m_driver->getDocument(uri)->getText().starts_with(text(3)));
+    auto compilation = harness.m_driver->getDocument(uri)->getAnalysis()->getCompilation();
+    REQUIRE(compilation->getRoot().topInstances.size() == 1);
+    CHECK(compilation->getRoot().topInstances.front()->body.find("V")
+              ->as<ast::ParameterSymbol>().getValue().integer().as<int>() == (mode == 1 ? 10 : 14));
 }

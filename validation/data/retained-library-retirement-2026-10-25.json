@@ -1,0 +1,160 @@
+{
+  "goalComplete": false,
+  "main": "6eab073a06584c31c5a05e5fd7be00ca2af90dd2",
+  "full38": {
+    "binarySha256": "3948f03d5eafb4bb1a0adc076fd92542c276fe7315a8dd748f63d6db075f5427",
+    "qualified": false,
+    "failedChecks": [
+      "memory-final-1008-peakRss",
+      "forced-final-memory-candidate-actualRetirement",
+      "macro-lifecycle-forward-cpuSeconds",
+      "macro-lifecycle-forward-candidate-actualRetirement",
+      "macro-lifecycle-forward-withinHard",
+      "macro-lifecycle-reverse-cpuSeconds",
+      "macro-lifecycle-reverse-candidate-actualRetirement",
+      "macro-lifecycle-reverse-withinHard",
+      "warm-p95",
+      "proofCountPreserved"
+    ],
+    "pending": [],
+    "warm": {
+      "baseline": {
+        "p50": 14.505260499999999,
+        "p95": 19.024124999999998,
+        "lastDiagnosticMs": 27.205833
+      },
+      "candidate": {
+        "p50": 15.87370825,
+        "p95": 22.4252915,
+        "lastDiagnosticMs": 14.151854
+      }
+    },
+    "first": {
+      "baseline": {
+        "p50": 51.931708,
+        "p95": 51.931708,
+        "lastDiagnosticMs": 85.003833
+      },
+      "candidate": {
+        "p50": 46.20125,
+        "p95": 46.20125,
+        "lastDiagnosticMs": 80.169542
+      }
+    }
+  },
+  "retirementRepair": {
+    "passed": false,
+    "binarySha256": "90b7218dc13315b7f43a7384f55fb2ca7f15970ce9a10e0bfac9d6c995dd5d6a",
+    "rows": {
+      "forced-final-memory": {
+        "baseline": {
+          "p50": 12.4500835,
+          "p95": 19.991583,
+          "maximum": 21.736875,
+          "cancelled": 0,
+          "lastDiagnosticMs": 25.765,
+          "finalFiles": 612,
+          "events": {
+            "retired": 1,
+            "replacement-failed": 0,
+            "replacement-cancelled": 1
+          }
+        },
+        "candidate": {
+          "p50": 19.139395999999998,
+          "p95": 22.882958,
+          "maximum": 23.513667,
+          "cancelled": 0,
+          "lastDiagnosticMs": 22.788709,
+          "finalFiles": 612,
+          "events": {
+            "retired": 1,
+            "replacement-failed": 0,
+            "replacement-cancelled": 1
+          },
+          "withinHard": true,
+          "historyMaxMiB": 64
+        },
+        "ratios": {
+          "cpuSeconds": 0.8583037664706076,
+          "peakRss": 0.980396758733139,
+          "peakFootprint": 1.0338317467860405
+        },
+        "passed": true
+      },
+      "macro-lifecycle-forward": {
+        "baseline": {
+          "p50": 15.0302705,
+          "p95": 525.624125,
+          "maximum": 525.624125,
+          "cancelled": 246,
+          "lastDiagnosticMs": 1065.182292,
+          "finalFiles": 612,
+          "events": {
+            "retired": 3,
+            "replacement-failed": 0,
+            "replacement-cancelled": 0
+          }
+        },
+        "candidate": {
+          "p50": 14.062083,
+          "p95": 450.610042,
+          "maximum": 450.610042,
+          "cancelled": 246,
+          "lastDiagnosticMs": 944.562292,
+          "finalFiles": 612,
+          "events": {
+            "retired": 5,
+            "replacement-failed": 0,
+            "replacement-cancelled": 0
+          },
+          "withinHard": true,
+          "historyMaxMiB": 64
+        },
+        "ratios": {
+          "cpuSeconds": 1.0261058693083918,
+          "peakRss": 1.085346606774311,
+          "peakFootprint": 1.0194989072275114
+        },
+        "passed": false
+      },
+      "macro-lifecycle-reverse": {
+        "baseline": {
+          "p50": 13.347354,
+          "p95": 1098.909792,
+          "maximum": 1098.909792,
+          "cancelled": 246,
+          "lastDiagnosticMs": 1576.627709,
+          "finalFiles": 612,
+          "events": {
+            "retired": 4,
+            "replacement-failed": 0,
+            "replacement-cancelled": 0
+          }
+        },
+        "candidate": {
+          "p50": 12.370854,
+          "p95": 440.395958,
+          "maximum": 440.395958,
+          "cancelled": 246,
+          "lastDiagnosticMs": 939.252792,
+          "finalFiles": 612,
+          "events": {
+            "retired": 5,
+            "replacement-failed": 0,
+            "replacement-cancelled": 0
+          },
+          "withinHard": true,
+          "historyMaxMiB": 64
+        },
+        "ratios": {
+          "cpuSeconds": 0.959908247042069,
+          "peakRss": 0.9106691016303989,
+          "peakFootprint": 1.0040008090668742
+        },
+        "passed": true
+      }
+    },
+    "scope": "Retained filelist repair only; all-five-category goal remains active, no main delivery qualification."
+  }
+}

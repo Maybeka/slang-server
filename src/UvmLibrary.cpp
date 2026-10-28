@@ -220,7 +220,7 @@ bool ServerDriver::configureUvmLibrary(const fs::path& base, bool requireValidCo
                 m_uvmPreparseDependencies = retained->preparseDependencies;
                 m_uvmProjectCacheHit = !shipped;
                 driver.precompiledUvm = syntax::SyntaxTree::sharedPrefixView(retained->uvmParseTree,
-                                                                             sm);
+                                                                             sm, &parseOptions);
             }
             else {
                 auto load = [&](const fs::path& path, std::string_view expected) {
@@ -266,7 +266,17 @@ bool ServerDriver::configureUvmLibrary(const fs::path& base, bool requireValidCo
                         auto source = isolated.readSource(entry, nullptr, 0);
                         if (!source)
                             throw std::runtime_error(source.error().message());
-                        auto tree = syntax::SyntaxTree::fromBuffer(*source, isolated, parseOptions);
+                        // Record facts once in the project artifact, independently
+                        // of whether this session requests the optional proof.
+                        auto artifactOptions = parseOptions;
+                        auto artifactPP = pp;
+                        artifactPP.trackMacroAccesses = true;
+                        artifactPP.maxTrackedMacroAccessBytes = std::max(
+                            pp.maxTrackedMacroAccessBytes,
+                            parsing::PreprocessorOptions{}.maxTrackedMacroAccessBytes);
+                        artifactOptions.set(artifactPP);
+                        auto tree = syntax::SyntaxTree::fromBuffer(*source, isolated,
+                                                                  artifactOptions);
                         m_uvmParseMs = elapsed(start);
                         const auto writeStart = Clock::now();
                         std::ostringstream stream(std::ios::binary);

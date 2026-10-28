@@ -11,6 +11,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <span>
+#include <string>
 #include <string_view>
 
 #include "slang/ast/SemanticFacts.h"
@@ -18,6 +20,11 @@
 #include "slang/syntax/SyntaxNode.h"
 #include "slang/text/SourceLocation.h"
 #include "slang/text/SourceManager.h"
+
+namespace slang::ast {
+class SubroutineSymbol;
+class Symbol;
+}
 
 namespace server {
 
@@ -30,10 +37,13 @@ std::optional<const parsing::Token> findNameToken(const syntax::SyntaxNode* node
 class BodySourceProjection {
 public:
     BodySourceProjection(const SourceManager&, BufferID current, BufferID query, size_t oldEnd,
-                         size_t newEnd, uint32_t baselineBufferLimit);
+                         size_t newEnd, uint32_t baselineBufferLimit,
+                         std::span<const ast::SubroutineSymbol* const> queryScopes = {},
+                         std::string_view displayedScope = {});
     ~BodySourceProjection();
     BodySourceProjection(const BodySourceProjection&) = delete;
     SourceLocation project(SourceLocation, const SourceManager&) const;
+    std::string projectLexicalPath(const ast::Symbol&, const SourceManager&) const;
 
 private:
     const BodySourceProjection* previous;
@@ -41,7 +51,11 @@ private:
     BufferID current, query;
     size_t oldEnd, newEnd;
     uint32_t baselineBufferLimit;
+    std::span<const ast::SubroutineSymbol* const> queryScopes;
+    std::string_view displayedScope;
 };
+
+std::string bodyQueryLexicalPath(const ast::Symbol&, const SourceManager&);
 
 lsp::Position toPosition(const SourceLocation& loc, const SourceManager& sourceManager);
 

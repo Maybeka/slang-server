@@ -1,0 +1,132 @@
+{
+  "stage": "A: generic specialization reference closure",
+  "status": "sdk-reference-and-root-closure-verified-server-integration-incomplete",
+  "featureComplete": false,
+  "performanceQualified": false,
+  "pushedToMain": false,
+  "binarySha256": "1616377f008b6a4a34c5d48f061a11b88acab208055773c4f68a2294e581c6e8",
+  "sdkBase": "151a801ceaf6faf23d79a42d210ff67e50eb4660",
+  "sdkPatchSha256": "ffbccfaacdbb88f9ba5ceeb7a13768ab89bd396594b3cf47ae90610489cabffa",
+  "tests": {
+    "targetedSdk": {
+      "cases": 6,
+      "assertions": 1194,
+      "exitCode": 0
+    },
+    "sdkNative": {
+      "cases": 2619,
+      "assertions": 27852,
+      "exitCode": 0
+    },
+    "sdkAsan": {
+      "cases": 2619,
+      "assertions": 27852,
+      "exitCode": 0,
+      "detectLeaks": false
+    },
+    "serverNative": {
+      "cases": 902,
+      "passed": 901,
+      "failed": 1,
+      "assertions": 145549,
+      "failedAssertions": 68,
+      "exitCode": 42
+    },
+    "serverAsan": {
+      "cases": 902,
+      "passed": 901,
+      "failed": 1,
+      "assertions": 145549,
+      "failedAssertions": 68,
+      "exitCode": 42,
+      "detectLeaks": false
+    },
+    "onlyServerFailure": "new changed-specialization regression: localDiagnosticUpdates; all Native diagnostic and hover comparisons passed",
+    "python": {
+      "passed": 17,
+      "exitCode": 0
+    },
+    "transport": {
+      "passed": 43,
+      "exitCode": 0
+    }
+  },
+  "cva6": {
+    "scenes": 7,
+    "states": 296,
+    "uriCount": 612,
+    "exactHoverAndDiagnostics": true,
+    "uvmAndWholeDutSharing": true,
+    "reports": {
+      "body-automatic-correctness.json": {
+        "sha256": "b3ed16391cc76c6eddbcd9edeaa4ab84b129f184fa9239f572e4ebbe29d2c328",
+        "states": 52,
+        "passed": true
+      },
+      "effectful-automatic-correctness.json": {
+        "sha256": "794e37b1111841b7b27ef0b3f016727512c2baf5d5d1745bee5d5528ab1a609e",
+        "states": 52,
+        "passed": true
+      },
+      "generic-automatic-correctness.json": {
+        "sha256": "c07145c428bb5e4cc606e174d6c58a820b91716c47672bfb81eec8325b4ecf8f",
+        "states": 52,
+        "passed": true
+      },
+      "local-imports-automatic-correctness.json": {
+        "sha256": "d8f9860adf64a78da022d22aa5d08685888aa3012c6b33502a6b259f61e74a2b",
+        "states": 32,
+        "passed": true
+      },
+      "local-types-automatic-correctness.json": {
+        "sha256": "a361f4b60000622d044caaf116fe95b84fe9e447d2c37f7a30f755ddbc1d0b6a",
+        "states": 28,
+        "passed": true
+      },
+      "package-automatic-correctness.json": {
+        "sha256": "7c7e973b8173522a2e5f3c962c513133f0b75b045571a1ad199012f691121b2b",
+        "states": 52,
+        "passed": true
+      },
+      "virtual-interface-automatic-correctness.json": {
+        "sha256": "258d6d5eb3cfbf81d10864ad61a10cca2d1f2acea2b9c034db0acca901cea2d8",
+        "states": 28,
+        "passed": true
+      }
+    },
+    "purpose": "correctness only"
+  },
+  "sdkRestoration": {
+    "base": "151a801ceaf6faf23d79a42d210ff67e50eb4660",
+    "files": 709,
+    "patchSha256": "ffbccfaacdbb88f9ba5ceeb7a13768ab89bd396594b3cf47ae90610489cabffa",
+    "cleanOfflineApplyVerified": true,
+    "temporaryTreeRemoved": true,
+    "networkUsed": false
+  },
+  "implemented": [
+    "class-owned fields/signatures/defaults/static initializer reference provenance",
+    "body/class-excluding read-only reference snapshot including nested scopes",
+    "recorded lookup target snapshot and additional Native dependency roots",
+    "transitive and cyclic liveness from a single retained root"
+  ],
+  "remaining": [
+    "raw semantic joint coalescing and provisional imported reference effects",
+    "first/last actual specialization and private invalid placeholder checks",
+    "current edited method syntax in newly created specializations of its own class",
+    "wire SDK views into server, then lift admission guards only after complete proof",
+    "expanded generic-change CVA6 and full performance qualification"
+  ],
+  "invariants": {
+    "experimentsDefaultOff": true,
+    "fixedDebounceAdded": false,
+    "networkUsed": false,
+    "executionOrder": [
+      "A",
+      "B",
+      "C",
+      "D"
+    ]
+  },
+  "evidenceDirectory": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/generic-reference-closure-2026-10-25"
+}

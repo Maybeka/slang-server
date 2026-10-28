@@ -1,0 +1,878 @@
+{
+  "stage": "BC first source witness construction",
+  "status": "original20 complete; qualification FAILED direct-forward p95 +13.35% and supplemental main-forward p50 +15.34%; correctness remains passed; view retained for first-copy savings",
+  "goalComplete": false,
+  "bcComplete": false,
+  "binarySha256": "b2549df1a8a83111669914ab9b181068e030728c4b53bc1fd6aca40109e49b88",
+  "sdkPatchSha256": "8b06b14672f78c39c60edd444b2c873d77cbaf54d10d50fa5684d091e2272e75",
+  "censusBefore": {
+    "scene": "same realCVA6 wholeDUT/UVM frozen",
+    "files": 618,
+    "snapshotCopiedBytes": 7753661,
+    "fixedLibraryCopiedBytes": 5910969,
+    "generatedBytes": 104,
+    "lookups": 2466,
+    "stage": "untracked/stage-bc-source-witness-2026-10-27",
+    "censusOnlyNative612AndHoverPass": true
+  },
+  "implementation": {
+    "sdkApi": "SourceManager::captureSnapshotView",
+    "nonReplayable": true,
+    "pinsOnlyImmutableFileStorage": true,
+    "doesNotPinSourceManager": true,
+    "sharedValidationAndCaptureLimitsWithOwnedSnapshot": true,
+    "originalOwnedReplaySnapshotUnchanged": true,
+    "serverUsesOnlyUnderExistingDefaultOffCertification": true,
+    "serverReleasesViewAfterPhysicalWitnesses": true,
+    "physicalBytesEofVersionsPathsStillChecked": true,
+    "noSuccessfulProofCachedAcrossRequests": true
+  },
+  "targeted": {
+    "sdkViewCases": 2,
+    "sdkViewAssertions": 53,
+    "serverProofCases": 15,
+    "serverProofAssertions": 12594,
+    "passed": true
+  },
+  "freshSdkRequired": true,
+  "sdkEvidenceInherited": false,
+  "offline709RestorePassed": true,
+  "fullCorrectnessStage": "untracked/stage-bc-source-witness-validation-2026-10-27",
+  "originalExecSession": 34655,
+  "oldQualificationFailuresPreserved": true,
+  "noNewDebounce": true,
+  "noQosPolicyAdded": true,
+  "networkUsedThisTurn": false,
+  "pushedMain": false,
+  "nativeComplete": {
+    "sdkCases": 2635,
+    "sdkAssertions": 35691,
+    "ctest": 943,
+    "python": 17,
+    "transport": 43,
+    "wireMatrixCases": 6,
+    "sdk709Integrity": true,
+    "allNewCandidateEvidence": true,
+    "sdkTestsInherited": false
+  },
+  "asanComplete": {
+    "sdkCases": 2635,
+    "sdkAssertions": 35691,
+    "serverCases": 928,
+    "serverAssertions": 172201,
+    "wireMatrixCases": 6,
+    "exactServerRegisteredNames": 929,
+    "passed": true,
+    "sdkEvidenceInherited": false
+  },
+  "preparedNext": {
+    "pressureStage": "untracked/stage-bc-source-witness-pressure-2026-10-27",
+    "originalSixWorkloadsUnchanged": true,
+    "pressureStarted": true,
+    "qualificationStage": "untracked/stage-bc-source-witness-qualification-2026-10-27",
+    "original14Plus6GatesUnchanged": true,
+    "qualificationSealed": false,
+    "qualificationStarted": false,
+    "pressureOriginalExecSession": 60709,
+    "pressureCompleted": true
+  },
+  "completeCorrectness": {
+    "passed": true,
+    "nativeStates": 448,
+    "asanStates": 38,
+    "fullDiagnosticArchives": 112,
+    "allStates612UriAndHoverNativeOracle": true,
+    "wholeDutAndUvmSharingPerState": true,
+    "originalExecSession34655": "terminal exit0"
+  },
+  "pressure": {
+    "passed": true,
+    "all6JobsAndOwnersAndArrivalAudit": true,
+    "metrics": {
+      "natural-forward": {
+        "arms": {
+          "baseline": {
+            "allQueryMs": {
+              "count": 384,
+              "p50": 99.8293125,
+              "p95": 435.858208,
+              "maximum": 685.234958
+            },
+            "successfulQueryMs": {
+              "count": 180,
+              "p50": 9.91,
+              "p95": 12.752875,
+              "maximum": 685.234958
+            },
+            "cancelledQueryMs": {
+              "count": 204,
+              "p50": 232.06910349999998,
+              "p95": 440.538458,
+              "maximum": 568.825084
+            },
+            "allStatusMs": {
+              "count": 384,
+              "p50": 100.882896,
+              "p95": 536.505583,
+              "maximum": 1187.233833
+            },
+            "queryToStatusGapMs": {
+              "count": 384,
+              "p50": 0.13716599999997925,
+              "p95": 432.25154200000003,
+              "maximum": 565.9668340000001
+            },
+            "cancelled": 204,
+            "lastDiagnosticMs": 1546.750042,
+            "finalVersion": 387,
+            "finalFiles": 612,
+            "memory": {
+              "peakRss": 946634752,
+              "peakFootprint": 731251816,
+              "samples": 1521,
+              "cpuSeconds": 27.595012958
+            },
+            "generationEvents": {
+              "replacement-cancelled": 1,
+              "retired": 35
+            },
+            "privateRootQuanta": [],
+            "maximumPrivateRootQuantumUs": null
+          },
+          "candidate": {
+            "allQueryMs": {
+              "count": 384,
+              "p50": 94.210417,
+              "p95": 109.175959,
+              "maximum": 664.476334
+            },
+            "successfulQueryMs": {
+              "count": 180,
+              "p50": 12.047104000000001,
+              "p95": 14.791958,
+              "maximum": 664.476334
+            },
+            "cancelledQueryMs": {
+              "count": 204,
+              "p50": 102.1170005,
+              "p95": 111.407167,
+              "maximum": 114.854208
+            },
+            "allStatusMs": {
+              "count": 384,
+              "p50": 94.3026045,
+              "p95": 109.277875,
+              "maximum": 669.842584
+            },
+            "queryToStatusGapMs": {
+              "count": 384,
+              "p50": 0.12166649999999635,
+              "p95": 0.18158400000000086,
+              "maximum": 5.366250000000036
+            },
+            "cancelled": 204,
+            "lastDiagnosticMs": 1041.005042,
+            "finalVersion": 387,
+            "finalFiles": 612,
+            "memory": {
+              "peakRss": 935755776,
+              "peakFootprint": 725664848,
+              "samples": 1536,
+              "cpuSeconds": 27.70723375
+            },
+            "generationEvents": {
+              "replacement-cancelled": 205,
+              "retired": 1
+            },
+            "privateRootQuanta": [
+              {
+                "maximumUs": 6553,
+                "checkpoints": 4154,
+                "completed": true
+              }
+            ],
+            "maximumPrivateRootQuantumUs": 6553
+          }
+        },
+        "memoryRatios": {
+          "cpuSeconds": 1.0040667055373664,
+          "peakRss": 0.9885077365087057,
+          "peakFootprint": 0.9923597208543548
+        }
+      },
+      "natural-reverse": {
+        "arms": {
+          "candidate": {
+            "allQueryMs": {
+              "count": 384,
+              "p50": 94.3531875,
+              "p95": 109.15925,
+              "maximum": 716.307667
+            },
+            "successfulQueryMs": {
+              "count": 180,
+              "p50": 12.050041499999999,
+              "p95": 15.106375,
+              "maximum": 716.307667
+            },
+            "cancelledQueryMs": {
+              "count": 204,
+              "p50": 102.241146,
+              "p95": 110.299292,
+              "maximum": 120.676542
+            },
+            "allStatusMs": {
+              "count": 384,
+              "p50": 94.69312500000001,
+              "p95": 109.256792,
+              "maximum": 722.324125
+            },
+            "queryToStatusGapMs": {
+              "count": 384,
+              "p50": 0.11106200000000399,
+              "p95": 0.17470800000000963,
+              "maximum": 7.518749999999997
+            },
+            "cancelled": 204,
+            "lastDiagnosticMs": 1088.0635,
+            "finalVersion": 387,
+            "finalFiles": 612,
+            "memory": {
+              "peakRss": 938278912,
+              "peakFootprint": 724468816,
+              "samples": 1550,
+              "cpuSeconds": 27.937053666
+            },
+            "generationEvents": {
+              "replacement-cancelled": 205,
+              "retired": 1
+            },
+            "privateRootQuanta": [
+              {
+                "maximumUs": 6396,
+                "checkpoints": 4154,
+                "completed": true
+              }
+            ],
+            "maximumPrivateRootQuantumUs": 6396
+          },
+          "baseline": {
+            "allQueryMs": {
+              "count": 384,
+              "p50": 95.48627099999999,
+              "p95": 531.097791,
+              "maximum": 634.068833
+            },
+            "successfulQueryMs": {
+              "count": 180,
+              "p50": 11.601729,
+              "p95": 15.062292,
+              "maximum": 467.12175
+            },
+            "cancelledQueryMs": {
+              "count": 204,
+              "p50": 242.36654199999998,
+              "p95": 552.231417,
+              "maximum": 634.068833
+            },
+            "allStatusMs": {
+              "count": 384,
+              "p50": 99.46879150000001,
+              "p95": 627.174375,
+              "maximum": 1004.913416
+            },
+            "queryToStatusGapMs": {
+              "count": 384,
+              "p50": 0.14514550000000437,
+              "p95": 526.191667,
+              "maximum": 632.5811659999999
+            },
+            "cancelled": 204,
+            "lastDiagnosticMs": 1383.559291,
+            "finalVersion": 387,
+            "finalFiles": 612,
+            "memory": {
+              "peakRss": 952762368,
+              "peakFootprint": 729973864,
+              "samples": 1564,
+              "cpuSeconds": 28.094120291
+            },
+            "generationEvents": {
+              "replacement-cancelled": 1,
+              "retired": 30
+            },
+            "privateRootQuanta": [],
+            "maximumPrivateRootQuantumUs": null
+          }
+        },
+        "memoryRatios": {
+          "cpuSeconds": 0.9944092705743018,
+          "peakRss": 0.9847984592103453,
+          "peakFootprint": 0.99245856835225
+        }
+      },
+      "forced-forward": {
+        "arms": {
+          "baseline": {
+            "allQueryMs": {
+              "count": 48,
+              "p50": 10.8663125,
+              "p95": 12.885666,
+              "maximum": 14.919
+            },
+            "successfulQueryMs": {
+              "count": 48,
+              "p50": 10.8663125,
+              "p95": 12.885666,
+              "maximum": 14.919
+            },
+            "cancelledQueryMs": {
+              "count": 0
+            },
+            "allStatusMs": {
+              "count": 48,
+              "p50": 11.0108335,
+              "p95": 13.11525,
+              "maximum": 15.0565
+            },
+            "queryToStatusGapMs": {
+              "count": 48,
+              "p50": 0.14397900000000075,
+              "p95": 0.18866700000000058,
+              "maximum": 0.24529199999999918
+            },
+            "cancelled": 0,
+            "lastDiagnosticMs": 19.892416,
+            "finalVersion": 51,
+            "finalFiles": 612,
+            "memory": {
+              "peakRss": 1072037888,
+              "peakFootprint": 911623392,
+              "samples": 315,
+              "cpuSeconds": 4.01912275
+            },
+            "generationEvents": {
+              "replacement-cancelled": 1,
+              "retired": 1
+            },
+            "privateRootQuanta": [
+              {
+                "maximumUs": 70685,
+                "checkpoints": 1022,
+                "completed": true
+              }
+            ],
+            "maximumPrivateRootQuantumUs": 70685
+          },
+          "candidate": {
+            "allQueryMs": {
+              "count": 48,
+              "p50": 10.3478545,
+              "p95": 13.264291,
+              "maximum": 15.304875
+            },
+            "successfulQueryMs": {
+              "count": 48,
+              "p50": 10.3478545,
+              "p95": 13.264291,
+              "maximum": 15.304875
+            },
+            "cancelledQueryMs": {
+              "count": 0
+            },
+            "allStatusMs": {
+              "count": 48,
+              "p50": 10.4729165,
+              "p95": 13.42475,
+              "maximum": 15.481166
+            },
+            "queryToStatusGapMs": {
+              "count": 48,
+              "p50": 0.1454374999999999,
+              "p95": 0.17395899999999997,
+              "maximum": 0.1901659999999996
+            },
+            "cancelled": 0,
+            "lastDiagnosticMs": 20.719834,
+            "finalVersion": 51,
+            "finalFiles": 612,
+            "memory": {
+              "peakRss": 1067237376,
+              "peakFootprint": 908362976,
+              "samples": 318,
+              "cpuSeconds": 4.108006833
+            },
+            "generationEvents": {
+              "replacement-cancelled": 1,
+              "retired": 1
+            },
+            "privateRootQuanta": [
+              {
+                "maximumUs": 7084,
+                "checkpoints": 4154,
+                "completed": true
+              }
+            ],
+            "maximumPrivateRootQuantumUs": 7084
+          }
+        },
+        "memoryRatios": {
+          "cpuSeconds": 1.0221152944383198,
+          "peakRss": 0.9955220687125566,
+          "peakFootprint": 0.99642350555217
+        }
+      },
+      "forced-reverse": {
+        "arms": {
+          "candidate": {
+            "allQueryMs": {
+              "count": 48,
+              "p50": 10.682542,
+              "p95": 14.254416,
+              "maximum": 14.404875
+            },
+            "successfulQueryMs": {
+              "count": 48,
+              "p50": 10.682542,
+              "p95": 14.254416,
+              "maximum": 14.404875
+            },
+            "cancelledQueryMs": {
+              "count": 0
+            },
+            "allStatusMs": {
+              "count": 48,
+              "p50": 10.8310835,
+              "p95": 14.408416,
+              "maximum": 14.529833
+            },
+            "queryToStatusGapMs": {
+              "count": 48,
+              "p50": 0.15493749999999995,
+              "p95": 0.18958399999999997,
+              "maximum": 0.20033300000000054
+            },
+            "cancelled": 0,
+            "lastDiagnosticMs": 18.987917,
+            "finalVersion": 51,
+            "finalFiles": 612,
+            "memory": {
+              "peakRss": 1066844160,
+              "peakFootprint": 908313848,
+              "samples": 313,
+              "cpuSeconds": 4.020965125
+            },
+            "generationEvents": {
+              "replacement-cancelled": 1,
+              "retired": 1
+            },
+            "privateRootQuanta": [
+              {
+                "maximumUs": 6084,
+                "checkpoints": 4154,
+                "completed": true
+              }
+            ],
+            "maximumPrivateRootQuantumUs": 6084
+          },
+          "baseline": {
+            "allQueryMs": {
+              "count": 48,
+              "p50": 10.4147495,
+              "p95": 13.870917,
+              "maximum": 15.074
+            },
+            "successfulQueryMs": {
+              "count": 48,
+              "p50": 10.4147495,
+              "p95": 13.870917,
+              "maximum": 15.074
+            },
+            "cancelledQueryMs": {
+              "count": 0
+            },
+            "allStatusMs": {
+              "count": 48,
+              "p50": 10.5524995,
+              "p95": 14.010459,
+              "maximum": 15.214667
+            },
+            "queryToStatusGapMs": {
+              "count": 48,
+              "p50": 0.1400414999999997,
+              "p95": 0.16454199999999908,
+              "maximum": 0.18524999999999991
+            },
+            "cancelled": 0,
+            "lastDiagnosticMs": 25.455833,
+            "finalVersion": 51,
+            "finalFiles": 612,
+            "memory": {
+              "peakRss": 1065533440,
+              "peakFootprint": 908362976,
+              "samples": 315,
+              "cpuSeconds": 4.040539416
+            },
+            "generationEvents": {
+              "replacement-cancelled": 1,
+              "retired": 1
+            },
+            "privateRootQuanta": [
+              {
+                "maximumUs": 67715,
+                "checkpoints": 1022,
+                "completed": true
+              }
+            ],
+            "maximumPrivateRootQuantumUs": 67715
+          }
+        },
+        "memoryRatios": {
+          "cpuSeconds": 0.9951555252938535,
+          "peakRss": 1.001230106865534,
+          "peakFootprint": 0.9999459158934281
+        }
+      },
+      "ranged-forced-20ms": {
+        "arms": {
+          "baseline": {
+            "allQueryMs": {
+              "count": 96,
+              "p50": 7.1175005,
+              "p95": 9.627959,
+              "maximum": 63.326208
+            },
+            "successfulQueryMs": {
+              "count": 94,
+              "p50": 7.1175005,
+              "p95": 9.004667,
+              "maximum": 63.326208
+            },
+            "cancelledQueryMs": {
+              "count": 2,
+              "p50": 13.0639375,
+              "p95": 24.008792,
+              "maximum": 24.008792
+            },
+            "allStatusMs": {
+              "count": 96,
+              "p50": 7.248563000000001,
+              "p95": 9.74675,
+              "maximum": 63.329625
+            },
+            "queryToStatusGapMs": {
+              "count": 96,
+              "p50": 0.12762450000000003,
+              "p95": 0.15616699999999994,
+              "maximum": 0.1602920000000001
+            },
+            "cancelled": 2,
+            "lastDiagnosticMs": 15.33275,
+            "finalVersion": 99,
+            "finalFiles": 612,
+            "memory": {
+              "peakRss": 1068892160,
+              "peakFootprint": 911394016,
+              "samples": 203,
+              "cpuSeconds": 4.113301458
+            },
+            "generationEvents": {
+              "replacement-cancelled": 1,
+              "retired": 1
+            },
+            "privateRootQuanta": [
+              {
+                "maximumUs": 62709,
+                "checkpoints": 1022,
+                "completed": true
+              }
+            ],
+            "maximumPrivateRootQuantumUs": 62709
+          },
+          "candidate": {
+            "allQueryMs": {
+              "count": 96,
+              "p50": 7.0370835,
+              "p95": 25.063416,
+              "maximum": 101.720917
+            },
+            "successfulQueryMs": {
+              "count": 92,
+              "p50": 7.036084,
+              "p95": 9.020375,
+              "maximum": 101.720917
+            },
+            "cancelledQueryMs": {
+              "count": 4,
+              "p50": 34.9938955,
+              "p95": 45.827583,
+              "maximum": 45.827583
+            },
+            "allStatusMs": {
+              "count": 96,
+              "p50": 7.1754375,
+              "p95": 25.215958,
+              "maximum": 101.724125
+            },
+            "queryToStatusGapMs": {
+              "count": 96,
+              "p50": 0.12647900000000067,
+              "p95": 0.157292,
+              "maximum": 0.18674999999999997
+            },
+            "cancelled": 4,
+            "lastDiagnosticMs": 14.22125,
+            "finalVersion": 99,
+            "finalFiles": 612,
+            "memory": {
+              "peakRss": 1068040192,
+              "peakFootprint": 906265800,
+              "samples": 203,
+              "cpuSeconds": 4.007566
+            },
+            "generationEvents": {
+              "replacement-cancelled": 1,
+              "retired": 1
+            },
+            "privateRootQuanta": [
+              {
+                "maximumUs": 4950,
+                "checkpoints": 4154,
+                "completed": true
+              }
+            ],
+            "maximumPrivateRootQuantumUs": 4950
+          }
+        },
+        "memoryRatios": {
+          "cpuSeconds": 0.9742942599564751,
+          "peakRss": 0.999202942979767,
+          "peakFootprint": 0.9943732173900953
+        }
+      },
+      "ranged-hard-20ms": {
+        "arms": {
+          "baseline": {
+            "allQueryMs": {
+              "count": 384,
+              "p50": 19.8935,
+              "p95": 413.292416,
+              "maximum": 553.244333
+            },
+            "successfulQueryMs": {
+              "count": 179,
+              "p50": 8.178833,
+              "p95": 13.675708,
+              "maximum": 388.042291
+            },
+            "cancelledQueryMs": {
+              "count": 205,
+              "p50": 150.413583,
+              "p95": 448.906875,
+              "maximum": 553.244333
+            },
+            "allStatusMs": {
+              "count": 384,
+              "p50": 20.1362295,
+              "p95": 434.842834,
+              "maximum": 849.583333
+            },
+            "queryToStatusGapMs": {
+              "count": 384,
+              "p50": 0.131479000000005,
+              "p95": 0.19820900000000208,
+              "maximum": 551.761333
+            },
+            "cancelled": 205,
+            "lastDiagnosticMs": 1200.616833,
+            "finalVersion": 387,
+            "finalFiles": 612,
+            "memory": {
+              "peakRss": 947879936,
+              "peakFootprint": 726058064,
+              "samples": 446,
+              "cpuSeconds": 10.170058875
+            },
+            "generationEvents": {
+              "replacement-cancelled": 6,
+              "retired": 7
+            },
+            "privateRootQuanta": [],
+            "maximumPrivateRootQuantumUs": null
+          },
+          "candidate": {
+            "allQueryMs": {
+              "count": 384,
+              "p50": 20.624021,
+              "p95": 48.754458,
+              "maximum": 630.315
+            },
+            "successfulQueryMs": {
+              "count": 179,
+              "p50": 7.72275,
+              "p95": 10.928833,
+              "maximum": 630.315
+            },
+            "cancelledQueryMs": {
+              "count": 205,
+              "p50": 34.485292,
+              "p95": 49.880333,
+              "maximum": 64.343542
+            },
+            "allStatusMs": {
+              "count": 384,
+              "p50": 20.6369585,
+              "p95": 48.838791,
+              "maximum": 634.387667
+            },
+            "queryToStatusGapMs": {
+              "count": 384,
+              "p50": 0.0992079999999973,
+              "p95": 0.14966599999999985,
+              "maximum": 4.748666
+            },
+            "cancelled": 205,
+            "lastDiagnosticMs": 995.114834,
+            "finalVersion": 387,
+            "finalFiles": 612,
+            "memory": {
+              "peakRss": 936607744,
+              "peakFootprint": 721159248,
+              "samples": 442,
+              "cpuSeconds": 9.817267916
+            },
+            "generationEvents": {
+              "replacement-cancelled": 134,
+              "retired": 1
+            },
+            "privateRootQuanta": [
+              {
+                "maximumUs": 5834,
+                "checkpoints": 4154,
+                "completed": true
+              }
+            ],
+            "maximumPrivateRootQuantumUs": 5834
+          }
+        },
+        "memoryRatios": {
+          "cpuSeconds": 0.9653108243190972,
+          "peakRss": 0.9881079959899056,
+          "peakFootprint": 0.9932528591817968
+        }
+      }
+    },
+    "firstSnapshotPhase": [
+      {
+        "job": "natural-forward",
+        "phase": "body-prepare-snapshot",
+        "observationalOnly": true,
+        "arms": {
+          "baseline": {
+            "samples": 1,
+            "medianUs": 965
+          },
+          "candidate": {
+            "samples": 1,
+            "medianUs": 476
+          }
+        }
+      },
+      {
+        "job": "natural-reverse",
+        "phase": "body-prepare-snapshot",
+        "observationalOnly": true,
+        "arms": {
+          "candidate": {
+            "samples": 1,
+            "medianUs": 361
+          },
+          "baseline": {
+            "samples": 1,
+            "medianUs": 1056
+          }
+        }
+      }
+    ],
+    "notPerformanceQualification": true,
+    "limitations": [
+      "Source/owner release event is destructor entry, not completed freeing latency",
+      "20ms forced cancel2\u21924, successful max about102ms; hard20ms cold successful max630ms exceeds baseline388ms",
+      "All requests include cancellations/queueing; successful and cancelled distributions remain separate",
+      "No universal millisecond response guarantee, no new fixed debounce or QoS strategy"
+    ]
+  },
+  "qualification": {
+    "bcComplete": false,
+    "b3Complete": false,
+    "goalComplete": false,
+    "candidateSha256": "b2549df1a8a83111669914ab9b181068e030728c4b53bc1fd6aca40109e49b88",
+    "checks": {
+      "fixed14": true,
+      "direct6": false,
+      "memory-final-1008-cpuSeconds": true,
+      "memory-final-1008-p50": false,
+      "memory-final-1008-p95": true,
+      "memory-final-1008-lastDiagnosticMs": true,
+      "memory-final-1008-peakRss": true,
+      "memory-final-1008-peakFootprint": true,
+      "memory-final-reverse-cpuSeconds": true,
+      "memory-final-reverse-p50": true,
+      "memory-final-reverse-p95": true,
+      "memory-final-reverse-lastDiagnosticMs": true,
+      "memory-final-reverse-peakRss": true,
+      "memory-final-reverse-peakFootprint": true,
+      "correctness": true,
+      "all6Pressure": true,
+      "ownersBalanced": true,
+      "arrivalAudit": true,
+      "testDiscovery": true,
+      "wireMatrices": true,
+      "rootCancellationSourcesPreserved": true,
+      "freshSdkSuites": true,
+      "viewLifetimeRegression": true,
+      "fullPhysicalProofRegression": true,
+      "privateRootObservedImprovement": true,
+      "rapidColdRecoveryBoundaryRecorded": true,
+      "boundEvidence": true,
+      "sourceIdentity": true,
+      "sdkPhysicalIdentity": true,
+      "sdkExecutableIdentity": true,
+      "candidateIdentity": true
+    },
+    "failedChecks": [
+      "direct6",
+      "memory-final-1008-p50"
+    ],
+    "ratios": {
+      "memory-final-1008": {
+        "cpuSeconds": 1.064976656086927,
+        "p50": 1.1534071322250807,
+        "p95": 0.8696825739795602,
+        "lastDiagnosticMs": 0.8680544696706558,
+        "peakRss": 0.7753053023110638,
+        "peakFootprint": 0.7429302939912529
+      },
+      "memory-final-reverse": {
+        "cpuSeconds": 0.9244763479154837,
+        "p50": 0.8202771213387483,
+        "p95": 0.8823832723630716,
+        "lastDiagnosticMs": 0.9178355142178418,
+        "peakRss": 0.7767617068260051,
+        "peakFootprint": 0.7446901453370744
+      }
+    },
+    "scope": "Combined BC (original B3 lifecycle plus C foreground first witness) acceptance only; all-five delivery still requires D",
+    "requirementsSha256": "295a500d7212dae8a3ae144ee45878eb402147fc402ff701962e314f466995db",
+    "auditScriptSha256": "b608257edc1bbe0968a7384296097839e648abb228d6ab07b026d99cca3bc4a7",
+    "evidenceSha256": {
+      "evaluation.json": "b22a0c3d325fd91476e9e12d02b11765c59f7ecbe312e5dddb040656a40c6364",
+      "direct-build-evaluation.json": "92eaa7ff8a6d43b8e1abd312df7c87f2978ae9e8efa01101cbad9ac7abb985fa",
+      "code-receipt.json": "c0fedc5d6876d5c2bbefe7327d9b34fe5bfa85cadbf104b3b2d0ef2e823f1789"
+    }
+  },
+  "qualificationDirectFailedChecks": [
+    "direct-memory-forward-p95"
+  ],
+  "productionViewRetained": true
+}

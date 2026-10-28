@@ -1,0 +1,160 @@
+{
+  "stage": "A",
+  "status": "local-generic-and-value-type-key-correctness-checkpoint-passed",
+  "allFiveComplete": false,
+  "stageAComplete": false,
+  "binarySha256": "4d9659ed8168f56c56525a11901bbf81b7d9909bc76aef49701ff62fff145baf",
+  "sdk": {
+    "base": "151a801ceaf6faf23d79a42d210ff67e50eb4660",
+    "files": 709,
+    "patchSha256": "ba4361c03648da85d6c9bf6185ec38e3ae01cc0cd05df79f77120302cc1b1289",
+    "cleanOfflineApplyVerified": true,
+    "temporaryTreeRemoved": true,
+    "networkUsed": false
+  },
+  "changes": [
+    "Allow local typedef/enum/struct/localparam generic arguments through private class semantic and reference closure instead of rejecting identifier spellings",
+    "Include each value parameter inferred canonical type in specialization cache keys; preserve width and signedness and reuse equivalent converted types",
+    "Private nominal ownership, unchanged Native allocation/reference/specialization/diagnostic state, query release and query-before-diagnostics cancellation/retry regressions"
+  ],
+  "tests": {
+    "targeted": {
+      "passed": true,
+      "cases": 5,
+      "assertions": 6951,
+      "log": "targeted-final.log"
+    },
+    "sdkNative": {
+      "passed": true,
+      "cases": 2626,
+      "assertions": 29250,
+      "log": "sdk-native.log"
+    },
+    "sdkAsan": {
+      "passed": true,
+      "cases": 2626,
+      "assertions": 29250,
+      "detectLeaks": false,
+      "log": "sdk-asan.log"
+    },
+    "ctest": {
+      "passed": true,
+      "tests": 922,
+      "log": "ctest.log"
+    },
+    "serverAsan": {
+      "passed": true,
+      "cases": 907,
+      "assertions": 153690,
+      "detectLeaks": false,
+      "log": "server-asan.log"
+    },
+    "python": {
+      "passed": true,
+      "tests": 17,
+      "log": "python.log"
+    },
+    "transport": {
+      "passed": true,
+      "tests": 43,
+      "log": "transport.log"
+    }
+  },
+  "cva6": {
+    "passed": true,
+    "scenes": {
+      "generic-changing": {
+        "passed": true,
+        "states": 28,
+        "report": "generic-changing-automatic-correctness.json",
+        "sha256": "a5d4470655fbff40b54c4a7af7a42b4d9985ba1992f071686f31c814460c1c54"
+      },
+      "body": {
+        "passed": true,
+        "states": 52,
+        "report": "body-automatic-correctness.json",
+        "sha256": "5827a8abd784bbe71d3292b87e2925482622f6ece8154f900b2950048bbc4f38"
+      },
+      "package": {
+        "passed": true,
+        "states": 52,
+        "report": "package-automatic-correctness.json",
+        "sha256": "386662fc30edc84d28aecadd85aa368f9b4dfb657bbe96dcaac4df3700a9f8e2"
+      },
+      "generic": {
+        "passed": true,
+        "states": 52,
+        "report": "generic-automatic-correctness.json",
+        "sha256": "f3c62337513446170a4b629df42d8cddbd65cf46456e553c88ee75bd84b1efa8"
+      },
+      "effectful": {
+        "passed": true,
+        "states": 52,
+        "report": "effectful-automatic-correctness.json",
+        "sha256": "5b7aa1d48ebeb247f85f5e31659985fe1fb0327dc05bafeb1594a58c77e7cf68"
+      },
+      "virtual-interface": {
+        "passed": true,
+        "states": 28,
+        "report": "virtual-interface-automatic-correctness.json",
+        "sha256": "f763c7908f8b6005a79217ac9c20225effc49fc1b571399643e984c6e9906790"
+      },
+      "local-types": {
+        "passed": true,
+        "states": 28,
+        "report": "local-types-automatic-correctness.json",
+        "sha256": "9d118744481d08cf746a7ea01be448ed2dc48d9eb33b0611e3715ad44186fb70"
+      },
+      "local-imports": {
+        "passed": true,
+        "states": 32,
+        "report": "local-imports-automatic-correctness.json",
+        "sha256": "fcbe6847a6bd065dde4fb4f36a874bf130de14c846b891a9358fb869eeb9165c"
+      },
+      "local-generic": {
+        "passed": true,
+        "states": 44,
+        "report": "local-generic-automatic-correctness.json",
+        "sha256": "cc1d402fa4da4d1a1c1f560f116737b9c8b253ba2582ef3500b5a370ddee0d17"
+      },
+      "local-value-width": {
+        "passed": true,
+        "states": 32,
+        "report": "local-value-width-automatic-correctness.json",
+        "sha256": "e2ffd8f00d7f98ee4d21fa52739d85ef36609c162fa1229f8c074f4a6edc168a"
+      }
+    },
+    "nativeStates": 400,
+    "asanCandidateStates": 26,
+    "nativeDiagnosticArchives": 100,
+    "asanOracleRevalidatedAgainstCurrentFreshNative": true,
+    "asanReportSha256": "193b9f369dd7028f83fd8bfdb62a638b0690150ea25dba8eb889d607e59c0b48",
+    "binarySha256": "4d9659ed8168f56c56525a11901bbf81b7d9909bc76aef49701ff62fff145baf",
+    "asanLocalGenericReportSha256": "da0cbfce3b69070e5c587cc530876e396c072a30de5952c04e924e55024c6273",
+    "asanValueWidthReportSha256": "1afa0f2c570dceffbd1de274754fb2439e1387265cf7844f543d635a8937bf72"
+  },
+  "allOwnedProcessesTerminal": true,
+  "liveProcesses": {},
+  "mainCommit": "6eab073a06584c31c5a05e5fd7be00ca2af90dd2",
+  "mainPushed": false,
+  "performanceQualified": false,
+  "networkUsed": false,
+  "experimentsDefaultOff": true,
+  "remaining": [
+    "Legal method-local let default-instance binding and task expect regression coverage in Stage A",
+    "Explicit external elaboration/fatal/error-limit support boundaries",
+    "Stage A fixed performance qualification",
+    "B lifecycle/memory/responsiveness",
+    "C first certification",
+    "D full qualification and main delivery"
+  ],
+  "logs": {
+    "targeted-final.log": "78163e91da99e42c02c0e7096dc677edb1216cceeca265bb146a23ad65a5349e",
+    "sdk-native.log": "7eb489942d3a947dfcb73709eed85dc021ad0a7cd1323bcebcd1908fba675b5d",
+    "sdk-asan.log": "9da5c288a4f2c9d77844205c37de72eade4be5d98e849456c9119701e6b3d41a",
+    "ctest.log": "6a0bf4717c4dc8bbf45e67e2f79ff1f8e5b9ee6cfe3cfff35ad587766f9fe8ec",
+    "server-asan.log": "5818d43a20aedb4e691cdd2c5d97ecbc557226244a6d95469d1b0d991e3b3278",
+    "python.log": "4e4c8b99ea7e5ca7da082806f5b398c7eb497d31f60276c2b563ea41291d4bf3",
+    "transport.log": "822b85dbfdc890d1fcae87b01335a27a7eb56c685addb5588e119ca35780898b"
+  }
+}

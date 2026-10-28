@@ -1,0 +1,29 @@
+{
+  "stage": "BC invocation-only directory leases with immutable input/group plan",
+  "candidateSha256": "38e69c897cc1cb57ca8d92d64317753dfa5772dda53678a86180f64e6c9afa28",
+  "status": "Native certification and complete CVA612 oracle passed; first preliminary feasibility FAILED RSS/maximum; ASan build pending",
+  "bcComplete": false,
+  "goalComplete": false,
+  "experimentsDefaultOff": true,
+  "noFixedDebounce": true,
+  "sdkChanged": false,
+  "budgetKiB": {
+    "default": 512,
+    "zeroDisables": true,
+    "cap": 16384
+  },
+  "maxInvocationDirectoryLeases": 64,
+  "nativeTargetedCases": 45,
+  "nativeTargetedAssertions": 21866,
+  "evidence": {
+    "candidate-receipt.json": "untracked/stage-bc-directory-input-plan-2026-10-27/candidate-receipt.json",
+    "performance-plan.json": "untracked/stage-bc-directory-input-plan-2026-10-27/performance-plan.json",
+    "performance-evaluation.json": "untracked/stage-bc-directory-input-plan-2026-10-27/performance-evaluation.json",
+    "performance-runtime.json": "untracked/stage-bc-directory-input-plan-2026-10-27/performance-runtime.json",
+    "resource-attribution.json": "untracked/stage-bc-directory-input-plan-2026-10-27/resource-attribution.json",
+    "native-certification-tests.log": "untracked/stage-bc-directory-input-plan-2026-10-27/native-certification-tests.log"
+  },
+  "priorFailure": "untracked/stage-bc-invocation-directory-lease-2026-10-27/performance-evaluation.json",
+  "mainPushed": false,
+  "networkUsed": false
+}

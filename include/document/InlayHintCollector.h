@@ -5,6 +5,7 @@
 
 #include "Config.h"
 #include "lsp/LspTypes.h"
+#include "lsp/RequestContext.h"
 #include <vector>
 
 #include "slang/ast/Compilation.h"
@@ -30,7 +31,7 @@ class ShallowAnalysis;
 class InlayHintCollector {
 public:
     InlayHintCollector(const ShallowAnalysis& analysis, lsp::Range range,
-                       const Config::InlayHints& config);
+                       const Config::InlayHints& config, const lsp::RequestContext& ctx = {});
     /// Get all inlay hints in the specified range
     std::vector<lsp::InlayHint> result;
 
@@ -38,6 +39,7 @@ public:
 
 private:
     const ShallowAnalysis& m_analysis;
+    const lsp::RequestContext m_ctx;
     lsp::Range m_range;
     slang::ast::Compilation tempComp;
 

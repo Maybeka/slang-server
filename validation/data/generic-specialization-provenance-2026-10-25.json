@@ -1,0 +1,69 @@
+{
+  "stage": "A: generic specialization closure",
+  "status": "foundation-verified-integration-incomplete",
+  "featureComplete": false,
+  "performanceQualified": false,
+  "pushedToMain": false,
+  "sdkBase": "151a801ceaf6faf23d79a42d210ff67e50eb4660",
+  "sdkPatchSha256": "f09378baa1ff85fed48f2d94499789948d8ac9a29a49790c0f413d1bf8902ce0",
+  "serverBinarySha256": "f3670b1f5dc46ff9ed94f51e97798a0541c6366fdba6611b68034fb5d7bf119e",
+  "tests": {
+    "targetedProvenance": {
+      "cases": 4,
+      "assertions": 270,
+      "exitCode": 0
+    },
+    "sdkNative": {
+      "cases": 2617,
+      "assertions": 26928,
+      "exitCode": 0
+    },
+    "sdkAsan": {
+      "cases": 2617,
+      "assertions": 26928,
+      "exitCode": 0,
+      "detectLeaks": false
+    },
+    "serverNative": {
+      "cases": 902,
+      "passed": 901,
+      "failed": 1,
+      "assertions": 145549,
+      "failedAssertions": 68,
+      "exitCode": 42,
+      "onlyFailure": "Changed generic instances update their complete diagnostic closure: localDiagnosticUpdates",
+      "nativeHoverAndHistoricalUriDiagnostics": "all comparisons passed"
+    }
+  },
+  "sdkRestoration": {
+    "base": "151a801ceaf6faf23d79a42d210ff67e50eb4660",
+    "files": 709,
+    "patchSha256": "f09378baa1ff85fed48f2d94499789948d8ac9a29a49790c0f413d1bf8902ce0",
+    "cleanOfflineApplyVerified": true,
+    "temporaryTreeRemoved": true,
+    "networkUsed": false
+  },
+  "implemented": [
+    "specialization-use provenance including cache hits",
+    "body-excluding cancellable dependency graph snapshot",
+    "cycle liveness and conservative fixed import roots"
+  ],
+  "remaining": [
+    "private new and obsolete specialization semantic diagnostics, including uninstantiated checks",
+    "dataflow replay of new/obsolete specialization scopes and static initializers",
+    "remove admission guards only after complete closure is correct",
+    "full server/SDK qualification and same CVA6 correctness/performance gates"
+  ],
+  "invariants": {
+    "experimentsDefaultOff": true,
+    "fixedDebounceAdded": false,
+    "networkUsed": false,
+    "executionOrder": [
+      "A",
+      "B",
+      "C",
+      "D"
+    ]
+  },
+  "evidenceDirectory": "/Users/xn/Documents/Codex/2026-10-19/handoff-md-package-include/untracked/generic-specialization-closure-2026-10-25"
+}

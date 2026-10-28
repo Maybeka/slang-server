@@ -188,6 +188,55 @@ const slang::ast::Symbol* lookupHierSymbol(slang::ast::Compilation& compilation,
     return result.found;
 }
 
+bool prepareActiveInstanceSelection(
+    slang::ast::Compilation& compilation, const SourceManager& sourceManager,
+    const std::string& hierPath,
+    std::unordered_map<std::string, std::string>& preparedGenerate,
+    std::unordered_map<std::string, hier::QualifiedInstance>& preparedInstances,
+    const lsp::RequestContext& ctx) {
+    auto* sym = lookupHierSymbol(compilation, hierPath);
+    if (!sym) {
+        return false;
+    }
+
+    setActiveGenerateScopes(*sym, preparedGenerate, ctx);
+
+    if (auto* port = sym->as_if<ast::InterfacePortSymbol>()) {
+        if (auto* enclosing = getEnclosingInstance(*port, ctx)) {
+            setActiveInstanceChain(*enclosing, preparedInstances, sourceManager, ctx);
+        }
+        auto connection = resolveInterfaceConnection(*port);
+        for (auto* connected : connection.sourcePath) {
+            ctx.checkpoint("during connected interface selection");
+            setActiveGenerateScopes(*connected, preparedGenerate, ctx);
+            if (auto* connectedPort = connected->as_if<ast::InterfacePortSymbol>()) {
+                if (auto* enclosing = getEnclosingInstance(*connectedPort, ctx)) {
+                    setActiveInstanceChain(*enclosing, preparedInstances, sourceManager, ctx);
+                }
+            }
+        }
+        if (connection.resolvedEndpoint &&
+            std::ranges::find(connection.sourcePath, connection.resolvedEndpoint) ==
+                connection.sourcePath.end()) {
+            setActiveGenerateScopes(*connection.resolvedEndpoint, preparedGenerate, ctx);
+        }
+        sym = connection.resolvedEndpoint;
+    }
+
+    if (auto* target = sym ? sym->as_if<ast::InstanceSymbol>() : nullptr) {
+        setActiveInstanceChain(*target, preparedInstances, sourceManager, ctx);
+        return true;
+    }
+
+    if (!sym)
+        return false;
+    if (auto* enclosing = getEnclosingInstance(*sym, ctx)) {
+        setActiveInstanceChain(*enclosing, preparedInstances, sourceManager, ctx);
+        return true;
+    }
+    return false;
+}
+
 // Walks up from `symbol` to the nearest enclosing module/interface instance body, or nullptr if
 // the symbol isn't inside one.
 const slang::ast::InstanceBodySymbol* enclosingInstanceBody(const slang::ast::Symbol& symbol) {
@@ -492,7 +541,7 @@ ServerCompilation::ServerCompilation(std::vector<std::shared_ptr<SlangDoc>> docu
                                      std::optional<std::string> top,
                                      const ServerCompilation* previous,
                                      const lsp::RequestContext& ctx, bool disposableRoot,
-                                     std::shared_ptr<const void> sourceOwner) :
+                                     std::shared_ptr<const void> sourceOwner, bool deferInitialModel) :
     m_sourceOwner(std::move(sourceOwner)), m_options(std::move(options)),
     m_disposableRoot(disposableRoot), m_top(std::move(top)), m_sourceManager(sourceManager),
     m_client(client) {
@@ -505,12 +554,11 @@ ServerCompilation::ServerCompilation(std::vector<std::shared_ptr<SlangDoc>> docu
     if (m_top) {
         m_options.insertOrGet<slang::ast::CompilationOptions>().topModules = {*m_top};
     }
-    refresh(ctx);
     if (previous) {
         // Copy value-only paths, never symbols from the retiring compilation.
         // Parent selections precede nested selections; disappeared paths decline
         // locally while still-valid module / generate choices remain selected.
-        std::vector<std::string> paths;
+        auto& paths = m_initialSelectionPaths;
         for (const auto& [_, selected] : previous->m_activeInstancesByModule)
             paths.push_back(selected.instPath);
         for (const auto& [_, selected] : previous->m_activeGenerateScopesByArray)
@@ -521,11 +569,11 @@ ServerCompilation::ServerCompilation(std::vector<std::shared_ptr<SlangDoc>> docu
             return da != db ? da < db : a < b;
         });
         paths.erase(std::unique(paths.begin(), paths.end()), paths.end());
-        for (const auto& path : paths) {
-            ctx.checkpoint("during full-model selection restoration");
-            setActiveInstance(path, ctx);
-        }
     }
+    // A staged replacement owns only current input and value DTOs until commit.
+    m_dirty = true;
+    if (!deferInitialModel)
+        refresh(ctx);
 }
 
 std::unordered_map<std::string, std::shared_ptr<SlangDoc>> ServerCompilation::indexModuleDocs(
@@ -548,7 +596,56 @@ void ServerCompilation::refresh(const lsp::RequestContext& ctx) {
     refreshImpl(ctx, false);
 }
 
+bool ServerCompilation::releaseUnsharedAnalysisCaches() {
+    if (m_refreshing || !m_analysis || m_analysis.use_count() != 1)
+        return false;
+    return m_analysis->releaseRecomputableCaches();
+}
+
+bool ServerCompilation::releaseUnsharedModel() {
+    if (m_refreshing || !m_analysis || m_analysis.use_count() != 1)
+        return false;
+    // Build the complete replacement hints before changing the live model.
+    // Resolve names exactly as getPreferredSymbolPath does, including definition
+    // precedence over a package with the same name and nested-definition lookup.
+    std::unordered_map<std::string, std::string> paths;
+    auto& compilation = m_analysis->compilation;
+    auto& root = compilation.getRoot();
+    auto remember = [&](std::string_view name) {
+        if (paths.contains(std::string(name)))
+            return;
+        SourceLocation location;
+        if (auto def = compilation.tryGetDefinition(name, root); def.definition)
+            location = def.definition->location;
+        if (auto path = m_sourceManager.getFullPath(
+                m_sourceManager.getFullyOriginalLoc(location).buffer());
+            !path.empty()) {
+            paths.emplace(name, path.string());
+            return;
+        }
+        if (auto package = compilation.getPackage(name)) {
+            if (auto syntax = package->getSyntax()) {
+                auto path = m_sourceManager.getFullPath(
+                    m_sourceManager.getFullyOriginalLoc(syntax->sourceRange().start()).buffer());
+                if (!path.empty())
+                    paths.emplace(name, path.string());
+            }
+        }
+    };
+    for (auto definition : compilation.getDefinitions())
+        remember(definition->name);
+    for (auto package : compilation.getPackages())
+        remember(package->name);
+    m_releasedSymbolPaths.swap(paths);
+    m_dirty = true;
+    m_hierarchySearchItems.clear();
+    m_hierarchySearchIndexed = false;
+    m_analysis.reset();
+    return true;
+}
+
 void ServerCompilation::prepareUnpublishedDiagnostics(const lsp::RequestContext& ctx) {
+    ensureCurrent(ctx);
     m_analysis->prepareDisposableDiagnostics(ctx);
 }
 
@@ -607,13 +704,28 @@ void ServerCompilation::refreshImpl(const lsp::RequestContext& ctx, bool complet
     if (completeDiagnostics)
         analysis->prepareDisposableDiagnostics(ctx);
     auto activeInstances = syncActiveInstances(*analysis, ctx);
+    auto activeGenerate = m_activeGenerateScopesByArray;
+    for (const auto& path : m_initialSelectionPaths) {
+        ctx.checkpoint("during full-model selection restoration");
+        auto nextGenerate = activeGenerate;
+        auto nextInstances = activeInstances;
+        if (prepareActiveInstanceSelection(analysis->compilation, m_sourceManager, path,
+                                           nextGenerate, nextInstances, ctx)) {
+            ctx.checkpoint("before active instance selection commit");
+            activeGenerate.swap(nextGenerate);
+            activeInstances.swap(nextInstances);
+        }
+    }
     std::vector<FrozenInstanceCache::Selection> frozenSelections;
     if (m_frozenInstances)
         frozenSelections = m_frozenInstances->prepareSelections(analysis->compilation, ctx);
     ctx.checkpoint("before full-model publication");
     m_moduleToDoc.swap(modules);
     m_analysis.swap(analysis);
+    m_releasedSymbolPaths.clear();
     m_activeInstancesByModule.swap(activeInstances);
+    m_activeGenerateScopesByArray.swap(activeGenerate);
+    m_initialSelectionPaths.clear();
     if (m_frozenInstances)
         m_frozenInstances->commitSelections(std::move(frozenSelections));
     m_hierarchySearchItems.clear();
@@ -628,14 +740,18 @@ void ServerCompilation::configureFrozenInstances(
     std::vector<std::string> paths, size_t budgetBytes, FrozenInstanceCache::Witness witness,
     std::function<void(const std::vector<std::string>&)> changed,
     FrozenInstanceCache::Witness requestWitness, const lsp::RequestContext& ctx) {
+    const bool deferred = m_dirty && !m_analysis;
+    if (!deferred)
+        ensureCurrent(ctx);
     auto candidate = std::make_unique<FrozenInstanceCache>(std::move(paths), budgetBytes,
                                                            m_sourceManager, std::move(witness),
                                                            std::move(requestWitness));
-    candidate->resolveSelections(m_analysis->compilation, ctx);
+    if (!deferred)
+        candidate->resolveSelections(m_analysis->compilation, ctx);
     ctx.checkpoint("before frozen instance configuration publication");
     m_frozenInstances = std::move(candidate);
     m_frozenModulesChanged = std::move(changed);
-    if (m_frozenModulesChanged)
+    if (!deferred && m_frozenModulesChanged)
         m_frozenModulesChanged(m_frozenInstances->modules());
 }
 
@@ -811,6 +927,11 @@ std::optional<ActiveGenerateLoop> ServerCompilation::getActiveGenerateLoop(
 
 std::optional<std::string> ServerCompilation::getPreferredSymbolPath(
     std::string_view name, const lsp::RequestContext& ctx) const {
+    if (m_refreshing && !m_analysis) {
+        ctx.throwIfCancelled("during released model path lookup");
+        auto found = m_releasedSymbolPaths.find(std::string(name));
+        return found == m_releasedSymbolPaths.end() ? std::nullopt : std::optional(found->second);
+    }
     ensureCurrent(ctx);
     auto& compilation = m_analysis->compilation;
     auto& root = compilation.getRoot();
@@ -847,49 +968,11 @@ bool ServerCompilation::setActiveInstance(const std::string& hierPath,
         m_activeGenerateScopesByArray.swap(preparedGenerate);
         m_activeInstancesByModule.swap(preparedInstances);
     };
-    auto* sym = lookupHierSymbol(m_analysis->compilation, hierPath);
-    if (!sym) {
+    if (!prepareActiveInstanceSelection(m_analysis->compilation, m_sourceManager, hierPath,
+                                         preparedGenerate, preparedInstances, ctx))
         return false;
-    }
-
-    setActiveGenerateScopes(*sym, preparedGenerate, ctx);
-
-    if (auto* port = sym->as_if<ast::InterfacePortSymbol>()) {
-        if (auto* enclosing = getEnclosingInstance(*port, ctx)) {
-            setActiveInstanceChain(*enclosing, preparedInstances, m_sourceManager, ctx);
-        }
-        auto connection = resolveInterfaceConnection(*port);
-        for (auto* connected : connection.sourcePath) {
-            ctx.checkpoint("during connected interface selection");
-            setActiveGenerateScopes(*connected, preparedGenerate, ctx);
-            if (auto* connectedPort = connected->as_if<ast::InterfacePortSymbol>()) {
-                if (auto* enclosing = getEnclosingInstance(*connectedPort, ctx)) {
-                    setActiveInstanceChain(*enclosing, preparedInstances, m_sourceManager, ctx);
-                }
-            }
-        }
-        if (connection.resolvedEndpoint &&
-            std::ranges::find(connection.sourcePath, connection.resolvedEndpoint) ==
-                connection.sourcePath.end()) {
-            setActiveGenerateScopes(*connection.resolvedEndpoint, preparedGenerate, ctx);
-        }
-        sym = connection.resolvedEndpoint;
-    }
-
-    if (auto* target = sym ? sym->as_if<ast::InstanceSymbol>() : nullptr) {
-        setActiveInstanceChain(*target, preparedInstances, m_sourceManager, ctx);
-        commit();
-        return true;
-    }
-
-    if (!sym)
-        return false;
-    if (auto* enclosing = getEnclosingInstance(*sym, ctx)) {
-        setActiveInstanceChain(*enclosing, preparedInstances, m_sourceManager, ctx);
-        commit();
-        return true;
-    }
-    return false;
+    commit();
+    return true;
 }
 
 std::optional<hier::QualifiedInstance> ServerCompilation::getActiveInstance(

@@ -1,0 +1,97 @@
+{
+  "scope": "Preprocessing influence proof prerequisite; local admission unchanged",
+  "sourceReceipt": {
+    "sourceSha256": {
+      "include/slang/parsing/PreprocessorMetadata.h": "b975cb00b6f3fc86d9e5def5d4b693f12c0c3e9e8391731b7d3cf1e46fc24160",
+      "include/slang/parsing/Preprocessor.h": "a0bfec13bafe40887223c645a6b2a6ddcd397dae10f007cb190382a7cf77faf0",
+      "source/parsing/Preprocessor.cpp": "d467bc378a4a9ca5328d1af491f841ff1a37eba57e679865a2e811a5832bbfb1",
+      "source/parsing/Preprocessor_macros.cpp": "b3541760225f1cae248eb7489a87e41090f5a787948c3d057a31a65737efebad",
+      "source/syntax/SyntaxTree.cpp": "ce8b88bcdf7b986af5991dfbb8578c7f9f1fd5b50ce7a388a3feebb22d3bfe3d",
+      "tests/unittests/parsing/PreprocessorTests.cpp": "6c430114786d5b4fd70df5175893230200843fc56e7ee4c5da57d3aba8081ebc",
+      "tests/unittests/parsing/SyntaxPrinterTests.cpp": "f559dc985708d432761fb6d6a7c8bab188ed34c751c6786c84093aa342cb90ce"
+    },
+    "patchSha256": "80c8223dc61c5236236ad76d1f0035f14c4660ca043baab6d13ed22bb4ab5cc7",
+    "admissionRelaxed": false,
+    "serverEnablesNewTrace": false,
+    "serverBinarySha256": {
+      "build-uvm/bin/slang-server": "ea9cf86c4e5141845163ebd0afd9c83f31c47253aa0aed814499ecd56a39dd85",
+      "build-uvm/bin/server_unittests": "c340e113165971ecc541b3e087b75d70a152c127cfa1952b761e14b9d7f7d5cb",
+      "build-uvm/bin/diagnostic_test_server": "14da17fe2675805463c59939b7c4e1862892222bc6537d07625b803723143c72",
+      "build-uvm/bin/slang_server_counted": "d788e26968c15004aeb6c2b6618d5e7a9e615edc68f7e3d5c39582f64055765a",
+      "build-uvm/bin/unittests": "dae16954d58d4052ebde8b5a2495f7f1ad96f784758f9f1aa9b34281b506e436",
+      "untracked/semantic-cancellation-2026-10-23/asan-build/bin/slang-server": "2b39e88c01d882959e8ed115fbaacbdf26afa43c381bf5ca32002ea199e48b10",
+      "untracked/semantic-cancellation-2026-10-23/asan-build/bin/server_unittests": "67c3d075f8b9f49a5cfb8d770ff5e4be5714da21db3bc2190f2753679c76ca4c",
+      "untracked/semantic-cancellation-2026-10-23/asan-build/bin/diagnostic_test_server": "ed7ec67bdf7b0887da1582acf82bfa799d94fda440b351a7666c543b668f2bfc",
+      "untracked/semantic-cancellation-2026-10-23/asan-build/bin/slang_server_counted": "b97901b131d6c69b6cfb9eff770432ebe3eb4233f6677cea62d3570a66a5b2ea",
+      "untracked/semantic-cancellation-2026-10-23/asan-build/bin/unittests": "84b300e552c3e2d0eae60e9b27ec15019f38e2dd74312856ad12cf2ccf6876b7"
+    }
+  },
+  "validation": {
+    "qualification": false,
+    "sourceReceipt": {
+      "sourceSha256": {
+        "include/slang/parsing/PreprocessorMetadata.h": "b975cb00b6f3fc86d9e5def5d4b693f12c0c3e9e8391731b7d3cf1e46fc24160",
+        "include/slang/parsing/Preprocessor.h": "a0bfec13bafe40887223c645a6b2a6ddcd397dae10f007cb190382a7cf77faf0",
+        "source/parsing/Preprocessor.cpp": "d467bc378a4a9ca5328d1af491f841ff1a37eba57e679865a2e811a5832bbfb1",
+        "source/parsing/Preprocessor_macros.cpp": "b3541760225f1cae248eb7489a87e41090f5a787948c3d057a31a65737efebad",
+        "source/syntax/SyntaxTree.cpp": "ce8b88bcdf7b986af5991dfbb8578c7f9f1fd5b50ce7a388a3feebb22d3bfe3d",
+        "tests/unittests/parsing/PreprocessorTests.cpp": "6c430114786d5b4fd70df5175893230200843fc56e7ee4c5da57d3aba8081ebc",
+        "tests/unittests/parsing/SyntaxPrinterTests.cpp": "f559dc985708d432761fb6d6a7c8bab188ed34c751c6786c84093aa342cb90ce"
+      },
+      "patchSha256": "80c8223dc61c5236236ad76d1f0035f14c4660ca043baab6d13ed22bb4ab5cc7",
+      "admissionRelaxed": false,
+      "serverEnablesNewTrace": false,
+      "serverBinarySha256": {
+        "build-uvm/bin/slang-server": "ea9cf86c4e5141845163ebd0afd9c83f31c47253aa0aed814499ecd56a39dd85",
+        "build-uvm/bin/server_unittests": "c340e113165971ecc541b3e087b75d70a152c127cfa1952b761e14b9d7f7d5cb",
+        "build-uvm/bin/diagnostic_test_server": "14da17fe2675805463c59939b7c4e1862892222bc6537d07625b803723143c72",
+        "build-uvm/bin/slang_server_counted": "d788e26968c15004aeb6c2b6618d5e7a9e615edc68f7e3d5c39582f64055765a",
+        "build-uvm/bin/unittests": "dae16954d58d4052ebde8b5a2495f7f1ad96f784758f9f1aa9b34281b506e436",
+        "untracked/semantic-cancellation-2026-10-23/asan-build/bin/slang-server": "2b39e88c01d882959e8ed115fbaacbdf26afa43c381bf5ca32002ea199e48b10",
+        "untracked/semantic-cancellation-2026-10-23/asan-build/bin/server_unittests": "67c3d075f8b9f49a5cfb8d770ff5e4be5714da21db3bc2190f2753679c76ca4c",
+        "untracked/semantic-cancellation-2026-10-23/asan-build/bin/diagnostic_test_server": "ed7ec67bdf7b0887da1582acf82bfa799d94fda440b351a7666c543b668f2bfc",
+        "untracked/semantic-cancellation-2026-10-23/asan-build/bin/slang_server_counted": "b97901b131d6c69b6cfb9eff770432ebe3eb4233f6677cea62d3570a66a5b2ea",
+        "untracked/semantic-cancellation-2026-10-23/asan-build/bin/unittests": "84b300e552c3e2d0eae60e9b27ec15019f38e2dd74312856ad12cf2ccf6876b7"
+      }
+    },
+    "steps": [
+      {
+        "name": "native-full",
+        "exitCode": 0,
+        "summary": [
+          "100% tests passed out of 970"
+        ],
+        "logSha256": "c3cc3dc948646ebbe636b838d88aa5f8ccc0a9967280ee2f06de60a879b3918e"
+      },
+      {
+        "name": "asan-sdk-full",
+        "exitCode": 0,
+        "summary": [
+          "All tests passed (36889 assertions in 2643 test cases)"
+        ],
+        "logSha256": "2ae9537e5cc4709501c5ea3058299df08d49b533a4f5b1559aa6fc037b360f59"
+      },
+      {
+        "name": "asan-server-full",
+        "exitCode": 0,
+        "summary": [
+          "All tests passed (176653 assertions in 955 test cases)"
+        ],
+        "logSha256": "de1b54e9b2023215c1b5bfef160458614fcc2c1aa40c75da4313545db23ef6a8"
+      }
+    ],
+    "noNewLocalAdmission": true,
+    "noPerformanceClaim": true,
+    "passed": true,
+    "nativeSdkFromCtest": {
+      "assertions": 36889,
+      "cases": 2643,
+      "lastTestLogSha256": "8af7a0659df005678298c01bcd5dec6c0dca93cae450cdca460039694673b6ea"
+    }
+  },
+  "incomplete": [
+    "Parse-archive trace persistence and default/project generators",
+    "Safe local preprocessing admission and suffix generated-name proof",
+    "Actual CVA6 performance; original BC/D qualification and main delivery"
+  ]
+}

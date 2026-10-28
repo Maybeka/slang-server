@@ -1,0 +1,126 @@
+{
+  "accepted": false,
+  "qualification": false,
+  "prototype": "Per-procedure bounded failed-condition memo; all production code/config/tests withdrawn",
+  "evaluation": {
+    "qualification": false,
+    "feasible": false,
+    "candidateSha256": "eb0f4625e3814df9ba8d3acf8b8b988219477f521e4de1fda795b81d308fa2dd",
+    "checks": {
+      "macro-forward-fourArms": true,
+      "macro-forward-completeOracle": true,
+      "macro-forward-control-warmFullPass": true,
+      "macro-forward-candidate-warmFullPass": true,
+      "macro-reverse-fourArms": true,
+      "macro-reverse-completeOracle": true,
+      "macro-reverse-control-warmFullPass": true,
+      "macro-reverse-candidate-warmFullPass": true,
+      "body-forward-fourArms": true,
+      "body-forward-completeOracle": true,
+      "body-reverse-fourArms": true,
+      "body-reverse-completeOracle": true,
+      "warmFullDataflowGain": false,
+      "macroFinalDiagnosticGain": false,
+      "macro-p50-baseline": true,
+      "macro-p95-baseline": true,
+      "macro-p50-control": true,
+      "macro-p95-control": true,
+      "body-p50-baseline": true,
+      "body-p95-baseline": true,
+      "body-lastDiagnostic-baseline": true,
+      "body-p50-control": true,
+      "body-p95-control": true,
+      "body-lastDiagnostic-control": false
+    },
+    "failedChecks": [
+      "warmFullDataflowGain",
+      "macroFinalDiagnosticGain",
+      "body-lastDiagnostic-control"
+    ],
+    "ratios": {
+      "warmFullDataflowVsControl": 0.9501198057378104,
+      "macro-p50-baseline": 1.0453570532921945,
+      "macro-p95-baseline": 1.060126767549885,
+      "macro-p50-control": 1.0275255779149661,
+      "macro-p95-control": 1.0414269070823916,
+      "body-p50-baseline": 0.9862364442356045,
+      "body-p95-baseline": 0.9345560764124102,
+      "body-lastDiagnostic-baseline": 1.0184484932988331,
+      "body-p50-control": 1.0100907586091212,
+      "body-p95-control": 1.0111071478963758,
+      "body-lastDiagnostic-control": 1.312137893499447
+    },
+    "savings": {
+      "macroFinalDiagnosticMsVsControl": -6.524395499999855
+    },
+    "fullDataflowPhases": {
+      "macro-forward": {
+        "control": {
+          "allUs": [
+            310846,
+            123996
+          ],
+          "warmMedianUs": 123996
+        },
+        "candidate": {
+          "allUs": [
+            310623,
+            118208
+          ],
+          "warmMedianUs": 118208
+        }
+      },
+      "macro-reverse": {
+        "control": {
+          "allUs": [
+            317750,
+            124740
+          ],
+          "warmMedianUs": 124740
+        },
+        "candidate": {
+          "allUs": [
+            312014,
+            118121
+          ],
+          "warmMedianUs": 118121
+        }
+      }
+    },
+    "priorOriginal20FailureUnchanged": true,
+    "scope": "One declared bounded feasibility set, not original qualification and not exact per-function timing"
+  },
+  "restoredValidation": {
+    "status": "completed",
+    "steps": [
+      {
+        "name": "sdk",
+        "status": "passed",
+        "pid": 67285,
+        "exitCode": 0,
+        "logSha256": "2dfa4a194daff87c84535a8bb1885815dbdfc6c521e8306c6906685981268d5e",
+        "expectedSummary": "35784 assertions in 2639 test cases"
+      },
+      {
+        "name": "server",
+        "status": "passed",
+        "pid": 67291,
+        "exitCode": 0,
+        "logSha256": "7a562baa91c7ac0a0b672b6fcf4c3f5b0ace2eadfde20f4233f3d4a794a5d65f",
+        "expectedSummary": "176653 assertions in 955 test cases"
+      }
+    ],
+    "qualification": false,
+    "binarySha256": {
+      "nativeBinarySha256": "276f15897dfb26e48cff9e7a7579cd2565ec5b7e712701167d6ddc0adf6a80bd",
+      "asanBinarySha256": "69896342c9441d5a007abea4f03ebc65bd13d4f685bffaa6d04acdabb6716883",
+      "nativeTestsSha256": "b22f550535423096e553cf37a83581a77c2ac234106c9c89517799824b734f48",
+      "asanTestsSha256": "13ab5c0278e918624b090e04a4878b4a2075bbc5d5dd1764fbce811d856ce4c2"
+    },
+    "detectLeaks": false,
+    "passed": true
+  },
+  "restoredNativeSha256": "276f15897dfb26e48cff9e7a7579cd2565ec5b7e712701167d6ddc0adf6a80bd",
+  "networkUsed": false,
+  "original20SupplementalFailureRemains": true
+}

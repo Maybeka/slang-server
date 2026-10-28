@@ -1,0 +1,287 @@
+{
+  "scope": "Optional macro trace persistence prerequisite; runtime tracing/default and local admission unchanged",
+  "version": {
+    "sourceSha256": {
+      "source/external/slang/include/slang/syntax/ParseArchive.h": "58c3dc58ec36f6d05cb57f62267517bd8905809d49f0608f56c9cc62bdecea70",
+      "source/external/slang/source/syntax/SyntaxTree.cpp": "764d8613d40985c26ea8e90a5e081dddc9b4b079c99340e56bb454f1d738654f",
+      "source/external/slang/tests/unittests/parsing/SyntaxPrinterTests.cpp": "7c65d612259e689aa7f5413933c6631f449b365e2038fba376dd961b1acf4c4a",
+      "source/src/uvm_preparse_main.cpp": "06dab7327fa2367d89b725b8c809448604d013fd6c19f0db34067568a317b8ae",
+      "source/src/UvmLibrary.cpp": "547f83f786ec0a87f9db6cd398c8498d07b92fd0c585b397cc772e312a0d5190",
+      "source/tests/cpp/UvmLibraryTests.cpp": "60ae1dcd9e778fa33d5187cb2ba262c828b17ffbc93fedf9c060a4aecd27ed35"
+    },
+    "sdkPatchSha256": "4e9b2d8191f90aedd42cb764ce06814663535afec274829af2a390e7c7bd90a4",
+    "runtimeTraceDefaultOff": true,
+    "localAdmissionChanged": false,
+    "serverBinarySha256": {
+      "build-uvm/bin/slang-server": "cc931d890bd75e652b15bb14c7f77e1f9b96bec1c57fdd6175cfc4f843d734d6",
+      "build-uvm/bin/server_unittests": "718744613184fb51abf4959763c78c2e4125d38f9cf1b0c0ba64e4361b60f943",
+      "build-uvm/bin/diagnostic_test_server": "a346e458b286e3854f49e60954f3b3146f65a14e17f46d712e896e53232db3d4",
+      "build-uvm/bin/slang_server_counted": "9610da046da539eaaad377d72a196ec1b4efb5a0367153631a7b7efe72408e08",
+      "build-uvm/bin/unittests": "256226ee706406268914f53a34c479cd5c6f3ddd6cba7684fd569796940416fb",
+      "untracked/semantic-cancellation-2026-10-23/asan-build/bin/slang-server": "60cd6c1131b9ac2036619ffb7cfd35c36b9ccfef716bcca71b3793b81cd67ccf",
+      "untracked/semantic-cancellation-2026-10-23/asan-build/bin/server_unittests": "fd02d591d5081c683970736a6842e573f07ebd73007b010b833a4772617b0a83",
+      "untracked/semantic-cancellation-2026-10-23/asan-build/bin/diagnostic_test_server": "fa508c15100a2dbe6af311396f5312f26dc1b6d3192ab0a12c10e91199de88bb",
+      "untracked/semantic-cancellation-2026-10-23/asan-build/bin/slang_server_counted": "14bc8237e27261b02b6fe54426e7f3c55eba8ffdea1147cef1177d06bb5109a4",
+      "untracked/semantic-cancellation-2026-10-23/asan-build/bin/unittests": "c60bacc335638776dada8ba9261ef98b8ccf887c7fb9c39a838bcde68a0adc4e"
+    }
+  },
+  "validation": {
+    "qualification": false,
+    "sourceReceipt": {
+      "sourceSha256": {
+        "source/external/slang/include/slang/syntax/ParseArchive.h": "58c3dc58ec36f6d05cb57f62267517bd8905809d49f0608f56c9cc62bdecea70",
+        "source/external/slang/source/syntax/SyntaxTree.cpp": "764d8613d40985c26ea8e90a5e081dddc9b4b079c99340e56bb454f1d738654f",
+        "source/external/slang/tests/unittests/parsing/SyntaxPrinterTests.cpp": "7c65d612259e689aa7f5413933c6631f449b365e2038fba376dd961b1acf4c4a",
+        "source/src/uvm_preparse_main.cpp": "06dab7327fa2367d89b725b8c809448604d013fd6c19f0db34067568a317b8ae",
+        "source/src/UvmLibrary.cpp": "547f83f786ec0a87f9db6cd398c8498d07b92fd0c585b397cc772e312a0d5190",
+        "source/tests/cpp/UvmLibraryTests.cpp": "60ae1dcd9e778fa33d5187cb2ba262c828b17ffbc93fedf9c060a4aecd27ed35"
+      },
+      "sdkPatchSha256": "4e9b2d8191f90aedd42cb764ce06814663535afec274829af2a390e7c7bd90a4",
+      "runtimeTraceDefaultOff": true,
+      "localAdmissionChanged": false,
+      "serverBinarySha256": {
+        "build-uvm/bin/slang-server": "cc931d890bd75e652b15bb14c7f77e1f9b96bec1c57fdd6175cfc4f843d734d6",
+        "build-uvm/bin/server_unittests": "718744613184fb51abf4959763c78c2e4125d38f9cf1b0c0ba64e4361b60f943",
+        "build-uvm/bin/diagnostic_test_server": "a346e458b286e3854f49e60954f3b3146f65a14e17f46d712e896e53232db3d4",
+        "build-uvm/bin/slang_server_counted": "9610da046da539eaaad377d72a196ec1b4efb5a0367153631a7b7efe72408e08",
+        "build-uvm/bin/unittests": "256226ee706406268914f53a34c479cd5c6f3ddd6cba7684fd569796940416fb",
+        "untracked/semantic-cancellation-2026-10-23/asan-build/bin/slang-server": "60cd6c1131b9ac2036619ffb7cfd35c36b9ccfef716bcca71b3793b81cd67ccf",
+        "untracked/semantic-cancellation-2026-10-23/asan-build/bin/server_unittests": "fd02d591d5081c683970736a6842e573f07ebd73007b010b833a4772617b0a83",
+        "untracked/semantic-cancellation-2026-10-23/asan-build/bin/diagnostic_test_server": "fa508c15100a2dbe6af311396f5312f26dc1b6d3192ab0a12c10e91199de88bb",
+        "untracked/semantic-cancellation-2026-10-23/asan-build/bin/slang_server_counted": "14bc8237e27261b02b6fe54426e7f3c55eba8ffdea1147cef1177d06bb5109a4",
+        "untracked/semantic-cancellation-2026-10-23/asan-build/bin/unittests": "c60bacc335638776dada8ba9261ef98b8ccf887c7fb9c39a838bcde68a0adc4e"
+      }
+    },
+    "steps": [
+      {
+        "name": "native-full",
+        "exitCode": 0,
+        "summary": [
+          "100% tests passed out of 970"
+        ],
+        "logSha256": "517489e99e13a0ce129eca809667109952c5d666afa6b8ff982aadc665bf85a4"
+      },
+      {
+        "name": "asan-sdk-full",
+        "exitCode": 0,
+        "summary": [
+          "All tests passed (36935 assertions in 2644 test cases)"
+        ],
+        "logSha256": "1ebb5567252fa18f1249d16d6581d6031b995c5c5889e5bdc6b70e558ebacf87"
+      },
+      {
+        "name": "asan-server-full",
+        "exitCode": 0,
+        "summary": [
+          "All tests passed (176669 assertions in 955 test cases)"
+        ],
+        "logSha256": "64277ff53db7c999221429e13490c5ffeebbe22d4fcd5753443a749a4bf19651"
+      }
+    ],
+    "noNewLocalAdmission": true,
+    "noPerformanceClaim": true,
+    "passed": true,
+    "nativeSdkFromCtest": {
+      "assertions": 36935,
+      "cases": 2644,
+      "logSha256": "f70d71624935b09df296750f1f75c371d8d66118a6408be68d2c54bb01e01d42"
+    },
+    "defaultProfileFiles": {
+      "build-uvm/uvm-preparsed": [
+        "default.cst"
+      ],
+      "build-uvm/share/slang-server/uvm/1.2/preparsed": [
+        "default.cst"
+      ],
+      "untracked/semantic-cancellation-2026-10-23/asan-build/uvm-preparsed": [
+        "default.cst"
+      ],
+      "untracked/semantic-cancellation-2026-10-23/asan-build/share/slang-server/uvm/1.2/preparsed": [
+        "default.cst"
+      ]
+    }
+  },
+  "targeted": {
+    "native-targeted": {
+      "exitCode": 0,
+      "assertions": 1252,
+      "cases": 6,
+      "logSha256": "0dd3ef07fc6ff69f2551d1fdbd496b83e1295ee6f4c69a928dfcd1e3b9648356"
+    },
+    "asan-targeted": {
+      "exitCode": 0,
+      "assertions": 1252,
+      "cases": 6,
+      "logSha256": "06ee3e4c407be70ad37025e74f7f131709993c374cf44f0dd85c4025b84806d1"
+    },
+    "native-provider": {
+      "exitCode": 0,
+      "assertions": 4056,
+      "cases": 6,
+      "logSha256": "139b42a0d2eb40f3a43f6f33fdc85fedfd47aca068e1fbdcd774ca26b4e91b45"
+    },
+    "asan-provider": {
+      "exitCode": 0,
+      "assertions": 4056,
+      "cases": 6,
+      "logSha256": "f6676c2a1610cc9496be4393d97a2f7037241e304e8e3b46f8af749d6c078e7b"
+    }
+  },
+  "readOverhead": {
+    "passed": true,
+    "qualification": false,
+    "medianMs": {
+      "legacy": 25.410604166666666,
+      "newOptout": 24.7990695,
+      "newOptin": 25.66434
+    },
+    "defaultOptoutRatio": 0.975933879310557,
+    "defaultOptoutAddedMs": -0.6115346666666639,
+    "optinRatio": 1.0099854309511531,
+    "optinAddedMs": 0.2537358333333337,
+    "traceNames": 441,
+    "traceTrailerBytes": 9272,
+    "retainedNameEstimateBytes": 36513,
+    "sourceSha256": "34f572f1650a8257341d99d18079ee0a9be176b027813d70775462d51d728778",
+    "probeSha256": "401fe149ae30509bef08b10cf7677cef125fd74d615393473a8140d9e1ccebc3",
+    "librarySha256": "aecc99d5e7a7c257e48a3c651d0c5c897fa72cb89816fc80493df867539125ef",
+    "artifactSha256": "070f5ee292af6183e439d94f26a0b8a994f1ce34a340e415118d59e7c7e173bf",
+    "scope": "Isolated native deserialization only; no end-to-end response speedup or heap/RSS claim"
+  },
+  "actualCva6": {
+    "passed": true,
+    "qualification": false,
+    "binarySha256": "cc931d890bd75e652b15bb14c7f77e1f9b96bec1c57fdd6175cfc4f843d734d6",
+    "targetSourceSha256": "6c2ecbefd33ef844ecbbe63d7282d37406714d9c18ef52711337e760141668cb",
+    "codeReference": "source-receipt.json",
+    "nativeLegacyOracle": "untracked/stage-bc-diagnostic-wire-2026-10-28/result.json",
+    "allTenStateMapsAndHoverMatch": true,
+    "stateRows": [
+      {
+        "phase": "original",
+        "version": 1,
+        "mapHash": "4974008de55cdd5769f40045ba7845f6d25e031bb554f0f8702bcfaa16e6efe2",
+        "hoverHash": "7e075da3d4bd50bd492e8069d51fed3a74fb916c9b7372c0bf4984144291e903",
+        "mapUris": 612,
+        "frames": 1,
+        "bytes": 44932,
+        "delta": false
+      },
+      {
+        "phase": "0",
+        "version": 2,
+        "mapHash": "dd200e5f9885e86a5000a23ea2205f7a732ea91e6aaa6f98e954ba80340c5ec6",
+        "hoverHash": "7e075da3d4bd50bd492e8069d51fed3a74fb916c9b7372c0bf4984144291e903",
+        "mapUris": 612,
+        "frames": 1,
+        "bytes": 45551,
+        "delta": false
+      },
+      {
+        "phase": "00",
+        "version": 3,
+        "mapHash": "dd200e5f9885e86a5000a23ea2205f7a732ea91e6aaa6f98e954ba80340c5ec6",
+        "hoverHash": "7e075da3d4bd50bd492e8069d51fed3a74fb916c9b7372c0bf4984144291e903",
+        "mapUris": 612,
+        "frames": 1,
+        "bytes": 45551,
+        "delta": false
+      },
+      {
+        "phase": "macro",
+        "version": 4,
+        "mapHash": "bd47f271fda95cff5d900c21f9abef90e83d2a4fa526b09a742453893ec1024a",
+        "hoverHash": "7e075da3d4bd50bd492e8069d51fed3a74fb916c9b7372c0bf4984144291e903",
+        "mapUris": 612,
+        "frames": 612,
+        "bytes": 13567220,
+        "delta": false
+      },
+      {
+        "phase": "6",
+        "version": 5,
+        "mapHash": "dd200e5f9885e86a5000a23ea2205f7a732ea91e6aaa6f98e954ba80340c5ec6",
+        "hoverHash": "7e075da3d4bd50bd492e8069d51fed3a74fb916c9b7372c0bf4984144291e903",
+        "mapUris": 612,
+        "frames": 612,
+        "bytes": 13567220,
+        "delta": false
+      },
+      {
+        "phase": "original",
+        "version": 1,
+        "mapHash": "4974008de55cdd5769f40045ba7845f6d25e031bb554f0f8702bcfaa16e6efe2",
+        "hoverHash": "7e075da3d4bd50bd492e8069d51fed3a74fb916c9b7372c0bf4984144291e903",
+        "mapUris": 612,
+        "frames": 1,
+        "bytes": 44932,
+        "delta": true
+      },
+      {
+        "phase": "0",
+        "version": 2,
+        "mapHash": "dd200e5f9885e86a5000a23ea2205f7a732ea91e6aaa6f98e954ba80340c5ec6",
+        "hoverHash": "7e075da3d4bd50bd492e8069d51fed3a74fb916c9b7372c0bf4984144291e903",
+        "mapUris": 612,
+        "frames": 1,
+        "bytes": 45551,
+        "delta": true
+      },
+      {
+        "phase": "00",
+        "version": 3,
+        "mapHash": "dd200e5f9885e86a5000a23ea2205f7a732ea91e6aaa6f98e954ba80340c5ec6",
+        "hoverHash": "7e075da3d4bd50bd492e8069d51fed3a74fb916c9b7372c0bf4984144291e903",
+        "mapUris": 612,
+        "frames": 1,
+        "bytes": 45551,
+        "delta": true
+      },
+      {
+        "phase": "macro",
+        "version": 4,
+        "mapHash": "bd47f271fda95cff5d900c21f9abef90e83d2a4fa526b09a742453893ec1024a",
+        "hoverHash": "7e075da3d4bd50bd492e8069d51fed3a74fb916c9b7372c0bf4984144291e903",
+        "mapUris": 612,
+        "frames": 1,
+        "bytes": 45551,
+        "delta": true
+      },
+      {
+        "phase": "6",
+        "version": 5,
+        "mapHash": "dd200e5f9885e86a5000a23ea2205f7a732ea91e6aaa6f98e954ba80340c5ec6",
+        "hoverHash": "7e075da3d4bd50bd492e8069d51fed3a74fb916c9b7372c0bf4984144291e903",
+        "mapUris": 612,
+        "frames": 1,
+        "bytes": 45551,
+        "delta": true
+      }
+    ],
+    "scopeFrozen": {
+      "prepared": true,
+      "retainedRoots": [
+        "uvmt_cva6_tb.cva6_dut_wrap.cva6_tb_wrapper_i.i_cva6"
+      ]
+    },
+    "uvmPrepared": true,
+    "exitCodes": [
+      0,
+      0
+    ],
+    "projectArchiveFacts": {
+      "complete": true,
+      "names": 441,
+      "retainedNameEstimateBytes": 36513,
+      "artifactSha256": "2d0c5a43828eda9587133447e15889d233cb1d6120917c0066f8511620c74203",
+      "probeSha256": "60c79093bca924b008b68138ab6b60995edbee1d741025aff99920b3046f0f1e",
+      "sourceSha256": "31b965d93f44f53ff88bed5027271734db7a3f2ac437d665e610748c07a8ee85"
+    },
+    "note": "UVM status counters were read after retained-owner handoffs; zero parse/load times there are not cold-start timing evidence."
+  },
+  "remaining": [
+    "Trace activation and retained-owner toggle tests",
+    "Safe local preprocessing admission and macro-query freshness",
+    "Original BC performance qualification and D/main delivery"
+  ]
+}

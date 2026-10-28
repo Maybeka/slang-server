@@ -1,0 +1,101 @@
+{
+  "stage": "B2",
+  "complete": false,
+  "goalComplete": false,
+  "candidateSha256": "d31ae6319b269790141d488c0c7f408cef1526712c0e4f6d6038515b59554742",
+  "optimization": "Skip directory-relative attempt only for expected-absent paths; perform the original fresh absolute open. Existing-file full-byte/EOF/fstat/lstat/F_GETPATH proof is unchanged.",
+  "experimentsDefaultOff": true,
+  "networkUsed": false,
+  "sourceFiles": {
+    "src/document/MethodScopeOverlay.cpp": "59bb5b0f57be034e8442655ab2ff41aa134a68c5544cb74b5b014b359df04a79",
+    "tests/cpp/MethodScopeOverlayTests.cpp": "b0f6080ec3bcaebde534e539f37ffe310a66335a934d8f2a6c83705a816844d5"
+  },
+  "mechanism": {
+    "filesPerValidation": 2237,
+    "expectedMissing": 1993,
+    "existingFiles": 244,
+    "expectedExistingBytes": 1844313,
+    "parents": 70,
+    "evidence": "untracked/stage-b2-diagnostic-tail-2026-10-26/proof-inputs.json"
+  },
+  "targeted": {
+    "passed": true,
+    "cases": 3,
+    "assertions": 574,
+    "newCase": "Earlier include becomes regular file, symlink or directory after directory-list check; all reject and retry succeeds after removal"
+  },
+  "shortTiming": {
+    "qualification": false,
+    "arms": {
+      "baseline": {
+        "p50": 15.0105415,
+        "p95": 18.617041,
+        "lastDiagnosticMs": 30.055791,
+        "finalFiles": 612,
+        "cancelled": 0,
+        "phaseMedianUs": {
+          "body-validate-files": 8416.0,
+          "local-publish-input-proof": 8343.0
+        }
+      },
+      "candidate": {
+        "p50": 16.4715415,
+        "p95": 21.270792,
+        "lastDiagnosticMs": 32.4495,
+        "finalFiles": 612,
+        "cancelled": 0,
+        "phaseMedianUs": {
+          "body-validate-files": 7133.5,
+          "local-publish-input-proof": 6875.0
+        }
+      }
+    },
+    "conclusion": "Physical proof stages improved; end-to-end query and final diagnostic did not improve in this short sample. Formal original gates still required."
+  },
+  "fullCorrectness": {
+    "originalExecSession": 14487,
+    "nativeCtest": 935,
+    "python": 17,
+    "transport": 43,
+    "sdkNativeCases": 2632,
+    "sdkAsanCases": 2632,
+    "sdkAssertions": 35510,
+    "serverAsanCases": 920,
+    "serverAsanAssertions": 171068,
+    "runtime": "untracked/stage-b2-absence-proof-2026-10-26/correctness-runtime.json",
+    "cvaStatus": "passed",
+    "nativeStates": 448,
+    "asanStates": 38,
+    "nativeDiagnosticArchives": 112,
+    "evidenceAuditSha256": "7cf0ba4a69301ee075352bed4f4825c091da7c603d443824d9edb86049a2674a"
+  },
+  "qualification": false,
+  "previousBbeQualificationFailurePreserved": true,
+  "remaining": [
+    "Attribute unmeasured query/queue/hover intervals before further change",
+    "B2 lifetime/performance audit including original plan diagnostic limits",
+    "B3/C/D including cleanup and main"
+  ],
+  "correctnessQualified": true,
+  "pressure": {
+    "status": "passed",
+    "originalExecSession": 26168,
+    "summary": "untracked/stage-b2-absence-proof-pressure-2026-10-26/pressure-summary.json",
+    "summarySha256": "99b957c77d9295af8c523a125602f892dbf67707d3ab43dcec6ec111572061dd",
+    "ownerLifetimesBalanced": true,
+    "qualification": false
+  },
+  "performanceQualificationState": "all20 ended; fixed14 passed; direct6 diagnostic tails failed both directions",
+  "qualificationOutcome": "untracked/stage-b2-absence-proof-qualification-2026-10-26/qualification-outcome.json",
+  "failedChecks": [
+    "direct-memory-forward-lastDiagnosticMs",
+    "direct-memory-reverse-lastDiagnosticMs"
+  ],
+  "requestAttribution": {
+    "stage": "untracked/stage-b2-request-attribution-2026-10-26",
+    "originalExecSession": 40040,
+    "purpose": "Queue residence vs dispatch and hover phases; original reverse1008 workload, mechanism only",
+    "sourceProbeRestored": true,
+    "qualification": false
+  }
+}

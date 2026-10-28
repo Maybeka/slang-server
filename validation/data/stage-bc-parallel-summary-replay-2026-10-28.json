@@ -1,0 +1,757 @@
+{
+  "status": "feasibility failed; prototype retained only for immediate attribution",
+  "decision": {
+    "accepted": false,
+    "prototypeRetainedForImmediateAttribution": true,
+    "defaultOff": true,
+    "reason": "Targeted full-dataflow and macro tail improved, but ordinary-body p50 and final diagnostics failed the predeclared nonregression gates; do not resample unchanged prototype or waive gates",
+    "failedChecks": [
+      "body-p50",
+      "body-lastDiagnosticMs"
+    ],
+    "derivedMedianOfForwardReverse": {
+      "macro": {
+        "p50": {
+          "baseline": 15.07478125,
+          "candidate": 15.48795875
+        },
+        "p95": {
+          "baseline": 451.12545850000004,
+          "candidate": 391.8501875
+        },
+        "lastDiagnosticMs": {
+          "baseline": 953.207521,
+          "candidate": 858.6009375
+        }
+      },
+      "body": {
+        "p50": {
+          "baseline": 14.6361255,
+          "candidate": 16.6027395
+        },
+        "p95": {
+          "baseline": 17.349188,
+          "candidate": 18.955167
+        },
+        "lastDiagnosticMs": {
+          "baseline": 22.958896000000003,
+          "candidate": 27.902375
+        }
+      }
+    },
+    "warmDataflowSavingsMs": 36.6525,
+    "warmDataflowRatio": 0.70415407153898,
+    "localPhaseAttribution": {
+      "body-forward": {
+        "baseline": {
+          "body-apply-parse": {
+            "observations": 14,
+            "medianUs": 945.5
+          },
+          "body-apply-bind": {
+            "observations": 14,
+            "medianUs": 164.5
+          },
+          "body-validate-directories": {
+            "observations": 28,
+            "medianUs": 163.5
+          },
+          "body-validate-files": {
+            "observations": 28,
+            "medianUs": 7571.5
+          },
+          "local-publish-analyze": {
+            "observations": 14,
+            "medianUs": 346.0
+          },
+          "local-publish-input-proof": {
+            "observations": 14,
+            "medianUs": 7685.5
+          }
+        },
+        "candidate": {
+          "body-apply-parse": {
+            "observations": 14,
+            "medianUs": 858.0
+          },
+          "body-apply-bind": {
+            "observations": 14,
+            "medianUs": 141.0
+          },
+          "body-validate-directories": {
+            "observations": 28,
+            "medianUs": 210.5
+          },
+          "body-validate-files": {
+            "observations": 28,
+            "medianUs": 9098.5
+          },
+          "local-publish-analyze": {
+            "observations": 14,
+            "medianUs": 357.5
+          },
+          "local-publish-input-proof": {
+            "observations": 14,
+            "medianUs": 8930.0
+          }
+        }
+      },
+      "body-reverse": {
+        "baseline": {
+          "body-apply-parse": {
+            "observations": 14,
+            "medianUs": 1099.5
+          },
+          "body-apply-bind": {
+            "observations": 14,
+            "medianUs": 178.5
+          },
+          "body-validate-directories": {
+            "observations": 28,
+            "medianUs": 167.0
+          },
+          "body-validate-files": {
+            "observations": 28,
+            "medianUs": 7604.0
+          },
+          "local-publish-analyze": {
+            "observations": 14,
+            "medianUs": 370.0
+          },
+          "local-publish-input-proof": {
+            "observations": 14,
+            "medianUs": 7679.5
+          }
+        },
+        "candidate": {
+          "body-apply-parse": {
+            "observations": 14,
+            "medianUs": 832.5
+          },
+          "body-apply-bind": {
+            "observations": 14,
+            "medianUs": 150.0
+          },
+          "body-validate-directories": {
+            "observations": 28,
+            "medianUs": 216.0
+          },
+          "body-validate-files": {
+            "observations": 28,
+            "medianUs": 9836.0
+          },
+          "local-publish-analyze": {
+            "observations": 14,
+            "medianUs": 329.0
+          },
+          "local-publish-input-proof": {
+            "observations": 14,
+            "medianUs": 9405.5
+          }
+        }
+      }
+    },
+    "whatEvidenceShows": "Ordinary-body parse/bind and local diagnostic analysis remain roughly unchanged; both directions show physical source-file validation and final input proof slower by roughly1.2\u20132.2ms per proof. This identifies phase, not root cause.",
+    "whatNotEstablished": "Do not assert idle worker wakeups, replay lookup cost, file counts, kernel or core placement caused regression without measurement. ThreadPool workers wait on condition_variable (source audit), not a spin loop. Source-memory byte/buffer counts are identical in observed body arms.",
+    "next": "Attribute physical proof read/metadata/compare costs or retained native-state influence with one correctness-only bounded observation; preserve full bytes/EOF/path/permissions and current-input witness. Do not weaken proof or reopen D38/main yet.",
+    "qualification": false,
+    "mainPushed": false
+  },
+  "feasibility": {
+    "status": "completed",
+    "qualification": false,
+    "binarySha256": "b4feba0586d0548e21db4520da7979b2d2421cca66c86ed2dac1275a7e988c2b",
+    "sourceReceiptSha256": "3b93094c41848cf6aab2b91caac0043b891be211c9e39058e7f5a4518a6a62f9",
+    "harnessSha256": {
+      "profile-feasibility.py": "e3ee291daf0411ae529983317a5fbb7ee75a3fd1b046ba9d3e9878454efdedc4",
+      "sampler.py": "d53b8bdeb47fdd895726b64d7e0322a84a3987629ea472bb310d213d548337ff"
+    },
+    "steps": [
+      {
+        "name": "macro-forward",
+        "status": "passed",
+        "pid": 27546,
+        "exitCode": 0,
+        "logSha256": "7d71e1d558215c61c86e6acbcd8edcf9bc95031f7e5d85d003d0a9c9aff08e42"
+      },
+      {
+        "name": "macro-reverse",
+        "status": "passed",
+        "pid": 27562,
+        "exitCode": 0,
+        "logSha256": "44d403a61a3f89e04e30ef4f95326ec4c8cb789a27d33f43ccc12edd04e29387"
+      },
+      {
+        "name": "body-forward",
+        "status": "passed",
+        "pid": 27575,
+        "exitCode": 0,
+        "logSha256": "65e4295f1bbcf3f8a815d4f086f89d37e1888dadd70af12e890073158e04a550"
+      },
+      {
+        "name": "body-reverse",
+        "status": "passed",
+        "pid": 27590,
+        "exitCode": 0,
+        "logSha256": "a5423ad0001d4ff5efa8927a2f3d480c4725eee76d5fb611773ef1581e18b8bb"
+      }
+    ],
+    "passed": false,
+    "checks": {
+      "macro-forward-oracle": true,
+      "macro-forward-sameBinary": true,
+      "macro-forward-mechanism": true,
+      "macro-reverse-oracle": true,
+      "macro-reverse-sameBinary": true,
+      "macro-reverse-mechanism": true,
+      "body-forward-oracle": true,
+      "body-forward-sameBinary": true,
+      "body-forward-mechanism": true,
+      "body-reverse-oracle": true,
+      "body-reverse-sameBinary": true,
+      "body-reverse-mechanism": true,
+      "macro-p50": true,
+      "macro-p95": true,
+      "macro-lastDiagnosticMs": true,
+      "macro-cpuSeconds": true,
+      "macro-peakRss": true,
+      "macro-peakFootprint": true,
+      "body-p50": false,
+      "body-p95": true,
+      "body-lastDiagnosticMs": false,
+      "body-cpuSeconds": true,
+      "body-peakRss": true,
+      "body-peakFootprint": true,
+      "warm-dataflow-present": true,
+      "warm-dataflow-ratio": true,
+      "warm-dataflow-saving": true
+    },
+    "ratios": {
+      "macro-p50": 1.0274085237555273,
+      "macro-p95": 0.8686057949442904,
+      "macro-lastDiagnosticMs": 0.9007492267782893,
+      "macro-cpuSeconds": 0.9891497680889059,
+      "macro-peakRss": 1.0275015181161864,
+      "macro-peakFootprint": 1.031612864372767,
+      "body-p50": 1.1343671178550634,
+      "body-p95": 1.0925679634113135,
+      "body-lastDiagnosticMs": 1.215318672117335,
+      "body-cpuSeconds": 1.0796172213639368,
+      "body-peakRss": 1.0122528351890412,
+      "body-peakFootprint": 1.0146967674773832,
+      "warmDataflow": 0.70415407153898
+    },
+    "savings": {
+      "warmDataflowMs": 36.6525
+    },
+    "metrics": {
+      "macro-forward": {
+        "native": {
+          "p50": 1889.4766455,
+          "p95": 3276.019125,
+          "lastDiagnosticMs": 4014.014125,
+          "memory": {
+            "peakRss": 1414987776,
+            "peakFootprint": 1015186896,
+            "samples": 390,
+            "cpuSeconds": 9.383943208
+          },
+          "finalFiles": 612,
+          "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+          "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+          "cancelled": 0,
+          "binarySha256": "b4feba0586d0548e21db4520da7979b2d2421cca66c86ed2dac1275a7e988c2b",
+          "passed": true
+        },
+        "baseline": {
+          "p50": 13.454604,
+          "p95": 469.122792,
+          "lastDiagnosticMs": 970.792167,
+          "memory": {
+            "peakRss": 1215840256,
+            "peakFootprint": 1058391360,
+            "samples": 234,
+            "cpuSeconds": 3.788030166
+          },
+          "finalFiles": 612,
+          "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+          "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+          "cancelled": 6,
+          "binarySha256": "b4feba0586d0548e21db4520da7979b2d2421cca66c86ed2dac1275a7e988c2b",
+          "passed": true
+        },
+        "candidate": {
+          "p50": 15.4522715,
+          "p95": 380.575708,
+          "lastDiagnosticMs": 847.742,
+          "memory": {
+            "peakRss": 1246707712,
+            "peakFootprint": 1089373504,
+            "samples": 221,
+            "cpuSeconds": 3.658444125
+          },
+          "finalFiles": 612,
+          "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+          "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+          "cancelled": 6,
+          "binarySha256": "b4feba0586d0548e21db4520da7979b2d2421cca66c86ed2dac1275a7e988c2b",
+          "passed": true
+        }
+      },
+      "macro-reverse": {
+        "candidate": {
+          "p50": 15.523646,
+          "p95": 403.124667,
+          "lastDiagnosticMs": 869.459875,
+          "memory": {
+            "peakRss": 1248346112,
+            "peakFootprint": 1090946392,
+            "samples": 225,
+            "cpuSeconds": 3.752564
+          },
+          "finalFiles": 612,
+          "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+          "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+          "cancelled": 6,
+          "binarySha256": "b4feba0586d0548e21db4520da7979b2d2421cca66c86ed2dac1275a7e988c2b",
+          "passed": true
+        },
+        "baseline": {
+          "p50": 16.6949585,
+          "p95": 433.128125,
+          "lastDiagnosticMs": 935.622875,
+          "memory": {
+            "peakRss": 1212432384,
+            "peakFootprint": 1055114560,
+            "samples": 228,
+            "cpuSeconds": 3.704271166
+          },
+          "finalFiles": 612,
+          "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+          "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+          "cancelled": 6,
+          "binarySha256": "b4feba0586d0548e21db4520da7979b2d2421cca66c86ed2dac1275a7e988c2b",
+          "passed": true
+        },
+        "native": {
+          "p50": 1962.0877289999999,
+          "p95": 3331.568542,
+          "lastDiagnosticMs": 4080.869375,
+          "memory": {
+            "peakRss": 1415430144,
+            "peakFootprint": 1015596496,
+            "samples": 396,
+            "cpuSeconds": 9.658539958
+          },
+          "finalFiles": 612,
+          "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+          "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+          "cancelled": 0,
+          "binarySha256": "b4feba0586d0548e21db4520da7979b2d2421cca66c86ed2dac1275a7e988c2b",
+          "passed": true
+        }
+      },
+      "body-forward": {
+        "native": {
+          "p50": 2193.996125,
+          "p95": 3713.455459,
+          "lastDiagnosticMs": 4494.194708,
+          "memory": {
+            "peakRss": 1414955008,
+            "peakFootprint": 1015154104,
+            "samples": 412,
+            "cpuSeconds": 10.086338666
+          },
+          "finalFiles": 612,
+          "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+          "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+          "cancelled": 0,
+          "binarySha256": "b4feba0586d0548e21db4520da7979b2d2421cca66c86ed2dac1275a7e988c2b",
+          "passed": true
+        },
+        "baseline": {
+          "p50": 14.097563000000001,
+          "p95": 17.015084,
+          "lastDiagnosticMs": 20.721167,
+          "memory": {
+            "peakRss": 951992320,
+            "peakFootprint": 794854528,
+            "samples": 191,
+            "cpuSeconds": 2.262298458
+          },
+          "finalFiles": 612,
+          "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+          "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+          "cancelled": 0,
+          "binarySha256": "b4feba0586d0548e21db4520da7979b2d2421cca66c86ed2dac1275a7e988c2b",
+          "passed": true
+        },
+        "candidate": {
+          "p50": 16.3844165,
+          "p95": 19.107167,
+          "lastDiagnosticMs": 27.892833,
+          "memory": {
+            "peakRss": 962379776,
+            "peakFootprint": 805241984,
+            "samples": 197,
+            "cpuSeconds": 2.482172541
+          },
+          "finalFiles": 612,
+          "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+          "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+          "cancelled": 0,
+          "binarySha256": "b4feba0586d0548e21db4520da7979b2d2421cca66c86ed2dac1275a7e988c2b",
+          "passed": true
+        }
+      },
+      "body-reverse": {
+        "candidate": {
+          "p50": 16.8210625,
+          "p95": 18.803167,
+          "lastDiagnosticMs": 27.911917,
+          "memory": {
+            "peakRss": 965066752,
+            "peakFootprint": 807830632,
+            "samples": 200,
+            "cpuSeconds": 2.5349655
+          },
+          "finalFiles": 612,
+          "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+          "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+          "cancelled": 0,
+          "binarySha256": "b4feba0586d0548e21db4520da7979b2d2421cca66c86ed2dac1275a7e988c2b",
+          "passed": true
+        },
+        "baseline": {
+          "p50": 15.174688,
+          "p95": 17.683292,
+          "lastDiagnosticMs": 25.196625,
+          "memory": {
+            "peakRss": 952123392,
+            "peakFootprint": 794854504,
+            "samples": 197,
+            "cpuSeconds": 2.384846791
+          },
+          "finalFiles": 612,
+          "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+          "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+          "cancelled": 0,
+          "binarySha256": "b4feba0586d0548e21db4520da7979b2d2421cca66c86ed2dac1275a7e988c2b",
+          "passed": true
+        },
+        "native": {
+          "p50": 2147.417333,
+          "p95": 3509.676792,
+          "lastDiagnosticMs": 4269.809541,
+          "memory": {
+            "peakRss": 1418788864,
+            "peakFootprint": 1019086288,
+            "samples": 404,
+            "cpuSeconds": 9.881102
+          },
+          "finalFiles": 612,
+          "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+          "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+          "cancelled": 0,
+          "binarySha256": "b4feba0586d0548e21db4520da7979b2d2421cca66c86ed2dac1275a7e988c2b",
+          "passed": true
+        }
+      }
+    },
+    "phases": {
+      "macro-forward": {
+        "baseline": {
+          "allUs": [
+            318919,
+            123340
+          ],
+          "warmUs": 123340
+        },
+        "candidate": {
+          "allUs": [
+            276792,
+            87515
+          ],
+          "warmUs": 87515
+        }
+      },
+      "macro-reverse": {
+        "baseline": {
+          "allUs": [
+            314994,
+            124441
+          ],
+          "warmUs": 124441
+        },
+        "candidate": {
+          "allUs": [
+            280926,
+            86961
+          ],
+          "warmUs": 86961
+        }
+      },
+      "body-forward": {
+        "baseline": {
+          "allUs": [
+            325371
+          ],
+          "warmUs": null
+        },
+        "candidate": {
+          "allUs": [
+            277923
+          ],
+          "warmUs": null
+        }
+      },
+      "body-reverse": {
+        "baseline": {
+          "allUs": [
+            314108
+          ],
+          "warmUs": null
+        },
+        "candidate": {
+          "allUs": [
+            337802
+          ],
+          "warmUs": null
+        }
+      }
+    },
+    "originalFinal20StillRequired": true
+  },
+  "validation": {
+    "status": "completed",
+    "qualification": false,
+    "steps": [
+      {
+        "name": "native-full",
+        "status": "passed",
+        "summary": "100% tests passed out of 974",
+        "logSha256": "1eb41fba37f5f44b62654fae1e4acb89a6540e5567671c0ac17da0ffc6e085b0"
+      },
+      {
+        "name": "asan-full",
+        "status": "passed",
+        "summary": "All tests passed (177142 assertions in 959 test cases)",
+        "logSha256": "b9a835a1545a99bedc6158df10c6784903238042dafbfe8cd100a5bd5ff7a46b"
+      },
+      {
+        "name": "tsan-targeted",
+        "status": "passed",
+        "summary": "All tests passed (900 assertions in 7 test cases)",
+        "logSha256": "e5972980157df9ccbbee14c397445ef8330f69d72039111d6d93b89ac46378af"
+      },
+      {
+        "name": "real-cva-tsan",
+        "status": "passed",
+        "cases": "macro12 complete612 and hover differential",
+        "exitReceipts": [
+          {
+            "pid": 27489,
+            "exitCode": 0,
+            "stderrSha256": "db644cc2336a7f3b16f7a429ada636d3da027f2017ee562676e15c563f702428",
+            "tsanWarningLines": []
+          },
+          {
+            "pid": 27493,
+            "exitCode": 0,
+            "stderrSha256": "0847d076eceb227e4acf3deedd8129a77e1a2d40437b422b428053c3d3906f18",
+            "tsanWarningLines": []
+          },
+          {
+            "pid": 27496,
+            "exitCode": 0,
+            "stderrSha256": "8516493bef66bb0398477914e227f44a8c36432611d20780e0e113352b5abbe9",
+            "tsanWarningLines": []
+          }
+        ],
+        "reports": 0
+      },
+      {
+        "name": "integrity",
+        "status": "passed",
+        "summary": "709SDK and1296 dependency files; offline",
+        "logSha256": "08c8fec12d316070e54e19554b6e1202309b0331e8a7c77793f4b889429e5309"
+      }
+    ],
+    "sourceSha256": {
+      "source/include/Config.h": "c835d225b198efad57d9ab423b309e35886a7be060d99911141ac6a24a6056ec",
+      "source/include/lsp/RequestContext.h": "78178d5a72321ea6789efc324b53073f4365496a57cbe5aa512aab3f2b3769f2",
+      "source/include/ast/ServerCompilationAnalysis.h": "541d0d5139bb3dd03bba6d04f24fd516ac384eb3d2f62025b0be4b337a58a9ec",
+      "source/src/ast/ServerCompilationAnalysis.cpp": "90c62574cca92bd367ae482522f4fd3acc74a9904aa6e6ad576fc956328ab840",
+      "source/src/ServerDriver.cpp": "810e4daac20e3b6859068bc184a281fee5260c974e49b8909c028eb9a8806055",
+      "source/tests/cpp/CompilationTests.cpp": "8d94123b42544f0db6d38be9a2840f5ec9db01ec22aa29d6cd6b184b349e3e33",
+      "source/tests/cpp/UvmLibraryTests.cpp": "03a7d9b74ae4fb965cb457af017f8a5bbec70b7f0e96176ec63e2bdd7fbbc6b0",
+      "source/include/document/BodyDiagnosticCache.h": "7d6a22a7e4b6989c7f726d3017b5b3b0261190dea76dd0300a2e08f0971b7c34",
+      "source/src/document/BodyDiagnosticCache.cpp": "f487c3d56d3d6cb6efd2f214a0815b98167fb5bc144188dfb9146ef751733d1e",
+      "source/src/diagnostics/DiagnosticSnapshotCodec.cpp": "47035932198578725ac726b781ccc69f4a31de8cbfb3cf5d0b8350e2f2026bd1",
+      "source/tests/cpp/DiagnosticSnapshotTests.cpp": "33962a93f033dcbd71d582ef727e11e69c7a21694c5c4351e82950ea474195c5"
+    },
+    "binarySha256": {
+      "build-uvm/bin/slang-server": "b4feba0586d0548e21db4520da7979b2d2421cca66c86ed2dac1275a7e988c2b",
+      "build-uvm/bin/server_unittests": "e6c2426b146665885f880e8fd28f90024d5a66f6c05dd04d6c31f338da057fc1",
+      "build-uvm/bin/diagnostic_test_server": "51f2a5b5a32d18bdfc250cdf0c8fcc68adaae867482df6a3006ce9e9e1725988",
+      "build-uvm/bin/slang_server_counted": "fea8c8a12622cf64970bc7f929eafd62ef2aa99a78372442f3db5dc72eb4ee35",
+      "untracked/semantic-cancellation-2026-10-23/asan-build/bin/slang-server": "f8256e375008951201a2b83e9a0fd42ccdc460098bbde3dc08131708d2e21651",
+      "untracked/semantic-cancellation-2026-10-23/asan-build/bin/server_unittests": "a8a381b8208c8af9176bd267f4bc87f352074e1858475e41a57d944b0e443a04",
+      "untracked/semantic-cancellation-2026-10-23/asan-build/bin/diagnostic_test_server": "c4427e64ff31c652418a4697b3899cb36e491cca3dd8a7951b1e92a7c6389dcc",
+      "untracked/semantic-cancellation-2026-10-23/asan-build/bin/slang_server_counted": "cf2a4f9d1cf9c2ed7e9f1ca89fd1c6f925628ccbbe3ba0f3ea34901271858806",
+      "untracked/stage-bc-parallel-summary-replay-2026-10-28/tsan-build/bin/slang-server": "01da061199348159d70533760b21e3ad629dc8158328711a34334d166eb6b257",
+      "untracked/stage-bc-parallel-summary-replay-2026-10-28/tsan-build/bin/server_unittests": "feeabb2e5072e2508711bd42893de8c3ad50e2e0086431f0836385308e2c7f23"
+    },
+    "TMPDIR": "/private/tmp",
+    "detectLeaks": false,
+    "tsanSuppressions": null,
+    "realCvaTsanSession": null,
+    "noPerformanceSampling": true,
+    "passed": true
+  },
+  "raceCheck": {
+    "boundedCases": [
+      {
+        "purpose": "Bounded instrumentation correctness only, all timings discarded",
+        "run": "tsan-cva",
+        "rows": [
+          {
+            "label": "native",
+            "binarySha256": "01da061199348159d70533760b21e3ad629dc8158328711a34334d166eb6b257",
+            "passed": true,
+            "finalFiles": 612,
+            "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+            "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+            "stderrSha256": "a539410e9887a160ec49d9c6d85ca1850e307caa6db8182f3dcf2aa3b50d123f",
+            "events": {
+              "start": 4,
+              "drained": 4,
+              "unfrozen": 4
+            },
+            "hoverResponsesChecked": 12
+          },
+          {
+            "label": "baseline",
+            "binarySha256": "b4feba0586d0548e21db4520da7979b2d2421cca66c86ed2dac1275a7e988c2b",
+            "passed": true,
+            "finalFiles": 612,
+            "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+            "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+            "stderrSha256": "2fa322542ce93d37d587357b37487a0c162125677095f53de57b43c5de61c015",
+            "events": {
+              "start": 2,
+              "drained": 2,
+              "unfrozen": 2
+            },
+            "hoverResponsesChecked": 12
+          },
+          {
+            "label": "candidate",
+            "binarySha256": "01da061199348159d70533760b21e3ad629dc8158328711a34334d166eb6b257",
+            "passed": true,
+            "finalFiles": 612,
+            "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+            "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+            "stderrSha256": "81b46b0b26c46b5b08550723880e3236b28477e7fee8432073efa40faf21ebfd",
+            "events": {
+              "start": 2,
+              "drained": 2,
+              "serial-replay": 2,
+              "procedures-reused": 2,
+              "procedures-recomputed": 2,
+              "parallel-summary-kept": 2,
+              "unfrozen": 2,
+              "worker-active": 1
+            },
+            "hoverResponsesChecked": 12
+          }
+        ],
+        "passed": true,
+        "referencePositions": 12
+      },
+      {
+        "purpose": "Bounded instrumentation correctness only, all timings discarded",
+        "run": "tsan-exit-cva",
+        "rows": [
+          {
+            "label": "native",
+            "binarySha256": "b4feba0586d0548e21db4520da7979b2d2421cca66c86ed2dac1275a7e988c2b",
+            "passed": true,
+            "finalFiles": 612,
+            "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+            "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+            "stderrSha256": "db644cc2336a7f3b16f7a429ada636d3da027f2017ee562676e15c563f702428",
+            "events": {
+              "start": 5,
+              "drained": 5,
+              "unfrozen": 5
+            },
+            "hoverResponsesChecked": 12
+          },
+          {
+            "label": "baseline",
+            "binarySha256": "b4feba0586d0548e21db4520da7979b2d2421cca66c86ed2dac1275a7e988c2b",
+            "passed": true,
+            "finalFiles": 612,
+            "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+            "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+            "stderrSha256": "0847d076eceb227e4acf3deedd8129a77e1a2d40437b422b428053c3d3906f18",
+            "events": {
+              "start": 2,
+              "drained": 2,
+              "unfrozen": 2
+            },
+            "hoverResponsesChecked": 12
+          },
+          {
+            "label": "candidate",
+            "binarySha256": "01da061199348159d70533760b21e3ad629dc8158328711a34334d166eb6b257",
+            "passed": true,
+            "finalFiles": 612,
+            "finalDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+            "postIdleDiagnostics": "5169761eedbbbfba6d18077b4051a4bc5540850e2569036e522e126563cd0799",
+            "stderrSha256": "8516493bef66bb0398477914e227f44a8c36432611d20780e0e113352b5abbe9",
+            "events": {
+              "start": 2,
+              "drained": 2,
+              "serial-replay": 2,
+              "procedures-reused": 2,
+              "procedures-recomputed": 2,
+              "parallel-summary-kept": 2,
+              "unfrozen": 2,
+              "worker-active": 1
+            },
+            "hoverResponsesChecked": 12
+          }
+        ],
+        "passed": true,
+        "referencePositions": 12
+      }
+    ],
+    "exitReceipts": [
+      {
+        "pid": 27489,
+        "exitCode": 0,
+        "stderrSha256": "db644cc2336a7f3b16f7a429ada636d3da027f2017ee562676e15c563f702428",
+        "tsanWarningLines": []
+      },
+      {
+        "pid": 27493,
+        "exitCode": 0,
+        "stderrSha256": "0847d076eceb227e4acf3deedd8129a77e1a2d40437b422b428053c3d3906f18",
+        "tsanWarningLines": []
+      },
+      {
+        "pid": 27496,
+        "exitCode": 0,
+        "stderrSha256": "8516493bef66bb0398477914e227f44a8c36432611d20780e0e113352b5abbe9",
+        "tsanWarningLines": []
+      }
+    ],
+    "projectRaceDetection": "No ThreadSanitizer report in bounded macro12 imported-owner and explicit shutdown run; no suppressions. Not proof for every project.",
+    "qualification": false
+  },
+  "original20StillFailed": true,
+  "D38Pending": true,
+  "goalComplete": false
+}

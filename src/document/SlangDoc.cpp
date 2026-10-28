@@ -7,6 +7,7 @@
 //------------------------------------------------------------------------------
 
 #include "document/SlangDoc.h"
+#include "document/DocumentEdits.h"
 
 #include "ServerDriver.h"
 #include "ast/TrustedUvmLibrary.h"
@@ -17,6 +18,7 @@
 #include "util/DisposableParseRequest.h"
 #include "util/Logging.h"
 #include "util/SlangExtensions.h"
+#include "util/UvmPhaseTrace.h"
 #include <algorithm>
 #include <atomic>
 #include <cstdio>
@@ -406,7 +408,7 @@ std::shared_ptr<syntax::SyntaxTree> SlangDoc::getSyntaxTree(const lsp::RequestCo
             }
             std::shared_ptr<syntax::SyntaxTree> tree;
             tree = m_driver.resumeScopeLibrary(unit.rootPaths, buffers, parseOptions,
-                                               unit.requiresNativeReplay);
+                                               unit.requiresNativeReplay, ctx);
             if (!tree && m_driver.isFrozenSourcesEnabled())
                 tree = m_driver.resumeFrozenSources(unit.rootPaths, buffers, parseOptions,
                                                     unit.requiresNativeReplay);
@@ -469,6 +471,7 @@ void SlangDoc::releaseSemanticCaches() {
 }
 
 SlangDoc::AnalysisInputs SlangDoc::getAnalysisInputs(const lsp::RequestContext& ctx) {
+    UvmPhaseTrace phases;
     auto cwdPhase = m_sourceManager.beginFastCwdPhase();
     ctx.throwIfCancelled("before analysis");
     auto indexRevision = m_driver.getDependencyIndexRevision();
@@ -483,10 +486,12 @@ SlangDoc::AnalysisInputs SlangDoc::getAnalysisInputs(const lsp::RequestContext& 
         return {fixed->buffer, fixed->tree, {fixed->tree}, indexRevision};
     }
     ctx.checkpoint("before owner resolution");
+    phases.mark("analysis-input-fixed-context");
     auto previousAnalysis = m_analysis;
     auto context = m_driver.getIncludeContext(
         m_uri, previousAnalysis ? previousAnalysis->getSyntaxTree().get() : nullptr, ctx);
     ctx.checkpoint("after owner resolution");
+    phases.mark("analysis-input-owner");
     m_driver.requireExplicitContext(m_uri);
     const bool legacy = !m_driver.hasConfiguredCompilationInputs() &&
                         !m_driver.hasSourceContextHints() &&
@@ -502,6 +507,7 @@ SlangDoc::AnalysisInputs SlangDoc::getAnalysisInputs(const lsp::RequestContext& 
     ctx.checkpoint("before dependency resolution");
     auto trees = m_driver.getDependentTrees(tree, &m_uri, ctx);
     ctx.checkpoint("after dependency resolution");
+    phases.mark("analysis-input-dependencies");
     // Resolving an explicit package reference can discover the owner for the first time.
     // Do not retain a standalone copy of the header alongside that package's include.
     if (!context) {
@@ -519,8 +525,9 @@ SlangDoc::AnalysisInputs SlangDoc::getAnalysisInputs(const lsp::RequestContext& 
     if (std::find(trees.begin(), trees.end(), tree) == trees.end())
         trees.insert(trees.begin(), tree);
     m_driver.requireExplicitContext(m_uri);
-    m_driver.updatePackageContextKind(m_uri, *tree);
+    m_driver.updatePackageContextKind(m_uri, tree);
     cwdPhase.finish();
+    phases.mark("analysis-input-owner-recheck");
     return {buffer, std::move(tree), std::move(trees), indexRevision};
 }
 
@@ -565,8 +572,10 @@ std::shared_ptr<ShallowAnalysis> SlangDoc::buildAnalysis(const AnalysisInputs& i
 
 std::pair<SlangDoc::AnalysisInputs, std::shared_ptr<ShallowAnalysis>> SlangDoc::
     getAnalysisAndInputs(const lsp::RequestContext& ctx) {
+    UvmPhaseTrace phases;
     auto cwdPhase = m_sourceManager.beginFastCwdPhase();
     auto inputs = getAnalysisInputs(ctx);
+    phases.mark("analysis-resolved-graph");
     ctx.checkpoint("before resolved analysis reuse");
     auto analysis = m_analysis;
     if (!hasAnalysis() || m_analysisIndexRevision != inputs.indexRevision ||
@@ -574,6 +583,7 @@ std::pair<SlangDoc::AnalysisInputs, std::shared_ptr<ShallowAnalysis>> SlangDoc::
         m_analysisContextRevision != m_driver.getExplicitContextRevision(m_uri) ||
         m_analysis->getBuffer() != inputs.buffer || m_analysis->getSyntaxTree() != inputs.tree)
         analysis = buildAnalysis(inputs, ctx);
+    phases.mark("analysis-resolved-reuse");
     m_driver.requireExplicitContext(m_uri);
     ctx.checkpoint("after resolved analysis reuse");
     cwdPhase.finish();
@@ -627,7 +637,9 @@ bool SlangDoc::textMatches(std::string_view text) {
     return true;
 }
 
-void SlangDoc::onChange(const std::vector<lsp::TextDocumentContentChangeEvent>& contentChanges) {
+SmallVector<char> applyDocumentChanges(
+    std::string_view currentText, std::span<const lsp::TextDocumentContentChangeEvent> contentChanges,
+    bool utf8Cols) {
     // From the LSP spec:
     //
     // The actual content changes. The content changes describe single state changes to the
@@ -645,16 +657,14 @@ void SlangDoc::onChange(const std::vector<lsp::TextDocumentContentChangeEvent>& 
     // present. WholeDocument will match if text is present, but only be tried second. Less specific
     // cases are tried later.
     SmallVector<char> buffer;
-    std::string_view textView = getText();
+    std::string_view textView = currentText;
     std::vector<size_t> lineOffsets;
 
     if (contentChanges.size() == 0) {
-        ERROR("Empty onChange event");
-        return;
+        throw std::invalid_argument("Empty document change list");
     }
 
     // LSP Position.character is UTF-16 code units unless the client negotiated utf-8
-    bool utf8Cols = m_driver.client.capabilities.utf8Positions;
 
     auto getOffsets = [&](lsp::Range range) {
         // Only one thread is able to call onchange, so the offsets remain valid without locking
@@ -730,6 +740,16 @@ void SlangDoc::onChange(const std::vector<lsp::TextDocumentContentChangeEvent>& 
             },
             contentChanges[i]);
     }
+    return buffer;
+}
+
+void SlangDoc::onChange(const std::vector<lsp::TextDocumentContentChangeEvent>& contentChanges) {
+    if (contentChanges.empty()) {
+        ERROR("Empty onChange event");
+        return;
+    }
+    auto buffer = applyDocumentChanges(getText(), contentChanges,
+                                       m_driver.client.capabilities.utf8Positions);
     m_buffer = m_sourceManager.replaceBuffer(m_buffer.id, std::move(buffer));
     m_completionTextIdentity = completionTextIdentity.fetch_add(1, std::memory_order_relaxed);
 

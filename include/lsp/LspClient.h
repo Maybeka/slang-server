@@ -154,8 +154,7 @@ public:
     /// Diagnostics notification are sent from the server to the client to signal
     /// results of validation runs.
     virtual void onDocPublishDiagnostics(const PublishDiagnosticsParams& params) {
-        sendNotification("textDocument/publishDiagnostics",
-                         rfl::to_generic<rfl::UnderlyingEnums>(params));
+        sendTypedNotification("textDocument/publishDiagnostics", params);
     };
 
     virtual void onTextDocumentInactiveRegions(const InactiveRegionsParams& params) {

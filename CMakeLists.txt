@@ -361,6 +361,7 @@ add_library(
   src/document/MethodScopeOverlay.cpp
   src/document/BodyDiagnosticCache.cpp
   src/document/BodyLineProof.cpp
+  src/document/MacroLineProof.cpp
   src/document/SlangDoc.cpp
   src/document/SymbolIndexer.cpp
   src/document/InlayHintCollector.cpp
@@ -381,6 +382,7 @@ add_library(
   src/lsp/URI.cpp
   src/util/Converters.cpp
   src/util/SourceContextHints.cpp
+  src/util/DirectoryProofPlan.cpp
   src/ExplicitContexts.cpp
   src/util/Formatting.cpp
   src/util/SlangExtensions.cpp

@@ -1,0 +1,204 @@
+{
+  "candidateSha256": "c744192545845a621b002f1c006e28b407a3c9f65a9ff024a14d703f7e5e1e00",
+  "baselineSha256": "cc7dea51c0f622f057822dacc5072202e7d40b7c5ca47fcb23f0da89db21623f",
+  "nativeCtest": 882,
+  "python": 17,
+  "transport": 43,
+  "serverAsan": {
+    "cases": 867,
+    "assertions": 118644,
+    "detectLeaks": false
+  },
+  "sdk": {
+    "unchangedFingerprint": "b49116278682343708d633610711576d8ce07640d799b4ac7b6362e001d07776",
+    "nativeCompleteIncludedInCtest": true,
+    "previousFullAsanCases": 2607,
+    "previousFullAsanAssertions": 26500,
+    "previousAsanLeakDetection": false
+  },
+  "correctness": {
+    "package": {
+      "states": 52,
+      "uriCount": 612,
+      "matched": true,
+      "runtimeDutAndUvmSharingVerified": true,
+      "candidateLocalUpdates": 12,
+      "sha256": "acd2322da4f3af471cd8e545b9e5efae1af7f94101da702c3a8bf02bcd1e7cdf"
+    },
+    "generic": {
+      "states": 52,
+      "uriCount": 612,
+      "matched": true,
+      "runtimeDutAndUvmSharingVerified": true,
+      "candidateLocalUpdates": 12,
+      "sha256": "58fd7ed6f2c4d3705e2845285924cae7238910d1141335a3a4a6c834d2138f17"
+    }
+  },
+  "additionalProjects": {
+    "cases": 15,
+    "passed": true,
+    "knownEncodingNegativeControlPreserved": true
+  },
+  "installedDefaultExternalColdWarmPassed": true,
+  "mechanismChecks": {
+    "package-forward-completed": true,
+    "package-forward-native612": true,
+    "package-forward-local": true,
+    "package-forward-latest": true,
+    "package-forward-p95": true,
+    "package-forward-diagnostic": false,
+    "package-forward-cpuSeconds": true,
+    "package-forward-peakRss": true,
+    "package-forward-peakFootprint": true,
+    "package-forward-storage": true,
+    "generic-forward-completed": true,
+    "generic-forward-native612": true,
+    "generic-forward-local": true,
+    "generic-forward-latest": true,
+    "generic-forward-first-multiline-completed": true,
+    "generic-forward-p95": true,
+    "generic-forward-diagnostic": false,
+    "generic-forward-cpuSeconds": true,
+    "generic-forward-peakRss": true,
+    "generic-forward-peakFootprint": true,
+    "generic-forward-storage": true,
+    "generic-reverse-completed": true,
+    "generic-reverse-native612": true,
+    "generic-reverse-local": true,
+    "generic-reverse-latest": true,
+    "generic-reverse-first-multiline-completed": true,
+    "generic-reverse-p95": true,
+    "generic-reverse-diagnostic": false,
+    "generic-reverse-cpuSeconds": true,
+    "generic-reverse-peakRss": true,
+    "generic-reverse-peakFootprint": true,
+    "generic-reverse-storage": true
+  },
+  "failedChecks": [
+    "package-forward-diagnostic",
+    "generic-forward-diagnostic",
+    "generic-reverse-diagnostic"
+  ],
+  "pairedSummary": {
+    "package-forward": {
+      "ratios": {
+        "cpuSeconds": 0.9846791975670205,
+        "peakRss": 0.999885801294252,
+        "peakFootprint": 1.0012485162819855
+      },
+      "arms": {
+        "baseline": {
+          "p50": 17.654062500000002,
+          "p95": 35.786875,
+          "maximum": 83.291584,
+          "cancelled": 0,
+          "lastDiagnosticMs": 20.451083,
+          "firstMultilineMs": 83.291584,
+          "firstMultilineError": null,
+          "localUpdates": 12
+        },
+        "candidate": {
+          "p50": 19.933166999999997,
+          "p95": 33.738667,
+          "maximum": 33.862125,
+          "cancelled": 0,
+          "lastDiagnosticMs": 37.533041,
+          "firstMultilineMs": 33.738667,
+          "firstMultilineError": null,
+          "localUpdates": 12
+        }
+      }
+    },
+    "generic-forward": {
+      "ratios": {
+        "cpuSeconds": 0.9923273829205442,
+        "peakRss": 0.9996069381751788,
+        "peakFootprint": 0.9985862765783263
+      },
+      "arms": {
+        "baseline": {
+          "p50": 14.818417,
+          "p95": 29.601042,
+          "maximum": 29.601042,
+          "cancelled": 1,
+          "lastDiagnosticMs": 20.608459,
+          "firstMultilineMs": 101.317666,
+          "firstMultilineError": {
+            "code": -32801,
+            "message": "Document content modified"
+          },
+          "localUpdates": 11
+        },
+        "candidate": {
+          "p50": 19.702854000000002,
+          "p95": 30.212834,
+          "maximum": 33.810375,
+          "cancelled": 0,
+          "lastDiagnosticMs": 28.1005,
+          "firstMultilineMs": 33.810375,
+          "firstMultilineError": null,
+          "localUpdates": 12
+        }
+      }
+    },
+    "generic-reverse": {
+      "ratios": {
+        "cpuSeconds": 0.9859993181279414,
+        "peakRss": 0.9975691279246429,
+        "peakFootprint": 1.0003156087365148
+      },
+      "arms": {
+        "baseline": {
+          "p50": 19.598375,
+          "p95": 29.486667,
+          "maximum": 29.486667,
+          "cancelled": 1,
+          "lastDiagnosticMs": 20.959459,
+          "firstMultilineMs": 94.266125,
+          "firstMultilineError": {
+            "code": -32801,
+            "message": "Document content modified"
+          },
+          "localUpdates": 11
+        },
+        "candidate": {
+          "p50": 19.0042295,
+          "p95": 28.291416,
+          "maximum": 33.444875,
+          "cancelled": 0,
+          "lastDiagnosticMs": 27.734917,
+          "firstMultilineMs": 33.444875,
+          "firstMultilineError": null,
+          "localUpdates": 12
+        }
+      }
+    }
+  },
+  "deliveryQualified": false,
+  "fiveCategoryGoalComplete": false,
+  "supersededCandidate": {
+    "sha256": "27ef5774507ac93b5a11864cb52e8d56d1aa91d34c85f72ee1076f680ab2f0fa",
+    "onlyBatchingResult": "29/30mechanism gates; no confirmed first-multiline benefit; generic reverse diagnostic gate failed. Original samples retained."
+  },
+  "findings": [
+    "Scoped native/query CST evidence reduces first multiline to33\u201334ms and eliminates generic cancelled queries.",
+    "Macro proof native contexts5.5\u20136.6ms, journal~2ms, token traversal~2ms, baseline replay5\u20136.5ms, current replay3\u20133.7ms.",
+    "Final diagnostic service is about7ms in the inspected generic reverse logs for both arms. Most arrival-to-publication difference precedes background diagnostics: approximately14ms versus20ms before its start. This localizes, but does not identify, the cause.",
+    "Current source-memory summaries are byte-identical across arms; do not attribute warm delays to added retained source data.",
+    "Three final-diagnostic relative10% gates failed; ordinary p50 and older warm/4032peak failures remain unwaived. No resampling or main push."
+  ],
+  "evidence": {
+    "code-receipt.json": "0f0728992a69a6bbd1022c50b77eb17ef602f5aa11f76c8854b765628d904295",
+    "ctest.log": "4854a824ca49ebb61698f13dbf54958f0ec1fe37cf2e6fdc1473c809dfe6c71e",
+    "python.log": "1f5c3977f01cfb55fffc7c4a85835e25acc01827237a6f6c1f8a3b99f126fe36",
+    "transport.log": "4eed2088b8855e6b03c131e0b2f43d2155f64ff99f5305b6156abdd01f5ea3b9",
+    "asan-complete.log": "e4eba2e3bb819a2e3baea8f5b915056ab2efc8c2d32474735cd533f3d917a7db",
+    "mechanism-plan.json": "7cb9eb23017b26f75768d782a51e6ce0c57709e5598fbdab251b2a3be1a679cd",
+    "mechanism-evaluation.json": "c90229c06a2a18f30944a0a7fb6a5a4a4f1474041d292383f61a6c571b2d560a",
+    "generic-reverse-candidate.stderr": "f55ddf75485f672b8fcdef2492673de1a6dfc2059dd3f7c3e407d75403f98239",
+    "generic-reverse-baseline.stderr": "d9494b61543bb0a8b04cf8983077283f068d4622a7e324d334c5b31c25135bd4",
+    "install-smoke.json": "8ebfaf4b21565e9df15b146cdd7dab8b842a5bc0ac2980538dc8f49f6ce52a68",
+    "external-cold-smoke.json": "5b96ba97db59d8558d486b2195951a32abad09ed2bc1f1f1210962fef5b09113",
+    "external-smoke.json": "d9869d2a3dda0f98aaa4b4d2af908225708666820beb65fa2f10d6ad5a3bd5a5"
+  }
+}
