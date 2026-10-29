@@ -1,0 +1,85 @@
+{
+  "baseCommit": "41758aa9e865903a0e283861f19331f9a36eab5b",
+  "binarySha256": "d57789d4229f19f6aea7599a86023b900bb0992d4ba84d5a6f818e642cbb4d1e",
+  "sdkPatchSha256": "51c7b4ee7fbc670b6e14fe80d19ae6c097eeebbc485d23697ac67cd3bca3c053",
+  "status": "incomplete",
+  "wholeDutPerformanceAccepted": false,
+  "implementation": [
+    "Reachability includes imported definition syntax identities, preserving bind children and defparam effects when consumer CST omits the fixed provider",
+    "Independent owners must match the native active descendant paths, definition identities and flags; compare public parameters at the whole frozen root boundary",
+    "Bind-created descendants may be retained only inside a certified root; standalone bound roots still use native eligibility restrictions; mutable external connections are refused",
+    "Local class declarations close before first handle use; inherited aliases and local extern implementations undergo provider/complete-body checks"
+  ],
+  "validation": {
+    "targeted": {
+      "cases": 9,
+      "assertions": 1793,
+      "passed": true
+    },
+    "serverFull": {
+      "cases": 1001,
+      "passed": true,
+      "seconds": 21.81
+    },
+    "sdkFull": {
+      "cases": 2644,
+      "assertions": 36972,
+      "passed": true
+    },
+    "sdkIntegrity": {
+      "files": 709,
+      "reversePatchCheck": true
+    }
+  },
+  "unresolved": [
+    "UART whole-root reuse: super constructor NewClass expression has VoidType; its contained call still needs normal dependency auditing before permitting this wrapper",
+    "UART full Native diagnostic equality: one missing sign-conversion warning in tl_device_seq.sv; temporary generic-diagnostic supersession trace did not directly suppress that location",
+    "AES whole-root joint reuse and genuine structural fallback/recovery performance remain unqualified",
+    "Remaining broader plan items, final sanitizer/package/default-off checks and main delivery remain open"
+  ],
+  "evidence": {
+    "local-extern-targeted.log": {
+      "sha256": "f855b340f25636ebc7d86bccc4c93ef579c40bf00aa12de98c7612f354e28719",
+      "bytes": 7949
+    },
+    "native-local-extern-full.log": {
+      "sha256": "5971bd98bdc26b38ad9c5420b9ab9d0a291b9ace9813650007c5e530a65aa39c",
+      "bytes": 233125
+    },
+    "sdk-bind-closure-full.log": {
+      "sha256": "b690695a485f42544cba40e7fa5867e83e1661634f4ecadf5187b517741bddcf",
+      "bytes": 224
+    }
+  },
+  "uartCurrentProbe": {
+    "file": "untracked/rtl-uvm-fallback-2026-10-29/opentitan-uart-uvm-local-extern-correctness.json",
+    "sha256": "6173aff506ff592e6cbc375a4b2ff2769d89bc734c84e5866365f96cb4fec07d",
+    "status": "failed",
+    "uvmPrepared": true,
+    "wholeRootRetained": false,
+    "hierarchyEqualsNative": true,
+    "topsEqualNative": true,
+    "diagnosticDelta": [
+      {
+        "file": "tl_device_seq.sv",
+        "removed": 1,
+        "added": 0
+      }
+    ],
+    "nativeDiagnostics": {
+      "hover": "66143f5e14dabaf30c183bdea97786b5f8991a9432f1131149fa64ef20011555",
+      "diagnostics": "613e55b4ce08cef203a9621b24fe31bd1508bf13019111f6ccbef75c22418d1c",
+      "diagnosticFiles": 521,
+      "errorCount": 0,
+      "nonemptyHover": true
+    },
+    "frozenDiagnostics": {
+      "hover": "66143f5e14dabaf30c183bdea97786b5f8991a9432f1131149fa64ef20011555",
+      "diagnostics": "b6ac9585a027851b1ccc812fcc0e2532a5eda3a29ec0f0a0f0313d48186fdd4b",
+      "diagnosticFiles": 521,
+      "errorCount": 0,
+      "nonemptyHover": true
+    },
+    "performanceAccepted": false
+  }
+}

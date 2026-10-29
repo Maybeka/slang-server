@@ -450,3 +450,39 @@ This candidate is not qualified: native certification regressions pass, but the
 first CVA6 two-order preliminary evaluation failed its forward RSS and reverse
 maximum-query gates despite improving query medians. Preserve those samples;
 full ASan, correctness, pressure and original performance qualification remain.
+
+
+Unchanged prototype hover also uses the certified current method parse. Return
+types, argument names/directions/types and default values are compared before
+answering, including non-ANSI argument declarations in the body. Function names
+and formal arguments can therefore be hovered during body edits without forcing
+a document-wide analysis. Native leading trivia is retained for documentation
+without executing its directives again; comment formats and source/expanded/both
+macro views retain native output. Queries requiring current enclosing or later
+code keep the existing native-rendering route. This does not remove first-baseline
+construction costs or admit edits across the method interface boundary.
+
+When baseline capture declines before an edit, diagnostic preparation preserves
+that specific reason if a later retry only observes the invalidated full model.
+Successful capture or certification clears the old reason, so recovery does not
+retain a stale refusal. This affects status attribution only; full diagnostic
+fallback and its current-version publication remain unchanged.
+
+### Deferred shared-baseline preparation
+
+Under the existing certification and local-diagnostic experiments, an edit may
+retain an exact current pre-edit owner before its semantic/dataflow diagnostics
+are ready. Source text, physical path, configuration and publication witnesses
+are captured before synchronization. Foreground work does not complete that
+analysis. Cancellable background work prepares the retained owner and uses the
+local diagnostic path, avoiding a second full model. Cancellation preserves the
+pending baseline for a newer body edit; publication still validates current
+inputs and document version.
+
+Shared preparation checks cancellation between completed lazy binding operations,
+not inside a binder. Native instance keys avoid warming redundant RTL instances;
+they do not replace Native context, side-effect or canonicalization checks. The
+normal complete semantic pass remains required, and fatal baselines fall back.
+A single binding can still take time. This introduces no new default-on option.
+See the [new-project qualification](../../validation/new-project-query-view-2026-10-29.md)
+for measured responsiveness, diagnostic and memory tradeoffs and coverage limits.

@@ -1,0 +1,122 @@
+{
+  "status": "incomplete",
+  "wholeDutPerformanceAccepted": false,
+  "baseCommit": "41758aa9e865903a0e283861f19331f9a36eab5b",
+  "binarySha256": "0515c7229ea02a04d6eac6de0420971ba2f7c84b750f1990e2a804df5d671703",
+  "sdkPatchSha256": "ab5145ddeea07e8cd6c52d55fa28e38174b9f7826f9835e0b2fc965ae3546ba7",
+  "implementation": [
+    "Audit super.new void wrapper through its actual call and arguments; mutable outside constructor input still refuses reuse",
+    "Recognize closed local class names and bind runtime virtual methods only for closed local or fixed provider classes",
+    "Permit fixed package DPI function declarations with integral/string signatures; audit actual output lvalues, retain native constant-expression errors; no foreign execution or result cache",
+    "Permit fixed package runtime variable references with complete per-origin read/write tracking; request independent owner promotion if preliminary tracking is incomplete",
+    "Retain native enum name() runtime binding for closed enum types"
+  ],
+  "validation": {
+    "targeted": {
+      "cases": 10,
+      "assertions": 2191,
+      "passed": true
+    },
+    "serverFull": {
+      "cases": 1002,
+      "passed": true,
+      "seconds": 15.92
+    },
+    "sdkFull": {
+      "cases": 2644,
+      "assertions": 36972,
+      "passed": true
+    },
+    "sdkIntegrity": {
+      "files": 709,
+      "reversePatchCheck": true
+    }
+  },
+  "isolation": {
+    "source": "untracked/rtl-uvm-fallback-2026-10-29/opentitan-uart-uvm-runtime-closure-isolation.json",
+    "sha256": "4061e0040dece6d780e7eddb1f927784c36fdebd870fde7597f293cfb7fe819b",
+    "rows": [
+      {
+        "arm": "native",
+        "equalsNative": true,
+        "hierarchyEqualsNative": true,
+        "topsEqualNative": true,
+        "uvmPrepared": false,
+        "scopePrepared": false,
+        "wholeRootRetained": false,
+        "diagnosticDifference": []
+      },
+      {
+        "arm": "uvm-only",
+        "equalsNative": true,
+        "hierarchyEqualsNative": true,
+        "topsEqualNative": true,
+        "uvmPrepared": true,
+        "scopePrepared": false,
+        "wholeRootRetained": false,
+        "diagnosticDifference": []
+      },
+      {
+        "arm": "scope-only",
+        "equalsNative": false,
+        "hierarchyEqualsNative": true,
+        "topsEqualNative": true,
+        "uvmPrepared": true,
+        "scopePrepared": true,
+        "wholeRootRetained": false,
+        "diagnosticDifference": [
+          {
+            "file": "tl_device_seq.sv",
+            "removed": 1,
+            "added": 0
+          }
+        ]
+      },
+      {
+        "arm": "joint",
+        "equalsNative": false,
+        "hierarchyEqualsNative": true,
+        "topsEqualNative": true,
+        "uvmPrepared": true,
+        "scopePrepared": true,
+        "wholeRootRetained": false,
+        "diagnosticDifference": [
+          {
+            "file": "tl_device_seq.sv",
+            "removed": 1,
+            "added": 0
+          }
+        ]
+      }
+    ],
+    "conclusion": "UVM-only matches Native; missing warning is isolated to the scope provider path. Scope-only may implicitly include UVM through its fixed declaration closure."
+  },
+  "wholeRoot": {
+    "retained": false,
+    "rootRefusals": [
+      "scope-body decline\ttb.dut\tpackage-reference-tracking\ten_sec_cm_cov",
+      "scope-body decline\ttb.dut\tsymbol-kind\tCovergroupType"
+    ],
+    "next": "CovergroupType closure in bound monitor proxy, including coverpoints/bins/options/sample calls; do not skip these nodes"
+  },
+  "remaining": [
+    "Resolve missing sign-conversion warning in tl_device_seq.sv without suppressing Native diagnostics",
+    "Prove whole DUT retained and repeated-edit hits, then measure actual joint-freeze structural fallback/recovery/memory",
+    "Continue AES and all other projects plus remaining broad-plan stages; final sanitizer/package/default-off/manual rebuild/cleanup/main delivery still pending"
+  ],
+  "harnessCorrection": "Benchmark and correctness probes now honor explicit freeze maxMiB instead of overwriting it with 256; prior evidence left unchanged",
+  "evidence": {
+    "runtime-closure-targeted.log": {
+      "sha256": "64031a9f28fd8e8958623db0c502ecdc5997b7e52ca3d7fd40a378d64477f2c6",
+      "bytes": 12883
+    },
+    "native-runtime-closure-full.log": {
+      "sha256": "5716374c8b1d2d8a101796c696a6bdc6bc4d7c5fae99f5d65d8a9b39905da612",
+      "bytes": 233383
+    },
+    "sdk-runtime-closure-full.log": {
+      "sha256": "ada340f20ee8252d1be5a0c822530976944374ae0c273d15149d34b831b224c9",
+      "bytes": 224
+    }
+  }
+}

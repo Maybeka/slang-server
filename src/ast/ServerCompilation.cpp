@@ -647,6 +647,9 @@ bool ServerCompilation::releaseUnsharedModel() {
 void ServerCompilation::prepareUnpublishedDiagnostics(const lsp::RequestContext& ctx) {
     ensureCurrent(ctx);
     m_analysis->prepareDisposableDiagnostics(ctx);
+    auto roots = m_analysis->compilation.getImportedInstanceBodyPaths();
+    ctx.checkpoint("before recording prepared model shared roots");
+    m_lastModelSharedRoots.swap(roots);
 }
 
 void ServerCompilation::prepareDiagnostics(const lsp::RequestContext& ctx) {
@@ -671,7 +674,9 @@ void ServerCompilation::prepareDiagnostics(const lsp::RequestContext& ctx) {
             phases.mark("model-unshared-cancelled");
     });
     m_analysis->prepareDisposableDiagnostics(ctx);
+    auto roots = m_analysis->compilation.getImportedInstanceBodyPaths();
     ctx.checkpoint("before reused full-model publication");
+    m_lastModelSharedRoots.swap(roots);
     m_dirty = false;
     phases.mark("model-unshared-diagnostics");
     // A cancelled candidate remains dirty and cannot be used as a diagnostic
@@ -683,6 +688,7 @@ std::vector<std::shared_ptr<syntax::SyntaxTree>> ServerCompilation::getCurrentSy
     const lsp::RequestContext& ctx) {
     const auto refreshing = std::exchange(m_refreshing, true);
     auto restore = ScopeGuard([&] { m_refreshing = refreshing; });
+    synchronizeNativeCompilationUnits(ctx);
     std::vector<std::shared_ptr<syntax::SyntaxTree>> trees;
     for (const auto& [_, doc] : m_documents) {
         ctx.checkpoint("during full-design syntax discovery");
@@ -692,9 +698,17 @@ std::vector<std::shared_ptr<syntax::SyntaxTree>> ServerCompilation::getCurrentSy
 }
 
 void ServerCompilation::refreshImpl(const lsp::RequestContext& ctx, bool completeDiagnostics) {
+    // A dirty model with no borrowers cannot answer current queries. Preserve
+    // its value-only source hints, then retire it before allocating a replacement.
+    // Retained query / diagnostic contexts keep the transactional overlap path.
+    if (m_dirty && m_disposableRoot) {
+        ctx.throwIfCancelled("before obsolete full-model retirement");
+        releaseUnsharedModel();
+    }
     m_dirty = true;
     m_refreshing = true;
     auto guard = ScopeGuard([&] { m_refreshing = false; });
+    synchronizeNativeCompilationUnits(ctx);
     // Every compiler pointer and index is private until the model is complete.
     // Existing ActiveDesignContext consumers continue owning the old analysis.
     auto modules = indexModuleDocs(ctx);
@@ -719,9 +733,11 @@ void ServerCompilation::refreshImpl(const lsp::RequestContext& ctx, bool complet
     std::vector<FrozenInstanceCache::Selection> frozenSelections;
     if (m_frozenInstances)
         frozenSelections = m_frozenInstances->prepareSelections(analysis->compilation, ctx);
+    auto sharedRoots = analysis->compilation.getImportedInstanceBodyPaths();
     ctx.checkpoint("before full-model publication");
     m_moduleToDoc.swap(modules);
     m_analysis.swap(analysis);
+    m_lastModelSharedRoots.swap(sharedRoots);
     m_releasedSymbolPaths.clear();
     m_activeInstancesByModule.swap(activeInstances);
     m_activeGenerateScopesByArray.swap(activeGenerate);
@@ -764,6 +780,7 @@ std::optional<FrozenInstanceCache::Certificate> ServerCompilation::certifyFrozen
     const std::string& path, const lsp::RequestContext& ctx) {
     if (!m_frozenInstances || !m_frozenInstances->selected(path))
         return {};
+    synchronizeNativeCompilationUnits(ctx);
     std::vector<std::shared_ptr<syntax::SyntaxTree>> trees;
     bool syntaxUnchanged = true;
     for (const auto& [_, document] : m_documents) {
@@ -773,6 +790,21 @@ std::optional<FrozenInstanceCache::Certificate> ServerCompilation::certifyFrozen
         trees.push_back(std::move(tree));
     }
     return m_frozenInstances->certify(trees, ctx, syntaxUnchanged);
+}
+
+void ServerCompilation::synchronizeNativeCompilationUnits(const lsp::RequestContext& ctx) {
+    if (m_documents.empty())
+        return;
+    auto units = m_documents.begin()->second->getNativeDesignCompilationUnits(ctx);
+    if (!units)
+        return;
+    const bool same = units->size() == m_documents.size() &&
+        std::ranges::all_of(*units, [&](const auto& unit) {
+            const auto found = m_documents.find(std::string(unit->getPath()));
+            return found != m_documents.end() && found->second == unit;
+        });
+    if (!same)
+        invalidateDocuments(*units);
 }
 
 void ServerCompilation::ensureCurrent(const lsp::RequestContext& ctx) const {

@@ -1,0 +1,129 @@
+{
+  "status": "incomplete",
+  "wholeDutPerformanceAccepted": false,
+  "baseCommit": "41758aa9e865903a0e283861f19331f9a36eab5b",
+  "binarySha256": "ce5a2d2e45b7e0c7c56809c20d96b881f2c4235ab4cb4601d6a1362bd9178122",
+  "sdkPatchSha256": "829957f824e6ccbc0819ba9a7a2c04b22c753b60e80d39166673021cb5c019da",
+  "implementation": [
+    "Close covergroup declarations and local unpacked aggregates; explicitly audit group options absent from default visitor; audit events, points, bins, crosses and sample/new arguments",
+    "Audit integral sequence-local symbols, their types, initializers and expanded match expressions; mutable outside sequence references remain refused, formal assertion arguments still unsupported",
+    "Reuse fixed provider class field and collection bindings with complete per-origin read/write tracking; no runtime values retained",
+    "Allow fixed provider runtime task signatures subject to existing scope/type/output checks; current-consumer generic specializations such as wait_modified still refuse",
+    "Keep imported wildcard forced-completion state and provisional generic checks in each consumer; preserve original owner completion flag, import count, diagnostics and allocations across repeated checks"
+  ],
+  "validation": {
+    "targeted": {
+      "cases": 12,
+      "assertions": 2393,
+      "passed": true
+    },
+    "serverFull": {
+      "cases": 1004,
+      "passed": true,
+      "seconds": 20.17
+    },
+    "sdkFull": {
+      "cases": 2644,
+      "assertions": 36972,
+      "passed": true
+    },
+    "sdkIntegrity": {
+      "files": 709,
+      "reversePatchCheck": true
+    }
+  },
+  "actualUart": {
+    "source": "untracked/rtl-uvm-fallback-2026-10-29/opentitan-uart-uvm-covergroup-final-correctness.json",
+    "sha256": "5afb98cc53132daa2121f0cfad58139867b12293ddf4c9eace3ea20d067f9bb7",
+    "arms": [
+      {
+        "arm": "native",
+        "equalsNative": true,
+        "hierarchyEqualsNative": true,
+        "topsEqualNative": true,
+        "uvmPrepared": false,
+        "scopePrepared": false,
+        "wholeRootRetained": false,
+        "diagnosticDifference": []
+      },
+      {
+        "arm": "uvm-only",
+        "equalsNative": true,
+        "hierarchyEqualsNative": true,
+        "topsEqualNative": true,
+        "uvmPrepared": true,
+        "scopePrepared": false,
+        "wholeRootRetained": false,
+        "diagnosticDifference": []
+      },
+      {
+        "arm": "scope-only",
+        "equalsNative": false,
+        "hierarchyEqualsNative": true,
+        "topsEqualNative": true,
+        "uvmPrepared": true,
+        "scopePrepared": true,
+        "wholeRootRetained": false,
+        "diagnosticDifference": [
+          {
+            "file": "uvm_callback.svh",
+            "removed": 0,
+            "added": 1,
+            "addedMessages": [
+              "$cast from 'this_type' (aka 'uvm_callbacks#(T,CB)') to 'uvm_callbacks#(T,uvm_callback)' will always succeed"
+            ]
+          }
+        ]
+      },
+      {
+        "arm": "joint",
+        "equalsNative": false,
+        "hierarchyEqualsNative": true,
+        "topsEqualNative": true,
+        "uvmPrepared": true,
+        "scopePrepared": true,
+        "wholeRootRetained": false,
+        "diagnosticDifference": [
+          {
+            "file": "uvm_callback.svh",
+            "removed": 0,
+            "added": 1,
+            "addedMessages": [
+              "$cast from 'this_type' (aka 'uvm_callbacks#(T,CB)') to 'uvm_callbacks#(T,uvm_callback)' will always succeed"
+            ]
+          }
+        ]
+      }
+    ],
+    "rootRefusals": [
+      "scope-body decline\ttb.dut\tfixed-reference-tracking\ten_sec_cm_cov",
+      "scope-body decline\ttb.dut\tunproven-call\twait_modified"
+    ],
+    "promotionHint": "fixed-reference-tracking is the initial consumer requesting an independent complete-tracking owner; the remaining independent-owner refusal is unproven-call wait_modified",
+    "conclusion": "Original tl_device_seq signedness warning restored by consumer-owned wildcard force; full equality still fails on one extra dynamic-cast-const warning in uvm_callback.svh. Whole DUT is not retained."
+  },
+  "rejectedExperiment": {
+    "change": "Disallow sharing all uninstantiated class frames across compilations",
+    "result": "Did not remove extra callback warning; reverted, no performance benefit claimed",
+    "evidence": "untracked/rtl-uvm-fallback-2026-10-29/opentitan-uart-uvm-private-provisional-correctness.json"
+  },
+  "remaining": [
+    "Resolve callback provisional specialization/diagnostic coalescing difference without filtering or changing Native warnings",
+    "Certify fixed generic provider task specializations, prove selected root retained plus repeated hits, then measure actual RTL+UVM structural fallback/recovery/memory",
+    "AES and remaining project/hover/preprocessor/replay/memory stages; sanitizer/package/default-off/manual rebuild/cleanup/main delivery still pending"
+  ],
+  "evidence": {
+    "covergroup-final-targeted.log": {
+      "sha256": "d601ca9cfe34f9b93b2cc9514e05134b675bce5b25cbc57c1847e72214a74a62",
+      "bytes": 14508
+    },
+    "native-covergroup-final.log": {
+      "sha256": "5964fde273ca38c19a81cbf507b28e60fe2882ecb279523be83b3bd89d68bdd0",
+      "bytes": 233898
+    },
+    "sdk-covergroup-final.log": {
+      "sha256": "eef66af7c6882abe51a495e6be66794d9d35f00b42241607d6f9ca808145c584",
+      "bytes": 224
+    }
+  }
+}

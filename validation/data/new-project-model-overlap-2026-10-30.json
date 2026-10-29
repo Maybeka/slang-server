@@ -1,0 +1,3299 @@
+{
+  "status": "Obsolete unborrowed model retirement qualified; full optimization objective remains active",
+  "mainHead": "41758aa9e865903a0e283861f19331f9a36eab5b",
+  "binarySha256": "8c065c3ceec56f6755c0420ef96c4f7666b51234d42eae6b3c5354c0a1be3604",
+  "asanBinarySha256": "edd2c40630c7bd82223e7d1db35c011f9fdb71199d3f0410fb485dc177f4174e",
+  "baselineBinarySha256": "823b290ea520a88d7e8d9e2fccf6085f9842396e60fed279011c9a417c49c1d5",
+  "sourceSeal": "untracked/project-optimization-2026-10-29/model-overlap-source-seal.json",
+  "sourceArchive": "untracked/project-optimization-2026-10-29/source-receipts/model-overlap",
+  "implemented": [
+    "For an already-dirty model under the default-off cooperative experiment, retain value source hints and release the old model before rebuilding only when its analysis has exactly one owner",
+    "Preserve transactional old/new overlap for externally retained contexts, and preserve the legacy default-off behavior",
+    "Keep current editor text, package/definition source preference and selected instances valid through cancellation and fresh retry"
+  ],
+  "reproducedBeforeFix": {
+    "productionBinarySha256": "823b290ea520a88d7e8d9e2fccf6085f9842396e60fed279011c9a417c49c1d5",
+    "productionSourceSeal": "untracked/project-optimization-2026-10-29/document-lease-source-seal.json",
+    "testFileSha256": "0de08d64dc9c1aa1c2272416020e0de69b1c4641627f7be98e3777138a484577",
+    "testSnippetSha256": "95a613c6b0a32ba5fbd59853d277d4a3ae4ecfa6330a17b988605bfcfff37fbe",
+    "assertions": 140,
+    "passed": 138,
+    "failed": 2,
+    "failure": "At new-model library-import checkpoint, sole-owner obsolete old model still alive in both cancelled and uncancelled cooperative cases. Borrowed/default-off/cancellation recovery/public diagnostics assertions passed."
+  },
+  "verification": {
+    "ctest": {
+      "passed": 1018,
+      "failed": 0,
+      "seconds": 17.33,
+      "TMPDIR": "/private/tmp"
+    },
+    "retirementRegression": {
+      "contexts": 8,
+      "assertions": 164,
+      "covers": [
+        "experiment off/on",
+        "external borrow retained/released",
+        "cancelled/successful rebuild",
+        "source preference and active instance",
+        "current-version diagnostics and Native equality"
+      ]
+    },
+    "asanUnits": {
+      "cases": 24,
+      "assertions": 3112,
+      "leakDetection": false
+    },
+    "asanProtocol": {
+      "states": 180,
+      "normalExitProcesses": 12,
+      "sanitizerErrors": 0,
+      "timingAccepted": false,
+      "leakDetection": false
+    },
+    "sdk": {
+      "cases": 2645,
+      "assertions": 37010,
+      "filesVerified": 709,
+      "productionChanges": false
+    },
+    "releaseStates": 1305,
+    "matrixStates": 1035,
+    "repeatStates": 270
+  },
+  "repeated": {
+    "cva6-uvm": {
+      "evidence": "untracked/project-optimization-2026-10-29/cva6-uvm-model-overlap-repeat.json",
+      "sha256": "1ee4b868a51da274ff52c0d429bc8b590bd9085c8c8410ef38816248ab3ad172",
+      "repeats": 3,
+      "alternatingOrder": true,
+      "arms": {
+        "native": {
+          "warmQueryMs": {
+            "median": 1510.778833,
+            "min": 1502.022417,
+            "max": 1546.410083,
+            "samples": 15,
+            "values": [
+              1511.232042,
+              1511.219375,
+              1511.383958,
+              1546.410083,
+              1515.36975,
+              1502.022417,
+              1511.068792,
+              1510.31525,
+              1510.778833,
+              1503.837417,
+              1504.780166,
+              1506.550375,
+              1502.467416,
+              1540.887208,
+              1507.811125
+            ]
+          },
+          "warmDiagnosticMs": {
+            "median": 1879.635375,
+            "min": 1870.131375,
+            "max": 1919.575541,
+            "samples": 15,
+            "values": [
+              1883.172625,
+              1879.635375,
+              1882.236292,
+              1919.575541,
+              1887.197666,
+              1870.986584,
+              1879.695,
+              1879.578375,
+              1881.551833,
+              1871.108084,
+              1872.685375,
+              1874.41925,
+              1870.131375,
+              1907.54525,
+              1876.088959
+            ]
+          },
+          "structuralQueryMs": {
+            "median": 1529.461208,
+            "min": 1514.717208,
+            "max": 1547.926542,
+            "samples": 3,
+            "values": [
+              1547.926542,
+              1529.461208,
+              1514.717208
+            ]
+          },
+          "structuralDiagnosticMs": {
+            "median": 1903.883125,
+            "min": 1883.09375,
+            "max": 1917.398417,
+            "samples": 3,
+            "values": [
+              1917.398417,
+              1903.883125,
+              1883.09375
+            ]
+          },
+          "firstBodyQueryMs": {
+            "median": 1524.117584,
+            "min": 1523.002333,
+            "max": 1536.949125,
+            "samples": 3,
+            "values": [
+              1536.949125,
+              1524.117584,
+              1523.002333
+            ]
+          },
+          "firstBodyDiagnosticMs": {
+            "median": 1909.145125,
+            "min": 1906.000292,
+            "max": 1921.077875,
+            "samples": 3,
+            "values": [
+              1921.077875,
+              1906.000292,
+              1909.145125
+            ]
+          },
+          "lastEditFootprintMiB": {
+            "median": 528.7668380737305,
+            "min": 527.9699859619141,
+            "max": 539.8293380737305,
+            "samples": 3,
+            "values": [
+              539.8293380737305,
+              527.9699859619141,
+              528.7668380737305
+            ]
+          },
+          "postStatusFootprintMiB": {
+            "median": 528.7824630737305,
+            "min": 527.9856109619141,
+            "max": 539.8449630737305,
+            "samples": 3,
+            "values": [
+              539.8449630737305,
+              527.9856109619141,
+              528.7824630737305
+            ]
+          },
+          "osReportedFootprintPeakMiB": {
+            "median": 622.5010528564453,
+            "min": 620.5479278564453,
+            "max": 623.4698028564453,
+            "samples": 3,
+            "values": [
+              620.5479278564453,
+              622.5010528564453,
+              623.4698028564453
+            ]
+          },
+          "allocatorInUseBytes": [
+            823974336,
+            823974336,
+            823970240
+          ],
+          "sourceDataBytes": [
+            10453933,
+            10453933,
+            10453933
+          ]
+        },
+        "baseline": {
+          "warmQueryMs": {
+            "median": 6.568417,
+            "min": 6.383458,
+            "max": 6.828167,
+            "samples": 15,
+            "values": [
+              6.759167,
+              6.6345,
+              6.828167,
+              6.519042,
+              6.608833,
+              6.383458,
+              6.61675,
+              6.767125,
+              6.575209,
+              6.51,
+              6.518958,
+              6.442917,
+              6.545708,
+              6.565709,
+              6.568417
+            ]
+          },
+          "warmDiagnosticMs": {
+            "median": 11.686916,
+            "min": 11.591417,
+            "max": 14.746125,
+            "samples": 15,
+            "values": [
+              14.746125,
+              11.926125,
+              12.153542,
+              11.591417,
+              11.686916,
+              13.905875,
+              11.883083,
+              11.891292,
+              11.660584,
+              11.625375,
+              14.258166,
+              11.608417,
+              11.617583,
+              11.604084,
+              11.602542
+            ]
+          },
+          "structuralQueryMs": {
+            "median": 385.396084,
+            "min": 383.824291,
+            "max": 394.486667,
+            "samples": 3,
+            "values": [
+              385.396084,
+              394.486667,
+              383.824291
+            ]
+          },
+          "structuralDiagnosticMs": {
+            "median": 869.155333,
+            "min": 862.934959,
+            "max": 890.653292,
+            "samples": 3,
+            "values": [
+              862.934959,
+              890.653292,
+              869.155333
+            ]
+          },
+          "firstBodyQueryMs": {
+            "median": 27.878458,
+            "min": 27.797042,
+            "max": 29.1775,
+            "samples": 3,
+            "values": [
+              27.797042,
+              29.1775,
+              27.878458
+            ]
+          },
+          "firstBodyDiagnosticMs": {
+            "median": 47.792042,
+            "min": 47.599167,
+            "max": 49.724542,
+            "samples": 3,
+            "values": [
+              47.792042,
+              49.724542,
+              47.599167
+            ]
+          },
+          "lastEditFootprintMiB": {
+            "median": 773.3294067382812,
+            "min": 771.5637588500977,
+            "max": 773.7825317382812,
+            "samples": 3,
+            "values": [
+              773.3294067382812,
+              773.7825317382812,
+              771.5637588500977
+            ]
+          },
+          "postStatusFootprintMiB": {
+            "median": 773.3450317382812,
+            "min": 771.5793838500977,
+            "max": 773.7981567382812,
+            "samples": 3,
+            "values": [
+              773.3450317382812,
+              773.7981567382812,
+              771.5793838500977
+            ]
+          },
+          "osReportedFootprintPeakMiB": {
+            "median": 979.6887588500977,
+            "min": 977.4074859619141,
+            "max": 981.6887588500977,
+            "samples": 3,
+            "values": [
+              979.6887588500977,
+              981.6887588500977,
+              977.4074859619141
+            ]
+          },
+          "allocatorInUseBytes": [
+            728920560,
+            728928752,
+            728891888
+          ],
+          "sourceDataBytes": [
+            12440015,
+            12440015,
+            12440015
+          ]
+        },
+        "candidate": {
+          "warmQueryMs": {
+            "median": 6.45425,
+            "min": 6.287917,
+            "max": 6.635333,
+            "samples": 15,
+            "values": [
+              6.391667,
+              6.498084,
+              6.587041,
+              6.518292,
+              6.433709,
+              6.630334,
+              6.407333,
+              6.570292,
+              6.454208,
+              6.287917,
+              6.53,
+              6.45425,
+              6.453584,
+              6.635333,
+              6.348625
+            ]
+          },
+          "warmDiagnosticMs": {
+            "median": 11.593167,
+            "min": 11.193834,
+            "max": 14.308292,
+            "samples": 15,
+            "values": [
+              13.983667,
+              11.700125,
+              11.625083,
+              11.641709,
+              11.53225,
+              14.173917,
+              11.516583,
+              11.593167,
+              11.447083,
+              11.193834,
+              14.308292,
+              11.576209,
+              11.498625,
+              11.759333,
+              11.432083
+            ]
+          },
+          "structuralQueryMs": {
+            "median": 384.450417,
+            "min": 384.401875,
+            "max": 386.653167,
+            "samples": 3,
+            "values": [
+              384.401875,
+              384.450417,
+              386.653167
+            ]
+          },
+          "structuralDiagnosticMs": {
+            "median": 866.817209,
+            "min": 866.512209,
+            "max": 883.667542,
+            "samples": 3,
+            "values": [
+              866.512209,
+              883.667542,
+              866.817209
+            ]
+          },
+          "firstBodyQueryMs": {
+            "median": 28.21825,
+            "min": 27.765375,
+            "max": 28.919792,
+            "samples": 3,
+            "values": [
+              28.21825,
+              28.919792,
+              27.765375
+            ]
+          },
+          "firstBodyDiagnosticMs": {
+            "median": 48.637125,
+            "min": 48.023083,
+            "max": 49.669125,
+            "samples": 3,
+            "values": [
+              49.669125,
+              48.637125,
+              48.023083
+            ]
+          },
+          "lastEditFootprintMiB": {
+            "median": 618.4230651855469,
+            "min": 615.0011444091797,
+            "max": 620.0011672973633,
+            "samples": 3,
+            "values": [
+              620.0011672973633,
+              618.4230651855469,
+              615.0011444091797
+            ]
+          },
+          "postStatusFootprintMiB": {
+            "median": 618.5011901855469,
+            "min": 615.0636444091797,
+            "max": 620.0792922973633,
+            "samples": 3,
+            "values": [
+              620.0792922973633,
+              618.5011901855469,
+              615.0636444091797
+            ]
+          },
+          "osReportedFootprintPeakMiB": {
+            "median": 824.8136444091797,
+            "min": 823.6261444091797,
+            "max": 824.8292694091797,
+            "samples": 3,
+            "values": [
+              823.6261444091797,
+              824.8292694091797,
+              824.8136444091797
+            ]
+          },
+          "allocatorInUseBytes": [
+            731291376,
+            731254512,
+            731254512
+          ],
+          "sourceDataBytes": [
+            12440015,
+            12440015,
+            12440015
+          ]
+        }
+      }
+    },
+    "opentitan-soc-large": {
+      "evidence": "untracked/project-optimization-2026-10-29/opentitan-soc-large-model-overlap-repeat.json",
+      "sha256": "0b56ab107eae75dc8e16cb8877e3d33e547f2d7eb732faba23f20237307ee6ef",
+      "repeats": 3,
+      "alternatingOrder": true,
+      "arms": {
+        "native": {
+          "warmQueryMs": {
+            "median": 625.9975,
+            "min": 619.573084,
+            "max": 632.015166,
+            "samples": 15,
+            "values": [
+              622.496166,
+              625.985542,
+              632.015166,
+              627.205625,
+              622.064833,
+              627.0645,
+              620.783833,
+              619.573084,
+              630.223792,
+              628.365875,
+              625.9975,
+              628.605875,
+              627.248125,
+              624.989084,
+              623.99075
+            ]
+          },
+          "warmDiagnosticMs": {
+            "median": 1234.132208,
+            "min": 1223.624584,
+            "max": 1257.545042,
+            "samples": 15,
+            "values": [
+              1231.484541,
+              1234.132208,
+              1255.646541,
+              1230.828584,
+              1224.097,
+              1231.518791,
+              1225.982375,
+              1223.624584,
+              1257.545042,
+              1236.3765,
+              1234.142,
+              1234.149083,
+              1234.148167,
+              1232.265834,
+              1236.362667
+            ]
+          },
+          "structuralQueryMs": {
+            "median": 623.106,
+            "min": 621.926,
+            "max": 623.904291,
+            "samples": 3,
+            "values": [
+              621.926,
+              623.904291,
+              623.106
+            ]
+          },
+          "structuralDiagnosticMs": {
+            "median": 1230.283791,
+            "min": 1227.0945,
+            "max": 1230.3165,
+            "samples": 3,
+            "values": [
+              1230.3165,
+              1230.283791,
+              1227.0945
+            ]
+          },
+          "firstBodyQueryMs": {
+            "median": 679.621541,
+            "min": 675.9675,
+            "max": 686.011208,
+            "samples": 3,
+            "values": [
+              675.9675,
+              679.621541,
+              686.011208
+            ]
+          },
+          "firstBodyDiagnosticMs": {
+            "median": 1312.436458,
+            "min": 1307.04925,
+            "max": 1315.610166,
+            "samples": 3,
+            "values": [
+              1307.04925,
+              1312.436458,
+              1315.610166
+            ]
+          },
+          "lastEditFootprintMiB": {
+            "median": 836.0491180419922,
+            "min": 834.6897659301758,
+            "max": 837.7991409301758,
+            "samples": 3,
+            "values": [
+              837.7991409301758,
+              834.6897659301758,
+              836.0491180419922
+            ]
+          },
+          "postStatusFootprintMiB": {
+            "median": 836.0647430419922,
+            "min": 834.7053909301758,
+            "max": 837.8147659301758,
+            "samples": 3,
+            "values": [
+              837.8147659301758,
+              834.7053909301758,
+              836.0647430419922
+            ]
+          },
+          "osReportedFootprintPeakMiB": {
+            "median": 2083.0645141601562,
+            "min": 2082.8145141601562,
+            "max": 2083.0957641601562,
+            "samples": 3,
+            "values": [
+              2083.0645141601562,
+              2082.8145141601562,
+              2083.0957641601562
+            ]
+          },
+          "allocatorInUseBytes": [
+            1642506608,
+            1642506608,
+            1642506608
+          ],
+          "sourceDataBytes": [
+            21624535,
+            21624535,
+            21624535
+          ]
+        },
+        "baseline": {
+          "warmQueryMs": {
+            "median": 16.398,
+            "min": 16.147041,
+            "max": 18.981458,
+            "samples": 15,
+            "values": [
+              16.5375,
+              16.147041,
+              16.19975,
+              16.572208,
+              18.981458,
+              16.402792,
+              16.398,
+              16.171125,
+              16.394042,
+              16.242083,
+              16.329,
+              16.437333,
+              16.86925,
+              16.460125,
+              16.175583
+            ]
+          },
+          "warmDiagnosticMs": {
+            "median": 31.087125,
+            "min": 30.666958,
+            "max": 34.047208,
+            "samples": 15,
+            "values": [
+              31.846167,
+              30.877958,
+              31.055917,
+              31.336208,
+              34.047208,
+              31.116,
+              31.175459,
+              30.749833,
+              31.087125,
+              30.864625,
+              31.107542,
+              30.932333,
+              31.385458,
+              31.010167,
+              30.666958
+            ]
+          },
+          "structuralQueryMs": {
+            "median": 713.459792,
+            "min": 712.666292,
+            "max": 716.662,
+            "samples": 3,
+            "values": [
+              712.666292,
+              716.662,
+              713.459792
+            ]
+          },
+          "structuralDiagnosticMs": {
+            "median": 1394.281542,
+            "min": 1390.294583,
+            "max": 1412.79025,
+            "samples": 3,
+            "values": [
+              1394.281542,
+              1412.79025,
+              1390.294583
+            ]
+          },
+          "firstBodyQueryMs": {
+            "median": 42.338917,
+            "min": 41.30725,
+            "max": 44.958791,
+            "samples": 3,
+            "values": [
+              44.958791,
+              42.338917,
+              41.30725
+            ]
+          },
+          "firstBodyDiagnosticMs": {
+            "median": 70.483083,
+            "min": 67.871083,
+            "max": 71.833916,
+            "samples": 3,
+            "values": [
+              71.833916,
+              70.483083,
+              67.871083
+            ]
+          },
+          "lastEditFootprintMiB": {
+            "median": 883.2523574829102,
+            "min": 882.5648345947266,
+            "max": 883.752311706543,
+            "samples": 3,
+            "values": [
+              883.2523574829102,
+              882.5648345947266,
+              883.752311706543
+            ]
+          },
+          "postStatusFootprintMiB": {
+            "median": 883.2679824829102,
+            "min": 882.5960845947266,
+            "max": 883.783561706543,
+            "samples": 3,
+            "values": [
+              883.2679824829102,
+              882.5960845947266,
+              883.783561706543
+            ]
+          },
+          "osReportedFootprintPeakMiB": {
+            "median": 2313.439697265625,
+            "min": 2312.299072265625,
+            "max": 2315.0022201538086,
+            "samples": 3,
+            "values": [
+              2315.0022201538086,
+              2313.439697265625,
+              2312.299072265625
+            ]
+          },
+          "allocatorInUseBytes": [
+            1774785568,
+            1774785568,
+            1774789664
+          ],
+          "sourceDataBytes": [
+            41550158,
+            41550158,
+            41550158
+          ]
+        },
+        "candidate": {
+          "warmQueryMs": {
+            "median": 16.354917,
+            "min": 15.968291,
+            "max": 16.639292,
+            "samples": 15,
+            "values": [
+              16.37575,
+              16.094916,
+              16.409542,
+              16.443834,
+              16.354917,
+              16.227583,
+              16.16925,
+              16.362625,
+              16.044917,
+              16.383417,
+              15.968291,
+              16.639292,
+              16.481,
+              16.283834,
+              15.982708
+            ]
+          },
+          "warmDiagnosticMs": {
+            "median": 31.157167,
+            "min": 30.73425,
+            "max": 37.531041,
+            "samples": 15,
+            "values": [
+              31.218417,
+              31.195875,
+              31.291417,
+              31.246084,
+              31.183792,
+              30.919125,
+              30.855541,
+              30.956625,
+              30.73425,
+              31.04325,
+              37.531041,
+              31.359833,
+              31.157167,
+              30.931417,
+              30.827291
+            ]
+          },
+          "structuralQueryMs": {
+            "median": 703.742458,
+            "min": 698.446167,
+            "max": 718.302416,
+            "samples": 3,
+            "values": [
+              703.742458,
+              718.302416,
+              698.446167
+            ]
+          },
+          "structuralDiagnosticMs": {
+            "median": 1362.810416,
+            "min": 1357.523625,
+            "max": 1380.731708,
+            "samples": 3,
+            "values": [
+              1362.810416,
+              1380.731708,
+              1357.523625
+            ]
+          },
+          "firstBodyQueryMs": {
+            "median": 39.83175,
+            "min": 39.80275,
+            "max": 41.160541,
+            "samples": 3,
+            "values": [
+              39.80275,
+              41.160541,
+              39.83175
+            ]
+          },
+          "firstBodyDiagnosticMs": {
+            "median": 66.438875,
+            "min": 66.338875,
+            "max": 68.022208,
+            "samples": 3,
+            "values": [
+              66.338875,
+              68.022208,
+              66.438875
+            ]
+          },
+          "lastEditFootprintMiB": {
+            "median": 501.4080810546875,
+            "min": 500.3924560546875,
+            "max": 501.5018081665039,
+            "samples": 3,
+            "values": [
+              500.3924560546875,
+              501.4080810546875,
+              501.5018081665039
+            ]
+          },
+          "postStatusFootprintMiB": {
+            "median": 501.4237060546875,
+            "min": 500.4080810546875,
+            "max": 501.5174331665039,
+            "samples": 3,
+            "values": [
+              500.4080810546875,
+              501.4237060546875,
+              501.5174331665039
+            ]
+          },
+          "osReportedFootprintPeakMiB": {
+            "median": 1685.3297958374023,
+            "min": 1684.704818725586,
+            "max": 1685.501693725586,
+            "samples": 3,
+            "values": [
+              1684.704818725586,
+              1685.501693725586,
+              1685.3297958374023
+            ]
+          },
+          "allocatorInUseBytes": [
+            1774792480,
+            1774796576,
+            1774792480
+          ],
+          "sourceDataBytes": [
+            41550158,
+            41550158,
+            41550158
+          ]
+        }
+      }
+    }
+  },
+  "modelMechanism": {
+    "cva6-uvm": {
+      "before": {
+        "evidence": "untracked/project-optimization-2026-10-29/cva6-uvm-model-ownership-summary.json",
+        "sha256": "d6c864ebcd1ebb293b59c844d8b8a8f3cb3aae9d3cc141a4c3413f2e8567f54c",
+        "fullOwnedPeakEstimateMiB": 286.20387268066406,
+        "fullBuilds": 3,
+        "fullReleases": 3
+      },
+      "after": {
+        "evidence": "untracked/project-optimization-2026-10-29/cva6-uvm-model-ownership-after-summary.json",
+        "sha256": "1abe7db1c9ba7bd9f20b3ad5af5cdfaae7af0b542ae3996b4994aeaff5cd17b1",
+        "fullOwnedPeakEstimateMiB": 169.51177215576172,
+        "fullBuilds": 3,
+        "fullReleases": 3
+      }
+    },
+    "opentitan-soc-large": {
+      "before": {
+        "evidence": "untracked/project-optimization-2026-10-29/opentitan-soc-large-model-ownership-summary.json",
+        "sha256": "db855717003ba1615f295eab820f5f068df1afa3026c029e81d3281ad51c2d68",
+        "fullOwnedPeakEstimateMiB": 1474.6035690307617,
+        "fullBuilds": 3,
+        "fullReleases": 3
+      },
+      "after": {
+        "evidence": "untracked/project-optimization-2026-10-29/opentitan-soc-large-model-ownership-after-summary.json",
+        "sha256": "a00fb621acbbf58617b0a3cf06de60e0ca14f7e0f4c1266d4968e4d642482d10",
+        "fullOwnedPeakEstimateMiB": 981.6232986450195,
+        "fullBuilds": 3,
+        "fullReleases": 3
+      }
+    }
+  },
+  "weakPrefixAudit": {
+    "purpose": "Mechanism audit on current Mac libc++; not a production change or performance improvement",
+    "baseSourceSeal": "untracked/project-optimization-2026-10-29/document-lease-source-seal.json",
+    "sdkTestFileBeforeSha256": "e461f3e737fa16fe69642b1ff1164a63484524f692bf6f45cfbd4e493273594c",
+    "auditTestFileSha256": "69ae37144e362a03fbb8be931b7a4e85959eb34dbe765fc7d9558b3f175aa7e6",
+    "auditPatchSha256": "83d9c7b37c3f92ee6f9119604bd0035cd094867611064ceea67ade18faf3d52d",
+    "result": "Filters: [prefix-weak-lifetime]\nRandomness seeded to: 2190522691\n===============================================================================\nAll tests passed (35 assertions in 1 test case)\n\n",
+    "modes": [
+      "checkpoint",
+      "member-view",
+      "composition",
+      "owned-composition",
+      "prepared-prefix"
+    ],
+    "sourcePayloadBytesPerMode": 1048576,
+    "conclusion": "All five factories release parent/source allocations at last strong owner despite expired weak entries on this Mac. Do not attribute persistent Mac footprint to deleter captures without further evidence.",
+    "fixtureCorrection": "Initial prepared-prefix fixture requested a view from a whole-group checkpoint instead of an interior-root checkpoint; it returned null and was corrected. That was not an implementation failure.",
+    "productionSdkChanges": false,
+    "testKeptInSdk": false,
+    "next": "Trace actual full/shallow/diagnostic model ownership and sizes on large workloads.",
+    "verifiedRuntimeLibrary": "/usr/lib/libc++.1.dylib (compatibility version1.0.0,current version2200.27.0), observed with otool -L build-uvm/bin/unittests"
+  },
+  "cases": {
+    "opentitan-soc-large": {
+      "status": "passed",
+      "evidence": "untracked/project-optimization-2026-10-29/opentitan-soc-large-model-overlap.json",
+      "sha256": "f523a9b6fcda035801bcbde6dcb962b7cd2cbf412a624d26325b7a59960a3690",
+      "arms": {
+        "native": {
+          "warmQueryMedianMs": 620.189166,
+          "warmDiagnosticMedianMs": 1224.315333,
+          "firstEdit": {
+            "queryMs": 682.9965,
+            "diagnosticMs": 1309.952666
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 621.286917,
+              "diagnosticMs": 1243.688459
+            }
+          ],
+          "lastEditFootprintMiB": 837.7991409301758,
+          "postStatusFootprintMiB": 837.8147659301758,
+          "allocatorInUseBytes": 1642506608,
+          "source": {
+            "dataBytes": 21624535,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 147033,
+            "indexBytes": 23975
+          },
+          "locationTableBytes": 117440623,
+          "scopePrepared": false,
+          "lastModelSharedRoots": []
+        },
+        "baseline": {
+          "warmQueryMedianMs": 15.955375,
+          "warmDiagnosticMedianMs": 30.8045,
+          "firstEdit": {
+            "queryMs": 43.8355,
+            "diagnosticMs": 70.972667
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 708.186583,
+              "diagnosticMs": 1372.44275
+            }
+          ],
+          "lastEditFootprintMiB": 885.111686706543,
+          "postStatusFootprintMiB": 885.127311706543,
+          "allocatorInUseBytes": 1774785568,
+          "source": {
+            "dataBytes": 41550158,
+            "queryBytes": 92228,
+            "queryBuffers": 2,
+            "retainedNameBytes": 158364,
+            "indexBytes": 72675
+          },
+          "locationTableBytes": 16120831,
+          "scopePrepared": true,
+          "lastModelSharedRoots": []
+        },
+        "candidate": {
+          "warmQueryMedianMs": 16.048,
+          "warmDiagnosticMedianMs": 30.523083,
+          "firstEdit": {
+            "queryMs": 39.585917,
+            "diagnosticMs": 65.602875
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 691.383708,
+              "diagnosticMs": 1350.441917
+            }
+          ],
+          "lastEditFootprintMiB": 500.0330581665039,
+          "postStatusFootprintMiB": 500.0643081665039,
+          "allocatorInUseBytes": 1774796576,
+          "source": {
+            "dataBytes": 41550158,
+            "queryBytes": 92228,
+            "queryBuffers": 2,
+            "retainedNameBytes": 158364,
+            "indexBytes": 72675
+          },
+          "locationTableBytes": 16120831,
+          "scopePrepared": true,
+          "lastModelSharedRoots": []
+        }
+      }
+    },
+    "opentitan-soc-inside-body": {
+      "status": "passed",
+      "evidence": "untracked/project-optimization-2026-10-29/opentitan-soc-inside-body-model-overlap.json",
+      "sha256": "e19cd3687256dd999435240df77df92a1929c7140b52abf94835039496012325",
+      "arms": {
+        "native": {
+          "warmQueryMedianMs": 626.264917,
+          "warmDiagnosticMedianMs": 1227.275084,
+          "firstEdit": {
+            "queryMs": 693.360125,
+            "diagnosticMs": 1315.680125
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 620.421667,
+              "diagnosticMs": 1219.823917
+            }
+          ],
+          "lastEditFootprintMiB": 836.9241409301758,
+          "postStatusFootprintMiB": 836.9397659301758,
+          "allocatorInUseBytes": 1642506608,
+          "source": {
+            "dataBytes": 21624535,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 147033,
+            "indexBytes": 23975
+          },
+          "locationTableBytes": 117440623,
+          "scopePrepared": false,
+          "lastModelSharedRoots": []
+        },
+        "baseline": {
+          "warmQueryMedianMs": 16.231833,
+          "warmDiagnosticMedianMs": 30.773708,
+          "firstEdit": {
+            "queryMs": 40.250166,
+            "diagnosticMs": 66.727666
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 699.970708,
+              "diagnosticMs": 1360.389708
+            }
+          ],
+          "lastEditFootprintMiB": 884.8929138183594,
+          "postStatusFootprintMiB": 884.9085388183594,
+          "allocatorInUseBytes": 1774793760,
+          "source": {
+            "dataBytes": 41550158,
+            "queryBytes": 92228,
+            "queryBuffers": 2,
+            "retainedNameBytes": 158364,
+            "indexBytes": 72675
+          },
+          "locationTableBytes": 16120831,
+          "scopePrepared": true,
+          "lastModelSharedRoots": []
+        },
+        "candidate": {
+          "warmQueryMedianMs": 16.091375,
+          "warmDiagnosticMedianMs": 30.662209,
+          "firstEdit": {
+            "queryMs": 41.900834,
+            "diagnosticMs": 68.725125
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 697.137792,
+              "diagnosticMs": 1366.201084
+            }
+          ],
+          "lastEditFootprintMiB": 501.0330810546875,
+          "postStatusFootprintMiB": 501.0643310546875,
+          "allocatorInUseBytes": 1774796576,
+          "source": {
+            "dataBytes": 41550158,
+            "queryBytes": 92228,
+            "queryBuffers": 2,
+            "retainedNameBytes": 158364,
+            "indexBytes": 72675
+          },
+          "locationTableBytes": 16120831,
+          "scopePrepared": true,
+          "lastModelSharedRoots": []
+        }
+      }
+    },
+    "opentitan-aes": {
+      "status": "passed",
+      "evidence": "untracked/project-optimization-2026-10-29/opentitan-aes-model-overlap.json",
+      "sha256": "0c501770f499cc234c344ef125f228008d7a1898c26672f15756237aa626d388",
+      "arms": {
+        "native": {
+          "warmQueryMedianMs": 58.669708,
+          "warmDiagnosticMedianMs": 94.246875,
+          "firstEdit": {
+            "queryMs": 61.15075,
+            "diagnosticMs": 97.972959
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 59.798792,
+              "diagnosticMs": 96.007084
+            }
+          ],
+          "lastEditFootprintMiB": 88.20367431640625,
+          "postStatusFootprintMiB": 88.21929931640625,
+          "allocatorInUseBytes": 115859648,
+          "source": {
+            "dataBytes": 3090325,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 49684,
+            "indexBytes": 11975
+          },
+          "locationTableBytes": 14680175,
+          "scopePrepared": false,
+          "lastModelSharedRoots": []
+        },
+        "baseline": {
+          "warmQueryMedianMs": 4.748166,
+          "warmDiagnosticMedianMs": 9.22875,
+          "firstEdit": {
+            "queryMs": 11.083375,
+            "diagnosticMs": 19.595625
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 62.092666,
+              "diagnosticMs": 99.648041
+            }
+          ],
+          "lastEditFootprintMiB": 83.50054931640625,
+          "postStatusFootprintMiB": 83.53179931640625,
+          "allocatorInUseBytes": 124031760,
+          "source": {
+            "dataBytes": 5275850,
+            "queryBytes": 92228,
+            "queryBuffers": 2,
+            "retainedNameBytes": 55773,
+            "indexBytes": 36675
+          },
+          "locationTableBytes": 2449047,
+          "scopePrepared": true,
+          "lastModelSharedRoots": []
+        },
+        "candidate": {
+          "warmQueryMedianMs": 4.725667,
+          "warmDiagnosticMedianMs": 9.172709,
+          "firstEdit": {
+            "queryMs": 11.405875,
+            "diagnosticMs": 19.934542
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 62.02225,
+              "diagnosticMs": 98.999084
+            }
+          ],
+          "lastEditFootprintMiB": 72.64117431640625,
+          "postStatusFootprintMiB": 72.65679931640625,
+          "allocatorInUseBytes": 124035088,
+          "source": {
+            "dataBytes": 5275850,
+            "queryBytes": 92228,
+            "queryBuffers": 2,
+            "retainedNameBytes": 55773,
+            "indexBytes": 36675
+          },
+          "locationTableBytes": 2449047,
+          "scopePrepared": true,
+          "lastModelSharedRoots": []
+        }
+      }
+    },
+    "opentitan-aes-inside-body": {
+      "status": "passed",
+      "evidence": "untracked/project-optimization-2026-10-29/opentitan-aes-inside-body-model-overlap.json",
+      "sha256": "e36ee649fbbea8c5544c82631c90ac647ca97c3bf7c0252aee111685a68f3189",
+      "arms": {
+        "native": {
+          "warmQueryMedianMs": 61.163084,
+          "warmDiagnosticMedianMs": 98.217167,
+          "firstEdit": {
+            "queryMs": 61.885083,
+            "diagnosticMs": 98.442458
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 61.472583,
+              "diagnosticMs": 98.550333
+            }
+          ],
+          "lastEditFootprintMiB": 88.31304931640625,
+          "postStatusFootprintMiB": 88.32867431640625,
+          "allocatorInUseBytes": 115859648,
+          "source": {
+            "dataBytes": 3090325,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 49684,
+            "indexBytes": 11975
+          },
+          "locationTableBytes": 14680175,
+          "scopePrepared": false,
+          "lastModelSharedRoots": []
+        },
+        "baseline": {
+          "warmQueryMedianMs": 4.729042,
+          "warmDiagnosticMedianMs": 9.2005,
+          "firstEdit": {
+            "queryMs": 11.580542,
+            "diagnosticMs": 20.026625
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 62.665,
+              "diagnosticMs": 100.368917
+            }
+          ],
+          "lastEditFootprintMiB": 83.10992431640625,
+          "postStatusFootprintMiB": 83.12554931640625,
+          "allocatorInUseBytes": 124031760,
+          "source": {
+            "dataBytes": 5275850,
+            "queryBytes": 92228,
+            "queryBuffers": 2,
+            "retainedNameBytes": 55773,
+            "indexBytes": 36675
+          },
+          "locationTableBytes": 2449047,
+          "scopePrepared": true,
+          "lastModelSharedRoots": []
+        },
+        "candidate": {
+          "warmQueryMedianMs": 4.855708,
+          "warmDiagnosticMedianMs": 9.381125,
+          "firstEdit": {
+            "queryMs": 11.243708,
+            "diagnosticMs": 19.752166
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 62.681833,
+              "diagnosticMs": 100.284458
+            }
+          ],
+          "lastEditFootprintMiB": 72.87554931640625,
+          "postStatusFootprintMiB": 72.90679931640625,
+          "allocatorInUseBytes": 124049424,
+          "source": {
+            "dataBytes": 5275850,
+            "queryBytes": 92228,
+            "queryBuffers": 2,
+            "retainedNameBytes": 55773,
+            "indexBytes": 36675
+          },
+          "locationTableBytes": 2449047,
+          "scopePrepared": true,
+          "lastModelSharedRoots": []
+        }
+      }
+    },
+    "aes-small": {
+      "status": "passed",
+      "evidence": "untracked/project-optimization-2026-10-29/aes-small-model-overlap.json",
+      "sha256": "90bfbfa1f7ab48994313ad945a84df7a3242664929aee0f2c9ec3da64ee87c48",
+      "arms": {
+        "native": {
+          "warmQueryMedianMs": 2.091042,
+          "warmDiagnosticMedianMs": 6.199708,
+          "firstEdit": {
+            "queryMs": 2.163584,
+            "diagnosticMs": 5.636959
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 2.086084,
+              "diagnosticMs": 5.810084
+            }
+          ],
+          "lastEditFootprintMiB": 9.797309875488281,
+          "postStatusFootprintMiB": 9.812934875488281,
+          "allocatorInUseBytes": 5318704,
+          "source": {
+            "dataBytes": 393188,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 5531,
+            "indexBytes": 2975
+          },
+          "locationTableBytes": 21107,
+          "scopePrepared": false,
+          "lastModelSharedRoots": []
+        },
+        "baseline": {
+          "warmQueryMedianMs": 0.376167,
+          "warmDiagnosticMedianMs": 0.544208,
+          "firstEdit": {
+            "queryMs": 0.754333,
+            "diagnosticMs": 5.078083
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 2.826,
+              "diagnosticMs": 6.806666
+            }
+          ],
+          "lastEditFootprintMiB": 13.812934875488281,
+          "postStatusFootprintMiB": 13.844184875488281,
+          "allocatorInUseBytes": 8022416,
+          "source": {
+            "dataBytes": 262781,
+            "queryBytes": 16776,
+            "queryBuffers": 2,
+            "retainedNameBytes": 2055,
+            "indexBytes": 3650
+          },
+          "locationTableBytes": 30448,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "aes.core.dec_block",
+            "aes.core.keymem",
+            "aes.core.sbox_inst"
+          ]
+        },
+        "candidate": {
+          "warmQueryMedianMs": 0.367917,
+          "warmDiagnosticMedianMs": 0.529291,
+          "firstEdit": {
+            "queryMs": 0.744958,
+            "diagnosticMs": 5.037083
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 2.903292,
+              "diagnosticMs": 6.892583
+            }
+          ],
+          "lastEditFootprintMiB": 13.672309875488281,
+          "postStatusFootprintMiB": 13.687934875488281,
+          "allocatorInUseBytes": 8022256,
+          "source": {
+            "dataBytes": 262781,
+            "queryBytes": 16776,
+            "queryBuffers": 2,
+            "retainedNameBytes": 2055,
+            "indexBytes": 3650
+          },
+          "locationTableBytes": 30448,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "aes.core.dec_block",
+            "aes.core.keymem",
+            "aes.core.sbox_inst"
+          ]
+        }
+      }
+    },
+    "aes-inside-body": {
+      "status": "passed",
+      "evidence": "untracked/project-optimization-2026-10-29/aes-inside-body-model-overlap.json",
+      "sha256": "36f8acd275bf6a353bd9a9766dbf3ad7d55be1e85cb8af0c3ce30a26966513ae",
+      "arms": {
+        "native": {
+          "warmQueryMedianMs": 2.094416,
+          "warmDiagnosticMedianMs": 6.163666,
+          "firstEdit": {
+            "queryMs": 2.128709,
+            "diagnosticMs": 6.253042
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 2.166583,
+              "diagnosticMs": 6.332375
+            }
+          ],
+          "lastEditFootprintMiB": 9.828559875488281,
+          "postStatusFootprintMiB": 9.859809875488281,
+          "allocatorInUseBytes": 5318704,
+          "source": {
+            "dataBytes": 393188,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 5531,
+            "indexBytes": 2975
+          },
+          "locationTableBytes": 21107,
+          "scopePrepared": false,
+          "lastModelSharedRoots": []
+        },
+        "baseline": {
+          "warmQueryMedianMs": 0.382208,
+          "warmDiagnosticMedianMs": 0.55925,
+          "firstEdit": {
+            "queryMs": 0.734833,
+            "diagnosticMs": 5.25475
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 2.870875,
+              "diagnosticMs": 6.902084
+            }
+          ],
+          "lastEditFootprintMiB": 13.766059875488281,
+          "postStatusFootprintMiB": 13.781684875488281,
+          "allocatorInUseBytes": 8022416,
+          "source": {
+            "dataBytes": 262781,
+            "queryBytes": 16776,
+            "queryBuffers": 2,
+            "retainedNameBytes": 2055,
+            "indexBytes": 3650
+          },
+          "locationTableBytes": 30448,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "aes.core.dec_block",
+            "aes.core.keymem",
+            "aes.core.sbox_inst"
+          ]
+        },
+        "candidate": {
+          "warmQueryMedianMs": 0.378792,
+          "warmDiagnosticMedianMs": 0.552042,
+          "firstEdit": {
+            "queryMs": 0.747584,
+            "diagnosticMs": 5.454667
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 2.808084,
+              "diagnosticMs": 6.813834
+            }
+          ],
+          "lastEditFootprintMiB": 13.797309875488281,
+          "postStatusFootprintMiB": 13.828559875488281,
+          "allocatorInUseBytes": 8022256,
+          "source": {
+            "dataBytes": 262781,
+            "queryBytes": 16776,
+            "queryBuffers": 2,
+            "retainedNameBytes": 2055,
+            "indexBytes": 3650
+          },
+          "locationTableBytes": 30448,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "aes.core.dec_block",
+            "aes.core.keymem",
+            "aes.core.sbox_inst"
+          ]
+        }
+      }
+    },
+    "ethernet-mac-medium": {
+      "status": "passed",
+      "evidence": "untracked/project-optimization-2026-10-29/ethernet-mac-medium-model-overlap.json",
+      "sha256": "02e356bf55afcf10903da3ee266a875c3dafb95c7fa0123799f6cfa7bf35bd26",
+      "arms": {
+        "native": {
+          "warmQueryMedianMs": 9.481709,
+          "warmDiagnosticMedianMs": 12.814667,
+          "firstEdit": {
+            "queryMs": 10.077917,
+            "diagnosticMs": 13.470209
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 9.247625,
+              "diagnosticMs": 12.502292
+            }
+          ],
+          "lastEditFootprintMiB": 21.328582763671875,
+          "postStatusFootprintMiB": 21.344207763671875,
+          "allocatorInUseBytes": 13887984,
+          "source": {
+            "dataBytes": 619568,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 4849,
+            "indexBytes": 2975
+          },
+          "locationTableBytes": 234482,
+          "scopePrepared": false,
+          "lastModelSharedRoots": []
+        },
+        "baseline": {
+          "warmQueryMedianMs": 22.633708,
+          "warmDiagnosticMedianMs": 26.024208,
+          "firstEdit": {
+            "queryMs": 23.552625,
+            "diagnosticMs": 26.959916
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 13.391,
+              "diagnosticMs": 16.771792
+            }
+          ],
+          "lastEditFootprintMiB": 25.516082763671875,
+          "postStatusFootprintMiB": 25.531707763671875,
+          "allocatorInUseBytes": 16769056,
+          "source": {
+            "dataBytes": 910587,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 58253,
+            "indexBytes": 26150
+          },
+          "locationTableBytes": 277825,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "eth_mac_10g.genblk1.axis_xgmii_rx_inst"
+          ]
+        },
+        "candidate": {
+          "warmQueryMedianMs": 23.504333,
+          "warmDiagnosticMedianMs": 26.7305,
+          "firstEdit": {
+            "queryMs": 23.798625,
+            "diagnosticMs": 27.159542
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 13.539666,
+              "diagnosticMs": 16.843916
+            }
+          ],
+          "lastEditFootprintMiB": 23.281707763671875,
+          "postStatusFootprintMiB": 23.312957763671875,
+          "allocatorInUseBytes": 16768896,
+          "source": {
+            "dataBytes": 910587,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 58253,
+            "indexBytes": 26150
+          },
+          "locationTableBytes": 277825,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "eth_mac_10g.genblk1.axis_xgmii_rx_inst"
+          ]
+        }
+      }
+    },
+    "ethernet-mac-ptp-medium": {
+      "status": "passed",
+      "evidence": "untracked/project-optimization-2026-10-29/ethernet-mac-ptp-medium-model-overlap.json",
+      "sha256": "63d853db2e902c1d52d2bc7834dd49e65dd3a60fca23038a70d2604309a9cf90",
+      "arms": {
+        "native": {
+          "warmQueryMedianMs": 12.909084,
+          "warmDiagnosticMedianMs": 16.320334,
+          "firstEdit": {
+            "queryMs": 13.352166,
+            "diagnosticMs": 16.800916
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 12.741042,
+              "diagnosticMs": 16.144042
+            }
+          ],
+          "lastEditFootprintMiB": 22.828582763671875,
+          "postStatusFootprintMiB": 22.859832763671875,
+          "allocatorInUseBytes": 15051680,
+          "source": {
+            "dataBytes": 739384,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 33289,
+            "indexBytes": 23975
+          },
+          "locationTableBytes": 274442,
+          "scopePrepared": false,
+          "lastModelSharedRoots": []
+        },
+        "baseline": {
+          "warmQueryMedianMs": 25.630834,
+          "warmDiagnosticMedianMs": 29.211209,
+          "firstEdit": {
+            "queryMs": 26.888875,
+            "diagnosticMs": 30.407708
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 16.249708,
+              "diagnosticMs": 19.851875
+            }
+          ],
+          "lastEditFootprintMiB": 35.562957763671875,
+          "postStatusFootprintMiB": 35.609832763671875,
+          "allocatorInUseBytes": 26532672,
+          "source": {
+            "dataBytes": 1033082,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 87641,
+            "indexBytes": 50900
+          },
+          "locationTableBytes": 352650,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "eth_mac_10g.genblk1.axis_xgmii_rx_inst",
+            "eth_mac_10g.mac_ctrl.mac_ctrl_rx_inst",
+            "eth_mac_10g.mac_ctrl.mac_pause_ctrl_rx_inst"
+          ]
+        },
+        "candidate": {
+          "warmQueryMedianMs": 25.229791,
+          "warmDiagnosticMedianMs": 28.8115,
+          "firstEdit": {
+            "queryMs": 26.132041,
+            "diagnosticMs": 29.789166
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 15.9645,
+              "diagnosticMs": 19.527167
+            }
+          ],
+          "lastEditFootprintMiB": 33.125457763671875,
+          "postStatusFootprintMiB": 33.203582763671875,
+          "allocatorInUseBytes": 26532512,
+          "source": {
+            "dataBytes": 1033082,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 87641,
+            "indexBytes": 50900
+          },
+          "locationTableBytes": 352650,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "eth_mac_10g.genblk1.axis_xgmii_rx_inst",
+            "eth_mac_10g.mac_ctrl.mac_ctrl_rx_inst",
+            "eth_mac_10g.mac_ctrl.mac_pause_ctrl_rx_inst"
+          ]
+        }
+      }
+    },
+    "ethernet-udp-medium": {
+      "status": "expected-fixed-dependency-refusal",
+      "performanceAccepted": false,
+      "evidence": "untracked/project-optimization-2026-10-29/ethernet-udp-medium-model-overlap.json",
+      "sha256": "39fcc2a3414b71233f5404b11d23d275aed49cd0d8ab5a10718b2a4338cebcc8"
+    },
+    "openofdm-wifi": {
+      "status": "passed",
+      "evidence": "untracked/project-optimization-2026-10-29/openofdm-wifi-model-overlap.json",
+      "sha256": "b1be270cda65ae174946e9e3c5c16450f7dc4e41791ba7bc36c3686aabcb3e75",
+      "arms": {
+        "native": {
+          "warmQueryMedianMs": 137.910125,
+          "warmDiagnosticMedianMs": 146.119458,
+          "firstEdit": {
+            "queryMs": 150.09225,
+            "diagnosticMs": 158.50075
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 137.675959,
+              "diagnosticMs": 145.957125
+            }
+          ],
+          "lastEditFootprintMiB": 203.4225845336914,
+          "postStatusFootprintMiB": 203.4382095336914,
+          "allocatorInUseBytes": 233387632,
+          "source": {
+            "dataBytes": 12954766,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 46648,
+            "indexBytes": 23975
+          },
+          "locationTableBytes": 286097,
+          "scopePrepared": false,
+          "lastModelSharedRoots": []
+        },
+        "baseline": {
+          "warmQueryMedianMs": 142.352125,
+          "warmDiagnosticMedianMs": 151.663709,
+          "firstEdit": {
+            "queryMs": 153.557834,
+            "diagnosticMs": 162.983667
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 143.042042,
+              "diagnosticMs": 152.413417
+            }
+          ],
+          "lastEditFootprintMiB": 214.8445053100586,
+          "postStatusFootprintMiB": 214.8601303100586,
+          "allocatorInUseBytes": 244151008,
+          "source": {
+            "dataBytes": 12954766,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 46648,
+            "indexBytes": 23975
+          },
+          "locationTableBytes": 286097,
+          "scopePrepared": false,
+          "lastModelSharedRoots": []
+        },
+        "candidate": {
+          "warmQueryMedianMs": 142.854167,
+          "warmDiagnosticMedianMs": 152.177917,
+          "firstEdit": {
+            "queryMs": 149.0785,
+            "diagnosticMs": 158.570666
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 141.784666,
+              "diagnosticMs": 151.124541
+            }
+          ],
+          "lastEditFootprintMiB": 87.98501586914062,
+          "postStatusFootprintMiB": 88.00064086914062,
+          "allocatorInUseBytes": 244147552,
+          "source": {
+            "dataBytes": 12954766,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 46648,
+            "indexBytes": 23975
+          },
+          "locationTableBytes": 286097,
+          "scopePrepared": false,
+          "lastModelSharedRoots": []
+        }
+      }
+    },
+    "openofdm-demodulator": {
+      "status": "passed",
+      "evidence": "untracked/project-optimization-2026-10-29/openofdm-demodulator-model-overlap.json",
+      "sha256": "7fe9fda9ce03b644caf33ee8e727954a4be41348da460decc8f53543f417601a",
+      "arms": {
+        "native": {
+          "warmQueryMedianMs": 0.8915,
+          "warmDiagnosticMedianMs": 4.060208,
+          "firstEdit": {
+            "queryMs": 0.935583,
+            "diagnosticMs": 4.071333
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 0.960667,
+              "diagnosticMs": 4.149542
+            }
+          ],
+          "lastEditFootprintMiB": 5.125434875488281,
+          "postStatusFootprintMiB": 5.141059875488281,
+          "allocatorInUseBytes": 1425744,
+          "source": {
+            "dataBytes": 91843,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 5210,
+            "indexBytes": 2975
+          },
+          "locationTableBytes": 21107,
+          "scopePrepared": false,
+          "lastModelSharedRoots": []
+        },
+        "baseline": {
+          "warmQueryMedianMs": 1.005625,
+          "warmDiagnosticMedianMs": 4.182459,
+          "firstEdit": {
+            "queryMs": 1.110417,
+            "diagnosticMs": 4.344625
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 0.994458,
+              "diagnosticMs": 4.18625
+            }
+          ],
+          "lastEditFootprintMiB": 5.641059875488281,
+          "postStatusFootprintMiB": 5.656684875488281,
+          "allocatorInUseBytes": 1868752,
+          "source": {
+            "dataBytes": 97668,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 5447,
+            "indexBytes": 4425
+          },
+          "locationTableBytes": 35554,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "demodulate.stb_delay_inst"
+          ]
+        },
+        "candidate": {
+          "warmQueryMedianMs": 1.035,
+          "warmDiagnosticMedianMs": 4.233042,
+          "firstEdit": {
+            "queryMs": 1.089542,
+            "diagnosticMs": 4.326417
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 1.1055,
+              "diagnosticMs": 4.322584
+            }
+          ],
+          "lastEditFootprintMiB": 5.547309875488281,
+          "postStatusFootprintMiB": 5.562934875488281,
+          "allocatorInUseBytes": 1868512,
+          "source": {
+            "dataBytes": 97668,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 5447,
+            "indexBytes": 4425
+          },
+          "locationTableBytes": 35554,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "demodulate.stb_delay_inst"
+          ]
+        }
+      }
+    },
+    "serdes-pcs-rtl": {
+      "status": "passed",
+      "evidence": "untracked/project-optimization-2026-10-29/serdes-pcs-rtl-model-overlap.json",
+      "sha256": "1ecfebaf6edb5d04db3a047f72eef3ca30e108ee3c69014bbf19c64be440b890",
+      "arms": {
+        "native": {
+          "warmQueryMedianMs": 4.780917,
+          "warmDiagnosticMedianMs": 8.318333,
+          "firstEdit": {
+            "queryMs": 5.010125,
+            "diagnosticMs": 8.609875
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 4.754417,
+              "diagnosticMs": 8.229208
+            }
+          ],
+          "lastEditFootprintMiB": 11.531684875488281,
+          "postStatusFootprintMiB": 11.547309875488281,
+          "allocatorInUseBytes": 5929776,
+          "source": {
+            "dataBytes": 453653,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 7611,
+            "indexBytes": 2975
+          },
+          "locationTableBytes": 119794,
+          "scopePrepared": false,
+          "lastModelSharedRoots": []
+        },
+        "baseline": {
+          "warmQueryMedianMs": 9.371541,
+          "warmDiagnosticMedianMs": 13.014041,
+          "firstEdit": {
+            "queryMs": 9.84375,
+            "diagnosticMs": 13.565209
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 9.55025,
+              "diagnosticMs": 13.177041
+            }
+          ],
+          "lastEditFootprintMiB": 14.484809875488281,
+          "postStatusFootprintMiB": 14.500434875488281,
+          "allocatorInUseBytes": 8709488,
+          "source": {
+            "dataBytes": 582422,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 12746,
+            "indexBytes": 4425
+          },
+          "locationTableBytes": 120127,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "ge_1000baseX.decoder_8b10bi",
+            "ge_1000baseX.ge_1000baseX_an_i",
+            "ge_1000baseX.ge_1000baseX_sync_i"
+          ]
+        },
+        "candidate": {
+          "warmQueryMedianMs": 9.290416,
+          "warmDiagnosticMedianMs": 12.962375,
+          "firstEdit": {
+            "queryMs": 9.8615,
+            "diagnosticMs": 13.549708
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 9.239375,
+              "diagnosticMs": 12.895916
+            }
+          ],
+          "lastEditFootprintMiB": 14.172309875488281,
+          "postStatusFootprintMiB": 14.187934875488281,
+          "allocatorInUseBytes": 8705232,
+          "source": {
+            "dataBytes": 582422,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 12746,
+            "indexBytes": 4425
+          },
+          "locationTableBytes": 120127,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "ge_1000baseX.decoder_8b10bi",
+            "ge_1000baseX.ge_1000baseX_an_i",
+            "ge_1000baseX.ge_1000baseX_sync_i"
+          ]
+        }
+      }
+    },
+    "serdes-pcs-verification": {
+      "status": "passed",
+      "evidence": "untracked/project-optimization-2026-10-29/serdes-pcs-verification-model-overlap.json",
+      "sha256": "83ff1094a9d8771bedbe6e4d273db2a3c366a082ac08ee983009d96adf72f11c",
+      "arms": {
+        "native": {
+          "warmQueryMedianMs": 19.14125,
+          "warmDiagnosticMedianMs": 23.358875,
+          "firstEdit": {
+            "queryMs": 20.087667,
+            "diagnosticMs": 24.358208
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 19.181667,
+              "diagnosticMs": 23.368292
+            }
+          ],
+          "lastEditFootprintMiB": 13.453582763671875,
+          "postStatusFootprintMiB": 13.469207763671875,
+          "allocatorInUseBytes": 22016976,
+          "source": {
+            "dataBytes": 652222,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 10395,
+            "indexBytes": 2975
+          },
+          "locationTableBytes": 234482,
+          "scopePrepared": false,
+          "lastModelSharedRoots": []
+        },
+        "baseline": {
+          "warmQueryMedianMs": 23.112875,
+          "warmDiagnosticMedianMs": 27.610167,
+          "firstEdit": {
+            "queryMs": 23.55425,
+            "diagnosticMs": 28.084083
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 23.470625,
+              "diagnosticMs": 27.939875
+            }
+          ],
+          "lastEditFootprintMiB": 17.42235565185547,
+          "postStatusFootprintMiB": 17.43798065185547,
+          "allocatorInUseBytes": 26725456,
+          "source": {
+            "dataBytes": 933562,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 16794,
+            "indexBytes": 8925
+          },
+          "locationTableBytes": 164927,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "ge_1000baseX_tb.ge_1000baseX_testi.ge_1000baseX_i.decoder_8b10bi",
+            "ge_1000baseX_tb.ge_1000baseX_testi.ge_1000baseX_i.ge_1000baseX_an_i",
+            "ge_1000baseX_tb.ge_1000baseX_testi.ge_1000baseX_i.ge_1000baseX_sync_i"
+          ]
+        },
+        "candidate": {
+          "warmQueryMedianMs": 23.065125,
+          "warmDiagnosticMedianMs": 27.6065,
+          "firstEdit": {
+            "queryMs": 23.538709,
+            "diagnosticMs": 28.0805
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 23.3355,
+              "diagnosticMs": 27.829417
+            }
+          ],
+          "lastEditFootprintMiB": 33.766082763671875,
+          "postStatusFootprintMiB": 33.781707763671875,
+          "allocatorInUseBytes": 26733776,
+          "source": {
+            "dataBytes": 933562,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 16794,
+            "indexBytes": 8925
+          },
+          "locationTableBytes": 164927,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "ge_1000baseX_tb.ge_1000baseX_testi.ge_1000baseX_i.decoder_8b10bi",
+            "ge_1000baseX_tb.ge_1000baseX_testi.ge_1000baseX_i.ge_1000baseX_an_i",
+            "ge_1000baseX_tb.ge_1000baseX_testi.ge_1000baseX_i.ge_1000baseX_sync_i"
+          ]
+        }
+      }
+    },
+    "serdes-8b10b-codec": {
+      "status": "passed",
+      "evidence": "untracked/project-optimization-2026-10-29/serdes-8b10b-codec-model-overlap.json",
+      "sha256": "70af40528fc1bdb58196f3b74f9ab566bb6d73dfbd0e0d6869baf78b94b7c272",
+      "arms": {
+        "native": {
+          "warmQueryMedianMs": 1.2365,
+          "warmDiagnosticMedianMs": 4.397167,
+          "firstEdit": {
+            "queryMs": 1.295333,
+            "diagnosticMs": 4.486083
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 1.252791,
+              "diagnosticMs": 4.409083
+            }
+          ],
+          "lastEditFootprintMiB": 6.016059875488281,
+          "postStatusFootprintMiB": 6.031684875488281,
+          "allocatorInUseBytes": 2188640,
+          "source": {
+            "dataBytes": 254272,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 2793,
+            "indexBytes": 1475
+          },
+          "locationTableBytes": 10609,
+          "scopePrepared": false,
+          "lastModelSharedRoots": []
+        },
+        "baseline": {
+          "warmQueryMedianMs": 1.126959,
+          "warmDiagnosticMedianMs": 4.292875,
+          "firstEdit": {
+            "queryMs": 1.166333,
+            "diagnosticMs": 4.367292
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 1.076583,
+              "diagnosticMs": 4.250875
+            }
+          ],
+          "lastEditFootprintMiB": 6.625434875488281,
+          "postStatusFootprintMiB": 6.641059875488281,
+          "allocatorInUseBytes": 2770544,
+          "source": {
+            "dataBytes": 265797,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 2897,
+            "indexBytes": 2925
+          },
+          "locationTableBytes": 18057,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "decoder_8b10b"
+          ]
+        },
+        "candidate": {
+          "warmQueryMedianMs": 1.094834,
+          "warmDiagnosticMedianMs": 4.266667,
+          "firstEdit": {
+            "queryMs": 1.169666,
+            "diagnosticMs": 4.373583
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 1.076,
+              "diagnosticMs": 4.238917
+            }
+          ],
+          "lastEditFootprintMiB": 6.516059875488281,
+          "postStatusFootprintMiB": 6.531684875488281,
+          "allocatorInUseBytes": 2770304,
+          "source": {
+            "dataBytes": 265797,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 2897,
+            "indexBytes": 2925
+          },
+          "locationTableBytes": 18057,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "decoder_8b10b"
+          ]
+        }
+      }
+    },
+    "cva6-uvm": {
+      "status": "passed",
+      "evidence": "untracked/project-optimization-2026-10-29/cva6-uvm-model-overlap.json",
+      "sha256": "09c8edd1866e450a340f36473ffcf112ea34ef17a8ecc385a3bb632a0d1c176a",
+      "arms": {
+        "native": {
+          "warmQueryMedianMs": 1502.971166,
+          "warmDiagnosticMedianMs": 1871.685,
+          "firstEdit": {
+            "queryMs": 1528.479042,
+            "diagnosticMs": 1908.163375
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 1506.663,
+              "diagnosticMs": 1874.319333
+            }
+          ],
+          "lastEditFootprintMiB": 545.0168380737305,
+          "postStatusFootprintMiB": 545.0324630737305,
+          "allocatorInUseBytes": 823970752,
+          "source": {
+            "dataBytes": 10453933,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 103049,
+            "indexBytes": 23975
+          },
+          "locationTableBytes": 58720367,
+          "scopePrepared": false,
+          "lastModelSharedRoots": []
+        },
+        "baseline": {
+          "warmQueryMedianMs": 6.421667,
+          "warmDiagnosticMedianMs": 11.485875,
+          "firstEdit": {
+            "queryMs": 27.938875,
+            "diagnosticMs": 48.389125
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 383.6395,
+              "diagnosticMs": 868.237375
+            }
+          ],
+          "lastEditFootprintMiB": 775.2668838500977,
+          "postStatusFootprintMiB": 775.2825088500977,
+          "allocatorInUseBytes": 728928752,
+          "source": {
+            "dataBytes": 12440015,
+            "queryBytes": 29660,
+            "queryBuffers": 2,
+            "retainedNameBytes": 114144,
+            "indexBytes": 96650
+          },
+          "locationTableBytes": 6312038,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "uvmt_cva6_tb.cva6_dut_wrap.cva6_tb_wrapper_i.i_cva6"
+          ]
+        },
+        "candidate": {
+          "warmQueryMedianMs": 6.234458,
+          "warmDiagnosticMedianMs": 11.239083,
+          "firstEdit": {
+            "queryMs": 28.381375,
+            "diagnosticMs": 48.596458
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 383.572375,
+              "diagnosticMs": 865.734959
+            }
+          ],
+          "lastEditFootprintMiB": 620.5636672973633,
+          "postStatusFootprintMiB": 620.6105422973633,
+          "allocatorInUseBytes": 731283184,
+          "source": {
+            "dataBytes": 12440015,
+            "queryBytes": 29660,
+            "queryBuffers": 2,
+            "retainedNameBytes": 114144,
+            "indexBytes": 96650
+          },
+          "locationTableBytes": 6312038,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "uvmt_cva6_tb.cva6_dut_wrap.cva6_tb_wrapper_i.i_cva6"
+          ]
+        }
+      }
+    },
+    "ethernet-udp-consumer-edit": {
+      "status": "passed",
+      "evidence": "untracked/project-optimization-2026-10-29/ethernet-udp-consumer-edit-model-overlap.json",
+      "sha256": "ea8bd2ff06c7bdb1b3be371908b1dd6bffa9ad49d13b723a919db845f7e7a61d",
+      "arms": {
+        "native": {
+          "warmQueryMedianMs": 8.039416,
+          "warmDiagnosticMedianMs": 11.657291,
+          "firstEdit": {
+            "queryMs": 8.4845,
+            "diagnosticMs": 12.170041
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 7.953041,
+              "diagnosticMs": 11.566208
+            }
+          ],
+          "lastEditFootprintMiB": 21.43793487548828,
+          "postStatusFootprintMiB": 21.45355987548828,
+          "allocatorInUseBytes": 12886304,
+          "source": {
+            "dataBytes": 882070,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 5785,
+            "indexBytes": 2975
+          },
+          "locationTableBytes": 463858,
+          "scopePrepared": false,
+          "lastModelSharedRoots": []
+        },
+        "baseline": {
+          "warmQueryMedianMs": 14.556542,
+          "warmDiagnosticMedianMs": 18.323917,
+          "firstEdit": {
+            "queryMs": 15.039792,
+            "diagnosticMs": 18.883709
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 14.468458,
+              "diagnosticMs": 18.2325
+            }
+          ],
+          "lastEditFootprintMiB": 26.453582763671875,
+          "postStatusFootprintMiB": 26.469207763671875,
+          "allocatorInUseBytes": 18491536,
+          "source": {
+            "dataBytes": 1202739,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 18109,
+            "indexBytes": 13425
+          },
+          "locationTableBytes": 330648,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "udp_complete_64.ip_arb_mux_inst.arb_inst",
+            "udp_complete_64.ip_complete_64_inst.arp_inst.arp_cache_inst",
+            "udp_complete_64.ip_complete_64_inst.eth_arb_mux_inst.arb_inst",
+            "udp_complete_64.udp_64_inst.genblk1.udp_checksum_gen_64_inst.payload_fifo"
+          ]
+        },
+        "candidate": {
+          "warmQueryMedianMs": 14.363459,
+          "warmDiagnosticMedianMs": 18.108125,
+          "firstEdit": {
+            "queryMs": 15.164333,
+            "diagnosticMs": 19.012166
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 14.525417,
+              "diagnosticMs": 17.7235
+            }
+          ],
+          "lastEditFootprintMiB": 25.687957763671875,
+          "postStatusFootprintMiB": 25.719207763671875,
+          "allocatorInUseBytes": 18491024,
+          "source": {
+            "dataBytes": 1202739,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 18109,
+            "indexBytes": 13425
+          },
+          "locationTableBytes": 330648,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "udp_complete_64.ip_arb_mux_inst.arb_inst",
+            "udp_complete_64.ip_complete_64_inst.arp_inst.arp_cache_inst",
+            "udp_complete_64.ip_complete_64_inst.eth_arb_mux_inst.arb_inst",
+            "udp_complete_64.udp_64_inst.genblk1.udp_checksum_gen_64_inst.payload_fifo"
+          ]
+        }
+      }
+    },
+    "cva6-uvm-signature-argument": {
+      "status": "passed",
+      "evidence": "untracked/project-optimization-2026-10-29/cva6-uvm-signature-argument-model-overlap.json",
+      "sha256": "4150224760cbffef6d726d75e6580885a9bfe6f9ff1622da4c4501fa803e0628",
+      "arms": {
+        "native": {
+          "warmQueryMedianMs": 1510.805875,
+          "warmDiagnosticMedianMs": 1878.703083,
+          "firstEdit": {
+            "queryMs": 1519.858958,
+            "diagnosticMs": 1899.335208
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 1522.691292,
+              "diagnosticMs": 1900.333792
+            }
+          ],
+          "lastEditFootprintMiB": 520.2668380737305,
+          "postStatusFootprintMiB": 520.2824630737305,
+          "allocatorInUseBytes": 825595200,
+          "source": {
+            "dataBytes": 10453933,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 103049,
+            "indexBytes": 23975
+          },
+          "locationTableBytes": 58720367,
+          "scopePrepared": false,
+          "lastModelSharedRoots": []
+        },
+        "baseline": {
+          "warmQueryMedianMs": 6.331917,
+          "warmDiagnosticMedianMs": 11.402292,
+          "firstEdit": {
+            "queryMs": 27.65375,
+            "diagnosticMs": 47.235458
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 384.664709,
+              "diagnosticMs": 863.004167
+            }
+          ],
+          "lastEditFootprintMiB": 774.8450317382812,
+          "postStatusFootprintMiB": 774.8606567382812,
+          "allocatorInUseBytes": 728920560,
+          "source": {
+            "dataBytes": 12440015,
+            "queryBytes": 29660,
+            "queryBuffers": 2,
+            "retainedNameBytes": 114144,
+            "indexBytes": 96650
+          },
+          "locationTableBytes": 6312038,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "uvmt_cva6_tb.cva6_dut_wrap.cva6_tb_wrapper_i.i_cva6"
+          ]
+        },
+        "candidate": {
+          "warmQueryMedianMs": 6.290541,
+          "warmDiagnosticMedianMs": 11.298458,
+          "firstEdit": {
+            "queryMs": 28.446667,
+            "diagnosticMs": 49.414542
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 385.786875,
+              "diagnosticMs": 862.981417
+            }
+          ],
+          "lastEditFootprintMiB": 616.7511901855469,
+          "postStatusFootprintMiB": 616.8293151855469,
+          "allocatorInUseBytes": 731287280,
+          "source": {
+            "dataBytes": 12440015,
+            "queryBytes": 29660,
+            "queryBuffers": 2,
+            "retainedNameBytes": 114144,
+            "indexBytes": 96650
+          },
+          "locationTableBytes": 6312038,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "uvmt_cva6_tb.cva6_dut_wrap.cva6_tb_wrapper_i.i_cva6"
+          ]
+        }
+      }
+    },
+    "cva6-uvm-signature-function": {
+      "status": "passed",
+      "evidence": "untracked/project-optimization-2026-10-29/cva6-uvm-signature-function-model-overlap.json",
+      "sha256": "1800526a1602d67963db281497974e1c2919b5733fe9b43a557f5dd2a011c8ff",
+      "arms": {
+        "native": {
+          "warmQueryMedianMs": 1276.906209,
+          "warmDiagnosticMedianMs": 1646.735584,
+          "firstEdit": {
+            "queryMs": 1293.663792,
+            "diagnosticMs": 1670.511167
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 1277.2035,
+              "diagnosticMs": 1647.469041
+            }
+          ],
+          "lastEditFootprintMiB": 499.25121307373047,
+          "postStatusFootprintMiB": 499.26683807373047,
+          "allocatorInUseBytes": 665131216,
+          "source": {
+            "dataBytes": 10297773,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 103049,
+            "indexBytes": 23975
+          },
+          "locationTableBytes": 58720367,
+          "scopePrepared": false,
+          "lastModelSharedRoots": []
+        },
+        "baseline": {
+          "warmQueryMedianMs": 6.522708,
+          "warmDiagnosticMedianMs": 11.577083,
+          "firstEdit": {
+            "queryMs": 24.115125,
+            "diagnosticMs": 44.826792
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 294.178125,
+              "diagnosticMs": 775.57325
+            }
+          ],
+          "lastEditFootprintMiB": 693.2355880737305,
+          "postStatusFootprintMiB": 693.2512130737305,
+          "allocatorInUseBytes": 728924656,
+          "source": {
+            "dataBytes": 12440015,
+            "queryBytes": 29660,
+            "queryBuffers": 2,
+            "retainedNameBytes": 114144,
+            "indexBytes": 96650
+          },
+          "locationTableBytes": 6312038,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "uvmt_cva6_tb.cva6_dut_wrap.cva6_tb_wrapper_i.i_cva6"
+          ]
+        },
+        "candidate": {
+          "warmQueryMedianMs": 6.415333,
+          "warmDiagnosticMedianMs": 11.419208,
+          "firstEdit": {
+            "queryMs": 24.517833,
+            "diagnosticMs": 44.527375
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 295.766417,
+              "diagnosticMs": 785.209167
+            }
+          ],
+          "lastEditFootprintMiB": 546.5948715209961,
+          "postStatusFootprintMiB": 546.6573715209961,
+          "allocatorInUseBytes": 731291376,
+          "source": {
+            "dataBytes": 12440015,
+            "queryBytes": 29660,
+            "queryBuffers": 2,
+            "retainedNameBytes": 114144,
+            "indexBytes": 96650
+          },
+          "locationTableBytes": 6312038,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "uvmt_cva6_tb.cva6_dut_wrap.cva6_tb_wrapper_i.i_cva6"
+          ]
+        }
+      }
+    },
+    "opentitan-soc-signature-argument": {
+      "status": "passed",
+      "evidence": "untracked/project-optimization-2026-10-29/opentitan-soc-signature-argument-model-overlap.json",
+      "sha256": "4a3dd8aafa2d198b0cfe45e2a28033efa1c00d54b11fb057f623c380ad315eb5",
+      "arms": {
+        "native": {
+          "warmQueryMedianMs": 626.6555,
+          "warmDiagnosticMedianMs": 1232.486083,
+          "firstEdit": {
+            "queryMs": 696.553375,
+            "diagnosticMs": 1345.84725
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 630.832542,
+              "diagnosticMs": 1248.461875
+            }
+          ],
+          "lastEditFootprintMiB": 834.6116638183594,
+          "postStatusFootprintMiB": 834.6272888183594,
+          "allocatorInUseBytes": 1642506608,
+          "source": {
+            "dataBytes": 21624535,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 147033,
+            "indexBytes": 23975
+          },
+          "locationTableBytes": 117440623,
+          "scopePrepared": false,
+          "lastModelSharedRoots": []
+        },
+        "baseline": {
+          "warmQueryMedianMs": 16.599666,
+          "warmDiagnosticMedianMs": 31.622375,
+          "firstEdit": {
+            "queryMs": 45.697375,
+            "diagnosticMs": 73.835708
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 705.507375,
+              "diagnosticMs": 1379.33275
+            }
+          ],
+          "lastEditFootprintMiB": 884.189811706543,
+          "postStatusFootprintMiB": 884.205436706543,
+          "allocatorInUseBytes": 1774793760,
+          "source": {
+            "dataBytes": 41550158,
+            "queryBytes": 92228,
+            "queryBuffers": 2,
+            "retainedNameBytes": 158364,
+            "indexBytes": 72675
+          },
+          "locationTableBytes": 16120831,
+          "scopePrepared": true,
+          "lastModelSharedRoots": []
+        },
+        "candidate": {
+          "warmQueryMedianMs": 16.05675,
+          "warmDiagnosticMedianMs": 30.509875,
+          "firstEdit": {
+            "queryMs": 40.004959,
+            "diagnosticMs": 66.430959
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 695.275583,
+              "diagnosticMs": 1352.090916
+            }
+          ],
+          "lastEditFootprintMiB": 500.1893310546875,
+          "postStatusFootprintMiB": 500.2049560546875,
+          "allocatorInUseBytes": 1774563104,
+          "source": {
+            "dataBytes": 41550158,
+            "queryBytes": 92228,
+            "queryBuffers": 2,
+            "retainedNameBytes": 158364,
+            "indexBytes": 72675
+          },
+          "locationTableBytes": 16120831,
+          "scopePrepared": true,
+          "lastModelSharedRoots": []
+        }
+      }
+    },
+    "opentitan-soc-signature-function": {
+      "status": "passed",
+      "evidence": "untracked/project-optimization-2026-10-29/opentitan-soc-signature-function-model-overlap.json",
+      "sha256": "8a2841e2671de3f24cc179c4650b9b913b4a0599c526951809e6e626fdc35774",
+      "arms": {
+        "native": {
+          "warmQueryMedianMs": 626.369583,
+          "warmDiagnosticMedianMs": 1231.29125,
+          "firstEdit": {
+            "queryMs": 685.504667,
+            "diagnosticMs": 1314.350958
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 626.1975,
+              "diagnosticMs": 1229.363708
+            }
+          ],
+          "lastEditFootprintMiB": 835.8460159301758,
+          "postStatusFootprintMiB": 835.8616409301758,
+          "allocatorInUseBytes": 1642425840,
+          "source": {
+            "dataBytes": 21624535,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 147033,
+            "indexBytes": 23975
+          },
+          "locationTableBytes": 117440623,
+          "scopePrepared": false,
+          "lastModelSharedRoots": []
+        },
+        "baseline": {
+          "warmQueryMedianMs": 16.414333,
+          "warmDiagnosticMedianMs": 31.372,
+          "firstEdit": {
+            "queryMs": 41.948959,
+            "diagnosticMs": 68.39825
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 702.215958,
+              "diagnosticMs": 1377.482166
+            }
+          ],
+          "lastEditFootprintMiB": 884.377311706543,
+          "postStatusFootprintMiB": 884.392936706543,
+          "allocatorInUseBytes": 1774556192,
+          "source": {
+            "dataBytes": 41550158,
+            "queryBytes": 92228,
+            "queryBuffers": 2,
+            "retainedNameBytes": 158364,
+            "indexBytes": 72675
+          },
+          "locationTableBytes": 16120831,
+          "scopePrepared": true,
+          "lastModelSharedRoots": []
+        },
+        "candidate": {
+          "warmQueryMedianMs": 16.175,
+          "warmDiagnosticMedianMs": 30.837333,
+          "firstEdit": {
+            "queryMs": 44.445375,
+            "diagnosticMs": 71.262458
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 695.305792,
+              "diagnosticMs": 1357.831917
+            }
+          ],
+          "lastEditFootprintMiB": 499.0018310546875,
+          "postStatusFootprintMiB": 499.0174560546875,
+          "allocatorInUseBytes": 1774792480,
+          "source": {
+            "dataBytes": 41550158,
+            "queryBytes": 92228,
+            "queryBuffers": 2,
+            "retainedNameBytes": 158364,
+            "indexBytes": 72675
+          },
+          "locationTableBytes": 16120831,
+          "scopePrepared": true,
+          "lastModelSharedRoots": []
+        }
+      }
+    },
+    "aes-small-signature-argument": {
+      "status": "passed",
+      "evidence": "untracked/project-optimization-2026-10-29/aes-small-signature-argument-model-overlap.json",
+      "sha256": "9d30a2afa44d9616a0f96b509ca8e3d9aaf517093380523f28db784f3c344485",
+      "arms": {
+        "native": {
+          "warmQueryMedianMs": 2.090416,
+          "warmDiagnosticMedianMs": 6.17525,
+          "firstEdit": {
+            "queryMs": 2.172792,
+            "diagnosticMs": 5.341584
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 2.079417,
+              "diagnosticMs": 6.15225
+            }
+          ],
+          "lastEditFootprintMiB": 9.766059875488281,
+          "postStatusFootprintMiB": 9.797309875488281,
+          "allocatorInUseBytes": 5318704,
+          "source": {
+            "dataBytes": 393188,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 5531,
+            "indexBytes": 2975
+          },
+          "locationTableBytes": 21107,
+          "scopePrepared": false,
+          "lastModelSharedRoots": []
+        },
+        "baseline": {
+          "warmQueryMedianMs": 0.373458,
+          "warmDiagnosticMedianMs": 0.550375,
+          "firstEdit": {
+            "queryMs": 0.745625,
+            "diagnosticMs": 5.46075
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 2.803375,
+              "diagnosticMs": 6.762417
+            }
+          ],
+          "lastEditFootprintMiB": 13.812934875488281,
+          "postStatusFootprintMiB": 13.828559875488281,
+          "allocatorInUseBytes": 8022416,
+          "source": {
+            "dataBytes": 262781,
+            "queryBytes": 16776,
+            "queryBuffers": 2,
+            "retainedNameBytes": 2055,
+            "indexBytes": 3650
+          },
+          "locationTableBytes": 30448,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "aes.core.dec_block",
+            "aes.core.keymem",
+            "aes.core.sbox_inst"
+          ]
+        },
+        "candidate": {
+          "warmQueryMedianMs": 0.373334,
+          "warmDiagnosticMedianMs": 0.56,
+          "firstEdit": {
+            "queryMs": 0.73175,
+            "diagnosticMs": 5.446875
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 2.819333,
+              "diagnosticMs": 6.841
+            }
+          ],
+          "lastEditFootprintMiB": 13.594184875488281,
+          "postStatusFootprintMiB": 13.625434875488281,
+          "allocatorInUseBytes": 8022256,
+          "source": {
+            "dataBytes": 262781,
+            "queryBytes": 16776,
+            "queryBuffers": 2,
+            "retainedNameBytes": 2055,
+            "indexBytes": 3650
+          },
+          "locationTableBytes": 30448,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "aes.core.dec_block",
+            "aes.core.keymem",
+            "aes.core.sbox_inst"
+          ]
+        }
+      }
+    },
+    "aes-small-signature-function": {
+      "status": "passed",
+      "evidence": "untracked/project-optimization-2026-10-29/aes-small-signature-function-model-overlap.json",
+      "sha256": "a8e8abd7aa62a37867657fe5723b7c342ddcb210dc65353b6ec8b0008b9dc9e3",
+      "arms": {
+        "native": {
+          "warmQueryMedianMs": 1.693125,
+          "warmDiagnosticMedianMs": 5.761084,
+          "firstEdit": {
+            "queryMs": 1.774375,
+            "diagnosticMs": 5.909083
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 1.666084,
+              "diagnosticMs": 5.782959
+            }
+          ],
+          "lastEditFootprintMiB": 9.609809875488281,
+          "postStatusFootprintMiB": 9.625434875488281,
+          "allocatorInUseBytes": 4945968,
+          "source": {
+            "dataBytes": 384398,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 3161,
+            "indexBytes": 2975
+          },
+          "locationTableBytes": 17777,
+          "scopePrepared": false,
+          "lastModelSharedRoots": []
+        },
+        "baseline": {
+          "warmQueryMedianMs": 0.383333,
+          "warmDiagnosticMedianMs": 0.55225,
+          "firstEdit": {
+            "queryMs": 0.876167,
+            "diagnosticMs": 4.262833
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 1.370959,
+              "diagnosticMs": 5.358459
+            }
+          ],
+          "lastEditFootprintMiB": 10.625434875488281,
+          "postStatusFootprintMiB": 10.656684875488281,
+          "allocatorInUseBytes": 5946736,
+          "source": {
+            "dataBytes": 224177,
+            "queryBytes": 16776,
+            "queryBuffers": 2,
+            "retainedNameBytes": 1897,
+            "indexBytes": 3650
+          },
+          "locationTableBytes": 30226,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "aes.core.dec_block",
+            "aes.core.keymem",
+            "aes.core.sbox_inst"
+          ]
+        },
+        "candidate": {
+          "warmQueryMedianMs": 0.393,
+          "warmDiagnosticMedianMs": 0.565333,
+          "firstEdit": {
+            "queryMs": 0.909166,
+            "diagnosticMs": 4.29625
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 1.403333,
+              "diagnosticMs": 5.414458
+            }
+          ],
+          "lastEditFootprintMiB": 10.516059875488281,
+          "postStatusFootprintMiB": 10.531684875488281,
+          "allocatorInUseBytes": 5946576,
+          "source": {
+            "dataBytes": 224177,
+            "queryBytes": 16776,
+            "queryBuffers": 2,
+            "retainedNameBytes": 1897,
+            "indexBytes": 3650
+          },
+          "locationTableBytes": 30226,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "aes.core.dec_block",
+            "aes.core.keymem",
+            "aes.core.sbox_inst"
+          ]
+        }
+      }
+    },
+    "opentitan-aes-uvm": {
+      "status": "passed",
+      "evidence": "untracked/rtl-uvm-fallback-2026-10-29/opentitan-aes-uvm-model-overlap.json",
+      "sha256": "d0d1d6e0bd6b37c75f5916f5ef2f17bab6f3c0f93c780e00a9deca48f74e7764",
+      "arms": {
+        "native": {
+          "warmQueryMedianMs": 2446.025291,
+          "warmDiagnosticMedianMs": 2621.635375,
+          "firstEdit": {
+            "queryMs": 2458.178708,
+            "diagnosticMs": 2632.73675
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 2447.243334,
+              "diagnosticMs": 2617.993209
+            }
+          ],
+          "lastEditFootprintMiB": 278.43841552734375,
+          "postStatusFootprintMiB": 278.45404052734375,
+          "allocatorInUseBytes": 561556544,
+          "source": {
+            "dataBytes": 8049559,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 166148,
+            "indexBytes": 47975
+          },
+          "locationTableBytes": 58762769,
+          "scopePrepared": false,
+          "lastModelSharedRoots": []
+        },
+        "frozen-full": {
+          "warmQueryMedianMs": 77.014125,
+          "warmDiagnosticMedianMs": 228.771917,
+          "firstEdit": {
+            "queryMs": 78.174875,
+            "diagnosticMs": 230.735875
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 78.364125,
+              "diagnosticMs": 232.095042
+            }
+          ],
+          "lastEditFootprintMiB": 432.3914031982422,
+          "postStatusFootprintMiB": 432.4070281982422,
+          "allocatorInUseBytes": 419195808,
+          "source": {
+            "dataBytes": 8056630,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 133529,
+            "indexBytes": 71925
+          },
+          "locationTableBytes": 5992783,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "tb.dut"
+          ]
+        },
+        "frozen-local": {
+          "warmQueryMedianMs": 2.104709,
+          "warmDiagnosticMedianMs": 3.371917,
+          "firstEdit": {
+            "queryMs": 10.093583,
+            "diagnosticMs": 22.381917
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 79.413125,
+              "diagnosticMs": 249.391875
+            }
+          ],
+          "lastEditFootprintMiB": 322.6414260864258,
+          "postStatusFootprintMiB": 322.6570510864258,
+          "allocatorInUseBytes": 453797792,
+          "source": {
+            "dataBytes": 8018108,
+            "queryBytes": 16344,
+            "queryBuffers": 2,
+            "retainedNameBytes": 133608,
+            "indexBytes": 72650
+          },
+          "locationTableBytes": 5261031,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "tb.dut"
+          ]
+        }
+      },
+      "actualWholeDutImportCheckedEveryFullEdit": true
+    },
+    "opentitan-uart-uvm": {
+      "status": "passed",
+      "evidence": "untracked/rtl-uvm-fallback-2026-10-29/opentitan-uart-uvm-model-overlap.json",
+      "sha256": "e15233097ff7d4e1f0ca77f4fd414ba3bc6407def2dfb334f12386e341b89e63",
+      "arms": {
+        "native": {
+          "warmQueryMedianMs": 2094.530041,
+          "warmDiagnosticMedianMs": 2236.387291,
+          "firstEdit": {
+            "queryMs": 2107.393,
+            "diagnosticMs": 2258.782583
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 2136.940583,
+              "diagnosticMs": 2279.284333
+            }
+          ],
+          "lastEditFootprintMiB": 344.18834686279297,
+          "postStatusFootprintMiB": 344.20397186279297,
+          "allocatorInUseBytes": 463919856,
+          "source": {
+            "dataBytes": 6719161,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 141106,
+            "indexBytes": 23975
+          },
+          "locationTableBytes": 58748783,
+          "scopePrepared": false,
+          "lastModelSharedRoots": []
+        },
+        "frozen-full": {
+          "warmQueryMedianMs": 93.784708,
+          "warmDiagnosticMedianMs": 228.725333,
+          "firstEdit": {
+            "queryMs": 106.156166,
+            "diagnosticMs": 237.517791
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 91.998625,
+              "diagnosticMs": 222.827667
+            }
+          ],
+          "lastEditFootprintMiB": 338.438232421875,
+          "postStatusFootprintMiB": 338.453857421875,
+          "allocatorInUseBytes": 372623920,
+          "source": {
+            "dataBytes": 6893944,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 123447,
+            "indexBytes": 71925
+          },
+          "locationTableBytes": 4956167,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "tb.dut"
+          ]
+        },
+        "frozen-local": {
+          "warmQueryMedianMs": 2.1505,
+          "warmDiagnosticMedianMs": 3.422791,
+          "firstEdit": {
+            "queryMs": 10.594958,
+            "diagnosticMs": 19.902708
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 109.2885,
+              "diagnosticMs": 252.11425
+            }
+          ],
+          "lastEditFootprintMiB": 364.2507553100586,
+          "postStatusFootprintMiB": 364.2820053100586,
+          "allocatorInUseBytes": 383460560,
+          "source": {
+            "dataBytes": 6882197,
+            "queryBytes": 3724,
+            "queryBuffers": 2,
+            "retainedNameBytes": 123526,
+            "indexBytes": 72650
+          },
+          "locationTableBytes": 4650071,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "tb.dut"
+          ]
+        }
+      },
+      "actualWholeDutImportCheckedEveryFullEdit": true
+    },
+    "asan:cva6-uvm-signature-argument": {
+      "status": "passed",
+      "evidence": "untracked/project-optimization-2026-10-29/cva6-uvm-signature-argument-model-overlap-asan.json",
+      "sha256": "b4d48fbf76aed2d8096386e5be5041f6fab46442289445ac88a16a3dfc2f8e9d",
+      "arms": {
+        "native": {
+          "warmQueryMedianMs": 3304.181458,
+          "warmDiagnosticMedianMs": 4939.030958,
+          "firstEdit": {
+            "queryMs": 3171.548167,
+            "diagnosticMs": 4666.612917
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 3345.837667,
+              "diagnosticMs": 5033.086334
+            }
+          ],
+          "lastEditFootprintMiB": 2447.257781982422,
+          "postStatusFootprintMiB": 2447.304656982422,
+          "allocatorInUseBytes": 37188121744,
+          "source": {
+            "dataBytes": 10452125,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 103049,
+            "indexBytes": 23975
+          },
+          "locationTableBytes": 58720367,
+          "scopePrepared": false,
+          "lastModelSharedRoots": []
+        },
+        "baseline": {
+          "warmQueryMedianMs": 8.417834,
+          "warmDiagnosticMedianMs": 14.580834,
+          "firstEdit": {
+            "queryMs": 59.245375,
+            "diagnosticMs": 106.665833
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 883.113125,
+              "diagnosticMs": 2584.242584
+            }
+          ],
+          "lastEditFootprintMiB": 2421.085838317871,
+          "postStatusFootprintMiB": 2421.210838317871,
+          "allocatorInUseBytes": 6350892172,
+          "source": {
+            "dataBytes": 12437455,
+            "queryBytes": 29660,
+            "queryBuffers": 2,
+            "retainedNameBytes": 114144,
+            "indexBytes": 96650
+          },
+          "locationTableBytes": 6312038,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "uvmt_cva6_tb.cva6_dut_wrap.cva6_tb_wrapper_i.i_cva6"
+          ]
+        },
+        "candidate": {
+          "warmQueryMedianMs": 8.528,
+          "warmDiagnosticMedianMs": 14.876791,
+          "firstEdit": {
+            "queryMs": 57.819375,
+            "diagnosticMs": 104.359417
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 882.281625,
+              "diagnosticMs": 2576.96875
+            }
+          ],
+          "lastEditFootprintMiB": 2421.9921112060547,
+          "postStatusFootprintMiB": 2422.1171112060547,
+          "allocatorInUseBytes": 6350949516,
+          "source": {
+            "dataBytes": 12437455,
+            "queryBytes": 29660,
+            "queryBuffers": 2,
+            "retainedNameBytes": 114144,
+            "indexBytes": 96650
+          },
+          "locationTableBytes": 6312038,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "uvmt_cva6_tb.cva6_dut_wrap.cva6_tb_wrapper_i.i_cva6"
+          ]
+        }
+      },
+      "timingAccepted": false,
+      "exitReceipt": "untracked/project-optimization-2026-10-29/cva6-uvm-signature-argument-model-overlap-asan-exit.json",
+      "exitReceiptSha256": "39d326e4f91e038f40bdb9b15d1eaf1f3d65384eb9e27f7d96fbd1ffad6d0b03"
+    },
+    "asan:opentitan-soc-signature-function": {
+      "status": "passed",
+      "evidence": "untracked/project-optimization-2026-10-29/opentitan-soc-signature-function-model-overlap-asan.json",
+      "sha256": "0e483dde7b3ec5ab826d547c3dc78a9119bf884e3baedbedfe0ceb2d571b45fd",
+      "arms": {
+        "native": {
+          "warmQueryMedianMs": 1724.259375,
+          "warmDiagnosticMedianMs": 4121.131042,
+          "firstEdit": {
+            "queryMs": 1725.348542,
+            "diagnosticMs": 3991.51
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 1764.213166,
+              "diagnosticMs": 4207.878166
+            }
+          ],
+          "lastEditFootprintMiB": 4353.227928161621,
+          "postStatusFootprintMiB": 4353.306053161621,
+          "allocatorInUseBytes": 46168357522,
+          "source": {
+            "dataBytes": 21621455,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 147033,
+            "indexBytes": 23975
+          },
+          "locationTableBytes": 117440623,
+          "scopePrepared": false,
+          "lastModelSharedRoots": []
+        },
+        "baseline": {
+          "warmQueryMedianMs": 17.9365,
+          "warmDiagnosticMedianMs": 33.47175,
+          "firstEdit": {
+            "queryMs": 64.760291,
+            "diagnosticMs": 117.229583
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 1727.278125,
+              "diagnosticMs": 3989.569334
+            }
+          ],
+          "lastEditFootprintMiB": 3691.5555267333984,
+          "postStatusFootprintMiB": 3691.6024017333984,
+          "allocatorInUseBytes": 11044020099,
+          "source": {
+            "dataBytes": 41544014,
+            "queryBytes": 92228,
+            "queryBuffers": 2,
+            "retainedNameBytes": 158364,
+            "indexBytes": 72675
+          },
+          "locationTableBytes": 16120831,
+          "scopePrepared": true,
+          "lastModelSharedRoots": []
+        },
+        "candidate": {
+          "warmQueryMedianMs": 17.793917,
+          "warmDiagnosticMedianMs": 33.609667,
+          "firstEdit": {
+            "queryMs": 60.927125,
+            "diagnosticMs": 112.641084
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 1730.109334,
+              "diagnosticMs": 3980.71325
+            }
+          ],
+          "lastEditFootprintMiB": 3691.2586517333984,
+          "postStatusFootprintMiB": 3691.3211517333984,
+          "allocatorInUseBytes": 11044944739,
+          "source": {
+            "dataBytes": 41544014,
+            "queryBytes": 92228,
+            "queryBuffers": 2,
+            "retainedNameBytes": 158364,
+            "indexBytes": 72675
+          },
+          "locationTableBytes": 16120831,
+          "scopePrepared": true,
+          "lastModelSharedRoots": []
+        }
+      },
+      "timingAccepted": false,
+      "exitReceipt": "untracked/project-optimization-2026-10-29/opentitan-soc-signature-function-model-overlap-asan-exit.json",
+      "exitReceiptSha256": "0cee01bacaf94efd585906265167ca8c293426f8432e6ac999d50bcd32674144"
+    },
+    "asan-whole:opentitan-aes-uvm": {
+      "status": "passed",
+      "evidence": "untracked/rtl-uvm-fallback-2026-10-29/opentitan-aes-uvm-model-overlap-asan-whole.json",
+      "sha256": "60b2781195330ef10a9dbdf31a4758d4f84bd0a3e8990711a38c7a2c5f12a93b",
+      "states": 45,
+      "actualWholeDutImportCheckedEveryFullEdit": true,
+      "timingAccepted": false,
+      "exitReceipt": "untracked/project-optimization-2026-10-29/opentitan-aes-uvm-model-overlap-asan-whole-exit.json",
+      "exitReceiptSha256": "c8d23f499175b83614ef3ceec8062cabc524b1f168b5311663ed2a2d77b7b50d"
+    },
+    "asan-whole:opentitan-uart-uvm": {
+      "status": "passed",
+      "evidence": "untracked/rtl-uvm-fallback-2026-10-29/opentitan-uart-uvm-model-overlap-asan-whole.json",
+      "sha256": "b844246d8814876c6ba43615af3413d3ae2dbb2bc97cdbdc4142715c3643f4e6",
+      "states": 45,
+      "actualWholeDutImportCheckedEveryFullEdit": true,
+      "timingAccepted": false,
+      "exitReceipt": "untracked/project-optimization-2026-10-29/opentitan-uart-uvm-model-overlap-asan-whole-exit.json",
+      "exitReceiptSha256": "c655bf2bbcffe83b0f68c5ab236a1d4501e8ab7390c5ae5c7526f08a0e371368"
+    }
+  },
+  "limitations": [
+    "Three alternating repeats for CVA6/largeSoC; other project cases one repeat. Report ranges, preserve initial samples, no broad statistical confidence claim",
+    "OS-reported process footprint peak is distinct from model allocation estimates; no independent high-frequency process-memory sampling",
+    "Instrumented model mechanism timings are not accepted; allocation traces exclude source and provider storage and do not establish live shallow-model totals",
+    "Large SoC does not prove whole RTL semantic freezing. Its gains concern full-model reconstruction. Strict AES/UART separately prove whole DUT+UVM reuse",
+    "Externally borrowed old models intentionally remain alive; this does not shrink the one model needed for current full semantics",
+    "No burst-input/cold-disk claim or ASan leak detection"
+  ],
+  "remaining": [
+    "Stay in memory ownership: profile mixed local-body/native fallback queries and genuinely borrowed model overlap before any renewal or release change",
+    "Continue first current parse/full-model cost optimization without weakening semantic correctness or experiment defaults",
+    "Final full release audit: fresh install/package, default bundled UVM profile, project variant caches/manual rebuild, cleanup and main push"
+  ]
+}

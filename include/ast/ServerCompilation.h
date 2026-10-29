@@ -60,6 +60,10 @@ public:
     void refresh(const lsp::RequestContext& ctx = {});
     /// Prepare complete semantics/dataflow privately before publishing a current model.
     void prepareDiagnostics(const lsp::RequestContext& ctx);
+    bool needsDiagnosticPreparation() const {
+        return m_dirty || !m_analysis || !m_analysis->diagnosticsReady();
+    }
+    const std::vector<std::string>& lastModelSharedRoots() const { return m_lastModelSharedRoots; }
     /// Preserve the root and selections while releasing unborrowed derived analysis.
     /// The driver must discard cached diagnostic routes before calling this.
     bool releaseUnsharedAnalysisCaches();
@@ -179,6 +183,7 @@ private:
     std::vector<std::string> m_initialSelectionPaths;
     bool m_dirty = false;
     bool m_refreshing = false;
+    void synchronizeNativeCompilationUnits(const lsp::RequestContext& ctx);
     std::unique_ptr<FrozenInstanceCache> m_frozenInstances;
     std::function<void(const std::vector<std::string>&)> m_frozenModulesChanged;
     std::optional<FrozenInstanceCache::Certificate> certifyFrozenInstance(
@@ -228,6 +233,8 @@ private:
     /// The analysis state, rebuilt on refresh(). Shared by shallow compilations that are using it
     /// for params while we may be rebuilding a new one.
     std::shared_ptr<ServerCompilationAnalysis> m_analysis;
+    // Value-only evidence survives model retirement; never a cache-preparation claim.
+    std::vector<std::string> m_lastModelSharedRoots;
     /// Syntax discovery may consult the previous model while rebuilding a released root.
     std::unordered_map<std::string, std::string> m_releasedSymbolPaths;
 

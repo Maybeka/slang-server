@@ -8,12 +8,15 @@
 #include <cstdlib>
 #include <fmt/format.h>
 #include <fstream>
+#include <map>
 
 #include "slang/ast/ASTVisitor.h"
 #include "slang/ast/symbols/BlockSymbols.h"
 #include "slang/ast/symbols/ParameterSymbols.h"
+#include "slang/ast/types/AllTypes.h"
 #include "slang/diagnostics/DiagnosticEngine.h"
 #include "slang/syntax/SyntaxTree.h"
+#include "slang/util/String.h"
 
 namespace server {
 using namespace slang;
@@ -40,6 +43,41 @@ struct Bodies : ASTVisitor<Bodies, VisitFlags::Symbols> {
         visitDefault(instance);
     }
 };
+struct SubtreeBodies : ASTVisitor<SubtreeBodies, VisitFlags::Symbols> {
+    std::map<std::string, const InstanceBodySymbol*> values;
+    void handle(const InstanceSymbol& instance) {
+        values.emplace(instance.body.getHierarchicalPath(), &instance.body);
+        visitDefault(instance);
+    }
+    void handle(const GenerateBlockSymbol& block) {
+        if (!block.isUninstantiated)
+            visitDefault(block);
+    }
+    void handle(const ClassType&) {}
+    void handle(const GenericClassDefSymbol&) {}
+};
+bool matchesNativeSubtree(const InstanceBodySymbol& native, const InstanceBodySymbol& retained) {
+    auto collect = [](const InstanceBodySymbol& root) {
+        SubtreeBodies visitor;
+        visitor.values.emplace(root.getHierarchicalPath(), &root);
+        root.visit(visitor);
+        return std::move(visitor.values);
+    };
+    const auto a = collect(native), b = collect(retained);
+    if (a.size() != b.size())
+        return false;
+    for (const auto& [path, body] : a) {
+        const auto found = b.find(path);
+        if (found == b.end() || &body->getDefinition() != &found->second->getDefinition() ||
+            body->flags != found->second->flags)
+            return false;
+    }
+    // Match the public boundary signature in its actual context. The complete
+    // root certificate separately audits descendant arguments and dependencies.
+    // A descendant-only signature check would incorrectly treat a nominal type
+    // declared in the retained root as an external, mutable type dependency.
+    return native.getCompilation().hasMatchingInstanceBodyParameters(retained, native);
+}
 // Closed bodies need their path and resolved arguments, not mutable ancestor
 // declarations. Reconstruct only active generate branches and one concrete loop
 // iteration. Instance arrays and CLI overrides keep the full-context route.
@@ -123,6 +161,47 @@ std::optional<BodyContext> compactContext(const Compilation& current,
     ClosedTypeContext types;
     types.fixedOwner = library.compilation.get();
     std::string arguments;
+    auto valueLiteral = [&](auto&& self, const Type& type,
+                             const ConstantValue& value) -> std::optional<std::string> {
+        const auto& canonical = type.getCanonicalType();
+        if (canonical.isString()) {
+            if (!value.isString() || value.str().find('\0') != std::string::npos ||
+                value.str().size() > size_t(SVInt::MAX_BITS) / 8)
+                return std::nullopt;
+            return quoteSVString(value.str());
+        }
+        if (canonical.kind == SymbolKind::FixedSizeUnpackedArrayType) {
+            if (!value.isUnpacked())
+                return std::nullopt;
+            const auto& array = canonical.as<FixedSizeUnpackedArrayType>();
+            const auto& elements = std::get<ConstantValue::Elements>(value.getVariant());
+            if (elements.size() != array.range.width())
+                return std::nullopt;
+            std::string text = "'{";
+            for (const auto& element : elements) {
+                auto literal = self(self, array.elementType, element);
+                if (!literal)
+                    return std::nullopt;
+                if (text.size() > 2)
+                    text += ',';
+                text += *literal;
+            }
+            return text + '}';
+        }
+        if (!type.isIntegral() || !value.isInteger())
+            return std::nullopt;
+        auto literal = value.integer().toString(LiteralBase::Binary, true);
+        // Assignment patterns preserve unpacked shape. Enum elements also need
+        // their fixed nominal assignment type, just like scalar overrides.
+        if (type.isEnum()) {
+            const auto parent = type.getParentScope();
+            if (type.kind != SymbolKind::TypeAlias || !parent ||
+                parent->asSymbol().kind != SymbolKind::Package)
+                return std::nullopt;
+            literal = fmt::format("{}'({})", type.toString(), literal);
+        }
+        return literal;
+    };
     for (auto parameter : body.getParameters()) {
         if (parameter->symbol.kind == SymbolKind::TypeParameter) {
             const auto& value = parameter->symbol.as<TypeParameterSymbol>();
@@ -141,7 +220,7 @@ std::optional<BodyContext> compactContext(const Compilation& current,
             if (current.isFixedInstanceBodyTypeArgument(type, body) &&
                 ((type.kind == SymbolKind::TypeAlias && scope &&
                   scope->asSymbol().kind == SymbolKind::Package) ||
-                 type.getCanonicalType().isSimpleBitVector()))
+                 type.getCanonicalType().isSimpleBitVector() || type.isString()))
                 spelling = type.kind == SymbolKind::TypeAlias && scope &&
                                    scope->asSymbol().kind == SymbolKind::Package
                                ? type.toString()
@@ -160,26 +239,18 @@ std::optional<BodyContext> compactContext(const Compilation& current,
         const auto& value = parameter->symbol.as<ParameterSymbol>();
         if (!value.isOverridden())
             continue;
-        if (parameter->isLocalParam() || !value.getType().isIntegral() ||
-            !value.getValue().isInteger())
+        if (parameter->isLocalParam() ||
+            !current.isFixedInstanceBodyTypeArgument(value.getType(), body))
             return std::nullopt;
         auto name = identifier(value.name);
         if (!name)
             return std::nullopt;
         if (!arguments.empty())
             arguments += ",";
-        auto literal = value.getValue().integer().toString(LiteralBase::Binary, true);
-        // A resolved integer literal loses an enum's nominal assignment type.
-        // Fixed package typedefs are still available in the independent owner.
-        if (value.getType().isEnum()) {
-            const auto& type = value.getType();
-            const auto parent = type.getParentScope();
-            if (type.kind != SymbolKind::TypeAlias || !parent ||
-                parent->asSymbol().kind != SymbolKind::Package)
-                return std::nullopt;
-            literal = fmt::format("{}'({})", type.toString(), literal);
-        }
-        arguments += fmt::format(".{}({})", *name, literal);
+        auto literal = valueLiteral(valueLiteral, value.getType(), value.getValue());
+        if (!literal)
+            return std::nullopt;
+        arguments += fmt::format(".{}({})", *name, *literal);
     }
     auto definition = identifier(body.getDefinition().name);
     if (!definition)
@@ -536,6 +607,19 @@ void ScopeBodyCache::publish(std::shared_ptr<Compilation> current,
             return false;
         }
         auto group = prepareGroup(bind(std::nullopt));
+        if (group) {
+            Bodies originals;
+            current->getRoot().visit(originals);
+            for (const auto& [path, body] : group->bodies) {
+                const auto original = std::ranges::find_if(originals.values, [&](auto candidate) {
+                    return candidate->getHierarchicalPath() == path;
+                });
+                if (original == originals.values.end() || !matchesNativeSubtree(**original, *body)) {
+                    ++counters.declines;
+                    return false;
+                }
+            }
+        }
         return group && retain(std::move(*group), false);
     };
     bool stopped = false, fullPublished = false;
@@ -603,15 +687,15 @@ void ScopeBodyCache::publish(std::shared_ptr<Compilation> current,
         auto owner = bind(context, body->flags.has(InstanceFlags::TargetedByBind));
         Bodies compactBodies;
         owner->getRoot().visit(compactBodies);
-        const bool valid = !owner->hasIssuedErrors() &&
-                           std::ranges::any_of(compactBodies.values, [&](auto candidate) {
+        const bool valid = std::ranges::any_of(compactBodies.values, [&](auto candidate) {
                                return candidate->getHierarchicalPath() == path &&
                                       &candidate->getDefinition() == &body->getDefinition() &&
                                       candidate->flags == body->flags &&
                                       current->hasMatchingInstanceBodyParameters(*candidate,
                                                                                  *body) &&
+                                      matchesNativeSubtree(*body, *candidate) &&
                                       owner->prepareInstanceBodyReuse(*candidate);
-                           });
+                           }) && !owner->hasUncertifiedInstanceBodyErrors();
         if (!valid) {
             if (auto trace = std::getenv("SLANG_SCOPE_BODY_TRACE"); trace && *trace) {
                 fmt::print(stderr, "scope-body compact-context invalid\t{}\terrors={}\n", path,

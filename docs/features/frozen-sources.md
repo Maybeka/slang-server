@@ -42,18 +42,39 @@ charges for its key and option storage. Parent and worker budgets are separate;
 
 ## Selection and preprocessing boundaries
 
-Package and module names are separate selectors. Each must identify exactly one
+Package and definition names are separate selectors. `modules` also accepts stable
+interface and program definitions, so providers can explicitly include an interface
+dependency declared after the selected RTL. Each name must identify exactly one
 declaration of its requested kind among the configured native compilation inputs.
 Missing and ambiguous names are reported by status. No file
 is added or reordered to obtain a hit. To select a UVM distribution as an input,
 use the independent [UVM source configuration](uvm-prefix-cache.md).
 
 The server resolves each selected declaration to its real source roots, including
-include ancestry. For each compilation unit it retains the complete ordered
+include ancestry. The syntax experiment retains the complete ordered
 prefix through the last selected declaration. Earlier roots remain dependencies,
 even if their packages were not selected. A root containing both library and
 user declarations remains one root: editing any part invalidates that group.
 Selecting a declaration in the last root may therefore offer no edit-time benefit.
+For the semantic experiment this fixed-dependency contract also covers earlier
+root files whose declarations were not explicitly selected. An editor change in
+one of those files requires `slang.rebuildScopeLibrary`; it is not an ordinary
+consumer edit. Keep mutable files outside the fixed prefix when configuring an
+editable consumer workload.
+
+For pure RTL without compilation-unit declarations, the semantic experiment can
+instead retain selected module definitions and their global child-definition
+closure across separated physical roots. Intervening unselected roots remain
+mutable; source order is preserved. A child definition is fixed even when it was
+not separately named in the configuration. Mixed physical files, ambiguous or
+missing child definitions, scoped types and interface-port dependencies keep the
+existing complete-provider route. Contiguous groups retain the prefix fast path.
+Projected providers use the current native parse to check expanded declaration
+syntax, locations and per-declaration preprocessing state before importing their
+semantics. A changed macro or directive context suspends the import; editing a
+fixed provider or its retained include still requires manual rebuilding. No
+filesystem freshness proof is added to the fixed-dependency contract.
+
 In full-design mode, a selection covering the entire input unit uses native
 parsing when it needs rebuilding: there is no remaining suffix to resume.
 Multi-root groups of this kind also avoid staging an unused initial UVM view.
@@ -67,9 +88,12 @@ An independent completion-detail lookup keeps its own original command-line macr
 context, instead of borrowing the project's preceding-file macros. Its parse can
 be retained only for dependencies of the selected input groups.
 
-Unsafe directives, syntax recovery at the group boundary, live preprocessing
-callbacks, inherited compilation-unit state and unsupported source-library contexts
-use native parsing. An explicit-filelist elaborated design can reuse the same
+Prefix checkpoints retain `timescale`, `default_nettype`, `unconnected_drive`,
+`celldefine` and their reset directives, including state inherited by the next
+source file. Parse archives preserve the same terminal state. Keyword stacks and
+unsupported pragma/protection state, syntax recovery at the group boundary,
+live preprocessing callbacks, inherited compilation-unit state and unsupported
+source-library contexts use native parsing. An explicit-filelist elaborated design can reuse the same
 syntax prefix. Each instance is elaborated again with current parameters,
 generate conditions, interface connections and bindings. Active instance
 selections are restored by their paths in the new compilation. Index-discovered
@@ -102,6 +126,18 @@ Independent contexts preserve inherited bind-target flags. Actual bound children
 and types supplied by mutable ancestors can still require native analysis.
 Inspect body hits separately from library preparation: this does not promise
 reuse of the entire selected DUT in every testbench.
+
+Fixed-size unpacked integral array parameters can form part of a retained body
+signature, including nested arrays and overrides. Import checks the declared
+ranges, nominal element types, override status and full four-state value. An
+independent owner reconstructs overridden values without retaining their mutable
+parent expressions. Dynamic arrays, queues and nonintegral elements still need
+native analysis.
+
+If fixed semantic preparation is refused because its dependency closure has errors,
+`slang.scopeLibraryStatus` includes the first error's source file, line and message.
+The server keeps native diagnostics; the status message does not suppress an error
+or turn a refused library into a cache hit.
 
 An explicit full design can also select canonical elaborated instance paths:
 
@@ -331,9 +367,34 @@ The current prototype supports one configured fixed declaration prefix containin
 packages and module/interface definitions. Module selectors and concrete RTL
 instance selectors prepare that definition closure. Parameters, attributes,
 bind state and instance counts belong to each consumer; virtual interface types
-keep the shared definition identity. `instanceBodiesShared` reports actual
-whole-body hits in the independent subtree registry; a false value means that
-this consumer has not yet reused an eligible body.
+keep the shared definition identity. `instanceBodiesShared` reports whether the
+independent subtree registry has accumulated any whole-body hits. It does not
+prove that the latest consumer reused the selected root. `lastModelSharedRoots`
+lists the actual imported root paths in the last completed full model; this
+value-only snapshot survives model retirement and is not a document-version
+certificate. Use it to distinguish prepared roots from roots actually reused.
+Virtual-interface arguments from a fixed library retain their original type
+identity. Before a retained DUT can use them, a private interface instance with
+the same resolved parameters must pass the complete body-independence audit.
+Its certificate is separate from the DUT certificate: proof instances never
+become design hierarchy, imported roots, or replayed DUT diagnostics. Interfaces
+with caller-dependent methods or unsupported proof dependencies still decline
+whole-root reuse. Proof storage and owned argument values count toward the budget.
+Existing assertion-control errors are preserved. The independence audit can retain
+the native invalid-scope-target error for two-argument `$asserton`, `$assertoff`
+and `$assertkill` calls with a decimal integer literal level and a string literal
+target. Native rejects that target without looking up the hierarchy. Dynamic
+arguments and other errors remain outside this exception.
+Type dimensions may use `$bits` of local, fixed integral signals. This certifies
+their type without treating the query as a runtime read; references to mutable
+signals outside the retained subtree still decline. Diagnostic certificates own
+their replay data, so additional private proof instances cannot invalidate it.
+Declaration analysis defers virtual-interface body checking. Each complete
+consumer creates private diagnostic instances with the same parameter values,
+including interfaces reached through another retained library. Their checks use
+the current design hierarchy without modifying the shared type owner. The
+independent subtree owner still checks only its certified root; it does not serve
+as a complete design diagnostic result.
 Inherited multi-unit preprocessing, unsupported unit declarations, ambiguous
 selectors, errors and budget overflow decline retention. A module/interface owner
 also uses native binding for an analysis containing compilation-unit functions,
@@ -429,7 +490,7 @@ The registry uses the same `frozenSources.maxMiB` limit as the library.
 `chargedBytes` includes library, retained body-owner and evicted-but-still-pinned
 charges. The nested `bodies` status reports the budget, base / owner / pinned
 charges, owners, hits, publications, evictions and declines; `instanceBodiesShared`
-reflects actual hits. Charges include reserved reference-profile hash storage and
+reflects cumulative hits. Charges include reserved reference-profile hash storage and
 subtree certificates. They can count shared prefix storage in more than one owner
 and are not process RSS or a temporary preparation limit. Replacing the library
 explicitly replaces the body registry; context retirement can retain it.
@@ -492,7 +553,14 @@ This includes nested tables of packed structs or enums and nonzero array bounds.
 The native parameter vector includes body localparams: signatures compare their
 resolved type / ranges and deep values, as well as ordinary scalar arguments.
 Array vectors and large integer payloads in certified tables contribute to retained
-memory charges. Overridable array-valued parameters still use native analysis.
+memory charges. Finite integral array overrides are compared by shape, nominal
+element types and every element, and detached from old caller expressions.
+String parameters, finite string arrays and builtin `string` type arguments also
+participate in exact signatures. String bytes are owned and charged; generated
+literals escape quotes, backslashes and nonprintable bytes. Embedded zero bytes
+and strings too wide for a native packed literal keep native analysis rather than
+changing the value during literal conversion. This restriction also applies to
+string leaves of an array. No runtime string value is cached.
 Transparent enum members preserve their original nominal owner.
 Pure built-in integral conversion, bit-count and fixed type / dimension queries
 can be shared; arguments and `inside` range endpoints pass the same dependency

@@ -1,0 +1,373 @@
+{
+  "status": "Unchanged signature/parameter hover qualified; complete optimization objective remains active",
+  "mainHead": "41758aa9e865903a0e283861f19331f9a36eab5b",
+  "binarySha256": "bf260c141dd392038aa15e413db68afe02139cfa5d85c2abf65d2cb674d37706",
+  "asanBinarySha256": "ca5fb22f1f5c2ee9f44228b0366f8e231e1a1c3f5bf580d26499c412973f4e2b",
+  "sdkPatchSha256": "3c592224843522823ebe3d75823ece536ec6209b8f0461db56b750eba6c4ccc1",
+  "sourceSeal": "untracked/project-optimization-2026-10-29/signature-hover-source-seal.json",
+  "sourceArchive": "untracked/project-optimization-2026-10-29/source-receipts/signature-hover-bf260c14",
+  "baseline": {
+    "binarySha256": "d9009781eab31be125378dba8a6dc9d484dca72c7ed5d5725891d2b8d3a0048f",
+    "matchesPriorQualifiedD900": true,
+    "receipt": "untracked/project-optimization-2026-10-29/signature-hover-baseline/receipt.json"
+  },
+  "implemented": [
+    "Allow certified hover within the unchanged edited method prototype; retain existing current return/argument/default-value comparisons, including non-ANSI arguments",
+    "Preserve original leading trivia in the fresh mini parse without reexecuting directives, own raw trivia bytes for documentation; preserve native comments and source/expanded/both rendering",
+    "Keep completion/goto boundaries unchanged, full Native interface/structural fallback and default-off settings"
+  ],
+  "verification": {
+    "ctest": {
+      "passed": 1015,
+      "failed": 0,
+      "seconds": 17.85,
+      "TMPDIR": "/private/tmp",
+      "concurrentAsanUnitBuild": true
+    },
+    "sdk": {
+      "cases": 2645,
+      "assertions": 37010
+    },
+    "signatureCase": {
+      "contexts": 72,
+      "assertions": 1872,
+      "commentFormats": [
+        "markdown",
+        "plaintext",
+        "raw"
+      ],
+      "macroViews": [
+        "source",
+        "expanded",
+        "both"
+      ],
+      "sameLineUnicode": true,
+      "contextsCovered": [
+        "class",
+        "package",
+        "module task",
+        "non-ANSI arguments"
+      ]
+    },
+    "asanUnits": {
+      "cases": 20,
+      "assertions": 2664,
+      "leakDetection": false
+    },
+    "sdkFilesVerified": 709
+  },
+  "existingRegression": {
+    "originalCasesPassed": 14,
+    "expectedFixedDependencyRefusals": 1,
+    "additionalOriginalScopeUdpConsumerPassed": true,
+    "completeStates": 675,
+    "runtime": "untracked/project-optimization-2026-10-29/signature-hover-nonregression-runtime.json"
+  },
+  "wholeRtlUvm": {
+    "aes": {
+      "passed": true,
+      "states": 45,
+      "actualWholeDutImportCheckedEveryFullEdit": true,
+      "evidence": "untracked/rtl-uvm-fallback-2026-10-29/opentitan-aes-uvm-signature-hover-nonregression.json",
+      "sha256": "56e9edd13f44fea007515d36d202d3358e649df2aaa2fce2bfbcf89a61545e3b",
+      "arms": {
+        "native": {
+          "warmQueryMedianMs": 2485.856875,
+          "warmDiagnosticMedianMs": 2659.148167,
+          "firstBodyEditQueryMs": 2484.659667,
+          "firstBodyEditDiagnosticMs": 2661.267542,
+          "lastFootprintMiB": 281.93841552734375,
+          "localStatesInWarmWindow": 0,
+          "warmSamples": 5
+        },
+        "frozen-full": {
+          "warmQueryMedianMs": 77.396208,
+          "warmDiagnosticMedianMs": 227.329917,
+          "firstBodyEditQueryMs": 80.52875,
+          "firstBodyEditDiagnosticMs": 238.8285,
+          "lastFootprintMiB": 458.9851760864258,
+          "localStatesInWarmWindow": 0,
+          "warmSamples": 5
+        },
+        "frozen-local": {
+          "warmQueryMedianMs": 2.22525,
+          "warmDiagnosticMedianMs": 3.540625,
+          "firstBodyEditQueryMs": 9.97925,
+          "firstBodyEditDiagnosticMs": 22.416875,
+          "lastFootprintMiB": 485.89147186279297,
+          "localStatesInWarmWindow": 5,
+          "warmSamples": 5
+        }
+      }
+    },
+    "uart": {
+      "passed": true,
+      "states": 45,
+      "actualWholeDutImportCheckedEveryFullEdit": true,
+      "evidence": "untracked/rtl-uvm-fallback-2026-10-29/opentitan-uart-uvm-signature-hover-nonregression.json",
+      "sha256": "96bb22c73c420bc15264043c8e5796ddc6f7db966c1fd589c9425aa8dd1e12af",
+      "arms": {
+        "native": {
+          "warmQueryMedianMs": 2181.484041,
+          "warmDiagnosticMedianMs": 2339.338166,
+          "firstBodyEditQueryMs": 2157.542833,
+          "firstBodyEditDiagnosticMs": 2309.702333,
+          "lastFootprintMiB": 332.65709686279297,
+          "localStatesInWarmWindow": 0,
+          "warmSamples": 5
+        },
+        "frozen-full": {
+          "warmQueryMedianMs": 92.247334,
+          "warmDiagnosticMedianMs": 223.88125,
+          "firstBodyEditQueryMs": 131.698833,
+          "firstBodyEditDiagnosticMs": 302.117208,
+          "lastFootprintMiB": 373.891357421875,
+          "localStatesInWarmWindow": 0,
+          "warmSamples": 5
+        },
+        "frozen-local": {
+          "warmQueryMedianMs": 2.589667,
+          "warmDiagnosticMedianMs": 4.201416,
+          "firstBodyEditQueryMs": 11.4605,
+          "firstBodyEditDiagnosticMs": 21.563333,
+          "lastFootprintMiB": 398.5945281982422,
+          "localStatesInWarmWindow": 5,
+          "warmSamples": 5
+        }
+      }
+    }
+  },
+  "firstAttemptFailure": {
+    "evidence": "untracked/project-optimization-2026-10-29/signature-hover-ab-runtime.json",
+    "conclusion": "Function hover in large SoC and small AES omitted native leading documentation comments; diagnostics and function code matched. Preserve-trivia fix and72-combination tests added. Initial failure is not a qualified timing pass."
+  },
+  "limitations": [
+    "One A/B repeat per signature case,5 samples per warm median; exact prior binary controls used, no broad statistical confidence claim",
+    "First-edit timing is after initialized project baseline, not cold process/disk startup",
+    "Enclosing/later declaration documentation may still require current Native rendering. Interface edits, structural changes and missing completed baseline remain full-analysis paths",
+    "Original UDP lfsr edit changes a real fixed dependency and remains a manual-rebuild boundary, not a timed pass",
+    "No ASan leak detection; process memory sampled at boundaries, not peak; no burst-input claim"
+  ],
+  "remaining": [
+    "Missing-baseline/first certification and remaining hundreds/thousands-of-ms full model/query/diagnostic costs still need focused optimization",
+    "Model/summary/native-CST overlap and broader document/query source lifetime audit; earliest precise diagnostic refusal attribution",
+    "Final fresh install/package/default bundled one-profile UVM/project variant-cache/manual rebuild gates; final full Mac qualification and cleanup/main push remain open"
+  ],
+  "qualifiedReleaseStates": 1035,
+  "signatureAB": {
+    "cva6-uvm-signature-argument": {
+      "passed": true,
+      "states": 45,
+      "evidence": "untracked/project-optimization-2026-10-29/cva6-uvm-signature-argument-signature-hover-comments.json",
+      "sha256": "b5507a6c2b7497e6540f9ff21df0fa56a2516074805e994f693e23150952c1d0",
+      "arms": {
+        "native": {
+          "warmQueryMedianMs": 1503.375,
+          "warmDiagnosticMedianMs": 1864.618542,
+          "firstBodyEditQueryMs": 1512.279208,
+          "firstBodyEditDiagnosticMs": 1890.341583,
+          "lastFootprintMiB": 578.3449859619141,
+          "localStatesInWarmWindow": 0,
+          "warmSamples": 5
+        },
+        "baseline": {
+          "warmQueryMedianMs": 264.925625,
+          "warmDiagnosticMedianMs": 757.454292,
+          "firstBodyEditQueryMs": 427.167125,
+          "firstBodyEditDiagnosticMs": 912.848125,
+          "lastFootprintMiB": 801.1888046264648,
+          "localStatesInWarmWindow": 0,
+          "warmSamples": 5
+        },
+        "candidate": {
+          "warmQueryMedianMs": 6.198625,
+          "warmDiagnosticMedianMs": 11.162292,
+          "firstBodyEditQueryMs": 27.496708,
+          "firstBodyEditDiagnosticMs": 46.8345,
+          "lastFootprintMiB": 775.7668838500977,
+          "localStatesInWarmWindow": 5,
+          "warmSamples": 5
+        }
+      }
+    },
+    "cva6-uvm-signature-function": {
+      "passed": true,
+      "states": 45,
+      "evidence": "untracked/project-optimization-2026-10-29/cva6-uvm-signature-function-signature-hover-comments.json",
+      "sha256": "71b4915f6c7d7622b8da2037790e96898f7d3fa340150a57df34ee151caf1840",
+      "arms": {
+        "native": {
+          "warmQueryMedianMs": 1302.295083,
+          "warmDiagnosticMedianMs": 1675.313708,
+          "firstBodyEditQueryMs": 1302.2685,
+          "firstBodyEditDiagnosticMs": 1677.999917,
+          "lastFootprintMiB": 510.96996307373047,
+          "localStatesInWarmWindow": 0,
+          "warmSamples": 5
+        },
+        "baseline": {
+          "warmQueryMedianMs": 170.968875,
+          "warmDiagnosticMedianMs": 639.552875,
+          "firstBodyEditQueryMs": 330.920334,
+          "firstBodyEditDiagnosticMs": 809.913125,
+          "lastFootprintMiB": 723.0481109619141,
+          "localStatesInWarmWindow": 0,
+          "warmSamples": 5
+        },
+        "candidate": {
+          "warmQueryMedianMs": 6.421708,
+          "warmDiagnosticMedianMs": 11.509625,
+          "firstBodyEditQueryMs": 24.573167,
+          "firstBodyEditDiagnosticMs": 43.4485,
+          "lastFootprintMiB": 696.4074630737305,
+          "localStatesInWarmWindow": 5,
+          "warmSamples": 5
+        }
+      }
+    },
+    "opentitan-soc-signature-argument": {
+      "passed": true,
+      "states": 45,
+      "evidence": "untracked/project-optimization-2026-10-29/opentitan-soc-signature-argument-signature-hover-comments.json",
+      "sha256": "59f762eec87617a89732c1c2ec129ff93be5a82b0ebd91192b6f56c2c26b1670",
+      "arms": {
+        "native": {
+          "warmQueryMedianMs": 628.505041,
+          "warmDiagnosticMedianMs": 1236.86875,
+          "firstBodyEditQueryMs": 743.371208,
+          "firstBodyEditDiagnosticMs": 1417.172083,
+          "lastFootprintMiB": 838.5803909301758,
+          "localStatesInWarmWindow": 0,
+          "warmSamples": 5
+        },
+        "baseline": {
+          "warmQueryMedianMs": 701.234958,
+          "warmDiagnosticMedianMs": 1349.559334,
+          "firstBodyEditQueryMs": 774.261542,
+          "firstBodyEditDiagnosticMs": 1442.97325,
+          "lastFootprintMiB": 514.7836532592773,
+          "localStatesInWarmWindow": 0,
+          "warmSamples": 5
+        },
+        "candidate": {
+          "warmQueryMedianMs": 16.563292,
+          "warmDiagnosticMedianMs": 31.491667,
+          "firstBodyEditQueryMs": 40.538792,
+          "firstBodyEditDiagnosticMs": 66.378833,
+          "lastFootprintMiB": 882.783561706543,
+          "localStatesInWarmWindow": 5,
+          "warmSamples": 5
+        }
+      }
+    },
+    "opentitan-soc-signature-function": {
+      "passed": true,
+      "states": 45,
+      "evidence": "untracked/project-optimization-2026-10-29/opentitan-soc-signature-function-signature-hover-comments.json",
+      "sha256": "f4bb83f8cac85dea7881ce5ad49b1735e7d847ae584f345aa6a091704904ca49",
+      "arms": {
+        "native": {
+          "warmQueryMedianMs": 679.111209,
+          "warmDiagnosticMedianMs": 1369.583458,
+          "firstBodyEditQueryMs": 675.144333,
+          "firstBodyEditDiagnosticMs": 1294.122625,
+          "lastFootprintMiB": 845.455436706543,
+          "localStatesInWarmWindow": 0,
+          "warmSamples": 5
+        },
+        "baseline": {
+          "warmQueryMedianMs": 718.012791,
+          "warmDiagnosticMedianMs": 1360.597041,
+          "firstBodyEditQueryMs": 763.403083,
+          "firstBodyEditDiagnosticMs": 1471.595833,
+          "lastFootprintMiB": 383.87742614746094,
+          "localStatesInWarmWindow": 0,
+          "warmSamples": 5
+        },
+        "candidate": {
+          "warmQueryMedianMs": 16.015708,
+          "warmDiagnosticMedianMs": 31.081042,
+          "firstBodyEditQueryMs": 39.860042,
+          "firstBodyEditDiagnosticMs": 66.024375,
+          "lastFootprintMiB": 881.017936706543,
+          "localStatesInWarmWindow": 5,
+          "warmSamples": 5
+        }
+      }
+    },
+    "aes-small-signature-argument": {
+      "passed": true,
+      "states": 45,
+      "evidence": "untracked/project-optimization-2026-10-29/aes-small-signature-argument-signature-hover-comments.json",
+      "sha256": "5aa604a824a44a1e5207d5f2f2ef5c5e4621682e32feb7e895e61f8b3ad05b61",
+      "arms": {
+        "native": {
+          "warmQueryMedianMs": 2.116417,
+          "warmDiagnosticMedianMs": 5.665125,
+          "firstBodyEditQueryMs": 2.278375,
+          "firstBodyEditDiagnosticMs": 5.955209,
+          "lastFootprintMiB": 9.812934875488281,
+          "localStatesInWarmWindow": 0,
+          "warmSamples": 5
+        },
+        "baseline": {
+          "warmQueryMedianMs": 2.961083,
+          "warmDiagnosticMedianMs": 6.388917,
+          "firstBodyEditQueryMs": 3.352042,
+          "firstBodyEditDiagnosticMs": 6.849084,
+          "lastFootprintMiB": 12.062934875488281,
+          "localStatesInWarmWindow": 0,
+          "warmSamples": 5
+        },
+        "candidate": {
+          "warmQueryMedianMs": 0.383166,
+          "warmDiagnosticMedianMs": 0.554333,
+          "firstBodyEditQueryMs": 0.746333,
+          "firstBodyEditDiagnosticMs": 5.022791,
+          "lastFootprintMiB": 13.781684875488281,
+          "localStatesInWarmWindow": 5,
+          "warmSamples": 5
+        }
+      }
+    },
+    "aes-small-signature-function": {
+      "passed": true,
+      "states": 45,
+      "evidence": "untracked/project-optimization-2026-10-29/aes-small-signature-function-signature-hover-comments.json",
+      "sha256": "36c17210175f236761bc428b8e607f2f974c251f49cb724f926d3df39829c8bf",
+      "arms": {
+        "native": {
+          "warmQueryMedianMs": 2.018083,
+          "warmDiagnosticMedianMs": 5.887083,
+          "firstBodyEditQueryMs": 1.968625,
+          "firstBodyEditDiagnosticMs": 5.6275,
+          "lastFootprintMiB": 9.562934875488281,
+          "localStatesInWarmWindow": 0,
+          "warmSamples": 5
+        },
+        "baseline": {
+          "warmQueryMedianMs": 2.014166,
+          "warmDiagnosticMedianMs": 5.436166,
+          "firstBodyEditQueryMs": 2.305167,
+          "firstBodyEditDiagnosticMs": 5.898375,
+          "lastFootprintMiB": 10.750434875488281,
+          "localStatesInWarmWindow": 0,
+          "warmSamples": 5
+        },
+        "candidate": {
+          "warmQueryMedianMs": 0.397583,
+          "warmDiagnosticMedianMs": 0.575583,
+          "firstBodyEditQueryMs": 0.8895,
+          "firstBodyEditDiagnosticMs": 3.786375,
+          "lastFootprintMiB": 10.609809875488281,
+          "localStatesInWarmWindow": 5,
+          "warmSamples": 5
+        }
+      }
+    }
+  },
+  "evidence": {
+    "path": "untracked/project-optimization-2026-10-29/signature-hover-qualification.json",
+    "sha256": "37f5ba3bb55e79f1eb6add55af46e79cd2019607a2bb777f188160718b5f2f51"
+  }
+}

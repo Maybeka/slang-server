@@ -17,6 +17,8 @@
 #include "slang/analysis/AnalysisQueries.h"
 #include "slang/analysis/ValueDriver.h"
 #include "slang/ast/Compilation.h"
+#include "slang/ast/EvalContext.h"
+#include "slang/util/String.h"
 #include "slang/ast/symbols/ClassSymbols.h"
 #include "slang/ast/symbols/CompilationUnitSymbols.h"
 #include "slang/ast/symbols/InstanceSymbols.h"
@@ -1327,6 +1329,42 @@ TEST_CASE("Configured library filelists keep identical options across rebuild an
                                                               true);
     CHECK_FALSE(rejected);
     CHECK(current->getDocument(uri)->textMatches(text));
+}
+
+TEST_CASE("A refused fixed package reports its first error and keeps native diagnostics",
+          "[scope-semantic][scope-error-reason]") {
+    const bool syntaxError = GENERATE(false, true);
+    LibraryWorkspace files;
+    files.write(files.root / "fixed.sv",
+                syntaxError ? "package fixed_pkg; localparam int N=; endpackage\n"
+                            : "package fixed_pkg; localparam int N=missing_fixed_value; endpackage\n");
+    files.write(files.root / "consumer.sv",
+                "module top; int value=fixed_pkg::N; endmodule\n");
+    files.write(files.root / "design.f", "fixed.sv\nconsumer.sv\n");
+    Config config;
+    config.experimentalScopeSemanticCache = true;
+    config.frozenSources = Config::FrozenSourcesConfig{
+        .packages = std::vector<std::string>{"fixed_pkg"}, .maxMiB = 64};
+    config.flagsByFile = std::vector<Config::FlagSource>{
+        {(files.root / "server.json").string(), "--single-unit --threads 1 --top top"}};
+    Indexer indexer;
+    ClientHarness client;
+    auto driver = server::ServerDriver::createFromFileLists(
+        indexer, client, config, {"design.f"}, files.root.string(), nullptr, true);
+    REQUIRE(driver);
+    CHECK_FALSE(driver->options.get<server::TrustedUvmImport>());
+    const auto status = rfl::json::write(driver->scopeLibraryStatus());
+    CHECK(status.find("first error:") != std::string::npos);
+    CHECK(status.find("fixed.sv:1:") != std::string::npos);
+    CHECK(status.find(syntaxError ? "syntax errors" : "missing_fixed_value") != std::string::npos);
+    config.experimentalScopeSemanticCache = false;
+    auto native = server::ServerDriver::createFromFileLists(
+        indexer, client, config, {"design.f"}, files.root.string(), nullptr, true);
+    REQUIRE(native);
+    auto& actual = driver->comp->getInstancesOfModule("top").front()->body.getCompilation();
+    auto& expected = native->comp->getInstancesOfModule("top").front()->body.getCompilation();
+    CHECK(DiagnosticEngine::reportAll(driver->sm, actual.getAllDiagnostics()) ==
+          DiagnosticEngine::reportAll(native->sm, expected.getAllDiagnostics()));
 }
 
 TEST_CASE("Initial promotion separates RTL admission from borrowed exploration bodies",
@@ -2737,7 +2775,7 @@ endmodule
     CHECK(oldY->as<ast::ValueSymbol>().getType().getBitWidth() == 4);
 }
 
-TEST_CASE("Parameter-only probing declines deferred type queries and mutable type aliases",
+TEST_CASE("Parameter-only probing reuses certified local type queries but rejects mutable aliases",
           "[scope-semantic][scope-body-parameters]") {
     const bool deferredQuery = GENERATE(false, true);
     LibraryWorkspace files;
@@ -2787,9 +2825,621 @@ TEST_CASE("Parameter-only probing declines deferred type queries and mutable typ
             REQUIRE(n);
             CHECK(n->as<ast::ParameterSymbol>().getValue().integer().as<int>() == 4);
         }
-        CHECK_FALSE(current->isImportedInstanceBody(body));
+        if (deferredQuery && bits == 8)
+            CHECK(current->isImportedInstanceBody(body));
+        if (!deferredQuery)
+            CHECK_FALSE(current->isImportedInstanceBody(body));
+        current->offerInstanceBodies(current);
+        CHECK((cache->status().publications > 0) == deferredQuery);
+    }
+}
+
+TEST_CASE("Closed local signal type queries preserve widths values and diagnostics across variants",
+          "[scope-semantic][scope-body-type-queries]") {
+    LibraryWorkspace files;
+    Config config;
+    config.experimentalScopeSemanticCache = true;
+    config.frozenSources = Config::FrozenSourcesConfig{
+        .instances = std::vector<std::string>{"top.u"}, .maxMiB = 64};
+    config.flagsByFile = std::vector<Config::FlagSource>{
+        {(files.root / "server.json").string(), "--single-unit --threads 1 --top top"}};
+    files.write(files.root / "fixed.sv", R"(
+package provider;
+  typedef struct packed {logic[3:0] payload; logic tag;} packet_t;
+endpackage
+module stable #(parameter int W=4, DIM=1)(input logic[W-1:0] a, output wire[31:0] y);
+  provider::packet_t packet;
+  logic[W-1:0] table_data [1:0];
+  localparam int N=$bits(a)+$bits(packet.payload)+$size(table_data,DIM);
+  localparam int SHAPE=$left(a)+$right(a)+$low(a)+$high(a)+$increment(a)+
+                      $dimensions(table_data)+$unpacked_dimensions(table_data);
+  assign packet.payload=4'(a);
+  assign packet.tag=1'b0;
+  assign y=32'(N+SHAPE);
+endmodule
+)");
+    auto source = [](int width) {
+        return fmt::format("module top; logic[{}:0] a; wire[31:0] y; "
+                           "stable #(.W({})) u(a,y); endmodule\n", width - 1, width);
+    };
+    files.write(files.root / "consumer.sv", source(4));
+    files.write(files.root / "design.f", "fixed.sv\nconsumer.sv\n");
+    Indexer indexer;
+    ClientHarness client;
+    auto driver = server::ServerDriver::createFromFileLists(
+        indexer, client, config, {"design.f"}, files.root.string(), nullptr, true);
+    REQUIRE(driver);
+    auto setting = driver->options.get<server::ScopeBodyImport>();
+    REQUIRE(setting);
+    auto cache = setting->cache.lock();
+    REQUIRE(cache);
+    int previous = 0;
+    for (int width : {4, 4, 8, 8, 4, 4}) {
+        auto make = [&](bool native) {
+            auto compilation = std::make_shared<ast::Compilation>(driver->options);
+            REQUIRE(server::importTrustedUvm(*compilation, driver->sm, driver->options));
+            if (native)
+                compilation->setInstanceBodyReuseHooks({}, {});
+            compilation->addSyntaxTree(syntax::SyntaxTree::fromText(
+                source(width), driver->sm, "type-query-consumer.sv", "", driver->options));
+            return compilation;
+        };
+        auto current = make(false), native = make(true);
+        CHECK(DiagnosticEngine::reportAll(driver->sm, current->getAllDiagnostics()) ==
+              DiagnosticEngine::reportAll(driver->sm, native->getAllDiagnostics()));
+        REQUIRE_FALSE(current->hasIssuedErrors());
+        const auto& actual = current->getRoot().topInstances.front()->body.find("u")
+                                 ->as<ast::InstanceSymbol>().body;
+        CHECK(actual.find("N")->as<ast::ParameterSymbol>().getValue().integer().as<int>() == width+6);
+        if (width == previous)
+            CHECK(current->isImportedInstanceBody(actual));
+        current->offerInstanceBodies(current);
+        previous = width;
+    }
+    CHECK(cache->status().hits >= 3);
+}
+
+TEST_CASE("Type-query certification still refuses runtime values dynamic shapes and public defaults",
+          "[scope-semantic][scope-body-type-queries]") {
+    const auto mode = GENERATE("runtime", "dynamic", "dimension", "public-default");
+    CAPTURE(mode);
+    LibraryWorkspace files;
+    Config config;
+    config.experimentalScopeSemanticCache = true;
+    config.frozenSources = Config::FrozenSourcesConfig{
+        .modules = std::vector<std::string>{"stable"}, .maxMiB = 64};
+    config.flagsByFile = std::vector<Config::FlagSource>{
+        {(files.root / "server.json").string(), "--single-unit --threads 1 --top top"}};
+    const std::string kind = mode;
+    std::string fixed = "module stable(input logic[3:0] a, input int dim, output wire[31:0] y); ";
+    if (kind == "runtime")
+        fixed += "localparam int N=$countones(a);";
+    else if (kind == "dynamic")
+        fixed += "int dynamic_data[]; localparam int N=$size(dynamic_data);";
+    else if (kind == "dimension")
+        fixed += "logic[3:0] fixed_data[2]; localparam int N=$size(fixed_data,dim);";
+    else
+        fixed = "module stable #(parameter int N=$bits(q)) "
+                "(input logic[3:0] a, input int dim, output wire[31:0] y); logic[3:0] q;";
+    fixed += "assign y=32'(N); endmodule\n";
+    files.write(files.root / "fixed.sv", fixed);
+    const std::string source = "module top; wire[31:0] y; stable u(4'b1,1,y); endmodule\n";
+    files.write(files.root / "consumer.sv", source);
+    files.write(files.root / "design.f", "fixed.sv\nconsumer.sv\n");
+    Indexer indexer;
+    ClientHarness client;
+    auto driver = server::ServerDriver::createFromFileLists(
+        indexer, client, config, {"design.f"}, files.root.string(), nullptr, true);
+    REQUIRE(driver);
+    auto setting = driver->options.get<server::ScopeBodyImport>();
+    REQUIRE(setting);
+    auto cache = setting->cache.lock();
+    REQUIRE(cache);
+    for (int repeat = 0; repeat < 2; ++repeat) {
+        auto make = [&](bool native) {
+            auto compilation = std::make_shared<ast::Compilation>(driver->options);
+            REQUIRE(server::importTrustedUvm(*compilation, driver->sm, driver->options));
+            if (native)
+                compilation->setInstanceBodyReuseHooks({}, {});
+            compilation->addSyntaxTree(syntax::SyntaxTree::fromText(
+                source, driver->sm, "unsafe-query-consumer.sv", "", driver->options));
+            return compilation;
+        };
+        auto current = make(false), native = make(true);
+        CHECK(DiagnosticEngine::reportAll(driver->sm, current->getAllDiagnostics()) ==
+              DiagnosticEngine::reportAll(driver->sm, native->getAllDiagnostics()));
         current->offerInstanceBodies(current);
         CHECK(cache->status().publications == 0);
+    }
+}
+
+TEST_CASE("Runtime randomize and plusargs retain local binding and audit mutable dependencies",
+          "[scope-semantic][scope-body-randomize]") {
+    const auto mode = GENERATE("plain", "inline", "outside", "class", "constant",
+                               "plusargs", "outside-plusargs", "distribution",
+                               "distribution-external-weight", "distribution-external-item");
+    const std::string kind = mode;
+    const bool reusable = kind == "plain" || kind == "inline" || kind == "plusargs" ||
+                          kind == "distribution";
+    CAPTURE(mode);
+    LibraryWorkspace files;
+    Config config;
+    config.experimentalScopeSemanticCache = true;
+    config.frozenSources = Config::FrozenSourcesConfig{
+        .instances = std::vector<std::string>{"top.u"}, .maxMiB = 64};
+    config.flagsByFile = std::vector<Config::FlagSource>{
+        {(files.root / "server.json").string(), "--single-unit --threads 1 --top top"}};
+    std::string fixed = "module stable #(parameter int W=4)(output wire[W-1:0] y); ";
+    if (kind == "class") {
+        fixed += "class C; rand bit[3:0] data; endclass C item=new; "
+                 "initial if(!item.randomize()) $error(\"randomize failed\"); assign y=W'(0);";
+    }
+    else if (kind == "plusargs" || kind == "outside-plusargs") {
+        fixed += "bit[W-1:0] data; initial begin void'($value$plusargs(\"data=%h\",";
+        fixed += kind == "plusargs" ? "data" : "mutable_limits::target";
+        fixed += ")); if($test$plusargs(\"override_data\")) data='1; end assign y=data;";
+    }
+    else if (kind == "constant") {
+        fixed += "bit[W-1:0] data; localparam int R=std::randomize(data); assign y=W'(R);";
+    }
+    else {
+        fixed += "function automatic bit[W-1:0] choose(); bit[W-1:0] data; "
+                 "if(!std::randomize(data)";
+        if (kind == "inline")
+            fixed += " with {data inside {[1:(1<<W)-1]};}";
+        else if (kind == "outside")
+            fixed += " with {data < mutable_limits::LIMIT;}";
+        else if (kind == "distribution")
+            fixed += " with {data dist {[1:(1<<W)-1] :/ W, 0 := 1};}";
+        else if (kind == "distribution-external-weight")
+            fixed += " with {data dist {[1:(1<<W)-1] :/ mutable_limits::LIMIT, 0 := 1};}";
+        else if (kind == "distribution-external-item")
+            fixed += " with {data dist {mutable_limits::target := W, 0 := 1};}";
+        fixed += ") $error(\"randomize failed\"); return data; endfunction assign y=choose();";
+    }
+    fixed += " endmodule\n";
+    files.write(files.root / "fixed.sv", fixed);
+    auto source = [](int width) {
+        return fmt::format("package mutable_limits; parameter int LIMIT={}; int target; endpackage\n"
+                           "module top; wire[{}:0] y; stable #(.W({})) u(y); endmodule\n",
+                           width - 1, width - 1, width);
+    };
+    files.write(files.root / "consumer.sv", source(4));
+    files.write(files.root / "design.f", "fixed.sv\nconsumer.sv\n");
+    Indexer indexer;
+    ClientHarness client;
+    auto driver = server::ServerDriver::createFromFileLists(
+        indexer, client, config, {"design.f"}, files.root.string(), nullptr, true);
+    REQUIRE(driver);
+    auto setting = driver->options.get<server::ScopeBodyImport>();
+    REQUIRE(setting);
+    auto cache = setting->cache.lock();
+    REQUIRE(cache);
+    int previous = 0;
+    for (int width : {4, 4, 8, 8}) {
+        auto make = [&](bool native) {
+            auto compilation = std::make_shared<ast::Compilation>(driver->options);
+            REQUIRE(server::importTrustedUvm(*compilation, driver->sm, driver->options));
+            if (native)
+                compilation->setInstanceBodyReuseHooks({}, {});
+            compilation->addSyntaxTree(syntax::SyntaxTree::fromText(
+                source(width), driver->sm, "randomize-consumer.sv", "", driver->options));
+            return compilation;
+        };
+        auto current = make(false), native = make(true);
+        CHECK(DiagnosticEngine::reportAll(driver->sm, current->getAllDiagnostics()) ==
+              DiagnosticEngine::reportAll(driver->sm, native->getAllDiagnostics()));
+        CHECK(current->hasIssuedErrors() == (kind == "constant"));
+        const auto& actual = current->getRoot().topInstances.front()->body.find("u")
+                                 ->as<ast::InstanceSymbol>().body;
+        if (width == previous)
+            CHECK(current->isImportedInstanceBody(actual) == reusable);
+        current->offerInstanceBodies(current);
+        CHECK((cache->status().publications > 0) == reusable);
+        previous = width;
+    }
+}
+
+TEST_CASE("Named assertion declarations close expanded bodies and folded repetition dependencies",
+          "[scope-semantic][scope-body-named-assertions]") {
+    const auto mode = GENERATE("sequence", "property", "unused-external", "delay-external",
+                               "formal", "local-variable", "local-variable-external", "default-clock", "disable-external",
+                               "clocking-vars", "unbounded-delay", "unbounded-repetition",
+                               "unbounded-external");
+    const std::string kind = mode;
+    const bool reusable = kind == "sequence" || kind == "property" || kind == "default-clock" ||
+                          kind == "local-variable" || kind == "unbounded-delay" ||
+                          kind == "unbounded-repetition";
+    CAPTURE(mode);
+    LibraryWorkspace files;
+    Config config;
+    config.experimentalScopeSemanticCache = true;
+    config.frozenSources = Config::FrozenSourcesConfig{
+        .instances = std::vector<std::string>{"top.u"}, .maxMiB = 64};
+    config.flagsByFile = std::vector<Config::FlagSource>{
+        {(files.root / "server.json").string(), "--single-unit --threads 1 --top top"}};
+    std::string fixed = "module stable #(parameter int W=2)"
+                        "(input logic clk, input logic rst_ni, input logic[W-1:0] a, "
+                        "output wire[W-1:0] y); ";
+    if (kind == "unused-external")
+        fixed += "sequence unused_s; mutable_limits::flag; endsequence ";
+    else if (kind == "delay-external")
+        fixed += "sequence s; a[0] ##mutable_limits::DELAY a[0]; endsequence "
+                 "assert property(@(posedge clk) s); ";
+    else if (kind == "unbounded-delay" || kind == "unbounded-external")
+        fixed += "sequence s; a[0] ##[" +
+                 std::string(kind == "unbounded-external" ? "mutable_limits::DELAY" : "W") +
+                 ":$] a[0]; endsequence assert property(@(posedge clk) s); ";
+    else if (kind == "unbounded-repetition")
+        fixed += "sequence s; a[0] [*W:$]; endsequence assert property(@(posedge clk) s); ";
+    else if (kind == "formal")
+        fixed += "sequence s(logic b); b; endsequence "
+                 "assert property(@(posedge clk) s(a[0])); ";
+    else if (kind == "local-variable")
+        fixed += "sequence s; int v; (1,v=1) ##1 (v==1); endsequence "
+                 "assert property(@(posedge clk) s); ";
+    else if (kind == "local-variable-external")
+        fixed += "sequence s; int v; (1,v=mutable_limits::flag) ##1 (v==1); endsequence "
+                 "assert property(@(posedge clk) s); ";
+    else if (kind == "default-clock")
+        fixed += "default disable iff !rst_ni; default clocking @(posedge clk); endclocking "
+                 "sequence s; a[0] [*W]; endsequence property p; s |-> ##1 a[0]; endproperty "
+                 "assert property(p); ";
+    else if (kind == "disable-external")
+        fixed += "default disable iff mutable_limits::flag; "
+                 "sequence unused_s; a[0]; endsequence ";
+    else if (kind == "clocking-vars")
+        fixed += "default clocking @(posedge clk); input a; endclocking "
+                 "sequence s; a[0]; endsequence assert property(s); ";
+    else {
+        fixed += "sequence s; a[0] [*W]; endsequence ";
+        if (kind == "property")
+            fixed += "property p; @(posedge clk) s |-> ##1 a[0]; endproperty assert property(p); ";
+        else
+            fixed += "assert property(@(posedge clk) s); ";
+    }
+    fixed += "assign y=a; endmodule\n";
+    files.write(files.root / "fixed.sv", fixed);
+    auto source = [](int width) {
+        return fmt::format("package mutable_limits; parameter int DELAY={}; bit flag; endpackage\n"
+                           "module top; logic clk; logic[{}:0] a; wire[{}:0] y; "
+                           "stable #(.W({})) u(clk,1'b1,a,y); endmodule\n",
+                           width, width - 1, width - 1, width);
+    };
+    files.write(files.root / "consumer.sv", source(2));
+    files.write(files.root / "design.f", "fixed.sv\nconsumer.sv\n");
+    Indexer indexer;
+    ClientHarness client;
+    auto driver = server::ServerDriver::createFromFileLists(
+        indexer, client, config, {"design.f"}, files.root.string(), nullptr, true);
+    REQUIRE(driver);
+    auto setting = driver->options.get<server::ScopeBodyImport>();
+    REQUIRE(setting);
+    auto cache = setting->cache.lock();
+    REQUIRE(cache);
+    int previous = 0;
+    for (int width : {2, 2, 4, 4}) {
+        auto make = [&](bool native) {
+            auto compilation = std::make_shared<ast::Compilation>(driver->options);
+            REQUIRE(server::importTrustedUvm(*compilation, driver->sm, driver->options));
+            if (native)
+                compilation->setInstanceBodyReuseHooks({}, {});
+            compilation->addSyntaxTree(syntax::SyntaxTree::fromText(
+                source(width), driver->sm, "assertion-consumer.sv", "", driver->options));
+            return compilation;
+        };
+        auto current = make(false), native = make(true);
+        CHECK(DiagnosticEngine::reportAll(driver->sm, current->getAllDiagnostics()) ==
+              DiagnosticEngine::reportAll(driver->sm, native->getAllDiagnostics()));
+        REQUIRE_FALSE(current->hasIssuedErrors());
+        const auto& actual = current->getRoot().topInstances.front()->body.find("u")
+                                 ->as<ast::InstanceSymbol>().body;
+        if (width == previous)
+            CHECK(current->isImportedInstanceBody(actual) == reusable);
+        if (kind == "default-clock") {
+            const auto& expected = native->getRoot().topInstances.front()->body.find("u")
+                                       ->as<ast::InstanceSymbol>().body;
+            auto clock = current->getDefaultClocking(actual);
+            auto expectedClock = native->getDefaultClocking(expected);
+            REQUIRE(clock);
+            REQUIRE(expectedClock);
+            CHECK(clock->getSyntax() == expectedClock->getSyntax());
+            auto disable = current->getDefaultDisable(actual);
+            auto expectedDisable = native->getDefaultDisable(expected);
+            REQUIRE(disable);
+            REQUIRE(expectedDisable);
+            CHECK(disable->syntax == expectedDisable->syntax);
+        }
+        current->offerInstanceBodies(current);
+        CHECK((cache->status().publications > 0) == reusable);
+        previous = width;
+    }
+}
+
+TEST_CASE("Frozen macro invocation diagnostics retain header expansion notes and outside guards",
+          "[scope-semantic][scope-body-macro-diagnostics]") {
+    const bool outside = GENERATE(false, true);
+    LibraryWorkspace files;
+    Config config;
+    config.experimentalScopeSemanticCache = true;
+    config.frozenSources = Config::FrozenSourcesConfig{
+        .instances = std::vector<std::string>{"top.u"}, .maxMiB = 64};
+    config.flagsByFile = std::vector<Config::FlagSource>{
+        {(files.root / "server.json").string(), "--single-unit --threads 1 --top top"}};
+    files.write(files.root / "checks.svh", "`define CHECK(T) if(probe(T)) y=1;\n");
+    files.write(files.root / "fixed.sv",
+                std::string("`include \"checks.svh\"\nmodule stable(input int a,output int y); "
+                            "function automatic int probe(input int x); return x; endfunction "
+                            "always_comb begin y=0; `CHECK(") +
+                    (outside ? "$root.top.mutable_result" : "a") + ") end endmodule\n");
+    auto source = [](int version) {
+        return fmt::format("module top; int a,y,mutable_result={}; stable u(a,y); endmodule\n",version);
+    };
+    files.write(files.root / "consumer.sv", source(0));
+    files.write(files.root / "design.f", "fixed.sv\nconsumer.sv\n");
+    Indexer indexer;
+    ClientHarness client;
+    auto driver = server::ServerDriver::createFromFileLists(
+        indexer, client, config, {"design.f"}, files.root.string(), nullptr, true);
+    REQUIRE(driver);
+    for (int version : {0,1,2}) {
+        auto make = [&](bool native) {
+            auto result = std::make_shared<ast::Compilation>(driver->options);
+            REQUIRE(server::importTrustedUvm(*result,driver->sm,driver->options));
+            if (native)
+                result->setInstanceBodyReuseHooks({},{});
+            result->addSyntaxTree(syntax::SyntaxTree::fromText(
+                source(version),driver->sm,"macro-consumer.sv","",driver->options));
+            return result;
+        };
+        auto actual = make(false),native = make(true);
+        const auto text = DiagnosticEngine::reportAll(driver->sm,actual->getAllDiagnostics());
+        CHECK(text == DiagnosticEngine::reportAll(driver->sm,native->getAllDiagnostics()));
+        REQUIRE_FALSE(native->hasIssuedErrors());
+        CHECK(text.find("int-bool-conv") != std::string::npos);
+        CHECK(text.find("expanded from macro") != std::string::npos);
+        const auto& body = actual->getRoot().topInstances.front()->body.find("u")
+                               ->as<ast::InstanceSymbol>().body;
+        if(version)
+            CHECK(actual->isImportedInstanceBody(body) == !outside);
+        actual->offerInstanceBodies(actual);
+    }
+}
+
+TEST_CASE("Closed coverage retains samples bins crosses events and options with native dependencies",
+          "[scope-semantic][scope-body-coverage]") {
+    const auto mode = GENERATE(std::string("local"), std::string("event"),
+                               std::string("bin"), std::string("option"),
+                               std::string("sample"), std::string("cross"));
+    LibraryWorkspace files;
+    Config config;
+    config.experimentalScopeSemanticCache = true;
+    config.frozenSources = Config::FrozenSourcesConfig{
+        .instances = std::vector<std::string>{"top.u"}, .maxMiB = 64};
+    config.flagsByFile = std::vector<Config::FlagSource>{
+        {(files.root / "server.json").string(), "--single-unit --threads 1 --top top"}};
+    const auto target = mode == "sample" ? "top.x" : "a";
+    files.write(files.root / "fixed.sv",
+        std::string("module stable(input logic clk, input int a); ") +
+        "class Proxy; covergroup cg(string name) with function sample(int x); "
+        "option.name=name; option.per_instance=1; " +
+        (mode == "option" ? "option.weight=top.K; " : "option.weight=2; ") +
+        "cp: coverpoint x { bins hit={" +
+        (mode == "bin" ? "top.K" : "1") + "}; bins trans=(1 => 2); } "
+        "other: coverpoint x; cr: cross cp,other { " +
+        (mode == "cross" ? "bins select=binsof(cp) intersect {top.K}; "
+                          : "bins select=binsof(cp) intersect {1}; ") +
+        "} endgroup function new(); cg=new(\"monitor\"); endfunction "
+        "function void sample(int x); cg.sample(x); endfunction endclass "
+        "Proxy proxy; initial proxy=new(); initial proxy.sample(" + target + "); "
+        "covergroup edge_cg @(posedge " + (mode == "event" ? "top.clk" : "clk") +
+        "); cp: coverpoint a; endgroup edge_cg edges=new; endmodule\n");
+    auto source = [](int version) {
+        return fmt::format("module top; localparam int K={}; logic clk; int x; "
+                           "stable u(clk,x); endmodule\n", version + 1);
+    };
+    files.write(files.root / "consumer.sv", source(0));
+    files.write(files.root / "design.f", "fixed.sv\nconsumer.sv\n");
+    Indexer indexer;
+    ClientHarness client;
+    auto driver = server::ServerDriver::createFromFileLists(
+        indexer, client, config, {"design.f"}, files.root.string(), nullptr, true);
+    REQUIRE(driver);
+    for (int version : {0, 1, 2}) {
+        auto make = [&](bool native) {
+            auto result = std::make_shared<ast::Compilation>(driver->options);
+            if (native) {
+                auto tree = syntax::SyntaxTree::fromFile(
+                    (files.root / "fixed.sv").string(), driver->sm, driver->options);
+                REQUIRE(tree);
+                result->addSyntaxTree(*tree);
+            }
+            else
+                REQUIRE(server::importTrustedUvm(*result, driver->sm, driver->options));
+            result->addSyntaxTree(syntax::SyntaxTree::fromText(
+                source(version), driver->sm, "coverage-consumer.sv", "", driver->options));
+            return result;
+        };
+        auto actual = make(false), native = make(true);
+        const auto actualText = DiagnosticEngine::reportAll(driver->sm, actual->getAllDiagnostics());
+        const auto expectedText = DiagnosticEngine::reportAll(driver->sm, native->getAllDiagnostics());
+        INFO(mode);
+        INFO(actualText);
+        INFO(expectedText);
+        CHECK(actualText == expectedText);
+        REQUIRE_FALSE(native->hasIssuedErrors());
+        const auto& body = actual->getRoot().topInstances.front()->body.find("u")
+                               ->as<ast::InstanceSymbol>().body;
+        if (version)
+            CHECK(actual->isImportedInstanceBody(body) == (mode == "local"));
+        actual->offerInstanceBodies(actual);
+    }
+}
+
+TEST_CASE("Fixed foreign runtime calls audit actual outputs and preserve native constant errors",
+          "[scope-semantic][scope-body-foreign-calls]") {
+    const auto mode = GENERATE(std::string("local"), std::string("external"), std::string("constant"),
+                               std::string("generic-external"));
+    LibraryWorkspace files;
+    Config config;
+    config.experimentalScopeSemanticCache = true;
+    config.frozenSources = Config::FrozenSourcesConfig{
+        .instances = std::vector<std::string>{"top.u"}, .maxMiB = 64};
+    config.flagsByFile = std::vector<Config::FlagSource>{
+        {(files.root / "server.json").string(), "--single-unit --threads 1 --top top"}};
+    files.write(files.root / "fixed.sv",
+                "package foreign_api; int enabled=1,count,outside; int queue_values[$]; "
+                "virtual class Base; int field; function new(); endfunction "
+                "pure virtual function int get_root(); "
+                "task wait_modified(input int cycles); #cycles; endtask endclass "
+                "class Box#(type T=bit); T item; function new(); endfunction endclass "
+                "class Registry#(type T=bit,type K=string); static event modified; "
+                "static task wait_modified(input T x, "
+                "output T y); process p=process::self(); string state,text; int chars; "
+                "state=p.get_randstate(); p.set_randstate(state); text.itoa(42); "
+                "text=text.tolower(); chars=text.len(); $swrite(text,\"%0d\",chars); "
+                "y=x; ->modified; endtask endclass "
+                "import \"DPI-C\" context function int read_value("
+                "input string path, output int value); "
+                "import \"DPI-C\" function int get_value(input int value); endpackage\n"
+                "module stable; int value,status; bit copied; "
+                "initial foreign_api::Registry#(bit)::wait_modified(1'b1," +
+                    std::string(mode == "generic-external" ? "top.flag" : "copied") + "); "
+                "foreign_api::Box#(bit) box,box_copy; "
+                "initial foreign_api::Registry#(foreign_api::Box#(bit))::wait_modified(box,box_copy); "
+                "class Proxy extends foreign_api::Base; function new(); super.new(); "
+                "endfunction virtual function int get_root(); return field; endfunction "
+                "endclass Proxy proxy; foreign_api::Base base_view; "
+                "initial begin proxy=new(); proxy.field=value; status=proxy.field; "
+                "base_view=proxy; status=base_view.get_root(); proxy.wait_modified(1); end "
+                "typedef enum {Idle,Busy} state_t; state_t state; string state_name; "
+                "initial state_name=state.name(); "
+                "initial begin status=foreign_api::enabled; foreign_api::count=status; "
+                "foreign_api::queue_values.push_back(status); end " +
+                    (mode == "constant" ? std::string("localparam int V=foreign_api::get_value(4); ")
+                                        : std::string("initial status=foreign_api::read_value(\"path\",") +
+                                              (mode == "external" ? "top.x" : "value") + "); ") +
+                    "endmodule\n");
+    auto source = [](int version) {
+        return fmt::format("module top; bit flag; int x={}; stable u(); {} endmodule\n", version,
+                           version % 2 ? "initial $display(foreign_api::outside);" : "");
+    };
+    files.write(files.root / "consumer.sv", source(0));
+    files.write(files.root / "design.f", "fixed.sv\nconsumer.sv\n");
+    Indexer indexer;
+    ClientHarness client;
+    auto driver = server::ServerDriver::createFromFileLists(
+        indexer, client, config, {"design.f"}, files.root.string(), nullptr, true);
+    REQUIRE(driver);
+    for (int version : {0, 1, 2}) {
+        auto make = [&](bool native) {
+            auto result = std::make_shared<ast::Compilation>(driver->options);
+            const bool imported = !native &&
+                                  server::importTrustedUvm(*result, driver->sm, driver->options);
+            if (!native && mode != "constant")
+                REQUIRE(imported);
+            if (!imported) {
+                auto fixed = syntax::SyntaxTree::fromFile(
+                    (files.root / "fixed.sv").string(), driver->sm, driver->options);
+                REQUIRE(fixed);
+                result->addSyntaxTree(*fixed);
+            }
+            result->addSyntaxTree(syntax::SyntaxTree::fromText(
+                source(version), driver->sm, "foreign-consumer.sv", "", driver->options));
+            return result;
+        };
+        auto actual = make(false), native = make(true);
+        CHECK(DiagnosticEngine::reportAll(driver->sm, actual->getAllDiagnostics()) ==
+              DiagnosticEngine::reportAll(driver->sm, native->getAllDiagnostics()));
+        CHECK(native->hasIssuedErrors() == (mode == "constant"));
+        const auto& body = actual->getRoot().topInstances.front()->body.find("u")
+                               ->as<ast::InstanceSymbol>().body;
+        if (version)
+            CHECK(actual->isImportedInstanceBody(body) == (mode == "local"));
+        actual->offerInstanceBodies(actual);
+    }
+}
+
+TEST_CASE("Imported definition identities retain binds and defparams absent from consumer CST",
+          "[scope-semantic][scope-provider-directives]") {
+    const bool defparam = GENERATE(false, true);
+    const bool externalBinding = GENERATE(false, true);
+    const bool localProxy = GENERATE(false, true);
+    const bool externalConstructor = GENERATE(false, true);
+    LibraryWorkspace files;
+    Config config;
+    config.experimentalScopeSemanticCache = true;
+    config.frozenSources = Config::FrozenSourcesConfig{
+        .instances = std::vector<std::string>{"top.u"}, .maxMiB = 64};
+    config.flagsByFile = std::vector<Config::FlagSource>{
+        {(files.root / "server.json").string(),
+         "--single-unit --threads 1 --top top --top directives"}};
+    const std::string fixed =
+        "module stable #(parameter int W=4)(input logic[W-1:0] a, output wire[W-1:0] y); "
+        "assign y=a; endmodule\n"
+        "module monitor(input logic[3:0] a); wire[3:0] probe=a; " +
+        (localProxy ? std::string("class ProxyBase; int value; extern virtual function int read(); "
+                                 "function new(int n); value=n; endfunction "
+                                 "endclass function int ProxyBase::read(); return value; "
+                                 "endfunction class Proxy extends ProxyBase; "
+                                 "function new(); super.new(") +
+                          (externalConstructor ? "top.a" : "4") +
+                          "); endfunction endclass Proxy proxy; int sample; "
+                          "initial begin proxy=new(); sample=proxy.read(); end "
+                    : std::string()) +
+        "endmodule\nmodule directives; " +
+        std::string(defparam ? "defparam top.u.W=8;"
+                              : externalBinding ? "bind stable monitor observe(.a(top.a));"
+                                                : "bind stable monitor observe(.a(a));") +
+        " endmodule\n";
+    files.write(files.root / "fixed.sv", fixed);
+    auto source = [](int version) {
+        return fmt::format("module top; logic[3:0] a; wire[7:0] y; "
+                           "stable #(.W(4)) u(a,y); localparam int TAG={}; endmodule\n", version);
+    };
+    files.write(files.root / "consumer.sv", source(0));
+    files.write(files.root / "design.f", "fixed.sv\nconsumer.sv\n");
+    Indexer indexer;
+    ClientHarness client;
+    auto driver = server::ServerDriver::createFromFileLists(
+        indexer, client, config, {"design.f"}, files.root.string(), nullptr, true);
+    REQUIRE(driver);
+    auto setting = driver->options.get<server::ScopeBodyImport>();
+    REQUIRE(setting);
+    auto cache = setting->cache.lock();
+    REQUIRE(cache);
+    for (int version : {0, 1, 2}) {
+        auto make = [&](bool native) {
+            auto compilation = std::make_shared<ast::Compilation>(driver->options);
+            if (native) {
+                auto tree = syntax::SyntaxTree::fromFile(
+                    (files.root / "fixed.sv").string(), driver->sm, driver->options);
+                REQUIRE(tree);
+                compilation->addSyntaxTree(*tree);
+            }
+            else
+                REQUIRE(server::importTrustedUvm(*compilation, driver->sm, driver->options));
+            // Deliberately omit provider syntax from imported consumers. The
+            // fixed directives exist only in the imported definition identities.
+            compilation->addSyntaxTree(syntax::SyntaxTree::fromText(
+                source(version), driver->sm, "directive-consumer.sv", "", driver->options));
+            return compilation;
+        };
+        auto current = make(false), native = make(true);
+        CHECK(DiagnosticEngine::reportAll(driver->sm, current->getAllDiagnostics()) ==
+              DiagnosticEngine::reportAll(driver->sm, native->getAllDiagnostics()));
+        REQUIRE_FALSE(current->hasIssuedErrors());
+        const auto tops = current->getRoot().topInstances;
+        const auto top = std::ranges::find_if(tops, [](auto instance) { return instance->name == "top"; });
+        REQUIRE(top != tops.end());
+        const auto& body = (*top)->body.find("u")->as<ast::InstanceSymbol>().body;
+        CHECK(body.find("W")->as<ast::ParameterSymbol>().getValue().integer().as<int>() ==
+              (defparam ? 8 : 4));
+        CHECK(bool(body.find("observe")) == !defparam);
+        if (version && !defparam)
+            CHECK(current->isImportedInstanceBody(body) ==
+                  (!externalBinding && (!localProxy || !externalConstructor)));
+        current->offerInstanceBodies(current);
     }
 }
 
@@ -3968,6 +4618,8 @@ endmodule
 TEST_CASE(
     "Local nominal defaults preserve declaration origin and instance identity across variants",
     "[scope-semantic][scope-body-local-nominal]") {
+    const bool nested = GENERATE(false, true);
+    CAPTURE(nested);
     LibraryWorkspace files;
     Config config;
     config.experimentalScopeSemanticCache = true;
@@ -3975,7 +4627,7 @@ TEST_CASE(
         Config::FrozenSourcesConfig{.modules = std::vector<std::string>{"stable"}, .maxMiB = 64};
     config.flagsByFile = std::vector<Config::FlagSource>{
         {(files.root / "server.json").string(), "--single-unit --threads 1 --top top"}};
-    files.write(files.root / "fixed.sv", R"(
+    std::string fixed = R"(
 module stable #(parameter int W=4,
   parameter type T=struct packed { logic [W-1:0] payload; },
   parameter type V=struct packed { logic [W-1:0] payload; },
@@ -3991,7 +4643,17 @@ module stable #(parameter int W=4,
   assign twin=a;
   assign y=q.payload ^ twin.payload ^ (state==Busy ? '1 : '0);
 endmodule
-)");
+)";
+    if (nested) {
+        const std::string direct = "parameter type V=struct packed { logic [W-1:0] payload; }";
+        const auto offset = fixed.find(direct);
+        REQUIRE(offset != std::string::npos);
+        fixed.replace(offset, direct.size(), "parameter type V=struct packed { T payload; }");
+        const auto member = fixed.find("  U q;");
+        REQUIRE(member != std::string::npos);
+        fixed.insert(member, "  localparam type LOCAL=struct packed { T item; };\n");
+    }
+    files.write(files.root / "fixed.sv", fixed);
     auto source = [](int width) {
         return fmt::format("module top; localparam int WIDTH={}; logic [WIDTH-1:0] a; "
                            "wire [WIDTH-1:0] y, z; stable #(.W(WIDTH)) u(.a(a),.y(y)); "
@@ -4073,6 +4735,71 @@ endmodule
     CHECK(cache->status().publications == 4);
     CHECK(cache->status().compactPublications == 4);
     CHECK(identities.size() >= 2);
+}
+
+TEST_CASE("Fixed array parameter overrides match deep values across independent body owners",
+          "[scope-semantic][scope-body-array-parameters]") {
+    const bool nested = GENERATE(false, true);
+    LibraryWorkspace files;
+    Config config;
+    config.experimentalScopeSemanticCache = true;
+    config.frozenSources = Config::FrozenSourcesConfig{
+        .instances = std::vector<std::string>{"top.u"}, .maxMiB = 64};
+    config.flagsByFile = std::vector<Config::FlagSource>{
+        {(files.root / "server.json").string(), "--single-unit --threads 1 --top top"}};
+    files.write(files.root / "fixed.sv",
+                "package policy; typedef logic[3:0] word_t; endpackage\n"
+                "module stable #(parameter policy::word_t P[1:0]" +
+                    std::string(nested ? "[0:1]" : "") + "=" +
+                    (nested ? "'{'{4'b0,4'b1},'{4'b10,4'b11}}"
+                            : "'{4'b0,4'b1}") +
+                    ")(output wire[3:0] y); assign y=" +
+                    (nested ? "P[0][1]" : "P[0]") + "; endmodule\n");
+    auto source = [&](int variant) {
+        const std::string element = variant == 0 ? "4'b0011"
+                                    : variant == 1 ? "4'b0101" : "4'bxz01";
+        const auto pattern = nested ? "'{'{4'b0,4'b1},'{4'b10," + element + "}}"
+                                    : "'{4'b0," + element + "}";
+        return "module top; wire[3:0] y; stable #(.P(" + pattern + ")) u(y); endmodule\n";
+    };
+    files.write(files.root / "consumer.sv", source(0));
+    files.write(files.root / "design.f", "fixed.sv\nconsumer.sv\n");
+    Indexer indexer;
+    ClientHarness client;
+    auto driver = server::ServerDriver::createFromFileLists(
+        indexer, client, config, {"design.f"}, files.root.string(), nullptr, true);
+    REQUIRE(driver);
+    auto setting = driver->options.get<server::ScopeBodyImport>();
+    REQUIRE(setting);
+    auto cache = setting->cache.lock();
+    REQUIRE(cache);
+    int previous = -1;
+    for (int variant : {0, 0, 1, 1, 2, 2, 0, 0}) {
+        auto make = [&](bool native) {
+            auto compilation = std::make_shared<ast::Compilation>(driver->options);
+            REQUIRE(server::importTrustedUvm(*compilation, driver->sm, driver->options));
+            if (native)
+                compilation->setInstanceBodyReuseHooks({}, {});
+            compilation->addSyntaxTree(syntax::SyntaxTree::fromText(
+                source(variant), driver->sm, "array-consumer.sv", "", driver->options));
+            return compilation;
+        };
+        auto current = make(false), native = make(true);
+        CHECK(DiagnosticEngine::reportAll(driver->sm, current->getAllDiagnostics()) ==
+              DiagnosticEngine::reportAll(driver->sm, native->getAllDiagnostics()));
+        REQUIRE_FALSE(current->hasIssuedErrors());
+        const auto& actual = current->getRoot().topInstances.front()->body.find("u")
+                                 ->as<ast::InstanceSymbol>().body;
+        const auto& expected = native->getRoot().topInstances.front()->body.find("u")
+                                   ->as<ast::InstanceSymbol>().body;
+        CHECK(actual.find("P")->as<ast::ParameterSymbol>().getValue() ==
+              expected.find("P")->as<ast::ParameterSymbol>().getValue());
+        if (variant == previous)
+            CHECK(current->isImportedInstanceBody(actual));
+        current->offerInstanceBodies(current);
+        previous = variant;
+    }
+    CHECK(cache->status().hits >= 4);
 }
 
 TEST_CASE("Closed fixed arrays retain nominal elements and native indexed drivers across edits",
@@ -4256,13 +4983,13 @@ TEST_CASE("Closed body extensions reject mutable function and array dependencies
         std::string("function automatic int f(input int a); return consumer_pkg::f(a); "
                     "endfunction always_comb y=f(a);"),
         std::string("function automatic int f(input int a, output int q); q=a; return a; "
-                    "endfunction int q; always_comb y=f(a,q);"),
+                    "endfunction always_comb y=f(a,$root.top.mutable_result);"),
         std::string("function automatic void f(input int x); y=x+consumer_pkg::N; "
                     "endfunction always_comb f(a);"),
         std::string("always_comb y=$urandom(a);"),
         std::string("initial $sformat($root.top.mutable_name,\"%0d\",a); assign y=a;"),
         std::string("int fd; initial fd=$fopen($root.top.mutable_name,\"w\"); assign y=a;"),
-        std::string("localparam string NAME=\"fixed\"; initial $info(NAME); assign y=a;"),
+        std::string("localparam string NAME=consumer_pkg::NAME; initial $info(NAME); assign y=a;"),
         std::string("always_comb y={<<consumer_pkg::N{a}};"),
         std::string("localparam int TABLE[2]='{consumer_pkg::N,0}; "
                     "always_comb y=TABLE[a[0]];"),
@@ -4289,8 +5016,9 @@ TEST_CASE("Closed body extensions reject mutable function and array dependencies
                 "module stable(input int a, output int y); " + implementation + " endmodule\n");
     auto source = [](int n) {
         return fmt::format("package consumer_pkg; parameter int N={}; "
+                           "parameter string NAME=$sformatf(\"%0d\",N); "
                            "function automatic int f(input int a); return a+N; endfunction "
-                           "endpackage module top; string mutable_name=\"consumer\"; int a,y; "
+                           "endpackage module top; string mutable_name=\"consumer\"; int a,y,mutable_result; "
                            "stable u(.*); endmodule\n",
                            n);
     };
@@ -5116,6 +5844,191 @@ TEST_CASE("Mutable compilation-unit bindings suspend and restore fixed definitio
         CHECK(cached->options.get<server::TrustedUvmImport>()->library == library);
     }
     CHECK((library->namespaceDeclines.load() > 0) == (kind < 5));
+}
+
+TEST_CASE("Generic cast warnings distinguish provisional compatibility from concrete certainty",
+          "[scope-semantic][scope-generic-cast-certainty]") {
+    const bool concrete = GENERATE(false, true);
+    LibraryWorkspace files;
+    Config config;
+    config.experimentalScopeSemanticCache = true;
+    config.frozenSources = Config::FrozenSourcesConfig{
+        .packages = std::vector<std::string>{"stable"}};
+    config.flagsByFile = std::vector<Config::FlagSource>{
+        {(files.root / "server.json").string(), "--single-unit --threads 1 --top top"}};
+    files.write(files.root / "fixed.sv",
+                std::string("package stable; class Base; endclass "
+                            "class Derived extends Base; endclass "
+                            "class Group#(type T=Base); static Group#(T) src; "
+                            "static Group#(Base) dst; static function int cast_it(); "
+                            "return $cast(dst,src); endfunction endclass ") +
+                    (concrete ? "Group#(Base) one; Group#(Derived) two; " : "") +
+                    "endpackage\n");
+    files.write(files.root / "consumer.sv", "module top; endmodule\n");
+    files.write(files.root / "design.f", "fixed.sv\nconsumer.sv\n");
+    Indexer indexer;
+    ClientHarness client;
+    auto driver = server::ServerDriver::createFromFileLists(
+        indexer, client, config, {"design.f"}, files.root.string(), nullptr, true);
+    REQUIRE(driver);
+    auto make = [&](bool native) {
+        auto result = std::make_shared<ast::Compilation>(driver->options);
+        if (native) {
+            auto tree = syntax::SyntaxTree::fromFile(
+                (files.root / "fixed.sv").string(), driver->sm, driver->options);
+            REQUIRE(tree);
+            result->addSyntaxTree(*tree);
+        }
+        else
+            REQUIRE(server::importTrustedUvm(*result, driver->sm, driver->options));
+        result->addSyntaxTree(syntax::SyntaxTree::fromText(
+            "module top; endmodule\n", driver->sm, "cast-consumer.sv", "", driver->options));
+        result->forceElaborate(*result->getPackage("stable"));
+        return result;
+    };
+    auto actual = make(false), native = make(true);
+    const auto actualText = DiagnosticEngine::reportAll(driver->sm, actual->getAllDiagnostics());
+    const auto nativeText = DiagnosticEngine::reportAll(driver->sm, native->getAllDiagnostics());
+    INFO(actualText);
+    INFO(nativeText);
+    REQUIRE_FALSE(native->hasIssuedErrors());
+    auto diagnosticSet = [&](ast::Compilation& compilation) {
+        std::vector<std::string> rendered;
+        for (const auto& diagnostic : compilation.getAllDiagnostics()) {
+            Diagnostics one;
+            one.push_back(diagnostic);
+            rendered.push_back(DiagnosticEngine::reportAll(driver->sm, one));
+        }
+        std::ranges::sort(rendered);
+        return rendered;
+    };
+    // Distinct messages at the same source position have no semantic ordering.
+    CHECK(diagnosticSet(*actual) == diagnosticSet(*native));
+    if (concrete) {
+        CHECK(nativeText.find("will always succeed") != std::string::npos);
+        CHECK(nativeText.find("will always fail") != std::string::npos);
+    }
+    else {
+        CHECK(nativeText.find("will always") == std::string::npos);
+    }
+}
+
+TEST_CASE("Forced retained generic checks keep diagnostics and allocations in the consumer",
+          "[scope-semantic][scope-forced-generic-diagnostics]") {
+    const bool callbacks = GENERATE(false, true);
+    LibraryWorkspace files;
+    Config config;
+    config.experimentalScopeSemanticCache = true;
+    config.frozenSources = Config::FrozenSourcesConfig{
+        .packages = std::vector<std::string>{"stable"}};
+    config.flagsByFile = std::vector<Config::FlagSource>{
+        {(files.root / "server.json").string(), "--single-unit --threads 1 --top top"}};
+    files.write(files.root / "fixed.sv",
+                "package shared; parameter int Token=1; endpackage "
+                "package stable; import shared::*; class Mem #(int Width=32); logic[Width-1:0] data; endclass "
+                "class Device #(int unsigned Width=32); Mem#(.Width(Width)) mem; endclass "
+                "Device#() seed; " +
+                    std::string(callbacks ? "class Obj; endclass class CB; endclass "
+                                            "class Derived extends CB; endclass "
+                                            "class Callbacks#(type T=Obj,type C=CB); "
+                                            "typedef Callbacks#(T,C) self_t; static self_t src; "
+                                            "static Callbacks#(T,CB) dst; "
+                                            "static function void run(); $cast(dst,src); endfunction "
+                                            "endclass Callbacks#(Obj,Derived) seed_callbacks; " : "") +
+                    "endpackage\n");
+    files.write(files.root / "consumer.sv", "module top; endmodule\n");
+    files.write(files.root / "design.f", "fixed.sv\nconsumer.sv\n");
+    Indexer indexer;
+    ClientHarness client;
+    auto driver = server::ServerDriver::createFromFileLists(
+        indexer, client, config, {"design.f"}, files.root.string(), nullptr, true);
+    REQUIRE(driver);
+    const auto library = driver->options.get<server::TrustedUvmImport>()->library;
+    REQUIRE(library);
+    const auto wildcardData = library->compilation->getPackage("stable")->getWildcardImportData();
+    REQUIRE(wildcardData);
+    const bool ownerForced = wildcardData->hasForceElaborated;
+    const auto ownerImports = wildcardData->importedSymbols.size();
+    const auto ownerBytes = library->compilation->getTotalBytesAllocated();
+    const auto ownerDiagnostics = DiagnosticEngine::reportAll(
+        driver->sm, library->compilation->getSemanticDiagnostics());
+    for (int version : {0, 1, 2}) {
+        auto make = [&](bool native) {
+            auto result = std::make_shared<ast::Compilation>(driver->options);
+            if (native) {
+                auto tree = syntax::SyntaxTree::fromFile(
+                    (files.root / "fixed.sv").string(), driver->sm, driver->options);
+                REQUIRE(tree);
+                result->addSyntaxTree(*tree);
+            }
+            else
+                REQUIRE(server::importTrustedUvm(*result, driver->sm, driver->options));
+            result->addSyntaxTree(syntax::SyntaxTree::fromText(
+                fmt::format("module top; localparam int V={}; endmodule\n",version),
+                driver->sm, "forced-consumer.sv", "", driver->options));
+            const auto package = result->getPackage("stable");
+            REQUIRE(package);
+            (void)package->find("seed")->as<ast::ValueSymbol>().getType();
+            result->forceElaborateForWildcardLookup(*package);
+            const auto bytes = result->getTotalBytesAllocated();
+            result->forceElaborateForWildcardLookup(*package);
+            CHECK(result->getTotalBytesAllocated() == bytes);
+            return result;
+        };
+        auto actual = make(false), native = make(true);
+        const auto text = DiagnosticEngine::reportAll(driver->sm, actual->getAllDiagnostics());
+        CHECK(text == DiagnosticEngine::reportAll(driver->sm, native->getAllDiagnostics()));
+        CHECK(text.find("changes signedness") != std::string::npos);
+        CHECK(library->compilation->getTotalBytesAllocated() == ownerBytes);
+        CHECK(wildcardData->hasForceElaborated == ownerForced);
+        CHECK(wildcardData->importedSymbols.size() == ownerImports);
+        CHECK(DiagnosticEngine::reportAll(driver->sm, library->compilation->getSemanticDiagnostics()) ==
+              ownerDiagnostics);
+    }
+}
+
+TEST_CASE("Frozen generic parameter conversions retain native diagnostics",
+          "[scope-semantic][scope-generic-parameter-diagnostics]") {
+    const bool instantiateDevice = GENERATE(false, true);
+    const bool providerDefault = GENERATE(false, true);
+    const int nested = GENERATE(0, 1, 2);
+    LibraryWorkspace files;
+    Config config;
+    config.experimentalScopeSemanticCache = true;
+    config.frozenSources = Config::FrozenSourcesConfig{
+        .packages = std::vector<std::string>{"stable"}};
+    config.flagsByFile = std::vector<Config::FlagSource>{
+        {(files.root / "server.json").string(), "--single-unit --threads 1 --top top"}};
+    files.write(files.root / "fixed.sv",
+                "package stable; class Mem #(int Width=32); logic[Width-1:0] data; endclass "
+                "class Device #(type REQ=int, int unsigned Width=32); "
+                "Mem#(.Width(Width)) mem; endclass " +
+                    std::string(providerDefault ? "Device#() provider_default; " : "") +
+                    "endpackage\n");
+    files.write(files.root / "consumer.sv",
+                std::string(nested == 1 ? "class User#(int unsigned W=32) extends "
+                                           "stable::Device#(int,W); endclass "
+                            : nested == 2 ? "class User#(int unsigned W=32); "
+                                            "stable::Device#(int,W) d; "
+                                            "function int get(); return d.mem.data; endfunction "
+                                            "endclass " : "") +
+                    (instantiateDevice ? "module top; stable::Device#(int,8) d; endmodule\n"
+                                       : "module top; stable::Mem#(16) m; endmodule\n"));
+    files.write(files.root / "design.f", "fixed.sv\nconsumer.sv\n");
+    Indexer indexer, nativeIndexer;
+    ClientHarness client, nativeClient;
+    auto cached = server::ServerDriver::createFromFileLists(
+        indexer, client, config, {"design.f"}, files.root.string(), nullptr, true);
+    REQUIRE(cached);
+    auto nativeConfig = config;
+    nativeConfig.experimentalScopeSemanticCache = false;
+    auto native = server::ServerDriver::createFromFileLists(
+        nativeIndexer, nativeClient, nativeConfig, {"design.f"}, files.root.string(), nullptr, true);
+    REQUIRE(native);
+    auto& actual = cached->comp->getInstancesOfModule("top").front()->body.getCompilation();
+    auto& expected = native->comp->getInstancesOfModule("top").front()->body.getCompilation();
+    CHECK(DiagnosticEngine::reportAll(cached->sm, actual.getAllDiagnostics()) ==
+          DiagnosticEngine::reportAll(native->sm, expected.getAllDiagnostics()));
 }
 
 TEST_CASE("Package generic methods keep current user types through fixed import aliases",
@@ -6048,4 +6961,247 @@ TEST_CASE("The server reloads failed syntax inputs without a watcher event or lo
     REQUIRE(compilation->getRoot().topInstances.size() == 1);
     CHECK(compilation->getRoot().topInstances.front()->body.find("V")
               ->as<ast::ParameterSymbol>().getValue().integer().as<int>() == (mode == 1 ? 10 : 14));
+}
+
+TEST_CASE("Fixed string parameters preserve escaped bytes and detach current caller inputs",
+          "[scope-semantic][scope-body-string-parameters]") {
+    const bool nested = GENERATE(false, true);
+    CAPTURE(nested);
+    LibraryWorkspace files;
+    Config config;
+    config.experimentalScopeSemanticCache = true;
+    config.frozenSources = Config::FrozenSourcesConfig{
+        .instances = std::vector<std::string>{"top.u"}, .maxMiB = 64};
+    config.flagsByFile = std::vector<Config::FlagSource>{
+        {(files.root / "server.json").string(), "--single-unit --threads 1 --top top"}};
+    const std::string parameters = R"(#(parameter string NAME="default",
+        parameter string ITEMS[2]='{"first","second"}, parameter type T=string)
+        (output wire [31:0] y); T label=NAME; )";
+    std::string fixed = "module stable " + parameters;
+    if (nested)
+        fixed += "child #(.NAME(NAME),.ITEMS(ITEMS),.T(T)) nested(y); endmodule\n"
+                 "module child " + parameters;
+    fixed += "assign y=NAME.len()+ITEMS[0].len()+ITEMS[1].len(); endmodule\n";
+    files.write(files.root / "fixed.sv", fixed);
+    const std::vector<std::string> names{"", "same", "sAme", "quotes\"\\\n\t", "\303\251",
+                                        "same", std::string(1, '\0')};
+    auto source = [&](int variant) {
+        const auto value = variant == 6 ? "$sformatf(\"%c\",0)" : quoteSVString(names[variant]);
+        return "module top; localparam string CURRENT=" + value +
+               "; wire[31:0] y; stable #(.NAME(CURRENT),.ITEMS('{CURRENT," +
+               quoteSVString(variant == 5 ? "TAIL" : "tail") + "}),"
+               ".T(string)) u(y); endmodule\n";
+    };
+    files.write(files.root / "consumer.sv", source(0));
+    files.write(files.root / "design.f", "fixed.sv\nconsumer.sv\n");
+    Indexer indexer;
+    ClientHarness client;
+    auto driver = server::ServerDriver::createFromFileLists(
+        indexer, client, config, {"design.f"}, files.root.string(), nullptr, true);
+    REQUIRE(driver);
+    const auto cache = driver->options.get<server::ScopeBodyImport>()->cache.lock();
+    REQUIRE(cache);
+    int previous = -1;
+    for (int variant : {0, 0, 1, 1, 5, 5, 2, 2, 3, 3, 4, 4, 6, 6, 0, 0}) {
+        CAPTURE(variant);
+        auto make = [&](bool native) {
+            auto compilation = std::make_shared<ast::Compilation>(driver->options);
+            REQUIRE(server::importTrustedUvm(*compilation, driver->sm, driver->options));
+            if (native)
+                compilation->setInstanceBodyReuseHooks({}, {});
+            compilation->addSyntaxTree(syntax::SyntaxTree::fromText(
+                source(variant), driver->sm, "string-consumer.sv", "", driver->options));
+            INFO(DiagnosticEngine::reportAll(driver->sm, compilation->getSemanticDiagnostics()));
+            CAPTURE(native);
+            REQUIRE_FALSE(compilation->hasIssuedErrors());
+            return compilation;
+        };
+        auto current = make(false), native = make(true);
+        CHECK(DiagnosticEngine::reportAll(driver->sm, current->getAllDiagnostics()) ==
+              DiagnosticEngine::reportAll(driver->sm, native->getAllDiagnostics()));
+        const auto& body = current->getRoot().topInstances.front()->body.find("u")
+                               ->as<ast::InstanceSymbol>().body;
+        const auto imported = current->getImportedInstanceBodyPaths();
+        CHECK((std::ranges::find(imported, "top.u") != imported.end()) ==
+              current->isImportedInstanceBody(body));
+        const auto& value = body.find("NAME")->as<ast::ParameterSymbol>();
+        CHECK(value.getValue().str() == names[variant]);
+        CHECK(body.find("ITEMS")->as<ast::ParameterSymbol>().getValue().elements()[1].str() ==
+              (variant == 5 ? "TAIL" : "tail"));
+        if (previous == variant)
+            CHECK(current->isImportedInstanceBody(body) == (variant != 6));
+        if (current->isImportedInstanceBody(body)) {
+            REQUIRE(value.getInitializer());
+            CHECK_FALSE(value.getDeclaredType()->getInitializerSyntax());
+            ast::EvalContext context(ast::ASTContext(body, ast::LookupLocation::max));
+            CHECK(value.getInitializer()->eval(context).str() == names[variant]);
+        }
+        analysis::AnalysisOptions options{.flags = analysis::AnalysisFlags::CheckUnused |
+                                                   analysis::AnalysisFlags::CheckShadow};
+        analysis::AnalysisManager actual(options), expected(options);
+        current->freeze(); actual.analyze(*current); current->unfreeze();
+        native->freeze(); expected.analyze(*native); native->unfreeze();
+        CHECK(DiagnosticEngine::reportAll(driver->sm, actual.getDiagnostics()) ==
+              DiagnosticEngine::reportAll(driver->sm, expected.getDiagnostics()));
+        current->offerInstanceBodies(current);
+        previous = variant;
+    }
+    CHECK(cache->status().hits >= 6);
+    CHECK(cache->status().publications >= 5);
+}
+
+TEST_CASE("Frozen interface handle flows close complete prototypes without adding design instances",
+          "[scope-semantic][scope-body-interface-handles]") {
+    const std::string mode = GENERATE("direct", "relay", "external", "prototype-external",
+                                      "external-method", "consumer-store", "consumer-before",
+                                      "provider-store", "provider-consumer", "provider-external-method",
+                                      "provider-assertion-error", "provider-assertion-expression",
+                                      "provider-assertion-multiple", "provider-external-bits");
+    const bool reusable = mode == "direct" || mode == "relay" || mode == "consumer-store" ||
+                          mode == "provider-store" || mode == "provider-consumer" ||
+                          mode == "provider-assertion-error" || mode == "provider-assertion-multiple";
+    CAPTURE(mode);
+    LibraryWorkspace files;
+    Config config;
+    config.experimentalScopeSemanticCache = true;
+    config.frozenSources = Config::FrozenSourcesConfig{
+        .instances = std::vector<std::string>{"top.u"}, .maxMiB = 64};
+    config.flagsByFile = std::vector<Config::FlagSource>{
+        {(files.root / "server.json").string(), "--single-unit --threads 1 --top top"}};
+    std::string fixed = R"(
+interface bus_if #(parameter int WIDTH=4);
+ logic[WIDTH-1:0] data;
+)";
+    fixed += mode == "provider-external-bits"
+                 ? "logic[$bits($root.top.mutable_value)-1:0] mirror;\n"
+                 : "logic[$bits(data)-1:0] mirror;\n";
+    fixed += R"(
+ function automatic int width(); )";
+    if (mode == "provider-assertion-error" || mode == "provider-assertion-multiple")
+        fixed += "$assertoff(0,\"top.u\"); $asserton(0,\"top.u\"); ";
+    if (mode == "provider-assertion-expression")
+        fixed += "$assertoff($root.top.mutable_value,\"top.u\"); ";
+    fixed += "return WIDTH";
+    if (mode == "external-method" || mode == "provider-external-method")
+        fixed += "+$root.top.mutable_value";
+    fixed += R"(; endfunction
+endinterface
+package handle_store;
+ class Store #(type T=bit);
+   static T value;
+   static function void set(input T item); value=item; endfunction
+   static function T get(); return value; endfunction
+ endclass
+)";
+    if (mode.starts_with("provider-"))
+        fixed += "typedef Store#(virtual bus_if#(4)) prebuilt_t;\n";
+    if (mode == "provider-assertion-multiple")
+        fixed += "typedef Store#(virtual bus_if#(8)) prebuilt_other_t;\n";
+    fixed += R"(endpackage
+module stable #(parameter int WIDTH=4);
+ bus_if#(WIDTH) local_if();
+)";
+    const std::string type = "virtual bus_if#(" +
+                             std::string(mode == "prototype-external"
+                                             ? "consumer_pkg::WIDTH" : "WIDTH") + ")";
+    if (mode == "provider-assertion-multiple")
+        fixed += "bus_if#(8) other_if(); initial handle_store::Store#(virtual bus_if#(8))::set(other_if); ";
+    fixed += "virtual bus_if#(WIDTH) relay; initial begin ";
+    if (mode == "relay")
+        fixed += "relay=local_if; ";
+    fixed += "handle_store::Store#(" + type + ")::set(" +
+             (mode == "external" ? "$root.top.external" :
+              mode == "relay" ? "relay" : "local_if") + "); ";
+    if (mode == "relay")
+        fixed += "relay=handle_store::Store#(" + type + ")::get(); "
+                 "$display(relay.width(),relay.data); ";
+    fixed += "end endmodule\n";
+    files.write(files.root / "fixed.sv", fixed);
+    auto source = [&](int width) {
+        const int actualWidth = mode == "prototype-external" ? 4 : width;
+        const auto call = fmt::format("initial handle_store::Store#(virtual bus_if#({}))"
+                                      "::set(external);", actualWidth);
+        return fmt::format("package consumer_pkg; parameter int WIDTH=4, MARKER={}; endpackage "
+                           "module top; int mutable_value; bus_if#({}) external(); "
+                           "{} stable#(.WIDTH({})) u(); {} endmodule\n", width, actualWidth,
+                           mode == "consumer-before" ? call : "", actualWidth,
+                           mode == "consumer-store" || mode == "provider-consumer" ? call : "");
+    };
+    files.write(files.root / "consumer.sv", source(4));
+    files.write(files.root / "design.f", "fixed.sv\nconsumer.sv\n");
+    Indexer indexer;
+    ClientHarness client;
+    auto driver = server::ServerDriver::createFromFileLists(
+        indexer, client, config, {"design.f"}, files.root.string(), nullptr, true);
+    REQUIRE(driver);
+    const auto cache = driver->options.get<server::ScopeBodyImport>()->cache.lock();
+    REQUIRE(cache);
+    int previous = 0;
+    for (int width : {4, 4, 8, 8, 4, 4}) {
+        CAPTURE(width);
+        auto make = [&](bool native) {
+            auto compilation = std::make_shared<ast::Compilation>(driver->options);
+            REQUIRE(server::importTrustedUvm(*compilation, driver->sm, driver->options));
+            if (native)
+                compilation->setInstanceBodyReuseHooks({}, {});
+            compilation->addSyntaxTree(syntax::SyntaxTree::fromText(
+                source(width), driver->sm, "interface-flow-consumer.sv", "", driver->options));
+            compilation->getSemanticDiagnostics();
+            return compilation;
+        };
+        auto current = make(false), native = make(true);
+        if (mode.starts_with("provider-assertion-"))
+            CHECK(std::ranges::any_of(current->getSemanticDiagnostics(),
+                                     [](const auto& diagnostic) { return diagnostic.isError(); }));
+        CHECK(DiagnosticEngine::reportAll(driver->sm,current->getSemanticDiagnostics()) ==
+              DiagnosticEngine::reportAll(driver->sm,native->getSemanticDiagnostics()));
+        auto paths = [](ast::Compilation& compilation) {
+            std::vector<std::string> result;
+            auto visitor = ast::makeVisitor([&](auto& self, const ast::InstanceSymbol& instance) {
+                result.push_back(instance.getHierarchicalPath());
+                self.visitDefault(instance);
+            });
+            compilation.getRoot().topInstances.front()->body.visit(visitor);
+            std::ranges::sort(result);
+            return result;
+        };
+        CHECK(paths(*current) == paths(*native));
+        const auto& body = current->getRoot().topInstances.front()->body.find("u")
+                               ->as<ast::InstanceSymbol>().body;
+        const auto imports = current->getImportedInstanceBodyPaths();
+        CHECK((std::ranges::find(imports, "top.u") != imports.end()) ==
+              current->isImportedInstanceBody(body));
+        if (width == previous)
+            CHECK(current->isImportedInstanceBody(body) ==
+                  reusable);
+        if (mode == "consumer-store" || mode == "consumer-before" || mode == "provider-consumer") {
+            auto identities = [](ast::Compilation& compilation) {
+                std::vector<const ast::SubroutineSymbol*> result;
+                auto visitor = ast::makeVisitor([&](auto&, const ast::CallExpression& call) {
+                    if (!call.isSystemCall() && call.getSubroutineName() == "set") {
+                        auto symbol = std::get<0>(call.subroutine);
+                        if (std::ranges::find(result, symbol) == result.end())
+                            result.push_back(symbol);
+                    }
+                });
+                compilation.getRoot().topInstances.front()->body.visit(visitor);
+                return result.size();
+            };
+            CHECK(identities(*current) == identities(*native));
+        }
+        analysis::AnalysisOptions options{.flags = analysis::AnalysisFlags::CheckUnused |
+                                                   analysis::AnalysisFlags::CheckShadow};
+        analysis::AnalysisManager actual(options), expected(options);
+        current->freeze(); actual.analyze(*current); current->unfreeze();
+        native->freeze(); expected.analyze(*native); native->unfreeze();
+        CHECK(DiagnosticEngine::reportAll(driver->sm,actual.getDiagnostics()) ==
+              DiagnosticEngine::reportAll(driver->sm,expected.getDiagnostics()));
+        current->offerInstanceBodies(current);
+        previous=width;
+    }
+    const auto roots = cache->status().retainedRoots;
+    // The pool can prepare a valid owner even when an earlier native class
+    // prevents this consumer from borrowing it. Only imports above prove reuse.
+    CHECK((std::ranges::find(roots, "top.u") != roots.end()) ==
+          (reusable || mode == "provider-store" || mode == "consumer-before"));
 }

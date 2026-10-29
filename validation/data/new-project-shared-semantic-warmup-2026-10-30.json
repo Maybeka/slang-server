@@ -1,0 +1,116 @@
+{
+  "status": "Shared semantic warmup qualified; overall optimization goal final delivery audit remains active",
+  "mainHead": "41758aa9e865903a0e283861f19331f9a36eab5b",
+  "binarySha256": "d7d6d1dba5070ffc4e7fdda8e6ec2ea1f1d2963d5b1004de624d551055d2010a",
+  "asanBinarySha256": "f980606808fbe95cdf8318878b4b34f9e844e6600ca6a9fa2e421a275d4a4bbb",
+  "baselineBinarySha256": "4e65f11ec451e3199d282ec7d215258273fd1414cc5b4d8de06062d80d8651d9",
+  "sourceSeal": "untracked/project-optimization-2026-10-29/shared-warmup-source-seal.json",
+  "sourceArchive": "untracked/project-optimization-2026-10-29/source-receipts/shared-semantic-warmup",
+  "implemented": [
+    "Warm complete lazy type/initializer/body binding operations with cancellation checkpoints outside the binding operations; retain the normal complete semantic pass",
+    "Use Native instance parameter/interface keys only to avoid redundant warmup; Native retains all canonicalization and context/side-effect checks",
+    "Snapshot generic specialization pointers before walking them, skip imported owners, and preserve Native hierarchy checks",
+    "Reject fatal completed baselines instead of certifying their partial diagnostic streams"
+  ],
+  "checks": {
+    "ctest": {
+      "passed": 1020,
+      "failed": 0,
+      "seconds": 14.93,
+      "TMPDIR": "/private/tmp"
+    },
+    "asanUnits": {
+      "cases": 31,
+      "assertions": 3726,
+      "leakDetection": false
+    },
+    "targeted": {
+      "cases": 7,
+      "assertions": 614
+    },
+    "sdkFilesVerified": 709
+  },
+  "pilots": [
+    {
+      "name": "shared-warmup-arrival80",
+      "evidence": "untracked/project-optimization-2026-10-29/opentitan-soc-large-shared-warmup-arrival80.json",
+      "sha256": "41487e8213c3beba61efc1fa865b130aef14fae3fdea3d1cb1db197c7a405636",
+      "binarySha256": "ec3cd08eb4c8014392d925ec7c19e5a593aed28ec4283ef0d5af42e27b976dde",
+      "passed": true,
+      "repeats": 1,
+      "arms": {
+        "native": {
+          "actualSendDelayMs": 91.343292,
+          "latestQueryMs": 1260.050541,
+          "latestDiagnosticMs": 1877.930875,
+          "footprintMiB": 695.3302764892578,
+          "finalFootprintMiB": 841.4085159301758
+        },
+        "baseline": {
+          "actualSendDelayMs": 91.337583,
+          "latestQueryMs": 362.719083,
+          "latestDiagnosticMs": 641.067875,
+          "footprintMiB": 585.3141937255859,
+          "finalFootprintMiB": 571.0174789428711
+        },
+        "candidate": {
+          "actualSendDelayMs": 91.356125,
+          "latestQueryMs": 18.599208,
+          "latestDiagnosticMs": 1047.728792,
+          "footprintMiB": 755.1111831665039,
+          "finalFootprintMiB": 604.4238433837891
+        }
+      }
+    },
+    {
+      "name": "shared-warmup-dedup-arrival80",
+      "evidence": "untracked/project-optimization-2026-10-29/opentitan-soc-large-shared-warmup-dedup-arrival80.json",
+      "sha256": "4a4417cbcf62e482eb69e743e3628a67a3d6ebe54ef030b8f50a5caeaeec71d5",
+      "binarySha256": "b73f22503c47a3d0d58c9b6c039d0a8c5cc2d6b1796f580def8bd0dbe1669360",
+      "passed": true,
+      "repeats": 1,
+      "arms": {
+        "native": {
+          "actualSendDelayMs": 91.331,
+          "latestQueryMs": 1236.474167,
+          "latestDiagnosticMs": 1842.104708,
+          "footprintMiB": 695.0802764892578,
+          "finalFootprintMiB": 841.2053909301758
+        },
+        "baseline": {
+          "actualSendDelayMs": 91.342292,
+          "latestQueryMs": 358.239666,
+          "latestDiagnosticMs": 632.283041,
+          "footprintMiB": 584.1891937255859,
+          "finalFootprintMiB": 573.8612518310547
+        },
+        "candidate": {
+          "actualSendDelayMs": 91.332583,
+          "latestQueryMs": 17.736542,
+          "latestDiagnosticMs": 679.4795,
+          "footprintMiB": 601.8142166137695,
+          "finalFootprintMiB": 572.6112289428711
+        }
+      }
+    }
+  ],
+  "pilotLimit": "Pilot binaries preceded the final fatal-baseline guard. Performance and complete project validation must use final sealed binary before acceptance.",
+  "rejectedPrototype": "Un-deduplicated warmup bound repeated RTL bodies before Native canonicalization, increasing diagnostics to1047.7ms and footprint755.1MiB. Not accepted.",
+  "fixtureCorrection": "Initial generic test cancelled at the first method and used an unreferenced local generic handle, which did not prove a new specialization. Corrected fixture references peer.touch and cancels only after the specialization count has actually increased; subsequent tests passed. Final frozen-provider prepared assertion is compiling.",
+  "remaining": [
+    "Fresh installation and one shipped default UVM preparse profile, zero default syntax parsing",
+    "Project custom profile cold/warm one-time cache and manual rebuild with changed owned provider",
+    "Default-off/offline/source restoration/delivery audit, cleanup of unused artifacts, main push and remote verification"
+  ],
+  "matrixQualification": {
+    "evidence": "untracked/project-optimization-2026-10-29/shared-warmup-matrix-qualification.json",
+    "sha256": "f11c44e6a8bcc972ea3aeeb5169a40aea1765db8606211d0d76ad995e40d101a",
+    "releaseStates": 1035,
+    "asanStates": 90,
+    "normalAsanExits": 6
+  },
+  "qualification": {
+    "evidence": "untracked/project-optimization-2026-10-29/shared-warmup-qualification.json",
+    "sha256": "be9a3934e0a370bd73d5eb7bfd5db6c988578621ff2d56fca29b42432d7e1c76"
+  }
+}

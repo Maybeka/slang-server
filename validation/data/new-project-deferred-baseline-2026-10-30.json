@@ -1,0 +1,96 @@
+{
+  "status": "Full cross-project matrix passed; mixed ASan/repeats running; shared semantic cancellation latency still requires work",
+  "mainHead": "41758aa9e865903a0e283861f19331f9a36eab5b",
+  "binarySha256": "4e65f11ec451e3199d282ec7d215258273fd1414cc5b4d8de06062d80d8651d9",
+  "asanBinarySha256": "84813b3ac75d7c5f90c92b5c49a79dec0e1e01ccc120ada83290685056558da8",
+  "baselineBinarySha256": "8c065c3ceec56f6755c0420ef96c4f7666b51234d42eae6b3c5354c0a1be3604",
+  "sourceSeal": "untracked/project-optimization-2026-10-29/deferred-baseline-source-seal.json",
+  "sourceArchive": "untracked/project-optimization-2026-10-29/source-receipts/deferred-baseline",
+  "implemented": [
+    "Capture exact current pre-edit model, text, canonical source path, configuration and publication witnesses without preparing full semantics/dataflow on the foreground",
+    "Complete the retained baseline during cancellable background diagnostics and reuse the local diagnostic path instead of constructing a second full model",
+    "Retain pending baseline across cancellation and newer body edits; publish only the latest version"
+  ],
+  "checks": {
+    "targeted": {
+      "assertions": 180,
+      "contexts": 4
+    },
+    "ctest": {
+      "passed": 1019,
+      "failed": 0,
+      "seconds": 22.83
+    },
+    "asanUnits": {
+      "cases": 30,
+      "assertions": 3549,
+      "leakDetection": false
+    },
+    "sdkFilesVerified": 709
+  },
+  "serialPilot": {
+    "evidence": "untracked/project-optimization-2026-10-29/opentitan-soc-large-deferred-baseline-serial.json",
+    "sha256": "0b28b2b5eafe4f72ebb2c00fb4e0b2640260288eb7e416d7f97443e65d8a6066",
+    "repeats": 1,
+    "publicEquality": true,
+    "cadence": "Sequential: await query and matching full diagnostic publication. No burst or cold-disk claim. Process memory read at boundaries, not independent sampled peak.",
+    "arms": {
+      "native": {
+        "nextEditQueryMs": 687.724375,
+        "nextEditDiagnosticMs": 1309.934875,
+        "nextEditFootprintMiB": 690.9865264892578,
+        "finalFootprintMiB": 837.2835159301758,
+        "warmQueryMedianMs": 623.908458,
+        "warmDiagnosticMedianMs": 1226.018041
+      },
+      "baseline": {
+        "nextEditQueryMs": 639.036334,
+        "nextEditDiagnosticMs": 699.75425,
+        "nextEditFootprintMiB": 588.9704437255859,
+        "finalFootprintMiB": 573.3612289428711,
+        "warmQueryMedianMs": 15.966792,
+        "warmDiagnosticMedianMs": 30.543583
+      },
+      "candidate": {
+        "nextEditQueryMs": 34.443833,
+        "nextEditDiagnosticMs": 700.287125,
+        "nextEditFootprintMiB": 584.2829437255859,
+        "finalFootprintMiB": 577.2049789428711,
+        "warmQueryMedianMs": 15.872917,
+        "warmDiagnosticMedianMs": 30.425334
+      }
+    }
+  },
+  "mechanism": {
+    "evidence": "untracked/project-optimization-2026-10-29/opentitan-soc-large-mixed-deferred-baseline-summary.json",
+    "sha256": "1c3bd0c4ef4efb0baabb7e3400b965a992ca62079c4b399890ca11f2b60f67fa",
+    "candidateFullOwnersAtVersion3": 1,
+    "fullModelEstimateMiB": 981.6193923950195,
+    "modelsLiveAfterClose": 0,
+    "timingAccepted": false,
+    "note": "Mechanism binary preceded restoring a missed existing observer checkpoint; final-binary serial pilot is separate."
+  },
+  "correctedDuringValidation": "First CTest run failed one existing native-route reuse checkpoint count because the capture refactor omitted that notification. Restored the checkpoint without weakening the assertion; final CTest1019 and ASan native-route tests passed.",
+  "limitations": [
+    "One serial pilot repeat; no broad statistical confidence claim",
+    "Large SoC does not prove whole RTL semantic freezing",
+    "Pre-edit full semantic/dataflow work still exists in background; no burst-input or semantic cancellation-quantum claim",
+    "ASan leak detection disabled; model allocation estimates are distinct from process footprint"
+  ],
+  "remaining": [
+    "Finish all newly added project controls, strict whole-DUT AES/UART and sanitizer protocol checks on final binary",
+    "Repeat mixed queries and measure arrival/cancellation behavior before broader acceptance",
+    "Final full goal packaging/cache/default-off audit, cleanup, main push and remote verification"
+  ],
+  "matrixQualification": {
+    "evidence": "untracked/project-optimization-2026-10-29/deferred-baseline-matrix-qualification.json",
+    "sha256": "1ee33b12f1e90f11af8275fd136f67614fecbc78a476121e1369c8b118175b7d",
+    "releaseStates": 1035,
+    "asanStates": 90,
+    "asanNormalExits": 6
+  },
+  "arrivalEvaluation": {
+    "evidence": "untracked/project-optimization-2026-10-29/deferred-baseline-arrival-evaluation.json",
+    "sha256": "733a9802367e7fcb78a01b2a6aa89c5cd0d0272f7243a2ae93f2c31dad5e24b8"
+  }
+}

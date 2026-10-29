@@ -235,7 +235,7 @@ struct Config {
             "preceding dependencies. Missing or ambiguous names are reported in status.",
             std::vector<std::string>>
             packages;
-        rfl::Description<"Exact module definition names in configured compilation inputs. "
+        rfl::Description<"Exact module, interface or program definition names in configured inputs. "
                          "Retains complete ordered source roots; instance parameterizations "
                          "are elaborated independently. Does not enable the experiment.",
                          std::vector<std::string>>

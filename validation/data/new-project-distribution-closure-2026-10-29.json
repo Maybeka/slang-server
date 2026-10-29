@@ -1,0 +1,38 @@
+{
+  "candidate": "1bd339d90d76f4cf653ed08729ce8f739f8e5755b33a90d7d051bf13811d4dac",
+  "sdkPatch": "f3e77c43dc8b0254438a01e0c2a6510aec0c5885a1d34c501abc537d423d5259",
+  "checks": {
+    "fullCtest": {
+      "passed": 1006,
+      "failed": 0,
+      "seconds": 15.12,
+      "TMPDIR": "/private/tmp"
+    },
+    "distributionTargeted": {
+      "cases": 1,
+      "assertions": 310
+    },
+    "sdkFileHashes": 709
+  },
+  "implemented": "Dist constraint wrappers retain only bound expressions; visit left operand, every item, explicit/default weights; all usual local/fixed dependency checks still apply.",
+  "targetedCases": [
+    "local finite distribution supports reuse",
+    "external weight parameter rejects reuse",
+    "external distribution item rejects reuse"
+  ],
+  "aesWholeRootRetained": false,
+  "nextRootRefusal": "value-type CustomForceName: string",
+  "nativeComparisonBeforeDist": {
+    "nativeErrors": 32,
+    "jointErrors": 28,
+    "equal": false,
+    "differenceFile": "fi_ghash_if.sv",
+    "missingErrors": 4,
+    "missingWarnings": 26,
+    "evidence": "untracked/rtl-uvm-fallback-2026-10-29/opentitan-aes-uvm-reference-final-diagnostic-control.json"
+  },
+  "diagnosticInvestigation": "DiagnosticVisitor::finalizeVirtualInterfaces clears pending virtual interface checks and skips visiting bodies in PackageAnalysis. Whether and how the consumer completes those checks must be tested; causal fix not yet implemented.",
+  "aesPerformanceAccepted": false,
+  "uartQualifiedEvidence": "source/validation/data/new-project-whole-rtl-uvm-reuse-2026-10-29.json",
+  "noNetworkFetches": true
+}

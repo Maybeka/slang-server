@@ -16,6 +16,10 @@ using NativeReferenceUsage = slang::ast::Compilation::ReferenceUsageMap;
 // are copied while current; the one original compilation owns all referenced symbols.
 struct BodyDiagnosticBaseline {
     explicit BodyDiagnosticBaseline(const URI& target) : uri(target) {}
+    // Captured before text synchronization; completed only by cancellable background work.
+    std::shared_ptr<class ActiveDesignContext> pendingDesign;
+    std::string config;
+    std::filesystem::path targetPath;
     ServerDriver* driver = nullptr;
     std::weak_ptr<const void> context;
     URI uri;
@@ -45,7 +49,11 @@ class BodyDiagnosticCache {
 public:
     static std::shared_ptr<const BodyDiagnosticBaseline> capture(ServerDriver&, const URI&,
                                                                  size_t begin, size_t end,
-                                                                 const lsp::RequestContext&);
+                                                                 const lsp::RequestContext&,
+                                                                 bool deferPreparation = false);
+    static std::shared_ptr<const BodyDiagnosticBaseline> completeCapture(
+        ServerDriver&, std::shared_ptr<const BodyDiagnosticBaseline>,
+        const lsp::RequestContext&);
     BodyDiagnosticCache(ServerDriver&, const URI&, size_t begin, size_t end,
                         const std::shared_ptr<slang::syntax::SyntaxTree>&, bool lineSensitive,
                         const lsp::RequestContext&,

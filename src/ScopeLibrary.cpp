@@ -11,6 +11,7 @@
 #include <rfl/to_generic.hpp>
 
 #include "slang/parsing/Preprocessor.h"
+#include "slang/parsing/ParserMetadata.h"
 #include "slang/syntax/AllSyntax.h"
 
 namespace server {
@@ -20,7 +21,204 @@ struct PackageClosure {
     std::shared_ptr<syntax::SyntaxTree> tree;
     std::vector<std::string> packages;
     std::set<std::string> files;
+    std::vector<std::string> definitions;
 };
+
+// Pure RTL declaration closure: retain the selected definitions and their global
+// child definitions in native input order, without making intervening roots fixed.
+// Compilation-unit namespaces, scoped types and interface ports keep the existing
+// complete-provider route. Their binding needs more than a definition-name graph.
+std::optional<PackageClosure> rtlDeclarationClosure(
+    const std::shared_ptr<syntax::SyntaxTree>& owner, std::span<const std::string> seeds,
+    ast::CompilationOptions options, std::shared_ptr<const void> sourceOwner) {
+    using K = syntax::SyntaxKind;
+    if (owner->root().kind != K::CompilationUnit || seeds.empty() ||
+        std::ranges::any_of(owner->diagnostics(), [](const auto& d) { return d.isError(); }))
+        return std::nullopt;
+    const auto& unit = owner->root().as<syntax::CompilationUnitSyntax>();
+    std::map<std::string, std::vector<const syntax::MemberSyntax*>> candidates;
+    std::set<std::string> globalNames;
+    for (auto member : unit.members) {
+        if (member->kind == K::EmptyMember || member->kind == K::BindDirective)
+            continue;
+        if (member->kind == K::PackageDeclaration) {
+            globalNames.emplace(member->as<syntax::ModuleDeclarationSyntax>()
+                                    .header->name.valueText());
+            continue;
+        }
+        if (member->kind == K::PackageImportDeclaration) {
+            for (auto item : member->as<syntax::PackageImportDeclarationSyntax>().items) {
+                if (item->item.kind == parsing::TokenKind::Star)
+                    return std::nullopt;
+                globalNames.emplace(item->item.valueText());
+            }
+            continue; // Explicit imports are irrelevant only if no selected name uses them.
+        }
+        if (member->kind != K::ModuleDeclaration && member->kind != K::InterfaceDeclaration &&
+            member->kind != K::ProgramDeclaration)
+            return std::nullopt;
+        const auto name = std::string(member->as<syntax::ModuleDeclarationSyntax>()
+                                          .header->name.valueText());
+        globalNames.insert(name);
+        candidates[name].push_back(member);
+    }
+    std::set<std::string> wanted(seeds.begin(), seeds.end());
+    std::shared_ptr<syntax::SyntaxTree> tree;
+    std::vector<const syntax::MemberSyntax*> selected;
+    for (;;) {
+        selected.clear();
+        for (const auto& name : wanted) {
+            const auto found = candidates.find(name);
+            if (found == candidates.end() || found->second.size() != 1)
+                return std::nullopt;
+            selected.push_back(found->second.front());
+        }
+        tree = syntax::SyntaxTree::selectCompilationUnitMembers(owner, selected);
+        const auto& meta = tree->getMetadata();
+        if (!meta.interfacePorts.empty() || !meta.virtualInterfaceTypes.empty() ||
+            !meta.namedPortTypes.empty())
+            return std::nullopt;
+        bool scoped = false;
+        auto inspect = [&](auto&& self, const syntax::SyntaxNode& node) -> void {
+            if (node.kind == K::ScopedName || node.kind == K::PackageImportDeclaration ||
+                (node.kind == K::ModuleDeclaration &&
+                 node.parent && node.parent->kind != K::CompilationUnit))
+                scoped = true;
+            for (size_t i = 0; i < node.getChildCount(); ++i)
+                if (auto child = node.childNode(i))
+                    self(self, *child);
+        };
+        inspect(inspect, tree->root());
+        if (scoped)
+            return std::nullopt;
+        bool added = false;
+        for (const auto* instance : meta.globalInstances) {
+            const auto name = std::string(instance->type.valueText());
+            const auto found = candidates.find(name);
+            if (found == candidates.end() || found->second.size() != 1)
+                return std::nullopt;
+            added |= wanted.insert(name).second;
+        }
+        if (!added)
+            break;
+    }
+    // Unselected global names must not change a selected body's unqualified
+    // lookup, even when native binding would produce an error instead of a value.
+    bool globalConflict = false;
+    auto checkNames = [&](auto&& self, const syntax::SyntaxNode& node) -> void {
+        for (size_t i = 0; i < node.getChildCount(); ++i) {
+            if (auto child = node.childNode(i))
+                self(self, *child);
+            else if (auto token = node.childToken(i);
+                     token && token.kind == parsing::TokenKind::Identifier) {
+                const auto name = std::string(token.valueText());
+                if (globalNames.contains(name) && !wanted.contains(name))
+                    globalConflict = true;
+            }
+        }
+    };
+    checkNames(checkNames, tree->root());
+    if (globalConflict)
+        return std::nullopt;
+    auto& sm = owner->sourceManager();
+    auto rootPath = [&](SourceLocation location) {
+        location = sm.getFullyExpandedLoc(location);
+        while (auto parent = sm.getIncludedFrom(location.buffer()))
+            location = sm.getFullyExpandedLoc(parent);
+        return sm.getFullPath(location.buffer()).lexically_normal().generic_string();
+    };
+    std::set<std::string> roots, knownRoots, files;
+    for (auto id : owner->getSourceBufferIds())
+        if (!sm.getIncludedFrom(id))
+            knownRoots.insert(sm.getFullPath(id).lexically_normal().generic_string());
+    for (auto member : selected) {
+        roots.insert(rootPath(member->getFirstToken().location()));
+        roots.insert(rootPath(member->getLastToken().location()));
+        auto origins = [&](auto&& self, const syntax::SyntaxNode& node) -> void {
+            for (size_t i = 0; i < node.getChildCount(); ++i) {
+                if (auto child = node.childNode(i))
+                    self(self, *child);
+                else if (auto token = node.childToken(i); token) {
+                    auto path = rootPath(sm.getFullyOriginalLoc(token.location()));
+                    if (knownRoots.contains(path))
+                        roots.insert(std::move(path));
+                }
+            }
+        };
+        origins(origins, *member);
+    }
+    for (auto member : unit.members)
+        if (member->kind != K::EmptyMember && std::ranges::find(selected, member) == selected.end())
+            if (roots.contains(rootPath(member->getFirstToken().location())) ||
+                roots.contains(rootPath(member->getLastToken().location())))
+                return std::nullopt; // Mixed physical roots remain indivisible.
+    for (auto id : owner->getSourceBufferIds())
+        if (roots.contains(rootPath(SourceLocation(id, 0)))) {
+            const auto& path = sm.getFullPath(id);
+            if (!path.empty())
+                files.insert(path.lexically_normal().generic_string());
+        }
+    auto compilation = std::make_shared<ast::Compilation>(options);
+    compilation->retainSourceOwner(std::move(sourceOwner));
+    compilation->addSyntaxTree(tree);
+    if (std::ranges::any_of(compilation->getSemanticDiagnostics(),
+                           [](const auto& d) { return d.isError(); }))
+        return std::nullopt;
+    PackageClosure result{std::move(compilation), std::move(tree), {}, std::move(files), {}};
+    for (auto member : result.tree->root().as<syntax::CompilationUnitSyntax>().members)
+        result.definitions.emplace_back(
+            member->as<syntax::ModuleDeclarationSyntax>().header->name.valueText());
+    return result;
+}
+
+bool sameProjectedSyntax(const syntax::SyntaxNode& left, const syntax::SyntaxNode& right,
+                         const SourceManager& aSources, const SourceManager& bSources) {
+    if (&left == &right)
+        return true;
+    if (left.kind != right.kind || left.getChildCount() != right.getChildCount())
+        return false;
+    auto locationMatches = [&](SourceLocation a, SourceLocation b) {
+        if (&aSources == &bSources && a == b)
+            return true;
+        auto same = [&](SourceLocation x, SourceLocation y) {
+            return x.offset() == y.offset() &&
+                   aSources.getFullPath(x.buffer()) == bSources.getFullPath(y.buffer());
+        };
+        return same(aSources.getFullyExpandedLoc(a), bSources.getFullyExpandedLoc(b)) &&
+               same(aSources.getFullyOriginalLoc(a), bSources.getFullyOriginalLoc(b));
+    };
+    for (size_t i = 0; i < left.getChildCount(); ++i) {
+        if (auto child = left.childNode(i)) {
+            auto other = right.childNode(i);
+            if (!other || !sameProjectedSyntax(*child, *other, aSources, bSources))
+                return false;
+        }
+        else {
+            auto a = left.childToken(i), b = right.childToken(i);
+            if (right.childNode(i) || a.kind != b.kind || a.rawText() != b.rawText())
+                return false;
+            if (!a)
+                continue;
+            if (!locationMatches(a.location(), b.location()))
+                return false;
+            auto at = a.trivia(), bt = b.trivia();
+            if (at.size() != bt.size())
+                return false;
+            for (size_t n = 0; n < at.size(); ++n) {
+                if (at[n].kind != bt[n].kind || at[n].getRawText() != bt[n].getRawText())
+                    return false;
+                auto an = at[n].syntax(), bn = bt[n].syntax();
+                if (bool(an) != bool(bn) ||
+                    (an && !sameProjectedSyntax(*an, *bn, aSources, bSources)))
+                    return false;
+                // Error-recovery trivia is not a valid provider proof.
+                if (!at[n].getSkippedTokens().empty() || !bt[n].getSkippedTokens().empty())
+                    return false;
+            }
+        }
+    }
+    return true;
+}
 
 // Bootstrap only: observe native package queries, including suppressed errors.
 // Looking at every A::B token would incorrectly freeze an unrelated package named like a local
@@ -131,6 +329,8 @@ std::optional<PackageClosure> packageClosure(const std::shared_ptr<syntax::Synta
 
 bool trustedLibraryNamespaceMatches(const TrustedUvmLibrary& library, const SourceManager& sources,
                                     std::span<const std::shared_ptr<syntax::SyntaxTree>> trees) {
+    std::set<std::string_view> seenDefinitions;
+    const syntax::SyntaxTree* currentTree = nullptr;
     auto compatible = [&](const syntax::SyntaxNode& member) {
         const bool package = member.kind == syntax::SyntaxKind::PackageDeclaration;
         const bool definition = member.kind == syntax::SyntaxKind::ModuleDeclaration ||
@@ -162,6 +362,15 @@ bool trustedLibraryNamespaceMatches(const TrustedUvmLibrary& library, const Sour
                 }
             }
             if (member.kind == syntax::SyntaxKind::PackageImportDeclaration) {
+                if (library.projectedDefinitions) {
+                    bool unrelated = true;
+                    for (auto item : member.as<syntax::PackageImportDeclarationSyntax>().items)
+                        unrelated &= item->item.kind != parsing::TokenKind::Star &&
+                                     !std::ranges::binary_search(library.unitLookupNames,
+                                                                item->item.valueText());
+                    if (unrelated)
+                        return true;
+                }
                 bool safe = true;
                 for (auto item : member.as<syntax::PackageImportDeclarationSyntax>().items) {
                     auto name = item->package.valueText();
@@ -185,7 +394,8 @@ bool trustedLibraryNamespaceMatches(const TrustedUvmLibrary& library, const Sour
         const auto name = declaration.header->name.valueText();
         const auto& names = package ? library.packages : library.definitions;
         if (std::ranges::find(names, name) == names.end())
-            return true;
+            return !library.projectedDefinitions ||
+                   !std::ranges::binary_search(library.unitLookupNames, name);
         const ast::Symbol* original = nullptr;
         if (package)
             original = library.compilation->getPackage(name);
@@ -199,9 +409,32 @@ bool trustedLibraryNamespaceMatches(const TrustedUvmLibrary& library, const Sour
             ownerSources->getFullyExpandedLoc(original->location).buffer());
         auto current = sources.getFullPath(
             sources.getFullyExpandedLoc(declaration.header->name.location()).buffer());
-        return original->getSyntax() == &member || (!current.empty() && current == provider);
+        if (original->getSyntax() != &member && (current.empty() || current != provider))
+            return false;
+        if (library.projectedDefinitions && definition) {
+            if (!seenDefinitions.insert(name).second || !original->getSyntax() || !currentTree)
+                return false;
+            const auto& providerTree = *library.compilation->getSyntaxTrees().front();
+            const auto& before = providerTree.getMetadata().nodeMeta;
+            const auto& after = currentTree->getMetadata().nodeMeta;
+            auto a = std::ranges::find_if(before, [&](const auto& entry) {
+                return entry.first == original->getSyntax();
+            });
+            auto b = std::ranges::find_if(after, [&](const auto& entry) {
+                return entry.first == &member;
+            });
+            if (a == before.end() || b == after.end() ||
+                a->second.defaultNetType != b->second.defaultNetType ||
+                a->second.unconnectedDrive != b->second.unconnectedDrive ||
+                a->second.cellDefine != b->second.cellDefine ||
+                a->second.timeScale != b->second.timeScale ||
+                !sameProjectedSyntax(*original->getSyntax(), member, *ownerSources, sources))
+                return false;
+        }
+        return true;
     };
     for (const auto& tree : trees) {
+        currentTree = tree.get();
         const auto& root = tree->root();
         if (root.kind == syntax::SyntaxKind::CompilationUnit) {
             for (auto member : root.as<syntax::CompilationUnitSyntax>().members)
@@ -224,6 +457,26 @@ bool trustedLibraryNamespaceMatches(const TrustedUvmLibrary& library, const Sour
                              sources.getFullPath(location.buffer()).string().c_str());
             }
             return false;
+        }
+    }
+    if (library.projectedDefinitions) {
+        // A direct provider import may precede adding consumer-only syntax.
+        // Require the declaration when its physical input is actually present;
+        // this also catches an earlier mutable conditional removing that module.
+        for (const auto& name : library.definitions) {
+            if (seenDefinitions.contains(name))
+                continue;
+            const auto* original = library.compilation->tryGetDefinition(
+                name, library.compilation->getRoot()).definition;
+            if (!original)
+                return false;
+            const auto* providerSources = library.compilation->getSourceManager();
+            const auto path = providerSources->getFullPath(
+                providerSources->getFullyExpandedLoc(original->location).buffer());
+            for (const auto& tree : trees)
+                for (auto id : tree->getSourceBufferIds())
+                    if (sources.getFullPath(id) == path)
+                        return false;
         }
     }
     return true;
@@ -252,6 +505,15 @@ bool ServerDriver::prepareScopeLibrary() {
     auto decline = [&](std::string reason) {
         m_scopeReason = std::move(reason);
         return false;
+    };
+    auto declineError = [&](std::string reason, const Diagnostic& error) {
+        reason += "; native analysis; first error: ";
+        if (error.location.valid() && error.location != SourceLocation::NoLocation) {
+            const auto location = sm.getFullyOriginalLoc(error.location);
+            reason += sm.getFullPath(location.buffer()).string() + ":" +
+                      std::to_string(sm.getLineNumber(location)) + ": ";
+        }
+        return decline(reason + diagEngine.formatMessage(error));
     };
     const auto config = m_config.frozenSources.value().value_or(Config::FrozenSourcesConfig{});
     if (m_config.experimentalFrozenSources.value() ||
@@ -307,9 +569,29 @@ bool ServerDriver::prepareScopeLibrary() {
             return decline("cannot read a fixed package root");
         roots.push_back(*buffer);
     }
+    auto compilationOptions = options.getOrDefault<ast::CompilationOptions>();
+    compilationOptions.flags |= ast::CompilationFlags::PackageAnalysis;
+    compilationOptions.topModules.clear();
+    std::optional<PackageClosure> closure;
+    if (config.packages.value().empty() && !modules.empty() && m_uvmEntryPath.empty() &&
+        driver.syntaxTrees.size() == 1)
+        closure = rtlDeclarationClosure(driver.syntaxTrees.front(), modules, compilationOptions,
+                                        m_driverOwner->getSourceOwner());
+    if (closure) {
+        bool separated = false;
+        for (size_t i = 0; i < plan.roots.size(); ++i) {
+            const bool fixed = closure->files.contains(plan.roots[i].lexically_normal().generic_string());
+            separated |= (i < plan.frozenRootCount) != fixed;
+        }
+        if (!separated)
+            closure.reset(); // Preserve the existing contiguous-prefix fast path.
+    }
+    const bool projectedRtl = closure.has_value();
     std::shared_ptr<syntax::SyntaxTree> prefix;
     try {
-        if (driver.precompiledUvm && !roots.empty() &&
+        if (projectedRtl)
+            prefix = closure->tree;
+        else if (driver.precompiledUvm && !roots.empty() &&
             sm.getFullPath(roots.front().id) == m_uvmEntryPath) {
             prefix = driver.precompiledUvm;
             if (roots.size() > 1) {
@@ -327,8 +609,12 @@ bool ServerDriver::prepareScopeLibrary() {
     catch (const std::exception& error) {
         return decline(std::string("package preprocessing is not reusable: ") + error.what());
     }
-    if (!prefix->isPrefixResumeSafe().value_or(false))
+    if (!projectedRtl && !prefix->isPrefixResumeSafe().value_or(false))
         return decline("fixed package prefix has unsupported preprocessing state");
+    if (const auto error = std::ranges::find_if(prefix->diagnostics(),
+                                               [](const auto& d) { return d.isError(); });
+        error != prefix->diagnostics().end())
+        return declineError("fixed scope prefix has syntax errors", *error);
     std::vector<std::string> packages, definitions;
     bool hasUnitDeclarations = false;
     for (const auto* member : prefix->root().as<syntax::CompilationUnitSyntax>().members) {
@@ -369,13 +655,12 @@ bool ServerDriver::prepareScopeLibrary() {
     if (m_config.experimentalUvmSemanticCache.value() && !m_uvmEntryPath.empty() &&
         std::ranges::find(packages, "uvm_pkg") == packages.end())
         return decline("UVM and fixed packages must share one ordered package closure");
-    auto compilationOptions = options.getOrDefault<ast::CompilationOptions>();
-    compilationOptions.flags |= ast::CompilationFlags::PackageAnalysis;
-    compilationOptions.topModules.clear();
-    auto compilation = std::make_shared<ast::Compilation>(compilationOptions);
-    compilation->retainSourceOwner(m_driverOwner->getSourceOwner());
-    compilation->addSyntaxTree(prefix);
-    std::optional<PackageClosure> closure;
+    auto compilation = projectedRtl ? closure->compilation
+                                    : std::make_shared<ast::Compilation>(compilationOptions);
+    if (!projectedRtl) {
+        compilation->retainSourceOwner(m_driverOwner->getSourceOwner());
+        compilation->addSyntaxTree(prefix);
+    }
     auto seeds = config.packages.value();
     if (m_config.experimentalUvmSemanticCache.value() && !m_uvmEntryPath.empty() &&
         std::ranges::find(seeds, "uvm_pkg") == seeds.end())
@@ -399,8 +684,13 @@ bool ServerDriver::prepareScopeLibrary() {
             packageOnly)
             closure = packageClosure(driver.syntaxTrees.front(), seeds, compilationOptions,
                                      m_driverOwner->getSourceOwner());
-        if (!closure && std::ranges::any_of(diagnostics, [](const auto& d) { return d.isError(); }))
-            return decline("fixed package dependency closure has semantic errors; native analysis");
+        if (!closure) {
+            const auto error = std::ranges::find_if(diagnostics,
+                                                   [](const auto& d) { return d.isError(); });
+            if (error != diagnostics.end()) {
+                return declineError("fixed package dependency closure has semantic errors", *error);
+            }
+        }
     }
     bool selective = false;
     auto semanticTree = prefix;
@@ -414,7 +704,7 @@ bool ServerDriver::prepareScopeLibrary() {
         compilation = closure->compilation;
         semanticTree = closure->tree;
         packages = closure->packages;
-        definitions.clear();
+        definitions = closure->definitions;
     }
     std::vector<std::string_view> unitLookupNames, safeUnitWildcardImports, unitDpiCNames;
     if (!definitions.empty() || hasUnitDeclarations) {
@@ -483,6 +773,7 @@ bool ServerDriver::prepareScopeLibrary() {
     library->packages = std::move(packages);
     library->definitions = std::move(definitions);
     library->hasUnitDeclarations = hasUnitDeclarations && !closure;
+    library->projectedDefinitions = projectedRtl;
     library->unitLookupNames = std::move(unitLookupNames);
     library->safeUnitWildcardImports = std::move(safeUnitWildcardImports);
     library->unitDpiCNames = std::move(unitDpiCNames);
@@ -530,8 +821,9 @@ bool ServerDriver::prepareScopeLibrary() {
             : "prepared fixed semantics; eligible integral subtrees use the independent semantic "
               "registry";
     if (selective)
-        m_scopeReason =
-            "prepared package declaration dependency closure; mutable roots parse natively";
+        m_scopeReason = projectedRtl
+                            ? "prepared RTL declaration dependency closure; mutable roots parse natively"
+                            : "prepared package declaration dependency closure; mutable roots parse natively";
     if (!m_scopeBodies && !m_trustedScopes->definitions.empty())
         m_scopeReason =
             "prepared package semantics and fixed definition identities; no RTL body selectors";
@@ -751,6 +1043,7 @@ rfl::Generic ServerDriver::scopeLibraryStatus() const {
         std::vector<std::string> packages, definitions;
         bool hasUnitDeclarations = false;
         std::vector<FrozenInstanceCache::Selection> instances;
+        std::vector<std::string> lastModelSharedRoots;
         bool instanceBodiesShared;
         ScopeBodyCache::Stats bodies;
         std::string reason;
@@ -769,7 +1062,8 @@ rfl::Generic ServerDriver::scopeLibraryStatus() const {
                library ? library->files.size() : 0,
                library ? library->packages : std::vector<std::string>{},
                library ? library->definitions : std::vector<std::string>{},
-               library && library->hasUnitDeclarations, m_scopeInstanceSelections, bodies.hits != 0,
+               library && library->hasUnitDeclarations, m_scopeInstanceSelections,
+               comp ? comp->lastModelSharedRoots() : std::vector<std::string>{}, bodies.hits != 0,
                bodies, m_scopeReason,
                SyntaxReplay{m_config.experimentalSyntaxPrefixCache.value(),
                    uint64_t(m_config.syntaxPrefixCacheMaxMiB.value()) * 1024 * 1024,

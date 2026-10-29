@@ -109,11 +109,12 @@ private:
         std::optional<Config::HoverConfig::MacroView>);
     std::optional<lsp::CompletionItem> resolveImpl(const lsp::CompletionItem&, const Config&,
                                                    const lsp::RequestContext&);
-    std::string diagnosticDecline;
+    std::string diagnosticDecline, diagnosticCaptureDecline;
     uint64_t diagnosticUpdates = 0;
     int diagnosticBaselineVersion = -1, diagnosticCaptureVersion = -1;
     void captureLocalBaseline(const Config&, const lsp::RequestContext&);
-    void prepareLocalDiagnostics(const Config&, const lsp::RequestContext&);
+    void prepareLocalDiagnostics(const Config&, const lsp::RequestContext&,
+                                 bool completeDeferred = false);
     URI uri;
     std::string text, configKey, optionsKey, packageName, className, functionName, functionPath;
     bool bodyQueries = false, generalBody = false;

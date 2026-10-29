@@ -115,6 +115,8 @@ public:
 
     bool isNativeCompilationUnit() const { return m_nativeCompilationUnit.has_value(); }
     void adoptNativeCompilationUnit(const SlangDoc& unit);
+    std::optional<std::vector<std::shared_ptr<SlangDoc>>> getNativeDesignCompilationUnits(
+        const lsp::RequestContext& ctx);
     /// Root paths in native preprocessing order; includes are not separate roots.
     std::span<const std::filesystem::path> getRootPaths() const {
         return m_nativeCompilationUnit ? std::span(m_nativeCompilationUnit->rootPaths)
@@ -195,6 +197,10 @@ public:
     /// Used when an external change (e.g. active-instance selection) means cached
     /// goto/hover results must be recomputed.
     void invalidateAnalysis() { m_analysis.reset(); }
+
+    /// Drop a finished query's sole cached view of the full design. External
+    /// borrowers retain their analysis and keep diagnostic preparation private.
+    bool releaseUnborrowedDesignAnalysis();
 
     /// At a serialized retirement boundary, release only recomputable bound models.
     /// Source text, versions, syntax and include selections remain available for rollback.

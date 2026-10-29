@@ -5,6 +5,7 @@
 #include "util/Converters.h"
 #include "util/DisposableParseRequest.h"
 #include "util/SlangExtensions.h"
+#include "util/SyntaxSourceLease.h"
 #include "util/UvmPhaseTrace.h"
 #include <algorithm>
 #include <set>
@@ -137,13 +138,30 @@ std::optional<BufferID> ServerDriver::findPackageInclude(
 }
 
 void ServerDriver::installConfiguredUnits(std::vector<std::shared_ptr<syntax::SyntaxTree>> trees) {
+    // Native CST tokens borrow source bytes. Published units and rollback recipes
+    // can outlive a document edit, which retires the manager's old FileData.
+    // Tie storage to each published tree rather than the current document or an
+    // editing generation, so cancellation cannot leave a live CST with freed text.
+    for (auto& tree : trees)
+        tree = retainSyntaxSourceStorage(sm, std::move(tree));
     configureFrozenSources(trees);
+    driver.syntaxTrees = trees;
     auto previous = std::move(m_configuredUnits);
     m_configuredUnits.clear();
     m_currentConfiguredTrees = trees;
     const bool inherited = driver.options.singleUnit.value_or(false) && trees.size() > 1;
     for (auto& tree : trees) {
         auto unit = SlangDoc::fromTree(*this, tree, inherited);
+        // Full designs and include contexts can still hold these documents.
+        // Rebind their native recipes without leaving stale document objects
+        // pointing at a previous parse of the same input unit.
+        auto existing = std::ranges::find_if(previous, [&](const auto& document) {
+            return document->getURI() == unit->getURI();
+        });
+        if (existing != previous.end()) {
+            (*existing)->adoptNativeCompilationUnit(*unit);
+            unit = *existing;
+        }
         m_configuredUnits.push_back(unit);
         for (const auto& openUri : m_openDocs) {
             auto open = docs.find(openUri);
@@ -162,11 +180,15 @@ void ServerDriver::installConfiguredUnits(std::vector<std::shared_ptr<syntax::Sy
     m_configuredUnitRevision = m_snapshotRevision;
 }
 
-void ServerDriver::refreshConfiguredUnits(const lsp::RequestContext& ctx) {
-    if (m_configuredUnits.empty() || m_configuredUnitRevision == m_snapshotRevision)
+void ServerDriver::refreshConfiguredUnits(const lsp::RequestContext& ctx, bool forceNative) {
+    if (m_configuredUnits.empty() ||
+        (!forceNative && m_configuredUnitRevision == m_snapshotRevision))
         return;
-    bool stale = false;
-    bool nativeReplay = false;
+    const bool previousReplay = m_nativeReplayInProgress;
+    m_nativeReplayInProgress = true;
+    auto restoreReplay = slang::ScopeGuard([&] { m_nativeReplayInProgress = previousReplay; });
+    bool stale = forceNative;
+    bool nativeReplay = forceNative;
     for (const auto& unit : m_configuredUnits) {
         stale |= !hasValidBuffers(sm, unit->getCachedSyntaxTree());
         nativeReplay |= unit->requiresNativeReplay();
@@ -178,11 +200,18 @@ void ServerDriver::refreshConfiguredUnits(const lsp::RequestContext& ctx) {
         auto restore = slang::ScopeGuard(
             [&] { driver.options.parseCheckpoint = std::move(previousCheckpoint); });
         driver.options.parseCheckpoint = request.callback();
+        auto previousTrees = driver.syntaxTrees;
+        bool installed = false;
+        auto rollbackTrees = slang::ScopeGuard([&] {
+            if (!installed)
+                driver.syntaxTrees = std::move(previousTrees);
+        });
         const bool parsed = driver.parseAllSources();
         ctx.checkpoint("after configured syntax parsing");
         request.finish(); // Installing complete units is an atomic state transition.
         m_nativeInputsFailed = m_configurationInputsFailed || !parsed;
         installConfiguredUnits(driver.syntaxTrees);
+        installed = true;
     }
     else {
         std::vector<std::shared_ptr<syntax::SyntaxTree>> trees;
@@ -192,6 +221,56 @@ void ServerDriver::refreshConfiguredUnits(const lsp::RequestContext& ctx) {
         m_currentConfiguredTrees = std::move(trees);
         m_configuredUnitRevision = m_snapshotRevision;
     }
+}
+
+void ServerDriver::refreshNativeUnits(const lsp::RequestContext& ctx, bool force) {
+    if (m_nativeReplayInProgress)
+        return;
+    const bool native = std::ranges::any_of(m_configuredUnits, [](const auto& unit) {
+        return unit->requiresNativeReplay();
+    });
+    if (!native && !force)
+        return;
+    // Direct document edits and invalidations need not advance the driver's
+    // protocol revision. Inspect the immutable native input trees as well.
+    force |= std::ranges::any_of(m_currentConfiguredTrees, [&](const auto& tree) {
+        return !hasValidBuffers(sm, tree);
+    });
+    if (!force && m_configuredUnitRevision == m_snapshotRevision)
+        return;
+    m_nativeReplayInProgress = true;
+    auto restore = slang::ScopeGuard([&] { m_nativeReplayInProgress = false; });
+    refreshConfiguredUnits(ctx, force);
+    if (m_nativeInputsFailed)
+        throw std::runtime_error("Native SourceLoader replay failed to load configured inputs");
+    if (comp)
+        comp->invalidate();
+}
+
+void ServerDriver::refreshNativeCompilationUnit(SlangDoc& document,
+                                               const lsp::RequestContext& ctx) {
+    const bool force = document.requiresNativeReplay() &&
+                       !hasValidBuffers(sm, document.getCachedSyntaxTree());
+    refreshNativeUnits(ctx, force);
+    if (!document.requiresNativeReplay() || hasValidBuffers(sm, document.getCachedSyntaxTree()))
+        return;
+    auto unit = std::ranges::find_if(m_configuredUnits, [&](const auto& candidate) {
+        return sm.getFullPath(candidate->getBuffer()) == sm.getFullPath(document.getBuffer());
+    });
+    if (unit == m_configuredUnits.end())
+        throw std::runtime_error("Native compilation unit has no configured SourceLoader recipe");
+    document.adoptNativeCompilationUnit(**unit);
+}
+
+std::optional<std::vector<std::shared_ptr<SlangDoc>>>
+ServerDriver::getNativeDesignCompilationUnits(const lsp::RequestContext& ctx) {
+    refreshNativeUnits(ctx, false);
+    if (m_designUsesConfiguredUnits &&
+        std::ranges::any_of(m_configuredUnits, [](const auto& unit) {
+            return unit->requiresNativeReplay();
+        }))
+        return m_configuredUnits;
+    return std::nullopt;
 }
 
 SourceContextHints ServerDriver::getSourceHints(BufferID buffer, const lsp::RequestContext& ctx) {

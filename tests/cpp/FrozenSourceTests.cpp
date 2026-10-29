@@ -1,10 +1,14 @@
 // SPDX-License-Identifier: MIT
 #include "document/FrozenSourceRegistry.h"
+#include "ast/TrustedUvmLibrary.h"
 #include "util/SlangExtensions.h"
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 #include <tuple>
+#include <sstream>
+
+#include "slang/parsing/ParserMetadata.h"
 
 #include "slang/ast/Compilation.h"
 #include "slang/ast/symbols/CompilationUnitSymbols.h"
@@ -69,8 +73,7 @@ TEST_CASE("A frozen input group preserves multiple packages and ordered macro st
 
 TEST_CASE("Generic prefix checkpoints decline unsupported directive and callback state",
           "[frozen-source]") {
-    const std::string directive = GENERATE("`timescale 1ns/1ps\n", "`default_nettype none\n",
-                                           "`begin_keywords \"1800-2017\"\n",
+    const std::string directive = GENERATE("`begin_keywords \"1800-2017\"\n",
                                            "`pragma protect begin\n");
     CAPTURE(directive);
     SourceManager sm;
@@ -84,6 +87,91 @@ TEST_CASE("Generic prefix checkpoints decline unsupported directive and callback
     pp.bufferChangeCB = [](BufferID, bool, bool) {};
     Bag options(pp);
     CHECK_THROWS(syntax::SyntaxTree::fromBuffersWithCheckpoint(std::vector{root}, sm, options));
+}
+
+TEST_CASE("Frozen prefixes preserve persistent directive state across resume and archives",
+          "[frozen-source][prefix-directives]") {
+    const std::string directives = GENERATE(
+        "`timescale 100ns/1ps", "`default_nettype none",
+        "`timescale 10ns/1ps\n`default_nettype none\n`unconnected_drive pull0\n`celldefine",
+        "`timescale 1ps/1fs\n`default_nettype wand\n`unconnected_drive pull1",
+        "`default_nettype wor\n`celldefine\n`endcelldefine\n`nounconnected_drive",
+        "`timescale 1ns/1ps\n`default_nettype none\n`unconnected_drive pull1\n`celldefine\n`resetall");
+    const bool trailingNewline = GENERATE(false, true);
+    CAPTURE(directives, trailingNewline);
+    SourceManager sm;
+    const auto root = std::filesystem::canonical(std::filesystem::temp_directory_path()) /
+                      "persistent-directives";
+    const auto first = sm.assignText((root / "first.sv").string(),
+        "package first; endpackage\n" + directives + (trailingNewline ? "\n" : ""));
+    const auto tail = sm.assignText((root / "tail.sv").string(),
+        "module inherited; assign implicit_net = 1'b0; endmodule\n"
+        "`timescale 100ps/10fs\n`default_nettype tri\n`unconnected_drive pull1\n"
+        "`endcelldefine\nmodule overridden; endmodule\n`default_nettype wor");
+    const auto final = sm.assignText((root / "final.sv").string(),
+        "module last; endmodule\n");
+    auto native = syntax::SyntaxTree::fromBuffers(std::vector{first, tail, final}, sm);
+    auto check = [&](const std::shared_ptr<syntax::SyntaxTree>& combined) {
+        const auto& expected = native->getMetadata().nodeMeta;
+        const auto& actual = combined->getMetadata().nodeMeta;
+        REQUIRE(actual.size() == expected.size());
+        for (size_t n = 0; n < expected.size(); ++n) {
+            CHECK(actual[n].first->header->name.valueText() ==
+                  expected[n].first->header->name.valueText());
+            CHECK(actual[n].second.defaultNetType == expected[n].second.defaultNetType);
+            CHECK(actual[n].second.unconnectedDrive == expected[n].second.unconnectedDrive);
+            CHECK(actual[n].second.cellDefine == expected[n].second.cellDefine);
+            CHECK(actual[n].second.timeScale == expected[n].second.timeScale);
+        }
+        ast::Compilation reference, resumed;
+        reference.addSyntaxTree(native);
+        resumed.addSyntaxTree(combined);
+        const auto& ref = reference.getAllDiagnostics();
+        const auto& got = resumed.getAllDiagnostics();
+        REQUIRE(got.size() == ref.size());
+        for (size_t n = 0; n < ref.size(); ++n) {
+            CHECK(got[n].code == ref[n].code);
+            CHECK(got[n].location.offset() == ref[n].location.offset());
+        }
+    };
+    auto prefix = syntax::SyntaxTree::fromBuffersWithCheckpoint(std::vector{first}, sm);
+    REQUIRE(prefix->isPrefixResumeSafe().value_or(false));
+    auto resume = [&](const auto& prepared) {
+        auto suffix = syntax::SyntaxTree::afterCachedPrefix(prepared, std::vector{tail, final}, {});
+        check(syntax::SyntaxTree::withCachedPrefix(prepared, suffix));
+    };
+    resume(prefix);
+    resume(syntax::SyntaxTree::sharedPrefixView(prefix, sm));
+    const auto empty = sm.assignText((root / "empty.sv").string(), "");
+    auto seed = syntax::SyntaxTree::fromBuffersWithCheckpoint(std::vector{empty}, sm);
+    auto firstCapture = syntax::SyntaxTree::afterCachedPrefixWithCheckpoint(
+        seed, std::vector{first, tail, final}, 1);
+    auto capturedFirst = syntax::SyntaxTree::preparedSourcePrefix(firstCapture, seed);
+    REQUIRE(capturedFirst);
+    resume(capturedFirst);
+    std::ostringstream output(std::ios::binary);
+    prefix->writeParseArchive(output, root);
+    SourceManager restoredSources;
+    std::istringstream input(output.str(), std::ios::binary);
+    auto restored = syntax::SyntaxTree::readParseArchive(input, restoredSources, root);
+    auto frozenNamespace = restoredSources.captureImmutablePrefix(restored->getSourceBufferIds());
+    SourceManager fork;
+    fork.inheritImmutablePrefix(frozenNamespace);
+    auto view = syntax::SyntaxTree::sharedPrefixView(restored, fork);
+    const auto restoredTail = fork.assignText((root / "tail.sv").string(), sm.getSourceText(tail.id));
+    const auto restoredFinal = fork.assignText((root / "final.sv").string(), sm.getSourceText(final.id));
+    check(syntax::SyntaxTree::withCachedPrefix(view,
+        syntax::SyntaxTree::afterCachedPrefix(view, std::vector{restoredTail, restoredFinal}, {})));
+    auto extended = syntax::SyntaxTree::extendCachedPrefix(prefix, std::vector{tail}, {});
+    check(syntax::SyntaxTree::withCachedPrefix(extended,
+        syntax::SyntaxTree::afterCachedPrefix(extended, std::vector{final}, {})));
+    // Capture an interior boundary after overrides, instead of at EOF.
+    auto capturedParse = syntax::SyntaxTree::afterCachedPrefixWithCheckpoint(
+        prefix, std::vector{tail, final}, 1);
+    auto captured = syntax::SyntaxTree::preparedSourcePrefix(capturedParse, prefix);
+    REQUIRE(captured);
+    check(syntax::SyntaxTree::withCachedPrefix(captured,
+        syntax::SyntaxTree::afterCachedPrefix(captured, std::vector{final}, {})));
 }
 
 TEST_CASE("Package selection resolves complete roots and reports ambiguous or missing names",
@@ -982,6 +1070,30 @@ TEST_CASE("Module selections retain whole roots and distinguish package names",
                                                std::vector<std::string>{"selected"});
     CHECK(ambiguous.units.empty());
     CHECK(ambiguous.selections[0].reason.find("ambiguous") != std::string::npos);
+}
+
+TEST_CASE("Stable interface and program selections retain complete roots and reject ambiguity",
+          "[frozen-module][frozen-interface][frozen-source]") {
+    const bool program = GENERATE(false, true);
+    SourceManager sm;
+    const std::string declaration = program ? "program selected; endprogram\n"
+                                             : "interface selected; endinterface\n";
+    auto setup = sm.assignText("setup.sv", "package types; typedef int word_t; endpackage\n");
+    auto selected = sm.assignText("fixed.sv", declaration);
+    auto user = sm.assignText("user.sv", "module top; endmodule\n");
+    auto tree = syntax::SyntaxTree::fromBuffers(std::vector{setup, selected, user}, sm);
+    auto plans = server::planFrozenSources(std::vector{tree}, {},
+                                           std::vector<std::string>{"selected"});
+    REQUIRE(plans.units.size() == 1);
+    CHECK(plans.units.front().frozenRootCount == 2);
+    REQUIRE(plans.selections.size() == 1);
+    CHECK(plans.selections.front().resolved);
+    auto duplicate = syntax::SyntaxTree::fromText("module selected; endmodule\n", sm);
+    auto ambiguous = server::planFrozenSources(std::vector{tree, duplicate}, {},
+                                               std::vector<std::string>{"selected"});
+    CHECK(ambiguous.units.empty());
+    CHECK_FALSE(ambiguous.selections.front().resolved);
+    CHECK(ambiguous.selections.front().reason.find("ambiguous") != std::string::npos);
 }
 
 TEST_CASE("Frozen modules share syntax while RTL instance semantics refresh",
@@ -2355,4 +2467,125 @@ endmodule
                   return m.range.start == declarationStart;
               }) == 1);
     }
+}
+
+TEST_CASE("Projected RTL dependencies exclude intervening mutable roots",
+          "[scope-projected-rtl]") {
+    FrozenWorkspace files;
+    files.write("fixed.sv", "`timescale 1ns/1ps\nmodule stable(input logic a, output wire y); "
+                            "leaf child(.*); endmodule\n");
+    files.write("leaf.sv", "module leaf(input logic a, output wire y); assign y=a; endmodule\n");
+    const auto source = [](int value) {
+        return fmt::format("module top; localparam int VALUE={}; logic a; wire y; "
+                           "stable u(.*); endmodule\n", value);
+    };
+    files.write("consumer.sv", source(1));
+    files.write("unrelated.sv", "package unrelated; typedef int item_t; class helper; endclass endpackage\n"
+                                 "import unrelated::item_t;\n");
+    files.write("design.f", "fixed.sv\nconsumer.sv\nleaf.sv\nunrelated.sv\n");
+    Config config;
+    config.flags = "--single-unit --threads 1 --top top";
+    config.compilationFilelist = "design.f";
+    config.experimentalScopeSemanticCache = true;
+    config.frozenSources = Config::FrozenSourcesConfig{
+        .modules = std::vector<std::string>{"stable"}, .maxMiB = 64};
+    files.write(".slang/server.json", rfl::json::write(config));
+    FrozenHarness server(files.initialize());
+    server.setBuildFile("design.f");
+    auto setting = server.m_driver->options.get<server::TrustedUvmImport>();
+    REQUIRE(setting);
+    REQUIRE(setting->library->projectedDefinitions);
+    CHECK(server.m_driver->isTrustedScopeSource(files.root / "fixed.sv"));
+    CHECK(server.m_driver->isTrustedScopeSource(files.root / "leaf.sv"));
+    CHECK_FALSE(server.m_driver->isTrustedScopeSource(files.root / "consumer.sv"));
+    auto user = server.openFile("consumer.sv");
+    for (int value : {2, 3, 4}) {
+        user.replaceAll(source(value));
+        user.publishChanges();
+        CHECK(server.m_driver->hasCompatibleTrustedNamespace());
+        auto compilation = server.m_driver->getDocument(user.m_uri)->getAnalysis()->getCompilation();
+        auto& top = compilation->getRoot().topInstances.front()->body;
+        CHECK(top.find("VALUE")->as<ast::ParameterSymbol>().getValue().integer().as<int>() == value);
+        server.m_driver->runPendingDiagnostics();
+        CHECK_FALSE(std::ranges::any_of(server.client.getDiagnostics(user.m_uri), [](const auto& d) {
+            return d.severity == lsp::DiagnosticSeverity::Error;
+        }));
+    }
+    auto* bodies = server.m_driver->options.get<server::ScopeBodyImport>();
+    REQUIRE(bodies);
+    REQUIRE(bodies->cache.lock());
+    CHECK(bodies->cache.lock()->status().hits > 0);
+    const auto generation = setting->library->generation;
+    auto provider = server.openFile("leaf.sv");
+    const std::string changed =
+        "module leaf(input logic a, output wire y); assign y=~a; endmodule\n";
+    server.m_driver->onDocDidChange(
+        {.textDocument = {.version = 2, .uri = provider.m_uri},
+         .contentChanges = {lsp::TextDocumentContentChangeWholeDocument{.text = changed}}});
+    CHECK_THROWS_AS(server.m_driver->trustedLibrarySourceContext(URI{}), lsp::RequestFailed);
+    REQUIRE(rfl::from_generic<bool>(server.command("slang.rebuildScopeLibrary")).value());
+    auto refreshed = server.m_driver->options.get<server::TrustedUvmImport>();
+    REQUIRE(refreshed);
+    CHECK(refreshed->library->generation != generation);
+    CHECK(server.m_driver->getDocument(provider.m_uri)->textMatches(changed));
+    CHECK(server.m_driver->getDocument(user.m_uri)->textMatches(source(4)));
+}
+
+TEST_CASE("Projected RTL checks mutable preprocessing context before importing",
+          "[scope-projected-rtl]") {
+    const std::string mode = GENERATE("macro", "timescale", "nettype", "conditional", "namespace", "import");
+    CAPTURE(mode);
+    FrozenWorkspace files;
+    const auto switches = [&](bool changed) {
+        std::string prefix;
+        if (mode == "macro")
+            prefix = changed ? "`define WIDTH 9\n" : "`define WIDTH 4\n";
+        else if (mode == "timescale")
+            prefix = changed ? "`timescale 10ns/1ps\n" : "`timescale 1ns/1ps\n";
+        else if (mode == "nettype")
+            prefix = changed ? "`default_nettype none\n" : "`default_nettype wire\n";
+        else if (mode == "conditional")
+            prefix = changed ? "`define HIDE_STABLE\n" : "`undef HIDE_STABLE\n";
+        return prefix + "module top; stable u(); endmodule\n" +
+               (mode == "namespace" && changed ? "package shadow; endpackage\n" : "") +
+               (mode == "import" && changed
+                    ? "package added; typedef int shadow; endpackage import added::shadow;\n"
+                    : "");
+    };
+    files.write("consumer.sv", switches(false));
+    files.write("fixed.sv", (mode == "conditional" ? "`ifndef HIDE_STABLE\n" : "") +
+        std::string("module stable; ") + (mode == "macro" ? "logic[`WIDTH-1:0] q; " : "") +
+        (mode == "namespace" || mode == "import" ? "logic shadow; " : "") +
+        "endmodule\n" + (mode == "conditional" ? "`endif\n" : ""));
+    files.write("design.f", "consumer.sv\nfixed.sv\n");
+    Config config;
+    config.flags = "--single-unit --threads 1 --top top";
+    config.compilationFilelist = "design.f";
+    config.experimentalScopeSemanticCache = true;
+    config.frozenSources = Config::FrozenSourcesConfig{
+        .modules = std::vector<std::string>{"stable"}, .maxMiB = 64};
+    files.write(".slang/server.json", rfl::json::write(config));
+    FrozenHarness server(files.initialize());
+    server.setBuildFile("design.f");
+    auto setting = server.m_driver->options.get<server::TrustedUvmImport>();
+    REQUIRE(setting);
+    // Macro-definition origins can conservatively retain the supplying root.
+    if (mode == "macro" && !setting->library->projectedDefinitions) {
+        CHECK(server.m_driver->isTrustedScopeSource(files.root / "consumer.sv"));
+        auto user = server.openFile("consumer.sv");
+        server.m_driver->onDocDidChange(
+            {.textDocument = {.version = 2, .uri = user.m_uri},
+             .contentChanges = {lsp::TextDocumentContentChangeWholeDocument{.text = switches(true)}}});
+        CHECK_THROWS_AS(server.m_driver->trustedLibrarySourceContext(URI{}), lsp::RequestFailed);
+        return;
+    }
+    REQUIRE(setting->library->projectedDefinitions);
+    auto user = server.openFile("consumer.sv");
+    REQUIRE(server.m_driver->hasCompatibleTrustedNamespace());
+    user.replaceAll(switches(true));
+    user.publishChanges();
+    CHECK_FALSE(server.m_driver->hasCompatibleTrustedNamespace());
+    user.replaceAll(switches(false));
+    user.publishChanges();
+    CHECK(server.m_driver->hasCompatibleTrustedNamespace());
 }

@@ -102,15 +102,18 @@ FrozenSourcePlans planFrozenSources(std::span<const std::shared_ptr<syntax::Synt
     auto select = [&](const std::string& name, bool module) {
         FrozenSelectionStatus status;
         (module ? status.module : status.package) = name;
-        const auto kind = module ? syntax::SyntaxKind::ModuleDeclaration
-                                 : syntax::SyntaxKind::PackageDeclaration;
         const std::string label = module ? "module" : "package";
         size_t owner = 0, count = 0, boundary = 0;
         bool complete = true;
         for (size_t i = 0; i < units.size(); ++i) {
             auto roots = orderedRoots(*units[i]);
             for (const auto& [node, _] : units[i]->getMetadata().nodeMeta) {
-                if (node->kind != kind || node->header->name.valueText() != name)
+                const bool selectedKind = module
+                    ? node->kind == syntax::SyntaxKind::ModuleDeclaration ||
+                          node->kind == syntax::SyntaxKind::InterfaceDeclaration ||
+                          node->kind == syntax::SyntaxKind::ProgramDeclaration
+                    : node->kind == syntax::SyntaxKind::PackageDeclaration;
+                if (!selectedKind || node->header->name.valueText() != name)
                     continue;
                 ++count;
                 owner = i;

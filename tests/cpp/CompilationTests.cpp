@@ -507,6 +507,84 @@ TEST_CASE("First diagnostics reuse only an unshared current full model",
           nativeModelDiagnostics("unshared_model.sv", modelOriginal));
 }
 
+TEST_CASE("Finished query caches allow cooperative diagnostics to reuse an unborrowed model",
+          "[cached-query-diagnostics]") {
+    const bool enabled = GENERATE(false, true);
+    const bool borrowed = GENERATE(false, true);
+    ServerHarness server;
+    server.loadConfig(Config{.experimentalCooperativeAnalysis = enabled});
+    auto doc = server.openFile("finished_query.sv", modelOriginal);
+    server.setTopLevel(std::string(doc.m_uri.getPath()));
+    changeModel(server, doc.m_uri, 2, modelEdited);
+    auto document = server.m_driver->getDocument(doc.m_uri);
+    auto cached = document->getAnalysis();
+    REQUIRE(cached->getShallowCompilation()->hasActiveDesign());
+    std::weak_ptr<slang::ast::Compilation> previous;
+    {
+        auto current = server.m_driver->comp->createActiveDesignContext({});
+        previous = current.retainCompilation();
+    }
+    if (!borrowed)
+        cached.reset();
+    server.m_driver->runPendingDiagnostics();
+    CHECK(document->hasAnalysis());
+    auto current = server.m_driver->comp->createActiveDesignContext({});
+    if (!enabled || !borrowed)
+        CHECK(current.retainCompilation() == previous.lock());
+    else {
+        CHECK_FALSE(previous.expired());
+        CHECK(current.retainCompilation() != previous.lock());
+    }
+    CHECK(rfl::json::write(server.client.getDiagnostics(doc.m_uri)) ==
+          nativeModelDiagnostics("finished_query.sv", modelEdited));
+}
+
+TEST_CASE("Cancelled preparation after releasing a query cache never restores a partial view",
+          "[cached-query-diagnostics][model-cancellation]") {
+    const auto boundary = GENERATE("during private full-design semantics",
+                                   "before reused full-model publication");
+    const auto text = manySemanticMethods();
+    ServerHarness server;
+    server.loadConfig(Config{.experimentalCooperativeAnalysis = true});
+    auto doc = server.openFile("finished_cancel.sv", text);
+    server.setTopLevel(std::string(doc.m_uri.getPath()));
+    auto edited = text;
+    edited.replace(edited.find("return 1599;"), std::string("return 1599;").size(),
+                   "return missing_user_value;");
+    changeModel(server, doc.m_uri, 2, edited);
+    auto document = server.m_driver->getDocument(doc.m_uri);
+    {
+        auto cached = document->getAnalysis();
+        REQUIRE(cached->getShallowCompilation()->hasActiveDesign());
+    }
+    std::weak_ptr<slang::ast::Compilation> previous;
+    {
+        auto current = server.m_driver->comp->createActiveDesignContext({});
+        previous = current.retainCompilation();
+    }
+    const auto publications = server.client.diagnosticPublications.size();
+    lsp::RequestContext ctx("cancel finished query diagnostics", 293);
+    size_t visits = 0;
+    ctx.setCheckpointObserverForTesting([&](std::string_view where) {
+        if (where == boundary &&
+            ++visits == (std::string_view(boundary) ==
+                                 "during private full-design semantics" ? 3u : 1u))
+            ctx.cancel();
+    });
+    CHECK_THROWS_AS(server.m_driver->runPendingDiagnostics(ctx), lsp::RequestCancelled);
+    CHECK(ctx.isCancelled());
+    CHECK_FALSE(document->hasAnalysis());
+    CHECK(server.client.diagnosticPublications.size() == publications);
+    auto fresh = document->getAnalysis();
+    REQUIRE(fresh);
+    auto current = server.m_driver->comp->createActiveDesignContext({});
+    CHECK(current.retainCompilation() != previous.lock());
+    fresh.reset();
+    server.m_driver->runPendingDiagnostics();
+    CHECK(rfl::json::write(server.client.getDiagnostics(doc.m_uri)) ==
+          nativeModelDiagnostics("finished_cancel.sv", edited));
+}
+
 TEST_CASE("Cancelled unshared semantic preparation rebuilds latest input without publishing",
           "[model-cancellation][unshared-model-diagnostics]") {
     const auto boundary = GENERATE("during private full-design semantics",

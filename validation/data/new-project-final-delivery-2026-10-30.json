@@ -1,0 +1,66 @@
+{
+  "status": "All local delivery gates passed; main commit/push and remote verification pending",
+  "binarySha256": "d7d6d1dba5070ffc4e7fdda8e6ec2ea1f1d2963d5b1004de624d551055d2010a",
+  "sourceSeal": "untracked/project-optimization-2026-10-29/shared-warmup-source-seal.json",
+  "performanceQualification": "untracked/project-optimization-2026-10-29/shared-warmup-qualification.json",
+  "installation": {
+    "receipt": "untracked/new-project-final-2026-10-30/install-receipt.json",
+    "sha256": "2b4c85636000303e27149dd304d6d7118ae968491511471af010aff303787e03",
+    "singleShippedDefaultProfile": true,
+    "cases": {
+      "default": {
+        "evidence": "untracked/new-project-final-2026-10-30/install-default-smoke.json",
+        "sha256": "ea21c32b037c790816461153639c47cfb1fab0f728ee0f4e7c92e1f1795ab784"
+      },
+      "cold": {
+        "evidence": "untracked/new-project-final-2026-10-30/install-cold-smoke.json",
+        "sha256": "6fcc32354b3b37de5ce7567e234944e4f9b3fd1f0a7b45e2dfc6c98e88c38d82"
+      },
+      "warm": {
+        "evidence": "untracked/new-project-final-2026-10-30/install-warm-smoke.json",
+        "sha256": "6fb8f4f8fd7fa129dec5b0113d529d7d6fff77a3480bb56f8ec473f967fba7e8"
+      }
+    },
+    "harness": "untracked/new-project-final-2026-10-30/install-smoke.py",
+    "harnessSha256": "eb8f536b3e7efbc44ba22601154601c1385f0e39ea8e3025b18b0af8bde48a68"
+  },
+  "remaining": [
+    "Stage and commit reviewed changes on main",
+    "Push main and verify remote commit identity"
+  ],
+  "manualRebuild": {
+    "passed": true,
+    "evidence": "untracked/new-project-final-2026-10-30/rebuild-smoke.json",
+    "sha256": "2d48144efaec3787a081aee990e6c355c281b8d2473843ff1d7666d96ec43ff0"
+  },
+  "defaultOff": {
+    "passed": true,
+    "evidence": "untracked/new-project-final-2026-10-30/default-off-smoke.json",
+    "sha256": "7e9eac97b6c7327f792f5b96534e3445afbb16649824c98559f6b28c4fb6330f"
+  },
+  "offlineRestore": {
+    "passed": true,
+    "evidence": "untracked/new-project-final-2026-10-30/offline-restoration.json",
+    "sha256": "a3863b2c341b50372d2823acb2c9bbc53b737243d632f181fe21018fd503b8fd"
+  },
+  "cleanup": {
+    "evidence": "untracked/new-project-final-2026-10-30/historical-cleanup-receipt.json",
+    "sha256": "4fc11e2c497022eb4ac3de929cefaf17f3e840cfc81567c23f890b1e70b703da",
+    "supersededExecutablesRetired": 3,
+    "ownedRebuildFixturesRetired": 2,
+    "terminalLogsRemoved": 9,
+    "retained": "Current release/install/ASan builds, local offline dependency exports, real workload source inputs, reusable project caches, source archives and conclusion/data/code receipts"
+  },
+  "sourceReview": {
+    "qualifiedCompiledInputsUnchanged": true,
+    "sdkSourceHashesVerified": 709,
+    "postQualificationChanges": "Documentation and delivery evidence only",
+    "documentation": [
+      "docs/features/method-body-certification.md",
+      "validation/new-project-query-view-2026-10-29.md"
+    ],
+    "remoteMainBeforeDelivery": "41758aa9e865903a0e283861f19331f9a36eab5b",
+    "remoteMatchedLocalParent": true,
+    "note": "SDK checkout keeps the pinned gitlink and intentional restored modifications encoded in restoration/slang.patch; offline byte reconstruction passed."
+  }
+}

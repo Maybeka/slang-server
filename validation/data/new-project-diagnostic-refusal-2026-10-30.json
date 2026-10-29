@@ -1,0 +1,437 @@
+{
+  "status": "Diagnostic capture-refusal attribution qualified; full optimization objective remains active",
+  "mainHead": "41758aa9e865903a0e283861f19331f9a36eab5b",
+  "binarySha256": "713381c33a3bef03ab070949ad863182d93d90281bd52ac722dca5e5010b91da",
+  "asanBinarySha256": "90c70edba8767d0dda30944c98f7e9cba3e8db759656442a1a961dd09dbf9e45",
+  "baselineBinarySha256": "bf260c141dd392038aa15e413db68afe02139cfa5d85c2abf65d2cb674d37706",
+  "sourceSeal": "untracked/project-optimization-2026-10-29/refusal-source-seal.json",
+  "sourceArchive": "untracked/project-optimization-2026-10-29/source-receipts/refusal-attribution",
+  "implemented": [
+    "Preserve the precise pre-edit capture refusal when post-edit preparation only sees an invalidated full model",
+    "Clear capture refusal on successful capture/certification, allowing subsequent current-model local recovery",
+    "No changes to diagnostic algorithm, freeze selectors, public results, or experiment defaults"
+  ],
+  "regressionBeforeFix": {
+    "assertions": 20,
+    "passed": 19,
+    "failed": 1,
+    "expected": "bounded diagnostic streams require full analysis",
+    "actual": "local diagnostics require a completed current full-design baseline"
+  },
+  "verification": {
+    "ctest": {
+      "passed": 1016,
+      "failed": 0,
+      "seconds": 22.75,
+      "TMPDIR": "/private/tmp",
+      "concurrentAsanBuild": true
+    },
+    "asanUnits": {
+      "cases": 22,
+      "assertions": 2827,
+      "leakDetection": false
+    },
+    "sdkFilesVerifiedUnchanged": 709,
+    "gitDiffCheck": true,
+    "releaseStates": 270
+  },
+  "cases": {
+    "cva6-uvm-signature-argument": {
+      "passed": true,
+      "evidence": "untracked/project-optimization-2026-10-29/cva6-uvm-signature-argument-refusal-attribution.json",
+      "sha256": "68f5d598745776878ed965d19a9a065fa478d11310f1562a783ff7bb28a6deb8",
+      "arms": {
+        "native": {
+          "warmQueryMedianMs": 1552.641541,
+          "warmDiagnosticMedianMs": 1928.727709,
+          "firstEdit": {
+            "queryMs": 1569.332291,
+            "diagnosticMs": 1952.807291
+          },
+          "structuralFallback": [
+            {
+              "state": "structural",
+              "queryMs": 1585.37975,
+              "diagnosticMs": 1974.846958
+            }
+          ],
+          "finalScopeRoots": [],
+          "finalFootprintMiB": 537.9856109619141
+        },
+        "baseline": {
+          "warmQueryMedianMs": 6.449208,
+          "warmDiagnosticMedianMs": 11.571708,
+          "firstEdit": {
+            "queryMs": 27.721541,
+            "diagnosticMs": 46.798208
+          },
+          "structuralFallback": [
+            {
+              "state": "structural",
+              "queryMs": 404.153041,
+              "diagnosticMs": 906.366458
+            }
+          ],
+          "finalScopeRoots": [
+            "uvmt_cva6_tb.cva6_dut_wrap.cva6_tb_wrapper_i.i_cva6"
+          ],
+          "finalFootprintMiB": 779.0325317382812
+        },
+        "candidate": {
+          "warmQueryMedianMs": 6.524125,
+          "warmDiagnosticMedianMs": 11.598917,
+          "firstEdit": {
+            "queryMs": 27.7045,
+            "diagnosticMs": 47.442458
+          },
+          "structuralFallback": [
+            {
+              "state": "structural",
+              "queryMs": 383.733875,
+              "diagnosticMs": 863.787417
+            }
+          ],
+          "finalScopeRoots": [
+            "uvmt_cva6_tb.cva6_dut_wrap.cva6_tb_wrapper_i.i_cva6"
+          ],
+          "finalFootprintMiB": 775.8762817382812
+        }
+      },
+      "wholeDutPerformanceAccepted": false
+    },
+    "opentitan-soc-signature-argument": {
+      "passed": true,
+      "evidence": "untracked/project-optimization-2026-10-29/opentitan-soc-signature-argument-refusal-attribution.json",
+      "sha256": "b4f7b51524f37b8702b4cb315b0a7d651aa6ed1112c409540db957a29ecc8232",
+      "arms": {
+        "native": {
+          "warmQueryMedianMs": 624.790375,
+          "warmDiagnosticMedianMs": 1238.430708,
+          "firstEdit": {
+            "queryMs": 679.530958,
+            "diagnosticMs": 1311.143042
+          },
+          "structuralFallback": [
+            {
+              "state": "structural",
+              "queryMs": 653.814375,
+              "diagnosticMs": 1286.490166
+            }
+          ],
+          "finalScopeRoots": [],
+          "finalFootprintMiB": 837.9710388183594
+        },
+        "baseline": {
+          "warmQueryMedianMs": 16.331375,
+          "warmDiagnosticMedianMs": 31.382167,
+          "firstEdit": {
+            "queryMs": 43.592042,
+            "diagnosticMs": 70.633083
+          },
+          "structuralFallback": [
+            {
+              "state": "structural",
+              "queryMs": 713.923125,
+              "diagnosticMs": 1389.582167
+            }
+          ],
+          "finalScopeRoots": [],
+          "finalFootprintMiB": 883.1585388183594
+        },
+        "candidate": {
+          "warmQueryMedianMs": 16.432666,
+          "warmDiagnosticMedianMs": 31.639917,
+          "firstEdit": {
+            "queryMs": 40.192,
+            "diagnosticMs": 68.598
+          },
+          "structuralFallback": [
+            {
+              "state": "structural",
+              "queryMs": 736.046333,
+              "diagnosticMs": 1411.327083
+            }
+          ],
+          "finalScopeRoots": [],
+          "finalFootprintMiB": 883.596061706543
+        }
+      },
+      "wholeDutPerformanceAccepted": false
+    },
+    "ethernet-udp-consumer-edit": {
+      "passed": true,
+      "evidence": "untracked/project-optimization-2026-10-29/ethernet-udp-consumer-edit-refusal-attribution.json",
+      "sha256": "c264f4c540731bf9b19935b7b9dd46ff56220854ece071fa9267ab114e44fc55",
+      "arms": {
+        "native": {
+          "warmQueryMedianMs": 8.214292,
+          "warmDiagnosticMedianMs": 11.343209,
+          "firstEdit": {
+            "queryMs": 8.49575,
+            "diagnosticMs": 11.693375
+          },
+          "structuralFallback": [
+            {
+              "state": "structural",
+              "queryMs": 8.024709,
+              "diagnosticMs": 11.140625
+            }
+          ],
+          "finalScopeRoots": [],
+          "finalFootprintMiB": 21.328582763671875
+        },
+        "baseline": {
+          "warmQueryMedianMs": 14.767041,
+          "warmDiagnosticMedianMs": 18.037625,
+          "firstEdit": {
+            "queryMs": 15.102416,
+            "diagnosticMs": 18.42325
+          },
+          "structuralFallback": [
+            {
+              "state": "structural",
+              "queryMs": 14.556083,
+              "diagnosticMs": 17.817917
+            }
+          ],
+          "finalScopeRoots": [
+            "udp_complete_64.ip_arb_mux_inst.arb_inst",
+            "udp_complete_64.ip_complete_64_inst.arp_inst.arp_cache_inst",
+            "udp_complete_64.ip_complete_64_inst.eth_arb_mux_inst.arb_inst",
+            "udp_complete_64.udp_64_inst.genblk1.udp_checksum_gen_64_inst.payload_fifo"
+          ],
+          "finalFootprintMiB": 26.562957763671875
+        },
+        "candidate": {
+          "warmQueryMedianMs": 14.552917,
+          "warmDiagnosticMedianMs": 17.809583,
+          "firstEdit": {
+            "queryMs": 15.155042,
+            "diagnosticMs": 18.461292
+          },
+          "structuralFallback": [
+            {
+              "state": "structural",
+              "queryMs": 14.915958,
+              "diagnosticMs": 18.187416
+            }
+          ],
+          "finalScopeRoots": [
+            "udp_complete_64.ip_arb_mux_inst.arb_inst",
+            "udp_complete_64.ip_complete_64_inst.arp_inst.arp_cache_inst",
+            "udp_complete_64.ip_complete_64_inst.eth_arb_mux_inst.arb_inst",
+            "udp_complete_64.udp_64_inst.genblk1.udp_checksum_gen_64_inst.payload_fifo"
+          ],
+          "finalFootprintMiB": 26.516082763671875
+        }
+      },
+      "wholeDutPerformanceAccepted": false
+    },
+    "serdes-pcs-verification": {
+      "passed": true,
+      "evidence": "untracked/project-optimization-2026-10-29/serdes-pcs-verification-refusal-attribution.json",
+      "sha256": "8fa0f1b3403d06387bcda09cb474b410e4829fecd16d2e2041fbb212fde1ba2d",
+      "arms": {
+        "native": {
+          "warmQueryMedianMs": 20.326084,
+          "warmDiagnosticMedianMs": 24.096375,
+          "firstEdit": {
+            "queryMs": 20.844959,
+            "diagnosticMs": 24.6035
+          },
+          "structuralFallback": [
+            {
+              "state": "structural",
+              "queryMs": 20.263083,
+              "diagnosticMs": 23.923542
+            }
+          ],
+          "finalScopeRoots": [],
+          "finalFootprintMiB": 13.687957763671875
+        },
+        "baseline": {
+          "warmQueryMedianMs": 23.850083,
+          "warmDiagnosticMedianMs": 27.818583,
+          "firstEdit": {
+            "queryMs": 24.810584,
+            "diagnosticMs": 28.866459
+          },
+          "structuralFallback": [
+            {
+              "state": "structural",
+              "queryMs": 24.284958,
+              "diagnosticMs": 28.259625
+            }
+          ],
+          "finalScopeRoots": [
+            "ge_1000baseX_tb.ge_1000baseX_testi.ge_1000baseX_i.decoder_8b10bi",
+            "ge_1000baseX_tb.ge_1000baseX_testi.ge_1000baseX_i.ge_1000baseX_an_i",
+            "ge_1000baseX_tb.ge_1000baseX_testi.ge_1000baseX_i.ge_1000baseX_sync_i"
+          ],
+          "finalFootprintMiB": 17.562957763671875
+        },
+        "candidate": {
+          "warmQueryMedianMs": 23.244334,
+          "warmDiagnosticMedianMs": 27.263167,
+          "firstEdit": {
+            "queryMs": 24.015,
+            "diagnosticMs": 28.130708
+          },
+          "structuralFallback": [
+            {
+              "state": "structural",
+              "queryMs": 23.136625,
+              "diagnosticMs": 27.183166
+            }
+          ],
+          "finalScopeRoots": [
+            "ge_1000baseX_tb.ge_1000baseX_testi.ge_1000baseX_i.decoder_8b10bi",
+            "ge_1000baseX_tb.ge_1000baseX_testi.ge_1000baseX_i.ge_1000baseX_an_i",
+            "ge_1000baseX_tb.ge_1000baseX_testi.ge_1000baseX_i.ge_1000baseX_sync_i"
+          ],
+          "finalFootprintMiB": 34.422332763671875
+        }
+      },
+      "wholeDutPerformanceAccepted": false
+    },
+    "opentitan-aes-uvm": {
+      "passed": true,
+      "evidence": "untracked/rtl-uvm-fallback-2026-10-29/opentitan-aes-uvm-refusal-attribution.json",
+      "sha256": "895669fb68102fae389666f402e6e6eb36dda4bb320382ca37244b22ea9f28b9",
+      "arms": {
+        "native": {
+          "warmQueryMedianMs": 2449.539875,
+          "warmDiagnosticMedianMs": 2622.559334,
+          "firstEdit": {
+            "queryMs": 2452.965959,
+            "diagnosticMs": 2625.675542
+          },
+          "structuralFallback": [
+            {
+              "state": "structural",
+              "queryMs": 2452.5035,
+              "diagnosticMs": 2622.943416
+            }
+          ],
+          "finalScopeRoots": [],
+          "finalFootprintMiB": 264.82901763916016
+        },
+        "frozen-full": {
+          "warmQueryMedianMs": 77.534167,
+          "warmDiagnosticMedianMs": 228.210708,
+          "firstEdit": {
+            "queryMs": 78.124917,
+            "diagnosticMs": 232.317042
+          },
+          "structuralFallback": [
+            {
+              "state": "structural",
+              "queryMs": 78.12375,
+              "diagnosticMs": 228.548208
+            }
+          ],
+          "finalScopeRoots": [
+            "tb.dut"
+          ],
+          "finalFootprintMiB": 460.2351989746094
+        },
+        "frozen-local": {
+          "warmQueryMedianMs": 1.981583,
+          "warmDiagnosticMedianMs": 3.221667,
+          "firstEdit": {
+            "queryMs": 9.79075,
+            "diagnosticMs": 21.801541
+          },
+          "structuralFallback": [
+            {
+              "state": "structural",
+              "queryMs": 79.639292,
+              "diagnosticMs": 248.272125
+            }
+          ],
+          "finalScopeRoots": [
+            "tb.dut"
+          ],
+          "finalFootprintMiB": 482.48522186279297
+        }
+      },
+      "wholeDutPerformanceAccepted": true
+    },
+    "opentitan-uart-uvm": {
+      "passed": true,
+      "evidence": "untracked/rtl-uvm-fallback-2026-10-29/opentitan-uart-uvm-refusal-attribution.json",
+      "sha256": "f4dccaaa57306546be8bed43362076d2baeb272d6f560d4a2e34976dcd885f81",
+      "arms": {
+        "native": {
+          "warmQueryMedianMs": 2097.77375,
+          "warmDiagnosticMedianMs": 2240.142834,
+          "firstEdit": {
+            "queryMs": 2114.608625,
+            "diagnosticMs": 2261.977833
+          },
+          "structuralFallback": [
+            {
+              "state": "structural",
+              "queryMs": 2105.256416,
+              "diagnosticMs": 2246.634333
+            }
+          ],
+          "finalScopeRoots": [],
+          "finalFootprintMiB": 344.90711975097656
+        },
+        "frozen-full": {
+          "warmQueryMedianMs": 92.147875,
+          "warmDiagnosticMedianMs": 223.224875,
+          "firstEdit": {
+            "queryMs": 106.174834,
+            "diagnosticMs": 240.184042
+          },
+          "structuralFallback": [
+            {
+              "state": "structural",
+              "queryMs": 91.762958,
+              "diagnosticMs": 222.165333
+            }
+          ],
+          "finalScopeRoots": [
+            "tb.dut"
+          ],
+          "finalFootprintMiB": 375.797607421875
+        },
+        "frozen-local": {
+          "warmQueryMedianMs": 2.108417,
+          "warmDiagnosticMedianMs": 3.4015,
+          "firstEdit": {
+            "queryMs": 9.955917,
+            "diagnosticMs": 18.459958
+          },
+          "structuralFallback": [
+            {
+              "state": "structural",
+              "queryMs": 109.295042,
+              "diagnosticMs": 253.217292
+            }
+          ],
+          "finalScopeRoots": [
+            "tb.dut"
+          ],
+          "finalFootprintMiB": 396.6882781982422
+        }
+      },
+      "wholeDutPerformanceAccepted": true
+    }
+  },
+  "coldQueryObservation": "source/validation/data/new-project-cold-query-observation-2026-10-30.json",
+  "limitations": [
+    "Six targeted project cases, one repeat each; not a new complete all-project matrix or statistical performance conclusion",
+    "Timed protocol runs followed terminal builds/tests, with sequential query and matching diagnostic publication; no burst or cold-disk claim",
+    "Pure RTL reuse is partial selected hierarchy and slower on these small cases; do not label it whole RTL+UVM freezing",
+    "Memory sampled at edit boundaries, not peak; ASan leak detection disabled",
+    "SDK files unchanged; prior same-source SDK validation retained rather than rerunning unchanged tests"
+  ],
+  "remaining": [
+    "Reduce required first current parse/full-model costs; cold mechanism probe is not accepted cold startup performance",
+    "Broader SlangDoc/query source lifetime and model/summary/native-CST overlap audit, with retained-tree replacement regression next",
+    "Final all-project qualification, packaging/fresh install/default bundled UVM/project variants/manual rebuild, cleanup and main push"
+  ]
+}

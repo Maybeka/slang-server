@@ -155,6 +155,8 @@ ServerDriver::ServerDriver(Indexer& indexer, SlangLspClient& client, const Confi
     }
     if (overlays && (overlays->m_preserveTrustedUvm || borrowInitialLibraries) &&
         overlays->m_trustedScopes && config.experimentalScopeSemanticCache.value()) {
+        if (overlays->m_preserveTrustedUvm)
+            (void)overlays->trustedLibrarySourceContext(URI{});
         m_trustedScopes = overlays->m_trustedScopes;
         m_scopeBodies = overlays->m_scopeBodies;
         if (borrowInitialLibraries && m_scopeBodies) {
@@ -718,8 +720,27 @@ void ServerDriver::publishCompilationDiagnostics(const URI* priorityUri,
                                                  const lsp::RequestContext* ctx) {
     auto cwdPhase = sm.beginFastCwdPhase();
     auto update = diagClient->beginUpdate();
-    if (isCooperativeAnalysisEnabled())
+    if (isCooperativeAnalysisEnabled() && comp->needsDiagnosticPreparation()) {
+        UvmPhaseTrace preparation;
+        std::vector<std::shared_ptr<SlangDoc>> restoreQueries;
+        for (const auto& [_, doc] : docs) {
+            if (doc->releaseUnborrowedDesignAnalysis() && doc->getVersion())
+                restoreQueries.push_back(doc);
+        }
+        preparation.mark("cooperative-query-cache-release");
+        // A finished query cache is not an active borrower. After it releases
+        // its view, the existing sole-owner path can prepare the current root.
+        // Real external views still force the private replacement path. A
+        // cancelled root remains dirty; never restore a view of partial work.
         comp->prepareDiagnostics(ctx ? *ctx : lsp::RequestContext{});
+        preparation.mark("cooperative-diagnostic-prepare");
+        // Restore cheap query indexes against the completed root so the next
+        // edit can still prepare a local method certificate without an extra
+        // user query. Syntax, source inputs and versions were not discarded.
+        for (const auto& doc : restoreQueries)
+            (void)doc->getAnalysis(ctx ? *ctx : lsp::RequestContext{});
+        preparation.mark("cooperative-query-cache-restore");
+    }
     auto design = comp->createActiveDesignContext({}, ctx ? *ctx : lsp::RequestContext{});
     const auto trees = design.getAnalysis().compilation.getSyntaxTrees();
     flat_hash_set<URI> currentSources;

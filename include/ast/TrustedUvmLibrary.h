@@ -23,6 +23,9 @@ struct TrustedUvmLibrary {
     std::vector<std::string> packages = {"uvm_pkg"};
     std::vector<std::string> definitions;
     bool hasUnitDeclarations = false;
+    // A projected RTL owner borrows declarations across mutable source roots.
+    // Recheck their expanded syntax and parser context in the current native unit.
+    bool projectedDefinitions = false;
     std::vector<std::string_view> unitLookupNames;
     std::vector<std::string_view> safeUnitWildcardImports;
     std::vector<std::string_view> unitDpiCNames;

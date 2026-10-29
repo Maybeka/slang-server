@@ -1,0 +1,408 @@
+{
+  "status": "CVA6 import-reentrancy regression fixed and qualified; Native WiFi replay remains open",
+  "mainHead": "41758aa9e865903a0e283861f19331f9a36eab5b",
+  "binarySha256": "f23335c9f48eaa0415dacb1f46300ea8bb09b28b764bd0a63dc1215fa83f1d8a",
+  "asanBinarySha256": "65ecbf0f4dc2c8c47f183ae2720e8236a2b8c1c088388aac20402e5ac6df534a",
+  "sdkPatchSha256": "02b057362f72d6f38bd8fe59233f73e62400b70b60fa721ffadb33f8301070cc",
+  "sourceSeal": "untracked/project-optimization-2026-10-29/reentry-source-seal.json",
+  "sourceArchive": "untracked/project-optimization-2026-10-29/source-receipts/reentry-02b05736",
+  "problem": "Type identity preflight rebound an unresolved certified localparam type after signature lookup had restored ordinary mode. A named field lookup exposed the same instance and recursively attempted its import until stack overflow.",
+  "fix": "Keep parameterLookupMode active with RAII restoration throughout the complete type/class identity preflight; preserve actual root reuse rather than disabling the cache.",
+  "minimalRegression": {
+    "tag": "scope-body-local-nominal",
+    "beforeFix": "exit139 SIGSEGV,81 assertions observed (80 passed before fatal signal)",
+    "afterFix": "included in targeted3cases1275 assertions and full CTest1008",
+    "priorSdkRecipe": "whole-aes source archive SDK c0f941ca + current main test fixture reproduces failure"
+  },
+  "checks": {
+    "ctest": {
+      "passed": 1008,
+      "failed": 0,
+      "seconds": 14.64,
+      "TMPDIR": "/private/tmp"
+    },
+    "sdk": {
+      "cases": 2645,
+      "assertions": 37001
+    },
+    "targeted": {
+      "cases": 3,
+      "assertions": 1275
+    },
+    "sdkIntegrityFiles": 709,
+    "reversePatchCheck": true,
+    "asan": {
+      "states": 15,
+      "allPublicResultsEqualRecordedNative": true,
+      "returnCodeAfterClose": 0,
+      "leakDetection": false,
+      "evidence": "untracked/project-optimization-2026-10-29/cva6-uvm-cva6-asan-reentry-fixed.json",
+      "sha256": "40df9eb2839a3fc0b7d2bdb57141a93968db3b1a3f6b82d6bfc96e0ceaa195a3",
+      "binarySha256": "65ecbf0f4dc2c8c47f183ae2720e8236a2b8c1c088388aac20402e5ac6df534a"
+    }
+  },
+  "cva6": {
+    "evidence": "untracked/project-optimization-2026-10-29/cva6-uvm-local-type-reentry-fixed.json",
+    "sha256": "1ce26fa90d3a6ba4422b4d827d9d7a19a6e62d1679661243edd8f1e1939107b6",
+    "states": 45,
+    "allPublicResultsEqualNative": true,
+    "measurements": {
+      "native": {
+        "warmQueryMedianMs": 1479.524417,
+        "warmDiagnosticMedianMs": 1839.605625,
+        "structuralFallback": {
+          "queryMs": 1484.244792,
+          "diagnosticMs": 1847.051458,
+          "footprintMiB": 563.4231109619141,
+          "equalNative": true,
+          "local": false
+        },
+        "structuralUndo": {
+          "queryMs": 1485.282666,
+          "diagnosticMs": 1848.311458,
+          "footprintMiB": 566.6262359619141,
+          "equalNative": true,
+          "local": false
+        },
+        "firstLocalRecovery": {
+          "queryMs": 1505.537209,
+          "diagnosticMs": 1867.479417,
+          "footprintMiB": 517.2981109619141,
+          "equalNative": true,
+          "local": false
+        },
+        "finalLocalEdit": {
+          "queryMs": 1490.964625,
+          "diagnosticMs": 1852.873959,
+          "footprintMiB": 526.9543609619141,
+          "equalNative": true,
+          "local": false
+        },
+        "lastModelSharedRoots": [],
+        "rootHits": 0
+      },
+      "baseline": {
+        "warmQueryMedianMs": 6.311208,
+        "warmDiagnosticMedianMs": 11.28,
+        "structuralFallback": {
+          "queryMs": 373.88,
+          "diagnosticMs": 841.845084,
+          "footprintMiB": 711.5012359619141,
+          "equalNative": true,
+          "local": false
+        },
+        "structuralUndo": {
+          "queryMs": 242.284084,
+          "diagnosticMs": 694.079334,
+          "footprintMiB": 775.8137588500977,
+          "equalNative": true,
+          "local": false
+        },
+        "firstLocalRecovery": {
+          "queryMs": 26.964917,
+          "diagnosticMs": 46.873375,
+          "footprintMiB": 775.9856338500977,
+          "equalNative": true,
+          "local": true
+        },
+        "finalLocalEdit": {
+          "queryMs": 6.61825,
+          "diagnosticMs": 11.655,
+          "footprintMiB": 776.0168838500977,
+          "equalNative": true,
+          "local": true
+        },
+        "lastModelSharedRoots": [],
+        "rootHits": 2
+      },
+      "candidate": {
+        "warmQueryMedianMs": 6.185709,
+        "warmDiagnosticMedianMs": 11.212583,
+        "structuralFallback": {
+          "queryMs": 378.104791,
+          "diagnosticMs": 851.766333,
+          "footprintMiB": 713.9387359619141,
+          "equalNative": true,
+          "local": false
+        },
+        "structuralUndo": {
+          "queryMs": 243.459125,
+          "diagnosticMs": 702.197209,
+          "footprintMiB": 776.3137817382812,
+          "equalNative": true,
+          "local": false
+        },
+        "firstLocalRecovery": {
+          "queryMs": 26.691375,
+          "diagnosticMs": 46.379916,
+          "footprintMiB": 776.5950317382812,
+          "equalNative": true,
+          "local": true
+        },
+        "finalLocalEdit": {
+          "queryMs": 6.531541,
+          "diagnosticMs": 11.430166,
+          "footprintMiB": 776.5950317382812,
+          "equalNative": true,
+          "local": true
+        },
+        "lastModelSharedRoots": [
+          "uvmt_cva6_tb.cva6_dut_wrap.cva6_tb_wrapper_i.i_cva6"
+        ],
+        "rootHits": 2
+      }
+    },
+    "limitations": "Sequential: await query and matching full diagnostic publication. No burst or cold-disk claim. Process memory read at boundaries, not independent sampled peak."
+  },
+  "aesNonregression": {
+    "evidence": "untracked/rtl-uvm-fallback-2026-10-29/opentitan-aes-uvm-reentry-fixed-nonregression.json",
+    "sha256": "8b6e1f6e38e4f695a7e72d94ac1d4ae7c95b6a38333fb5a3eb167aa4b5a17cf5",
+    "states": 45,
+    "allPublicResultsEqualNative": true,
+    "measurements": {
+      "native": {
+        "warmQueryMedianMs": 2402.045667,
+        "warmDiagnosticMedianMs": 2569.127166,
+        "structuralFallback": {
+          "queryMs": 2412.042875,
+          "diagnosticMs": 2579.915625,
+          "footprintMiB": 295.07904052734375,
+          "equalNative": true,
+          "local": false
+        },
+        "structuralUndo": {
+          "queryMs": 2418.614375,
+          "diagnosticMs": 2588.78475,
+          "footprintMiB": 298.04779052734375,
+          "equalNative": true,
+          "local": false
+        },
+        "firstLocalRecovery": {
+          "queryMs": 2421.280208,
+          "diagnosticMs": 2591.656917,
+          "footprintMiB": 301.04779052734375,
+          "equalNative": true,
+          "local": false
+        },
+        "finalLocalEdit": {
+          "queryMs": 2458.993125,
+          "diagnosticMs": 2630.226416,
+          "footprintMiB": 288.57904052734375,
+          "equalNative": true,
+          "local": false
+        },
+        "lastModelSharedRoots": [],
+        "rootHits": 0
+      },
+      "frozen-full": {
+        "warmQueryMedianMs": 75.947792,
+        "warmDiagnosticMedianMs": 223.804583,
+        "structuralFallback": {
+          "queryMs": 76.918,
+          "diagnosticMs": 226.367292,
+          "footprintMiB": 448.9539260864258,
+          "equalNative": true,
+          "local": false
+        },
+        "structuralUndo": {
+          "queryMs": 75.830625,
+          "diagnosticMs": 226.690042,
+          "footprintMiB": 449.0008010864258,
+          "equalNative": true,
+          "local": false
+        },
+        "firstLocalRecovery": {
+          "queryMs": 75.193,
+          "diagnosticMs": 222.529,
+          "footprintMiB": 449.0476760864258,
+          "equalNative": true,
+          "local": false
+        },
+        "finalLocalEdit": {
+          "queryMs": 76.807458,
+          "diagnosticMs": 227.09725,
+          "footprintMiB": 449.1101760864258,
+          "equalNative": true,
+          "local": false
+        },
+        "lastModelSharedRoots": [
+          "tb.dut"
+        ],
+        "rootHits": 14
+      },
+      "frozen-local": {
+        "warmQueryMedianMs": 2.100083,
+        "warmDiagnosticMedianMs": 3.295791,
+        "structuralFallback": {
+          "queryMs": 77.970625,
+          "diagnosticMs": 241.703875,
+          "footprintMiB": 479.0945739746094,
+          "equalNative": true,
+          "local": false
+        },
+        "structuralUndo": {
+          "queryMs": 78.20775,
+          "diagnosticMs": 238.225917,
+          "footprintMiB": 481.7664489746094,
+          "equalNative": true,
+          "local": false
+        },
+        "firstLocalRecovery": {
+          "queryMs": 9.481375,
+          "diagnosticMs": 21.767875,
+          "footprintMiB": 481.8289489746094,
+          "equalNative": true,
+          "local": true
+        },
+        "finalLocalEdit": {
+          "queryMs": 2.137541,
+          "diagnosticMs": 3.413958,
+          "footprintMiB": 481.8289489746094,
+          "equalNative": true,
+          "local": true
+        },
+        "lastModelSharedRoots": [
+          "tb.dut"
+        ],
+        "rootHits": 2
+      }
+    },
+    "limitations": "Sequential: await query and matching full diagnostic publication. No burst or cold-disk claim. Process memory read at boundaries, not independent sampled peak."
+  },
+  "uartNonregression": {
+    "evidence": "untracked/rtl-uvm-fallback-2026-10-29/opentitan-uart-uvm-reentry-fixed-nonregression.json",
+    "sha256": "576dcc9dec51858ea13b832ba9c7c4686f40375c56309008455fc805cb38aa6a",
+    "states": 45,
+    "allPublicResultsEqualNative": true,
+    "measurements": {
+      "native": {
+        "warmQueryMedianMs": 2086.110542,
+        "warmDiagnosticMedianMs": 2226.791542,
+        "structuralFallback": {
+          "queryMs": 2102.601917,
+          "diagnosticMs": 2245.512375,
+          "footprintMiB": 355.11022186279297,
+          "equalNative": true,
+          "local": false
+        },
+        "structuralUndo": {
+          "queryMs": 2090.573417,
+          "diagnosticMs": 2234.377167,
+          "footprintMiB": 357.79772186279297,
+          "equalNative": true,
+          "local": false
+        },
+        "firstLocalRecovery": {
+          "queryMs": 2090.219209,
+          "diagnosticMs": 2231.303875,
+          "footprintMiB": 360.62584686279297,
+          "equalNative": true,
+          "local": false
+        },
+        "finalLocalEdit": {
+          "queryMs": 2094.253708,
+          "diagnosticMs": 2237.220333,
+          "footprintMiB": 343.51647186279297,
+          "equalNative": true,
+          "local": false
+        },
+        "lastModelSharedRoots": [],
+        "rootHits": 0
+      },
+      "frozen-full": {
+        "warmQueryMedianMs": 91.158917,
+        "warmDiagnosticMedianMs": 222.614708,
+        "structuralFallback": {
+          "queryMs": 93.514125,
+          "diagnosticMs": 225.835458,
+          "footprintMiB": 363.3445053100586,
+          "equalNative": true,
+          "local": false
+        },
+        "structuralUndo": {
+          "queryMs": 90.343459,
+          "diagnosticMs": 220.284584,
+          "footprintMiB": 363.3601303100586,
+          "equalNative": true,
+          "local": false
+        },
+        "firstLocalRecovery": {
+          "queryMs": 90.377875,
+          "diagnosticMs": 220.808709,
+          "footprintMiB": 363.3757553100586,
+          "equalNative": true,
+          "local": false
+        },
+        "finalLocalEdit": {
+          "queryMs": 92.861833,
+          "diagnosticMs": 224.383125,
+          "footprintMiB": 363.4226303100586,
+          "equalNative": true,
+          "local": false
+        },
+        "lastModelSharedRoots": [
+          "tb.dut"
+        ],
+        "rootHits": 14
+      },
+      "frozen-local": {
+        "warmQueryMedianMs": 2.091333,
+        "warmDiagnosticMedianMs": 3.339917,
+        "structuralFallback": {
+          "queryMs": 110.779208,
+          "diagnosticMs": 256.232708,
+          "footprintMiB": 386.8288803100586,
+          "equalNative": true,
+          "local": false
+        },
+        "structuralUndo": {
+          "queryMs": 96.655208,
+          "diagnosticMs": 242.22325,
+          "footprintMiB": 392.1257553100586,
+          "equalNative": true,
+          "local": false
+        },
+        "firstLocalRecovery": {
+          "queryMs": 10.290041,
+          "diagnosticMs": 19.610458,
+          "footprintMiB": 392.3288803100586,
+          "equalNative": true,
+          "local": true
+        },
+        "finalLocalEdit": {
+          "queryMs": 2.127916,
+          "diagnosticMs": 3.343041,
+          "footprintMiB": 392.3288803100586,
+          "equalNative": true,
+          "local": true
+        },
+        "lastModelSharedRoots": [
+          "tb.dut"
+        ],
+        "rootHits": 2
+      }
+    },
+    "limitations": "Sequential: await query and matching full diagnostic publication. No burst or cold-disk claim. Process memory read at boundaries, not independent sampled peak."
+  },
+  "earlierAesThreeRepeatQualification": "source/validation/data/new-project-aes-whole-rtl-uvm-2026-10-29.json",
+  "crossProjectEarlierCandidate": {
+    "runtime": "untracked/project-optimization-2026-10-29/whole-aes-cross-project-runtime.json",
+    "binarySha256": "aa6417bfcb2d971fc6f082be0d37740ee0e991afcc85574d67ff7125838a2e84",
+    "passedCases": 13,
+    "failedCases": [
+      "openofdm-wifi",
+      "cva6-uvm"
+    ],
+    "note": "CVA6 subsequently fixed and retested above. Do not relabel the13 earlier candidate passes as current-binary all-project qualification."
+  },
+  "wifiCurrentNative": {
+    "evidence": "untracked/project-optimization-2026-10-29/openofdm-wifi-current-native-replay-proof.json",
+    "sha256": "0c81c131c4c023f50bc5d6efabeaa7a7a3821577ec08569801d02f2039603e41",
+    "failure": "RpcError({'jsonrpc': '2.0', 'id': 6, 'error': {'code': -32603, 'message': 'Native compilation unit requires SourceLoader replay to preserve preprocessing context'}})",
+    "state": "initial state succeeds; first edit requires actual Native SourceLoader context replay; current and historical Native both fail before freeze/candidate comparison"
+  },
+  "next": "Finish actual Native SourceLoader replay and persistent preprocessing context compatibility before signature-hover expansion; then rerun all-project matrix and continue memory/ownership and final release checks.",
+  "wholeGoalComplete": false,
+  "networkFetches": false,
+  "pushed": false
+}

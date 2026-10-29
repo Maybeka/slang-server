@@ -430,7 +430,7 @@ index 133958b90..6208d7475 100644
  
  template<typename TVisitor>
 diff --git a/include/slang/ast/Compilation.h b/include/slang/ast/Compilation.h
-index b7ddc64e4..7626dc929 100644
+index b7ddc64e4..7cde5c6cc 100644
 --- a/include/slang/ast/Compilation.h
 +++ b/include/slang/ast/Compilation.h
 @@ -7,7 +7,9 @@
@@ -480,17 +480,18 @@ index b7ddc64e4..7626dc929 100644
  class AttributeSymbol;
  class ASTContext;
  class CompilationUnitSymbol;
-@@ -50,6 +82,9 @@ class SystemSubroutine;
+@@ -50,6 +82,10 @@ class SystemSubroutine;
  struct AssertionInstanceDetails;
  struct ConfigRule;
  struct ResolvedConfig;
 +namespace detail {
 +struct ClassSpecializationState;
++class ClassSpecializationKey;
 +}
  
  enum class IntegralFlags : uint8_t;
  enum class SymbolIndex : uint32_t;
-@@ -88,7 +123,8 @@ enum class SLANG_EXPORT CompilationFlags {
+@@ -88,7 +124,8 @@ enum class SLANG_EXPORT CompilationFlags {
      /// for an unknown definition.
      IgnoreUnknownModules = 1 << 5,
  
@@ -500,7 +501,7 @@ index b7ddc64e4..7626dc929 100644
      RelaxStringConversions = 1 << 6,
  
      /// Allow implicit call expressions (lacking parentheses) to be recursive function calls.
-@@ -151,11 +187,24 @@ enum class SLANG_EXPORT CompilationFlags {
+@@ -151,11 +188,24 @@ enum class SLANG_EXPORT CompilationFlags {
      /// (untaken generate branches and uninstantiated module instances) so that
      /// additional lints, like port and parameter name checks, can run on it.
      CheckUninstantiated = 1 << 21,
@@ -526,7 +527,7 @@ index b7ddc64e4..7626dc929 100644
      /// Various flags that control compilation behavior.
      bitmask<CompilationFlags> flags = CompilationFlags::AllowTopLevelIfacePorts;
  
-@@ -331,6 +380,10 @@ public:
+@@ -331,6 +381,10 @@ public:
      Compilation(Compilation&& other) = delete;
      ~Compilation();
  
@@ -537,7 +538,7 @@ index b7ddc64e4..7626dc929 100644
      /// @name Top-level API
      /// @{
  
-@@ -349,7 +402,84 @@ public:
+@@ -349,7 +403,92 @@ public:
  
      /// Adds a syntax tree to the compilation. If the compilation has already been finalized
      /// by calling @a getRoot this call will throw an exception.
@@ -566,8 +567,13 @@ index b7ddc64e4..7626dc929 100644
 +    /// Resolve a retained root body to its current consumer boundary, if attached.
 +    const InstanceBodySymbol& getCurrentInstanceBody(const InstanceBodySymbol& body) const;
 +    bool isImportedInstanceBody(const InstanceBodySymbol& body) const;
++    /// Concrete roots actually borrowed by this compilation, without elaborating.
++    std::vector<std::string> getImportedInstanceBodyPaths() const;
 +    const InstanceBodySymbol* getCanonicalInstanceBody(const InstanceSymbol& instance) const;
 +    bool prepareInstanceBodyReuse(const InstanceBodySymbol& body);
++    /// For independent cache owners only: every issued error must belong to a
++    /// successful body certificate. Parse, fatal and unclaimed errors decline.
++    bool hasUncertifiedInstanceBodyErrors();
 +    /// A failed certificate encountered an imported descendant. The mixed graph
 +    /// is not reusable; a separately bound owner must establish a new certificate.
 +    bool instanceBodyReuseRequiresFreshOwner(const InstanceBodySymbol& body) const;
@@ -579,7 +585,7 @@ index b7ddc64e4..7626dc929 100644
 +    /// Call only before elaboration, after validating the original native graph;
 +    /// this owner is not a complete design diagnostic result.
 +    void setInstanceBodyCacheContext(bool inheritedBindTarget = false);
-+    /// Accept integral type arguments with fixed nominal identity and no mutable aliases.
++    /// Accept integral / string type arguments with fixed identity and no mutable aliases.
 +    bool isFixedInstanceBodyTypeArgument(const Type& type, const InstanceBodySymbol& root) const;
 +    /// Record an independently bound, closed integral type dependency. The
 +    /// source is inspected for provenance and layout, never retained by pointer.
@@ -613,6 +619,9 @@ index b7ddc64e4..7626dc929 100644
 +    /// Never creates or changes state in the retained compilation.
 +    const detail::ClassSpecializationState* findRetainedBodyClassState(
 +        const GenericClassDefSymbol& symbol) const;
++    const Type* findCertifiedBodyClass(const GenericClassDefSymbol& symbol,
++                                       const detail::ClassSpecializationKey& key,
++                                       bool uninstantiated) const;
 +    /// Detached bodies may borrow only classes whose semantic walk completed.
 +    bool canReuseBodyClassSpecialization(const Type& type) const;
 +    std::vector<const Type*> getImportedClassSpecializations() const;
@@ -623,7 +632,7 @@ index b7ddc64e4..7626dc929 100644
  
      /// Gets the override node for a top-level definition, creating it if necessary. This must be
      /// called before the compilation is finalized. The syntax node can come from another
-@@ -366,10 +496,66 @@ public:
+@@ -366,10 +505,66 @@ public:
      /// so will result in an exception.
      const RootSymbol& getRoot();
  
@@ -691,7 +700,7 @@ index b7ddc64e4..7626dc929 100644
  
      /// Indicates whether the design has been compiled and can no longer accept modifications.
      bool isFinalized() const { return finalized; }
-@@ -391,11 +577,17 @@ public:
+@@ -391,11 +586,17 @@ public:
      /// for lazy evaluation.
      const Diagnostics& getSemanticDiagnostics();
  
@@ -709,7 +718,7 @@ index b7ddc64e4..7626dc929 100644
  
      /// Returns true if there are any fatal errors reported in the compilation,
      /// or if we've hit the configured error limit and stopped elaboration early
-@@ -512,6 +704,11 @@ public:
+@@ -512,6 +713,11 @@ public:
  
      /// Gets the package with the give name, or nullptr if there is no such package.
      const PackageSymbol* getPackage(std::string_view name) const;
@@ -721,7 +730,7 @@ index b7ddc64e4..7626dc929 100644
  
      /// Gets the built-in 'std' package.
      const PackageSymbol& getStdPackage() const { return *stdPkg; }
-@@ -676,12 +873,28 @@ public:
+@@ -676,12 +882,28 @@ public:
      /// Notes that the given syntax node is "referenced" somewhere in the AST.
      /// This is used to diagnose unused variables, nets, etc. The @a isLValue parameter
      /// is used to tell whether a value is only assigned or whether it's also read somewhere.
@@ -752,7 +761,7 @@ index b7ddc64e4..7626dc929 100644
  
      /// Checks whether the given syntax node has been referenced in the AST thus far.
      /// The result is a pair, the first item of which is true if the node has been used
-@@ -689,6 +902,14 @@ public:
+@@ -689,6 +911,14 @@ public:
      /// The second item is only relevant for nodes where it makes sense; e.g. variables and nets.
      std::pair<bool, bool> isReferenced(const syntax::SyntaxNode& node) const;
  
@@ -767,7 +776,18 @@ index b7ddc64e4..7626dc929 100644
      /// Notes that the given symbol has a name conflict in its parent scope.
      /// This will cause appropriate errors to be issued.
      void noteNameConflict(const Symbol& symbol);
-@@ -857,6 +1078,52 @@ private:
+@@ -719,6 +949,10 @@ public:
+     /// be elaborated and any relevant diagnostics to be issued.
+     void forceElaborate(const Symbol& symbol);
+ 
++    /// Complete wildcard lookup in this consumer without changing an imported
++    /// scope's completion flag or allocating provisional types in its owner.
++    void forceElaborateForWildcardLookup(const Scope& scope);
++
+     /// Gets the default time scale to use when none is specified in the source code.
+     std::optional<TimeScale> getDefaultTimeScale() const { return options.defaultTimeScale; }
+ 
+@@ -857,6 +1091,58 @@ private:
      friend class Scope;
      friend struct DiagnosticVisitor;
  
@@ -807,7 +827,11 @@ index b7ddc64e4..7626dc929 100644
 +        std::vector<const InstanceBodySymbol*> descendants;
 +        std::vector<const Type*> classes;
 +        std::vector<const DefinitionSymbol*> instantiationSites;
-+        std::vector<const Diagnostic*> diagnostics;
++        // Proof binding can append diagnostics at an existing source location,
++        // invalidating the raw map's occurrence vectors. Own replay snapshots.
++        std::vector<Diagnostic> diagnostics;
++        std::vector<std::pair<const Scope*, const Expression*>> defaultDisables;
++        std::vector<std::pair<const Symbol*, const Symbol*>> defaultClockings;
 +    };
 +    flat_hash_map<const InstanceBodySymbol*, std::unique_ptr<BodyReuseCertificate>>
 +        bodyReuseCertificates;
@@ -816,11 +840,13 @@ index b7ddc64e4..7626dc929 100644
 +    void replayInstanceBodyDiagnostics(const InstanceBodySymbol& body);
 +    std::vector<std::shared_ptr<Compilation>> importedBodyOwners;
 +    std::vector<const Type*> importedBodyClasses;
++    flat_hash_map<const GenericClassDefSymbol*, std::unique_ptr<detail::ClassSpecializationState>>
++        certifiedBodyClassStates;
 +
      // Collected information about a resolved bind directive.
      struct ResolvedBind {
          SmallVector<const Symbol*> instTargets;
-@@ -884,8 +1151,9 @@ private:
+@@ -884,8 +1170,9 @@ private:
  
      Diagnostic& addDiag(Diagnostic diag);
  
@@ -832,7 +858,7 @@ index b7ddc64e4..7626dc929 100644
      void insertDefinition(Symbol& symbol, const Scope& scope);
      void parseParamOverrides(
          bool skipDefParams,
-@@ -895,7 +1163,10 @@ private:
+@@ -895,7 +1182,10 @@ private:
      void checkModportExports(
          std::span<const std::pair<const InterfacePortSymbol*, const ModportSymbol*>> modports);
      void checkElemTimeScale(std::optional<TimeScale> timeScale, SourceRange sourceRange);
@@ -844,7 +870,7 @@ index b7ddc64e4..7626dc929 100644
      void resolveBindTargets(const syntax::BindDirectiveSyntax& syntax, const Scope& scope,
                              ResolvedBind& resolvedBind);
      void checkBindTargetParams(const syntax::BindDirectiveSyntax& syntax, const Scope& scope,
-@@ -935,7 +1206,25 @@ private:
+@@ -935,7 +1225,25 @@ private:
      // A map of syntax nodes that have been referenced in the AST.
      // The value indicates whether the node has been used as an lvalue vs non-lvalue,
      // for things like variables and nets.
@@ -871,7 +897,7 @@ index b7ddc64e4..7626dc929 100644
  
      // The name map for all module, interface, program, and primitive definitions.
      // The key is a combination of definition name + the scope in which it was declared.
-@@ -996,6 +1285,10 @@ private:
+@@ -996,6 +1304,10 @@ private:
      std::unique_ptr<RootSymbol> root;
      SourceManager* sourceManager = nullptr;
      size_t numErrors = 0; // total number of errors inserted into the diagMap
@@ -882,7 +908,35 @@ index b7ddc64e4..7626dc929 100644
      bool finalized = false;
      bool finalizing = false; // to prevent reentrant calls to getRoot()
      bool anyElemsWithTimescales = false;
-@@ -1134,6 +1427,16 @@ private:
+@@ -1010,6 +1322,7 @@ private:
+     TypedBumpAllocator<AssertionInstanceDetails> assertionDetailsAllocator;
+     TypedBumpAllocator<ConfigBlockSymbol> configBlockAllocator;
+     TypedBumpAllocator<Scope::WildcardImportData> wildcardImportAllocator;
++    flat_hash_set<const Scope*> forcedImportedWildcardScopes;
+ 
+     // This is storage for a temporary diagnostic that is being constructed.
+     // Typically this is done in-place within the diagMap, but for diagnostics
+@@ -1019,6 +1332,19 @@ private:
+     // A map of instances that have been created by virtual interface type declarations.
+     flat_hash_map<InstanceCacheKey, const InstanceSymbol*> virtualIfaceCache;
+     std::vector<const InstanceSymbol*> virtualIfaceInstances;
++    // Reference-tracked owners retain every binding occurrence, including
++    // parameter expressions discarded by virtual-interface canonicalization.
++    std::vector<const InstanceSymbol*> bodyVirtualIfaceSites;
++    // Declaration-only owners defer interface-body checking to each complete
++    // design. Keep the original type identities immutable, and bind diagnostic
++    // instances with the same actual parameters in the current consumer.
++    std::vector<const InstanceSymbol*> deferredVirtualIfaceInstances;
++    flat_hash_set<const InstanceSymbol*> importedVirtualIfaceChecks;
++    std::vector<std::unique_ptr<HierarchyOverrideNode>> importedVirtualIfaceOverrides;
++    // Private proof instances are never added to the design or provider maps.
++    flat_hash_map<const InstanceBodySymbol*, const InstanceBodySymbol*> bodyVirtualIfaceProofs;
++    bool prepareInstanceBodyReuseImpl(const InstanceBodySymbol& body, bool virtualProof);
++    void prepareImportedVirtualInterfaceChecks(const std::function<void()>& checkpoint);
+ 
+     // A list of assignments via hierarchical reference.
+     std::vector<const HierarchicalReference*> hierarchicalAssignments;
+@@ -1134,6 +1460,16 @@ private:
      // The default library.
      std::unique_ptr<SourceLibrary> defaultLibMem;
      const SourceLibrary* defaultLibPtr;
@@ -1006,7 +1060,7 @@ index 04b935cb0..127874b12 100644
  
  } // namespace slang::ast
 diff --git a/include/slang/ast/symbols/ClassSymbols.h b/include/slang/ast/symbols/ClassSymbols.h
-index bb4820890..011d5ef29 100644
+index bb4820890..d15cabcaa 100644
 --- a/include/slang/ast/symbols/ClassSymbols.h
 +++ b/include/slang/ast/symbols/ClassSymbols.h
 @@ -71,6 +71,11 @@ public:
@@ -1031,7 +1085,17 @@ index bb4820890..011d5ef29 100644
  
      void populate(const Scope& scope, const syntax::ClassDeclarationSyntax& syntax);
      void inheritMembers(function_ref<void(const Symbol&)> insertCB) const;
-@@ -228,6 +236,17 @@ struct ClassSpecializationHasher {
+@@ -217,6 +225,9 @@ public:
+     size_t hash() const { return savedHash; }
+ 
+     bool operator==(const ClassSpecializationKey& other) const;
++    /// Compare semantic arguments across retained arenas, whose matching
++    /// virtual interface or mapped nominal types can have different hashes.
++    bool matchesArguments(const ClassSpecializationKey& other) const;
+ 
+ private:
+     std::span<const ConstantValue* const> paramValues;
+@@ -228,6 +239,17 @@ struct ClassSpecializationHasher {
      size_t operator()(const ClassSpecializationKey& key) const { return key.hash(); }
  };
  
@@ -1049,7 +1113,7 @@ index bb4820890..011d5ef29 100644
  } // namespace detail
  
  /// Represents a generic class definition, which is a parameterized class that has not
-@@ -258,6 +277,9 @@ public:
+@@ -258,6 +280,9 @@ public:
      /// Forces a specialization with all parameters set to invalid values. This allows
      /// determining members that aren't dependent on parameters.
      const Type& getInvalidSpecialization() const;
@@ -1090,6 +1154,40 @@ index 074d9d3c1..a2569cf3c 100644
  };
  
  /// Represents an array of instances.
+diff --git a/include/slang/ast/symbols/MemberSymbols.h b/include/slang/ast/symbols/MemberSymbols.h
+index 03958795a..7e4d6e44a 100644
+--- a/include/slang/ast/symbols/MemberSymbols.h
++++ b/include/slang/ast/symbols/MemberSymbols.h
+@@ -318,9 +318,14 @@ public:
+ 
+     void makeDefaultInstance() const;
+ 
++    const Expression& getDefaultInstance() const;
++
+     void serializeTo(ASTSerializer&) const {}
+ 
+     static bool isKind(SymbolKind kind) { return kind == SymbolKind::Sequence; }
++
++private:
++    mutable const Expression* defaultInstance = nullptr;
+ };
+ 
+ /// Represents a named property object.
+@@ -335,9 +340,14 @@ public:
+ 
+     void makeDefaultInstance() const;
+ 
++    const Expression& getDefaultInstance() const;
++
+     void serializeTo(ASTSerializer&) const {}
+ 
+     static bool isKind(SymbolKind kind) { return kind == SymbolKind::Property; }
++
++private:
++    mutable const Expression* defaultInstance = nullptr;
+ };
+ 
+ /// Represents a let declaration.
 diff --git a/include/slang/ast/symbols/PortSymbols.h b/include/slang/ast/symbols/PortSymbols.h
 index 76ff9a76c..b1971fb24 100644
 --- a/include/slang/ast/symbols/PortSymbols.h
@@ -2500,6 +2598,21 @@ index 46a3155d1..b9309e1e8 100644
      /// Construct a new item using the allocator.
      template<typename... Args>
      T* emplace(Args&&... args) {
+diff --git a/include/slang/util/String.h b/include/slang/util/String.h
+index 85687e23e..28334ae52 100644
+--- a/include/slang/util/String.h
++++ b/include/slang/util/String.h
+@@ -16,6 +16,10 @@
+ 
+ namespace slang {
+ 
++/// Quotes raw bytes as a SystemVerilog string literal, including escapes for
++/// quotes, backslashes, control characters and bytes outside printable ASCII.
++SLANG_EXPORT std::string quoteSVString(std::string_view value);
++
+ /// Converts a span of characters into a std::string_view.
+ inline std::string_view toStringView(std::span<char> text) {
+     return std::string_view(text.data(), text.size());
 diff --git a/scripts/syntax_gen.py b/scripts/syntax_gen.py
 index eb1dbca66..69567859c 100755
 --- a/scripts/syntax_gen.py
@@ -3392,7 +3505,7 @@ index 25f1ea99a..c6206f30b 100644
                  canonicalBody = &canonicalInstance.body;
  
 diff --git a/source/analysis/AnalysisScopeVisitor.h b/source/analysis/AnalysisScopeVisitor.h
-index 347cd532c..5a99d3bb6 100644
+index 347cd532c..600e9528d 100644
 --- a/source/analysis/AnalysisScopeVisitor.h
 +++ b/source/analysis/AnalysisScopeVisitor.h
 @@ -33,12 +33,14 @@ struct AnalysisScopeVisitor {
@@ -3486,7 +3599,15 @@ index 347cd532c..5a99d3bb6 100644
      }
  
      void visit(const MultiPortSymbol& symbol) {
-@@ -584,7 +600,42 @@ private:
+@@ -440,6 +456,7 @@ private:
+ 
+         auto [rvalue, lvalue] = isReferenced(*syntax);
+ 
++
+         auto portRef = symbol.getFirstPortBackref();
+         if (portRef) {
+             // This is a variable or net connected internally to a port.
+@@ -584,7 +601,42 @@ private:
      }
  
      std::pair<bool, bool> isReferenced(const syntax::SyntaxNode& node) const {
@@ -3769,10 +3890,10 @@ index cb4f631f8..dc0ee94e2 100644
              // information to point the user towards the right ones.
              Diagnostic diag = *found;
 diff --git a/source/ast/Compilation.cpp b/source/ast/Compilation.cpp
-index ed7528f2c..d675b0d40 100644
+index ed7528f2c..da2ba9c55 100644
 --- a/source/ast/Compilation.cpp
 +++ b/source/ast/Compilation.cpp
-@@ -9,12 +9,14 @@
+@@ -9,22 +9,28 @@
  
  #include "ElabVisitors.h"
  #include "builtins/Builtins.h"
@@ -3784,11 +3905,13 @@ index ed7528f2c..d675b0d40 100644
  #include "slang/ast/ScriptSession.h"
  #include "slang/ast/SystemSubroutine.h"
 -#include "slang/ast/types/TypePrinter.h"
++#include "slang/ast/expressions/AssignmentExpressions.h"
 +#include "slang/ast/expressions/LiteralExpressions.h"
  #include "slang/diagnostics/DiagnosticEngine.h"
  #include "slang/diagnostics/Diagnostics.h"
  #include "slang/diagnostics/LookupDiags.h"
-@@ -22,6 +24,7 @@
++#include "slang/diagnostics/SysFuncsDiags.h"
+ #include "slang/parsing/Parser.h"
  #include "slang/parsing/Preprocessor.h"
  #include "slang/syntax/AllSyntax.h"
  #include "slang/syntax/SyntaxTree.h"
@@ -3796,7 +3919,73 @@ index ed7528f2c..d675b0d40 100644
  #include "slang/text/CharInfo.h"
  #include "slang/text/SourceManager.h"
  #include "slang/util/TimeTrace.h"
-@@ -43,6 +46,16 @@ Compilation::Compilation(const Bag& options, const SourceLibrary* defaultLib) :
++#include "slang/util/String.h"
+ 
+ using namespace slang::parsing;
+ 
+@@ -39,10 +45,78 @@ const PackageSymbol& createStdPackage(Compilation&);
+ 
+ namespace slang::ast {
+ 
++static bool retainableStringConstant(const ConstantValue& value) {
++    // Native packed string literals discard zero bytes. Preserve exact values
++    // when generating detached literals, and avoid overflowing literal widths.
++    return value.isString() && value.str().find('\0') == std::string::npos &&
++           value.str().size() <= size_t(SVInt::MAX_BITS) / 8;
++}
++
++static std::optional<size_t> fixedOverrideStorage(const ConstantValue& value) {
++    if (value.isInteger())
++        return value.integer().isSingleWord() ? 0
++                   : value.integer().getNumWords() * sizeof(uint64_t);
++    if (value.isString())
++        return value.str().capacity();
++    if (value.isUnpacked()) {
++        const auto& elements = std::get<ConstantValue::Elements>(value.getVariant());
++        size_t bytes = elements.capacity() * sizeof(ConstantValue);
++        for (const auto& element : elements) {
++            const auto nested = fixedOverrideStorage(element);
++            if (!nested)
++                return std::nullopt;
++            bytes += *nested;
++        }
++        return bytes;
++    }
++    return std::nullopt;
++}
++
++static size_t retainedDiagnosticStorage(const Diagnostic& diagnostic) {
++    size_t bytes = diagnostic.args.capacity() * sizeof(Diagnostic::Arg) +
++                   diagnostic.ranges.capacity() * sizeof(SourceRange) +
++                   diagnostic.notes.capacity() * sizeof(Diagnostic);
++    for (const auto& argument : diagnostic.args) {
++        if (auto string = std::get_if<std::string>(&argument))
++            bytes += string->capacity();
++        else if (auto value = std::get_if<ConstantValue>(&argument))
++            bytes += fixedOverrideStorage(*value).value_or(0);
++    }
++    for (const auto& note : diagnostic.notes)
++        bytes += retainedDiagnosticStorage(note);
++    return bytes;
++}
++
++static detail::ClassSpecializationKey retainedClassKey(Compilation& storage,
++                                                      const ClassType& type) {
++    SmallVector<const ConstantValue*> values;
++    SmallVector<const Type*> types;
++    for (auto symbol : type.genericParameters) {
++        if (auto value = symbol->as_if<ParameterSymbol>()) {
++            values.push_back(&value->getValue());
++            types.push_back(&value->getType().getCanonicalType());
++        }
++        else
++            types.push_back(&symbol->as<TypeParameterSymbol>().targetType.getType()
++                                 .getCanonicalType());
++    }
++    return {values.copy(storage), types.copy(storage)};
++}
++
+ Compilation::Compilation(const Bag& options, const SourceLibrary* defaultLib) :
      options(options.getOrDefault<CompilationOptions>()), tempDiag({}, {}), netAliasAllocator(*this),
      defaultLibPtr(defaultLib) {
  
@@ -3813,7 +4002,7 @@ index ed7528f2c..d675b0d40 100644
      // Construct all built-in types.
      auto& bi = builtins::Builtins::Instance;
      bitType = &bi.bitType;
-@@ -148,11 +161,7 @@ Compilation::Compilation(const Bag& options, const SourceLibrary* defaultLib) :
+@@ -148,11 +222,7 @@ Compilation::Compilation(const Bag& options, const SourceLibrary* defaultLib) :
  
      // Set a default handler for printing types and symbol paths, for convenience.
      static std::once_flag onceFlag;
@@ -3826,7 +4015,7 @@ index ed7528f2c..d675b0d40 100644
  
      // Reset systemId counters that may have been changed due to creation of types
      // in the std package.
-@@ -163,11 +172,1892 @@ Compilation::Compilation(const Bag& options, const SourceLibrary* defaultLib) :
+@@ -163,141 +233,3194 @@ Compilation::Compilation(const Bag& options, const SourceLibrary* defaultLib) :
  
  Compilation::~Compilation() = default;
  
@@ -3841,6 +4030,7 @@ index ed7528f2c..d675b0d40 100644
  }
  
 -void Compilation::addSyntaxTree(std::shared_ptr<SyntaxTree> tree) {
+-    SLANG_ASSERT(!isFrozen());
 +void Compilation::importPackage(std::shared_ptr<Compilation> owner, std::string_view name,
 +                                SourceManager& sources) {
 +    if (finalized || !owner || owner.get() == this || !owner->isElaborated() ||
@@ -3860,7 +4050,9 @@ index ed7528f2c..d675b0d40 100644
 +    importedPackages.emplace(package);
 +    retainImportedCompilation(std::move(owner));
 +}
-+
+ 
+-    if (!tree)
+-        SLANG_THROW(std::invalid_argument("tree cannot be null"));
 +void Compilation::retainImportedCompilation(std::shared_ptr<Compilation> owner) {
 +    // One owner can provide an entire package dependency closure. Retain and
 +    // merge its metadata / diagnostics once, rather than once per package.
@@ -3882,7 +4074,9 @@ index ed7528f2c..d675b0d40 100644
 +        attributeMap.try_emplace(symbol, attributes);
 +    importedCompilations.push_back(std::move(owner));
 +}
-+
+ 
+-    if (finalized)
+-        SLANG_THROW(std::logic_error("The compilation has already been finalized"));
 +void Compilation::importDefinition(std::shared_ptr<Compilation> owner, std::string_view name,
 +                                   SourceManager& sources) {
 +    if (finalized || !owner || owner.get() == this || !owner->isElaborated() ||
@@ -3907,7 +4101,13 @@ index ed7528f2c..d675b0d40 100644
 +    importedDefinitions.emplace(definition);
 +    retainImportedCompilation(std::move(owner));
 +}
-+
+ 
+-    if (&tree->sourceManager() != sourceManager) {
+-        if (!sourceManager)
+-            sourceManager = &tree->sourceManager();
+-        else {
+-            SLANG_THROW(std::logic_error(
+-                "All syntax trees added to the compilation must use the same source manager"));
 +void Compilation::importCompilationUnitDeclarations(std::shared_ptr<Compilation> owner,
 +                                                    SourceManager& sources) {
 +    if (finalized || !owner || owner.get() == this || !owner->isElaborated() ||
@@ -3940,8 +4140,17 @@ index ed7528f2c..d675b0d40 100644
 +                default:
 +                    break;
 +            }
-+        }
-+    }
+         }
+     }
+-
+-    auto lib = tree->getSourceLibrary();
+-    if (lib) {
+-        auto& entry = libraryNameMap[lib->name];
+-        SLANG_ASSERT(entry == nullptr || entry == lib);
+-        entry = lib;
+-    }
+-    else {
+-        lib = defaultLibPtr;
 +    for (auto unit : owner->compilationUnits) {
 +        for (const auto& symbol : unit->members()) {
 +            const Symbol* actual = &symbol;
@@ -3954,10 +4163,14 @@ index ed7528f2c..d675b0d40 100644
 +                }
 +            }
 +        }
-+    }
+     }
 +    retainImportedCompilation(std::move(owner));
 +}
-+
+ 
+-    const SyntaxNode& node = tree->root();
+-    const SyntaxNode* topNode = &node;
+-    while (topNode->parent)
+-        topNode = topNode->parent;
 +bool Compilation::isFixedInstanceBodyTypeArgument(const Type& type,
 +                                                  const InstanceBodySymbol& rootBody) const {
 +    auto fixed = [&](const Type& candidate) {
@@ -4009,11 +4222,15 @@ index ed7528f2c..d675b0d40 100644
 +                    return false;
 +            return true;
 +        }
-+        return canonical.isSimpleBitVector();
++        return canonical.isSimpleBitVector() || canonical.isString();
 +    };
 +    return check(check, type);
 +}
-+
+ 
+-    auto unit = emplace<CompilationUnitSymbol>(*this, *lib);
+-    unit->setSyntax(*topNode);
+-    root->addMember(*unit);
+-    compilationUnits.push_back(unit);
 +std::string Compilation::instanceBodyTypeOrigin(const Type& type) const {
 +    if (auto found = fixedBodyTypeOrigins.find(&type); found != fixedBodyTypeOrigins.end())
 +        return found->second;
@@ -4035,13 +4252,28 @@ index ed7528f2c..d675b0d40 100644
 +                       type.getParentScope()->asSymbol().getHierarchicalPath(), type.name,
 +                       type.getSyntax() ? type.getSyntax()->toString() : std::string());
 +}
-+
+ 
+-    for (auto& [n, meta] : tree->getMetadata().nodeMeta) {
+-        SyntaxMetadata result;
+-        result.tree = tree.get();
+-        result.defaultNetType = &getNetType(meta.defaultNetType);
+-        result.timeScale = meta.timeScale;
 +const Compilation::InstanceBodyTypePresentation* Compilation::getInstanceBodyTypePresentation(
 +    const Type& type) const {
 +    auto found = fixedBodyTypePresentations.find(&type);
 +    return found == fixedBodyTypePresentations.end() ? nullptr : &found->second;
 +}
-+
+ 
+-        switch (meta.unconnectedDrive) {
+-            case TokenKind::Pull0Keyword:
+-                result.unconnectedDrive = UnconnectedDrive::Pull0;
+-                break;
+-            case TokenKind::Pull1Keyword:
+-                result.unconnectedDrive = UnconnectedDrive::Pull1;
+-                break;
+-            default:
+-                result.unconnectedDrive = UnconnectedDrive::None;
+-                break;
 +bool Compilation::isInstanceBodyBindContextCompatible() const {
 +    if (bodyBindContextCompatible)
 +        return *bodyBindContextCompatible;
@@ -4067,7 +4299,7 @@ index ed7528f2c..d675b0d40 100644
 +                node.target->kind == SyntaxKind::IdentifierName &&
 +                !definitions.contains(
 +                    node.target->template as<IdentifierNameSyntax>().identifier.valueText());
-+        }
+         }
 +        else
 +            self.visitDefault(node);
 +    });
@@ -4077,7 +4309,10 @@ index ed7528f2c..d675b0d40 100644
 +    bodyBindContextCompatible = compatible;
 +    return compatible;
 +}
-+
+ 
+-        result.cellDefine = meta.cellDefine;
+-
+-        syntaxMetadata[n] = result;
 +bool Compilation::recordInstanceBodyTypeDependency(const Type& replacement, const Type& source) {
 +    if (!instanceBodyCacheContext || !isElaborated() || hasFatalErrors())
 +        return false;
@@ -4250,7 +4485,14 @@ index ed7528f2c..d675b0d40 100644
 +        batch.targets.emplace_back(nullptr, sourceCopies.size());
 +        sourceCopies.emplace_back(const_cast<Symbol*>(target), SourceLocation{},
 +                                  syntax ? syntaxCopies.at(syntax) : nullptr);
-+    }
+     }
+-
+-    for (auto& inst : tree->getMetadata().globalInstances)
+-        globalInstantiations.emplace(inst->type.valueText());
+-
+-    if (node.kind == SyntaxKind::CompilationUnit) {
+-        for (auto member : node.as<CompilationUnitSyntax>().members)
+-            unit->addMembers(*member);
 +    for (const auto& [manager, batch] : batches) {
 +        auto locations = manager->projectImmutableOriginalLocations(batch.locations);
 +        if (!locations)
@@ -4262,14 +4504,19 @@ index ed7528f2c..d675b0d40 100644
 +            else
 +                std::get<1>(sourceCopies[symbolIndex]) = (*locations)[i];
 +        }
-+    }
+     }
+-    else if (node.kind == SyntaxKind::LibraryMap) {
+-        for (auto member : node.as<LibraryMapSyntax>().members)
+-            unit->addMembers(*member);
 +    for (auto [token, location] : tokenCopies)
 +        *token = token->withLocation(*this, location);
 +    for (auto [target, location, syntax] : sourceCopies) {
 +        target->location = location;
 +        if (syntax)
 +            target->setSyntax(*syntax);
-+    }
+     }
+-    else {
+-        unit->addMembers(node);
 +    for (auto& [type, origin] : staged)
 +        fixedBodyTypeOrigins.insert_or_assign(type, std::move(origin));
 +    for (auto& [type, display] : presentations)
@@ -4284,15 +4531,28 @@ index ed7528f2c..d675b0d40 100644
 +            target.as<PackedStructType>().systemId = original->as<PackedStructType>().systemId;
 +        else if (type->kind == SymbolKind::PackedUnionType)
 +            target.as<PackedUnionType>().systemId = original->as<PackedUnionType>().systemId;
-+    }
+     }
+-
+-    syntaxTrees.emplace_back(std::move(tree));
+-    cachedParseDiagnostics.reset();
 +    return true;
-+}
-+
+ }
+ 
+-HierarchyOverrideNode& Compilation::getOrAddTopLevelHierarchyOverride(
+-    const SyntaxNode& definitionSyntax) {
+-    SLANG_ASSERT(!isFrozen());
+-
+-    if (finalized)
+-        SLANG_THROW(std::logic_error("The compilation has already been finalized"));
+-
+-    return hierarchyOverrides.childNodes[definitionSyntax];
 +const Type* Compilation::getInstanceBodyTypeIdentity(const Type& type) const {
 +    auto found = importedBodyTypeIdentities.find(&type);
 +    return found == importedBodyTypeIdentities.end() ? &type : found->second;
-+}
-+
+ }
+ 
+-std::span<const std::shared_ptr<SyntaxTree>> Compilation::getSyntaxTrees() const {
+-    return syntaxTrees;
 +bool Compilation::tryImportInstanceBody(std::shared_ptr<Compilation> owner,
 +                                        const InstanceBodySymbol& retained,
 +                                        InstanceBodySymbol& target) {
@@ -4343,6 +4603,13 @@ index ed7528f2c..d675b0d40 100644
 +            member->kind == SymbolKind::GenerateBlockArray)
 +            return false;
 +    }
++    // Matching intentionally skips certified localparams. Their type arguments
++    // can still be lazy here (for example a local packed struct with named
++    // fields). Keep the complete identity preflight parameter-only too: exposing
++    // this body during a named-type lookup would recursively try to import it.
++    const bool previousLookupMode = target.parameterLookupMode;
++    target.parameterLookupMode = true;
++    auto restoreLookupMode = ScopeGuard([&] { target.parameterLookupMode = previousLookupMode; });
 +    std::vector<std::pair<const Type*, const Type*>> typeIdentities;
 +    auto mapTypes = [&](auto&& self, const Type& oldType, const Type& newType) -> bool {
 +        const auto& a = oldType.getCanonicalType();
@@ -4411,9 +4678,50 @@ index ed7528f2c..d675b0d40 100644
 +            if (auto initializer = value.getInitializer())
 +                boundaryInitializers.push_back(initializer);
 +    }
-+    target.boundaryParameterInitializers = boundaryInitializers.copy(*this);
-+    for (auto [type, identity] : typeIdentities)
++    std::vector<std::pair<const Type*, const Type*>> previousIdentities;
++    for (auto [type, identity] : typeIdentities) {
++        auto found = importedBodyTypeIdentities.find(type);
++        previousIdentities.emplace_back(type, found == importedBodyTypeIdentities.end()
++                                                ? nullptr : found->second);
 +        importedBodyTypeIdentities.insert_or_assign(type, identity);
++    }
++    bool keepIdentities = false;
++    auto restoreIdentities = ScopeGuard([&] {
++        if (!keepIdentities)
++            for (auto [type, identity] : previousIdentities) {
++                if (identity)
++                    importedBodyTypeIdentities.insert_or_assign(type, identity);
++                else
++                    importedBodyTypeIdentities.erase(type);
++            }
++    });
++    std::vector<std::pair<detail::ClassSpecializationKey, const ClassType*>> classes;
++    for (auto type : certificate.classes) {
++        const auto& cls = type->as<ClassType>();
++        if (!cls.genericClass)
++            continue;
++        auto key = retainedClassKey(*this, cls);
++        auto conflicts = [&](const auto& states) {
++            const auto found = states.find(cls.genericClass);
++            if (found == states.end())
++                return false;
++            const auto& cache = cls.isUninstantiated ? found->second->uninstantiated
++                                                     : found->second->instantiated;
++            for (const auto& [existing, candidate] : cache)
++                if (candidate != type && key.matchesArguments(existing))
++                    return true;
++            return false;
++        };
++        if (conflicts(importedClassStates) || conflicts(certifiedBodyClassStates)) {
++            if (std::getenv("SLANG_SCOPE_BODY_TRACE"))
++                fmt::print(stderr, "scope-body class-identity-conflict\t{}\t{}\n",
++                           retained.getHierarchicalPath(), cls.name);
++            return false;
++        }
++        classes.emplace_back(key, &cls);
++    }
++    keepIdentities = true;
++    target.boundaryParameterInitializers = boundaryInitializers.copy(*this);
 +
 +    // No symbol is reparented and no borrowed map / member link may be mutated.
 +    // The wrapper keeps the current instance and compilation as its boundary.
@@ -4425,6 +4733,23 @@ index ed7528f2c..d675b0d40 100644
 +    for (auto type : certificate.classes)
 +        if (std::ranges::find(importedBodyClasses, type) == importedBodyClasses.end())
 +            importedBodyClasses.push_back(type);
++    for (const auto& [key, type] : classes) {
++        auto& state = certifiedBodyClassStates[type->genericClass];
++        if (!state)
++            state = std::make_unique<detail::ClassSpecializationState>();
++        auto& cache = type->isUninstantiated ? state->uninstantiated : state->instantiated;
++        cache.emplace(key, type);
++    }
++    for (auto [scope, expression] : certificate.defaultDisables) {
++        defaultDisableMap.insert_or_assign(scope, expression);
++        if (scope == &retained)
++            defaultDisableMap.insert_or_assign(&target, expression);
++    }
++    for (auto [scope, clocking] : certificate.defaultClockings) {
++        defaultClockingMap.insert_or_assign(scope, clocking);
++        if (scope == &retained)
++            defaultClockingMap.insert_or_assign(&target, clocking);
++    }
 +    // Fold the immutable profile once at import. Unused / shadow analysis asks
 +    // about many declarations; scanning every retained subtree for each query
 +    // makes analysis cost grow with the number of disjoint cached bodies.
@@ -4461,9 +4786,23 @@ index ed7528f2c..d675b0d40 100644
 +    for (auto definition : certificate.instantiationSites)
 +        noteDefinitionInstantiated(*definition);
 +    return true;
-+}
-+
+ }
+ 
+-std::span<const CompilationUnitSymbol* const> Compilation::getCompilationUnits() const {
+-    return compilationUnits;
 +bool Compilation::prepareInstanceBodyReuse(const InstanceBodySymbol& retained) {
++    return prepareInstanceBodyReuseImpl(retained, false);
+ }
+ 
+-std::vector<const Symbol*> Compilation::getDefinitions() const {
+-    std::vector<const Symbol*> result;
+-    for (auto& [key, val] : definitionMap) {
+-        for (auto sym : val.first) {
+-            result.insert(std::ranges::upper_bound(result, sym->name, {},
+-                                                   [](auto item) { return item->name; }),
+-                          sym);
++bool Compilation::prepareInstanceBodyReuseImpl(const InstanceBodySymbol& retained,
++                                              bool virtualProof) {
 +    auto owner = this;
 +    auto decline = [&](std::string_view reason, std::string_view detail = {}) {
 +        if (auto trace = std::getenv("SLANG_SCOPE_BODY_TRACE"); trace && *trace) {
@@ -4476,7 +4815,7 @@ index ed7528f2c..d675b0d40 100644
 +    };
 +    if (!isElaborated() || hasFatalErrors() || retained.borrowedMembers ||
 +        &retained.getCompilation() != this || !retained.parentInstance ||
-+        !InstanceCacheKey::isEligibleForCaching(*retained.parentInstance))
++        (!virtualProof && !InstanceCacheKey::isEligibleForCaching(*retained.parentInstance)))
 +        return decline("body-context");
 +    if (getDefaultDisable(retained) && !defaultDisableMap.contains(&retained))
 +        return decline("outside-default-disable");
@@ -4502,6 +4841,7 @@ index ed7528f2c..d675b0d40 100644
 +            independent = false;
 +        };
 +        flat_hash_set<const Scope*> closedClasses;
++        flat_hash_set<const CovergroupType*> closedCovergroups;
 +        auto isLocal = [&](const Symbol& symbol) {
 +            const Scope* scope = symbol.kind == SymbolKind::InstanceBody
 +                                     ? &symbol.as<InstanceBodySymbol>()
@@ -4526,8 +4866,34 @@ index ed7528f2c..d675b0d40 100644
 +                return imported.get() == &compilation;
 +            });
 +        };
++        auto isFixedRuntimeBinding = [&](const Symbol& symbol) {
++            const auto scope = symbol.getParentScope();
++            return scope && isFixedCompilation(scope->getCompilation()) &&
++                   ((scope->asSymbol().kind == SymbolKind::Package &&
++                     symbol.kind == SymbolKind::Variable) ||
++                    (scope->asSymbol().kind == SymbolKind::ClassType &&
++                     symbol.kind == SymbolKind::ClassProperty));
++        };
 +        flat_hash_set<const Type*> queuedTypes;
 +        std::vector<const Type*> pendingTypes;
++        flat_hash_set<const InstanceBodySymbol*> virtualPrototypeRoots;
++        std::vector<const InstanceBodySymbol*> pendingVirtualPrototypes;
++        flat_hash_set<const DefinitionSymbol*> virtualPrototypeDefinitions;
++        auto inVirtualPrototype = [&](const InstanceBodySymbol& body) {
++            const Scope* scope = &body;
++            while (scope) {
++                const auto& symbol = scope->asSymbol();
++                if (auto instanceBody = symbol.as_if<InstanceBodySymbol>()) {
++                    if (virtualPrototypeRoots.contains(instanceBody))
++                        return true;
++                    scope = instanceBody->parentInstance
++                                ? instanceBody->parentInstance->getParentScope() : nullptr;
++                }
++                else
++                    scope = symbol.getParentScope();
++            }
++            return false;
++        };
 +        auto fixedBitVector = [&](auto&& self, const Type& type, bool recordUse = true) -> bool {
 +            if (type.kind == SymbolKind::TypeAlias) {
 +                auto scope = type.getParentScope();
@@ -4589,6 +4955,20 @@ index ed7528f2c..d675b0d40 100644
 +            }
 +            return type.getCanonicalType().kind == SymbolKind::StringType;
 +        };
++        auto fixedParameterType = [&](auto&& self, const Type& type) -> bool {
++            if (isFixedIntegralType(type) || fixedStringType(fixedStringType, type, true))
++                return true;
++            if (type.kind == SymbolKind::TypeAlias) {
++                const auto scope = type.getParentScope();
++                if (!scope || (!isLocal(type) && !isFixedCompilation(scope->getCompilation()) &&
++                               !fixedBodyTypeOrigins.contains(&type)))
++                    return false;
++                return self(self, type.as<TypeAliasType>().targetType.getType());
++            }
++            if (type.kind == SymbolKind::FixedSizeUnpackedArrayType)
++                return self(self, *type.getArrayElementType());
++            return false;
++        };
 +        std::function<bool(const Type&, bool)> isFixedBodyValueType;
 +        isFixedBodyValueType = [&](const Type& type, bool recordUse) {
 +            if (fixedBitVector(fixedBitVector, type, recordUse) ||
@@ -4604,6 +4984,65 @@ index ed7528f2c..d675b0d40 100644
 +                return isFixedBodyValueType(type.as<TypeAliasType>().targetType.getType(), true);
 +            }
 +            const auto& canonical = type.getCanonicalType();
++            if (canonical.kind == SymbolKind::VirtualInterfaceType) {
++                const auto& vif = canonical.as<VirtualInterfaceType>();
++                const auto& body = vif.iface.body;
++                if (!completeBodyReferenceTracking) {
++                    certificate.requiresFreshOwner = true;
++                    return false;
++                }
++                if (!importedDefinitions.contains(&body.getDefinition()))
++                    return false;
++                if (&body.getCompilation() != this) {
++                    if (vif.isRealIface || !isFixedCompilation(body.getCompilation()))
++                        return decline("virtual-interface-owner", body.getDefinition().name);
++                    auto found = bodyVirtualIfaceProofs.find(&body);
++                    if (found != bodyVirtualIfaceProofs.end())
++                        return prepareInstanceBodyReuseImpl(*found->second, true);
++
++                    // A fixed type identity does not prove that the interface
++                    // body is independent of the caller. Bind a private proof
++                    // with resolved arguments and audit its entire graph. Its
++                    // separate certificate must not export auxiliary instances,
++                    // reference profiles or diagnostics into the retained DUT.
++                    auto overrides = std::make_unique<HierarchyOverrideNode>();
++                    for (auto parameter : body.getParameters()) {
++                        if (parameter->isLocalParam())
++                            continue;
++                        const auto& symbol = parameter->symbol;
++                        if (auto value = symbol.as_if<ParameterSymbol>()) {
++                            if (!fixedOverrideStorage(value->getValue()))
++                                return false;
++                            overrides->paramOverrides.emplace(
++                                symbol.getSyntax(), HierarchyOverrideNode::ValueParamOverride{
++                                                        .value = value->getValue()});
++                        }
++                        else {
++                            overrides->paramOverrides.emplace(
++                                symbol.getSyntax(), HierarchyOverrideNode::TypeParamOverride{
++                                                        .type = &symbol.as<TypeParameterSymbol>()
++                                                                     .targetType.getType()});
++                        }
++                    }
++                    auto* arguments = overrides.get();
++                    importedVirtualIfaceOverrides.push_back(std::move(overrides));
++                    auto& proof = InstanceBodySymbol::fromDefinition(
++                        *this, body.getDefinition(), vif.iface.location, InstanceFlags::None,
++                        arguments, nullptr, nullptr);
++                    auto instance = emplace<InstanceSymbol>(vif.iface.name, vif.iface.location,
++                                                           proof, 0u);
++                    instance->setParent(*root);
++                    bodyVirtualIfaceProofs.emplace(&body, &proof);
++                    if (!prepareInstanceBodyReuseImpl(proof, true))
++                        return decline("virtual-interface-proof", body.getDefinition().name);
++                    return true;
++                }
++                if (!isLocal(vif.iface))
++                    return decline("virtual-interface-context", body.getDefinition().name);
++                if (!vif.isRealIface && virtualPrototypeRoots.emplace(&body).second)
++                    pendingVirtualPrototypes.push_back(&body);
++                return true;
++            }
 +            if (canonical.kind == SymbolKind::QueueType ||
 +                canonical.kind == SymbolKind::DynamicArrayType ||
 +                canonical.kind == SymbolKind::FixedSizeUnpackedArrayType)
@@ -4613,33 +5052,77 @@ index ed7528f2c..d675b0d40 100644
 +                return isFixedBodyValueType(array.elementType, true) &&
 +                       (!array.indexType || isFixedBodyValueType(*array.indexType, true));
 +            }
-+            if (canonical.kind == SymbolKind::FloatingType)
++            if (canonical.kind == SymbolKind::CovergroupType) {
++                const auto& group = canonical.as<CovergroupType>();
++                if (isFixedCompilation(group.getCompilation()))
++                    return true;
++                if (&group.getCompilation() != this || !isLocal(group))
++                    return false;
++                if (closedCovergroups.emplace(&group).second) {
++                    pendingTypes.push_back(&group);
++                    if (auto base = group.getBaseGroup())
++                        return isFixedBodyValueType(*base, true);
++                }
++                return true;
++            }
++            if (canonical.kind == SymbolKind::UnpackedStructType) {
++                const auto& aggregate = canonical.as<UnpackedStructType>();
++                if (isFixedCompilation(aggregate.getCompilation()))
++                    return true;
++                if (!isLocal(aggregate))
++                    return false;
++                if (queuedTypes.emplace(&aggregate).second)
++                    pendingTypes.push_back(&aggregate);
++                for (const auto& field : aggregate.membersOfType<FieldSymbol>())
++                    if (!isFixedBodyValueType(field.getType(), true))
++                        return false;
++                return true;
++            }
++            if (canonical.kind == SymbolKind::FloatingType ||
++                canonical.kind == SymbolKind::EventType)
 +                return true;
 +            if (canonical.kind != SymbolKind::ClassType)
 +                return false;
 +            const auto& cls = canonical.as<ClassType>();
-+            if (isFixedCompilation(cls.getCompilation()))
++            if (isFixedCompilation(cls.getCompilation())) {
++                for (auto parameter : cls.genericParameters) {
++                    if (const auto type = parameter->as_if<TypeParameterSymbol>()) {
++                        const auto& argument = type->targetType.getType();
++                        if (argument.getCanonicalType().isVirtualInterface() &&
++                            !isFixedBodyValueType(argument, true))
++                            return false;
++                    }
++                }
 +                return true;
++            }
 +            if (closedClasses.contains(&cls))
 +                return true;
 +            const auto* provider = cls.genericClass ? cls.genericClass->getParentScope()
 +                                                    : cls.getParentScope();
-+            if (&cls.getCompilation() != this || cls.isUninstantiated || !provider ||
++            if (cls.isUninstantiated)
++                return decline("class-uninstantiated", cls.name);
++            if (&cls.getCompilation() != this || !provider ||
 +                (!isLocal(provider->asSymbol()) && !isFixedCompilation(provider->getCompilation())))
-+                return false;
++                return decline("class-provider", cls.name);
 +            // Specializations stay inside this independent owner. Their provider
 +            // is fixed, but parameters must also close over this retained graph.
 +            closedClasses.emplace(&cls);
 +            for (auto parameter : cls.genericParameters) {
 +                if (parameter->kind == SymbolKind::TypeParameter) {
-+                    if (!isFixedInstanceBodyTypeArgument(
-+                            parameter->as<TypeParameterSymbol>().targetType.getType(), retained))
++                    const auto& argument = parameter->as<TypeParameterSymbol>().targetType.getType();
++                    if (!isFixedInstanceBodyTypeArgument(argument, retained) &&
++                        !isFixedBodyValueType(argument, true))
 +                        return false;
 +                }
-+                else if (parameter->kind != SymbolKind::Parameter ||
-+                         !parameter->as<ParameterSymbol>().getValue().isInteger() ||
-+                         !isFixedIntegralType(parameter->as<ParameterSymbol>().getType()))
-+                    return false;
++                else {
++                    if (parameter->kind != SymbolKind::Parameter)
++                        return false;
++                    const auto& value = parameter->as<ParameterSymbol>();
++                    if ((!value.getValue().isInteger() &&
++                         !retainableStringConstant(value.getValue())) ||
++                        !fixedParameterType(fixedParameterType, value.getType()))
++                        return false;
++                }
 +            }
 +            certificate.classes.push_back(&cls);
 +            pendingTypes.push_back(&cls);
@@ -4647,36 +5130,59 @@ index ed7528f2c..d675b0d40 100644
 +                return isFixedBodyValueType(*base, true);
 +            return true;
 +        };
-+        auto declarationNames = [&](const SyntaxNode& syntax, const Symbol& declaration) {
++        auto declarationNames = [&](const SyntaxNode& syntax, const Symbol& declaration,
++                                    const Scope* argumentScope = nullptr) {
++            bool fixedSizeQuery = false;
 +            auto names = makeSyntaxVisitor([&](auto& syntaxVisitor, const auto& node) {
 +                if (!independent)
 +                    return;
 +                using S = std::remove_cvref_t<decltype(node)>;
-+                if constexpr (std::same_as<S, AssignmentPatternItemSyntax>) {
++                if constexpr (std::same_as<S, InvocationExpressionSyntax>) {
++                    const bool saved = fixedSizeQuery;
++                    if (node.left->kind == SyntaxKind::SystemName && node.arguments &&
++                        node.arguments->parameters.size() == 1 && node.attributes.empty() &&
++                        node.left->template as<SystemNameSyntax>().systemIdentifier.valueText() == "$bits")
++                        fixedSizeQuery = true;
++                    syntaxVisitor.visitDefault(node);
++                    fixedSizeQuery = saved;
++                }
++                else if constexpr (std::same_as<S, AssignmentPatternItemSyntax>) {
 +                    node.expr->visit(syntaxVisitor);
 +                }
 +                else if constexpr (std::derived_from<S, NameSyntax>) {
-+                    auto scope = declaration.getParentScope();
++                    auto scope = argumentScope ? argumentScope : declaration.getParentScope();
 +                    if (!scope) {
 +                        reject("type-declaration-context");
 +                        return;
 +                    }
-+                    ASTContext context(*scope, LookupLocation::before(declaration));
++                    ASTContext context(*scope, argumentScope ? LookupLocation::max
++                                                             : LookupLocation::before(declaration));
 +                    LookupResult result;
 +                    Lookup::name(node, context, LookupFlags::ForceHierarchical, result);
 +                    if (auto symbol = result.found) {
 +                        auto parent = symbol->getParentScope();
++                        const auto value = symbol->template as_if<ValueSymbol>();
++                        const bool localSizeOperand = fixedSizeQuery && isLocal(*symbol) && value &&
++                            value->getType().isFixedSize() &&
++                            fixedBitVector(fixedBitVector, value->getType(), true);
 +                        const bool local = isLocal(*symbol) &&
-+                                           (symbol->kind == SymbolKind::Parameter ||
++                                           (localSizeOperand || symbol->kind == SymbolKind::Parameter ||
 +                                            symbol->kind == SymbolKind::TypeParameter ||
 +                                            symbol->kind == SymbolKind::EnumValue ||
-+                                            symbol->kind == SymbolKind::TypeAlias);
++                                            symbol->kind == SymbolKind::TypeAlias ||
++                                            (symbol->kind == SymbolKind::ClassType &&
++                                             closedClasses.contains(&symbol->as<ClassType>())) ||
++                                            (symbol->kind == SymbolKind::CovergroupType &&
++                                             closedCovergroups.contains(&symbol->as<CovergroupType>())));
 +                        if (!local && (!parent || !isFixedCompilation(parent->getCompilation()))) {
 +                            reject("type-declaration-dependency", symbol->name);
 +                            return;
 +                        }
-+                        if (auto source = symbol->getSyntax())
-+                            certificate.references[source].first = true;
++                        // Type queries do not read a runtime value. Preserve
++                        // Native's tracked usage instead of inventing a read.
++                        if (!localSizeOperand)
++                            if (auto source = symbol->getSyntax())
++                                certificate.references[source].first = true;
 +                    }
 +                    for (const auto& selector : result.selectors)
 +                        if (auto selection = std::get_if<0>(&selector))
@@ -4702,6 +5208,10 @@ index ed7528f2c..d675b0d40 100644
 +                    // prevents publishing that compilation. Seeded calls remain
 +                    // outside this certificate until their effects are audited.
 +                    return call.arguments().empty();
++                case KnownSystemName::Name:
++                    return call.arguments().size() == 1 &&
++                           call.arguments()[0]->type->getCanonicalType().kind == SymbolKind::EnumType &&
++                           isFixedIntegralType(*call.arguments()[0]->type);
 +                case KnownSystemName::Time:
 +                case KnownSystemName::STime:
 +                case KnownSystemName::RealTime:
@@ -4736,6 +5246,35 @@ index ed7528f2c..d675b0d40 100644
 +                    return false;
 +            }
 +        };
++        auto localScopeRandomizeCall = [&](const CallExpression& call) {
++            if (!call.isSystemCall() || call.thisClass() || call.arguments().empty() ||
++                call.getKnownSystemName() != parsing::KnownSystemName::Randomize)
++                return false;
++            const auto& info = std::get<1>(call.subroutine);
++            // Scope randomize and class randomize have the same visible name.
++            // Accept only the compiler's std::randomize binder, never a class
++            // method whose object / constraint ownership has not been closed.
++            if (&*info.subroutine != getSystemSubroutine(parsing::KnownSystemName::Randomize) ||
++                !isLocal(info.scope->asSymbol()) || info.extraInfo.index() == 1)
++                return false;
++            if (info.extraInfo.index() == 2 &&
++                !std::get<2>(info.extraInfo).constraintRestrictions.empty())
++                return false;
++            for (auto argument : call.arguments()) {
++                if (argument->kind != ExpressionKind::Assignment)
++                    return false;
++                const auto& target = argument->as<AssignmentExpression>().left();
++                const auto symbol = target.getSymbolReference();
++                if (target.kind != ExpressionKind::NamedValue || !symbol ||
++                    symbol->kind != SymbolKind::Variable || !isLocal(*symbol) ||
++                    !isFixedIntegralType(*target.type))
++                    return false;
++            }
++            // Reuse binding only. Random values are produced at simulation
++            // runtime, and native constant evaluation still rejects this call.
++            // The ordinary visitor audits all lvalues and inline constraints.
++            return true;
++        };
 +        auto diagnosticCall = [&](const CallExpression& call) {
 +            if (!call.isSystemCall() || call.thisClass() || call.hasOutputArgs())
 +                return false;
@@ -4765,6 +5304,25 @@ index ed7528f2c..d675b0d40 100644
 +                return false;
 +            using parsing::KnownSystemName;
 +            switch (call.getKnownSystemName()) {
++                case KnownSystemName::ValuePlusArgs: {
++                    if (call.arguments().size() != 2 ||
++                        call.arguments()[1]->kind != ExpressionKind::Assignment)
++                        return false;
++                    const auto& destination =
++                        call.arguments()[1]->as<AssignmentExpression>().left();
++                    const auto target = destination.getSymbolReference(false);
++                    // Retain the runtime command-line lookup, never its value.
++                    // A destination in another consumer must not become owned
++                    // by this cached graph. The ordinary audit checks its type,
++                    // selectors and the format expression as well.
++                    return target && isLocal(*target);
++                }
++                case KnownSystemName::TestPlusArgs:
++                    return call.arguments().size() == 1;
++                case KnownSystemName::SWrite:
++                case KnownSystemName::SWriteB:
++                case KnownSystemName::SWriteO:
++                case KnownSystemName::SWriteH:
 +                case KnownSystemName::SFormat: {
 +                    // Only a local destination can be retained. Audit every
 +                    // argument below, including selectors and format operands.
@@ -4823,6 +5381,10 @@ index ed7528f2c..d675b0d40 100644
 +                return false;
 +            using parsing::KnownSystemName;
 +            switch (call.getKnownSystemName()) {
++                case KnownSystemName::First:
++                case KnownSystemName::Last:
++                case KnownSystemName::Next:
++                case KnownSystemName::Prev:
 +                case KnownSystemName::ArraySize:
 +                case KnownSystemName::Num:
 +                case KnownSystemName::Exists:
@@ -4833,8 +5395,43 @@ index ed7528f2c..d675b0d40 100644
 +                case KnownSystemName::PushFront:
 +                case KnownSystemName::PushBack: {
 +                    auto receiver = call.arguments().front()->getSymbolReference(false);
-+                    return receiver && isLocal(*receiver);
++                    return receiver && (isLocal(*receiver) || isFixedRuntimeBinding(*receiver));
 +                }
++                default:
++                    return false;
++            }
++        };
++        auto localStringCall = [&](const CallExpression& call) {
++            if (!call.isSystemCall() || call.thisClass() || call.arguments().empty() ||
++                call.arguments()[0]->type->getCanonicalType().kind != SymbolKind::StringType)
++                return false;
++            const auto& info = std::get<1>(call.subroutine);
++            if (info.extraInfo.index() != 0 || !isLocal(info.scope->asSymbol()))
++                return false;
++            using parsing::KnownSystemName;
++            switch (call.getKnownSystemName()) {
++                case KnownSystemName::Putc:
++                case KnownSystemName::IToA:
++                case KnownSystemName::HexToA:
++                case KnownSystemName::OctToA:
++                case KnownSystemName::BinToA:
++                case KnownSystemName::RealToA: {
++                    const auto receiver = call.arguments()[0]->getSymbolReference(false);
++                    return receiver && (isLocal(*receiver) || isFixedRuntimeBinding(*receiver));
++                }
++                case KnownSystemName::Len:
++                case KnownSystemName::Getc:
++                case KnownSystemName::ToUpper:
++                case KnownSystemName::ToLower:
++                case KnownSystemName::Compare:
++                case KnownSystemName::ICompare:
++                case KnownSystemName::Substr:
++                case KnownSystemName::AToI:
++                case KnownSystemName::AToHex:
++                case KnownSystemName::AToOct:
++                case KnownSystemName::AToBin:
++                case KnownSystemName::AToReal:
++                    return true;
 +                default:
 +                    return false;
 +            }
@@ -4842,23 +5439,75 @@ index ed7528f2c..d675b0d40 100644
 +        auto closedFunction = [&](const SubroutineSymbol& subroutine) {
 +            auto scope = subroutine.getParentScope();
 +            const bool fixed = scope && isFixedCompilation(scope->getCompilation());
++            // A static generic method can be reached without materializing a
++            // class handle. Close that specialization too, including its base
++            // types and complete bodies, before treating the method as local.
++            if (scope && scope->asSymbol().kind == SymbolKind::ClassType &&
++                !closedClasses.contains(scope) &&
++                !isFixedBodyValueType(scope->asSymbol().as<ClassType>(), true))
++                return false;
 +            const bool classMethod = scope && scope->asSymbol().kind == SymbolKind::ClassType &&
 +                                     (closedClasses.contains(scope) || fixed);
++            const auto classParent = classMethod ? scope->asSymbol().getParentScope() : nullptr;
++            const bool runtimeBuiltin = classMethod &&
++                subroutine.flags.has(MethodFlags::BuiltIn) &&
++                (subroutine.name == "get_randstate" || subroutine.name == "set_randstate" ||
++                 (classParent && &classParent->asSymbol() == stdPkg));
 +            return (isLocal(subroutine) || fixed) &&
-+                   (subroutine.subroutineKind == SubroutineKind::Function || isLocal(subroutine)) &&
-+                   (!subroutine.thisVar || classMethod) && !subroutine.hasOutputArgs() &&
++                   (!subroutine.thisVar || classMethod) &&
 +                   (!subroutine.flags.has(MethodFlags::Constructor) || classMethod) &&
-+                   !subroutine.flags.has(MethodFlags::Virtual | MethodFlags::Pure |
-+                                         MethodFlags::InterfaceExtern | MethodFlags::ModportImport |
++                   (!subroutine.flags.has(MethodFlags::Virtual) || classMethod) &&
++                   (!subroutine.flags.has(MethodFlags::Pure) || (classMethod && fixed)) &&
++                   (!subroutine.flags.has(MethodFlags::BuiltIn) || runtimeBuiltin) &&
++                   !subroutine.flags.has(MethodFlags::InterfaceExtern | MethodFlags::ModportImport |
 +                                         MethodFlags::ModportExport | MethodFlags::DPIImport |
-+                                         MethodFlags::DPIContext | MethodFlags::BuiltIn |
-+                                         MethodFlags::Randomize) &&
++                                         MethodFlags::DPIContext | MethodFlags::Randomize) &&
 +                   (subroutine.getReturnType().isVoid() ||
 +                    isFixedBodyValueType(subroutine.getReturnType(), true));
++        };
++        auto fixedCoverageCall = [&](const CallExpression& call) {
++            if (call.isSystemCall())
++                return false;
++            const auto& function = *std::get<0>(call.subroutine);
++            const auto scope = function.getParentScope();
++            if (!scope || scope->asSymbol().kind != SymbolKind::CovergroupBody ||
++                !function.flags.has(MethodFlags::BuiltIn) || !isLocal(function) ||
++                !function.getReturnType().isVoid())
++                return false;
++            return function.name == "sample" || function.name == "start" ||
++                   function.name == "stop" || function.name == "set_inst_name";
++        };
++        auto fixedForeignCall = [&](const SubroutineSymbol& function) {
++            const auto scope = function.getParentScope();
++            if (!scope || scope->asSymbol().kind != SymbolKind::Package ||
++                !isFixedCompilation(scope->getCompilation()) || function.thisVar ||
++                function.subroutineKind != SubroutineKind::Function ||
++                !function.flags.has(MethodFlags::DPIImport))
++                return false;
++            auto signatureType = [&](const Type& type) {
++                return isFixedIntegralType(type) || fixedStringType(fixedStringType, type, true);
++            };
++            if (!function.getReturnType().isVoid() && !signatureType(function.getReturnType()))
++                return false;
++            for (auto argument : function.getArguments())
++                if (!signatureType(argument->getType()))
++                    return false;
++            // Retain a fixed declaration and its runtime call, never a foreign
++            // result. Native constant evaluation still rejects DPI execution;
++            // every actual argument / output lvalue receives the normal audit.
++            return true;
 +        };
 +        auto fixedArrayConstant = [&](auto&& self, const Type& type, const ConstantValue& value,
 +                                      size_t& storageBytes) -> bool {
 +            const auto& canonical = type.getCanonicalType();
++            if (canonical.isString()) {
++                if (!retainableStringConstant(value))
++                    return false;
++                // Parameter string storage and the detached literal's packed
++                // value both own their bytes; AST text is charged by the arena.
++                storageBytes += 2 * value.str().capacity();
++                return true;
++            }
 +            if (canonical.kind == SymbolKind::FixedSizeUnpackedArrayType) {
 +                if (!value.isUnpacked())
 +                    return false;
@@ -4909,9 +5558,21 @@ index ed7528f2c..d675b0d40 100644
 +                    reject("borrowed-child-owner");
 +                    return;
 +                }
++                // Native elaboration caching excludes bind-created instances:
++                // their meaning depends on the target context. Here they stay
++                // inside the certified root at the same path, and their complete
++                // bindings are audited below along with ordinary descendants.
++                // Keep the native eligibility rule for the independently reused
++                // root; never publish a bound child as a standalone owner.
++                const bool eligibleDescendant = node.parentInstance &&
++                    !node.parentInstance->resolvedConfig &&
++                    (!node.hierarchyOverrideNode || (virtualProof && &node == &retained)) &&
++                    !node.flags.has(InstanceFlags::Uninstantiated);
 +                if (!node.parentInstance || !importedDefinitions.contains(&node.getDefinition()) ||
-+                    !InstanceCacheKey::isEligibleForCaching(*node.parentInstance)) {
-+                    reject("child-definition-or-context");
++                    (&node == &retained && !virtualProof
++                         ? !InstanceCacheKey::isEligibleForCaching(*node.parentInstance)
++                         : !eligibleDescendant)) {
++                    reject("child-definition-or-context", node.getDefinition().name);
 +                    return;
 +                }
 +                if (auto effect = instanceSideEffectMap.find(&node);
@@ -4920,24 +5581,31 @@ index ed7528f2c..d675b0d40 100644
 +                    reject("child-upward-side-effect");
 +                    return;
 +                }
-+                if (&node != &retained)
++                if (inVirtualPrototype(node))
++                    virtualPrototypeDefinitions.emplace(&node.getDefinition());
++                else if (&node != &retained)
 +                    certificate.descendants.push_back(&node);
 +            }
 +            if constexpr (std::derived_from<T, Symbol>) {
 +                switch (node.kind) {
 +                    case SymbolKind::TypeParameter: {
 +                        const auto& parameter = node.template as<TypeParameterSymbol>();
-+                        if ((!closedClasses.contains(node.getParentScope()) &&
-+                             !isFixedInstanceBodyTypeArgument(parameter.targetType.getType(),
-+                                                              retained)) ||
-+                            !isFixedIntegralType(parameter.targetType.getType())) {
++                        const auto& argument = parameter.targetType.getType();
++                        const bool closedClass = closedClasses.contains(node.getParentScope());
++                        if (closedClass ? !isFixedBodyValueType(argument, true)
++                                        : (!isFixedInstanceBodyTypeArgument(argument, retained) ||
++                                           !fixedParameterType(fixedParameterType, argument))) {
 +                            reject("type-parameter-dependency", node.name);
 +                            return;
 +                        }
 +                        break;
 +                    }
 +                    case SymbolKind::Subroutine:
-+                        if (closedClasses.contains(node.getParentScope()) &&
++                        if ((closedClasses.contains(node.getParentScope()) ||
++                             (node.getParentScope() && isLocal(node) &&
++                              (node.getParentScope()->asSymbol().kind == SymbolKind::CovergroupBody ||
++                               node.getParentScope()->asSymbol().kind == SymbolKind::Coverpoint ||
++                               node.getParentScope()->asSymbol().kind == SymbolKind::CoverCross))) &&
 +                            node.template as<SubroutineSymbol>().flags.has(MethodFlags::BuiltIn))
 +                            return; // Uncalled compiler-provided class APIs are not user bodies.
 +                        if (!closedFunction(node.template as<SubroutineSymbol>())) {
@@ -4945,21 +5613,108 @@ index ed7528f2c..d675b0d40 100644
 +                            return;
 +                        }
 +                        break;
-+                    case SymbolKind::FormalArgument:
-+                        if (node.template as<FormalArgumentSymbol>().direction !=
-+                            ArgumentDirection::In) {
-+                            reject("function-argument-direction", node.name);
++                    case SymbolKind::MethodPrototype: {
++                        const auto& prototype = node.template as<MethodPrototypeSymbol>();
++                        const auto method = prototype.getSubroutine();
++                        if (!closedClasses.contains(node.getParentScope()) || !method ||
++                            !isLocal(*method)) {
++                            reject("method-prototype-context", node.name);
 +                            return;
 +                        }
++                        // Extern class declarations are resolved by the native
++                        // binder. Audit the actual implementation, including its
++                        // signature and body, before retaining the declaration.
++                        method->visit(visitor);
++                        break;
++                    }
++                    case SymbolKind::FormalArgument:
++                        // Formal aliases stay in this retained function frame.
++                        // Actual argument lvalues are separately audited at every
++                        // call, so output / reference directions cannot introduce
++                        // a mutable outside binding silently.
 +                        break;
 +                    case SymbolKind::Parameter:
 +                    case SymbolKind::EnumValue:
 +                    case SymbolKind::Field:
 +                        break;
++                    case SymbolKind::Sequence:
++                    case SymbolKind::Property: {
++                        const bool sequence = node.kind == SymbolKind::Sequence;
++                        const auto ports = sequence ? node.template as<SequenceSymbol>().ports
++                                                    : node.template as<PropertySymbol>().ports;
++                        if (!ports.empty()) {
++                            reject("assertion-formal-ports", node.name);
++                            return;
++                        }
++                        // Bounds / repetitions are folded out of the assertion
++                        // expression. Audit their source names too, including
++                        // declarations that have no actual assertion caller.
++                        auto names = makeSyntaxVisitor([&](auto& self, const auto& syntax) {
++                            using S = std::remove_cvref_t<decltype(syntax)>;
++                            if constexpr (std::derived_from<S, NameSyntax>) {
++                                const auto& scope = sequence
++                                    ? static_cast<const Scope&>(node.template as<SequenceSymbol>())
++                                    : static_cast<const Scope&>(node.template as<PropertySymbol>());
++                                ASTContext context(scope, LookupLocation::max);
++                                LookupResult result;
++                                Lookup::name(syntax, context, LookupFlags::ForceHierarchical,
++                                             result);
++                                if (const auto symbol = result.found) {
++                                    const auto scope = symbol->getParentScope();
++                                    if (!isLocal(*symbol) &&
++                                        (!scope || !isFixedCompilation(scope->getCompilation()))) {
++                                        reject("assertion-declaration-dependency", symbol->name);
++                                        return;
++                                    }
++                                }
++                                for (const auto& selector : result.selectors)
++                                    if (auto selection = std::get_if<0>(&selector))
++                                        (*selection)->visit(self);
++                            }
++                            else {
++                                self.visitDefault(syntax);
++                            }
++                        });
++                        if (const auto syntax = node.getSyntax())
++                            syntax->visit(names);
++                        pendingExpressions.push_back(
++                            sequence ? &node.template as<SequenceSymbol>().getDefaultInstance()
++                                     : &node.template as<PropertySymbol>().getDefaultInstance());
++                        break;
++                    }
++                    case SymbolKind::ClockingBlock: {
++                        const auto& block = node.template as<ClockingBlockSymbol>();
++                        const auto syntax = block.getSyntax();
++                        if (block.isGlobal || !syntax ||
++                            !syntax->template as<ClockingDeclarationSyntax>().items.empty()) {
++                            reject("clocking-block-context", block.name);
++                            return;
++                        }
++                        // Plain clocking events are visited normally below.
++                        // Clocking variables / skew expressions need a wider
++                        // certificate before they can enter a retained owner.
++                        break;
++                    }
 +                    case SymbolKind::TypeAlias:
 +                        if (!isFixedBodyValueType(node.template as<TypeAliasType>(),
 +                                                  /* recordUse */ false))
 +                            reject("type-alias-dependency");
++                        break;
++                    case SymbolKind::CovergroupType:
++                        if (!isFixedBodyValueType(node.template as<CovergroupType>(), true))
++                            reject("covergroup-context", node.name);
++                        break;
++                    case SymbolKind::CovergroupBody:
++                        // Unlike coverpoint / cross options, these are not part
++                        // of CovergroupBodySymbol::visitExprs. Audit every setter.
++                        for (const auto& option : node.template as<CovergroupBodySymbol>().options)
++                            pendingExpressions.push_back(&option.getExpression());
++                        break;
++                    case SymbolKind::Coverpoint:
++                    case SymbolKind::CoverCross:
++                    case SymbolKind::CoverCrossBody:
++                    case SymbolKind::CoverageBin:
++                    case SymbolKind::UnpackedStructType:
 +                        break;
 +                    case SymbolKind::EnumType:
 +                    case SymbolKind::PackedStructType:
@@ -4968,13 +5723,26 @@ index ed7528f2c..d675b0d40 100644
 +                    case SymbolKind::TransparentMember: {
 +                        const auto& wrapped = node.template as<TransparentMemberSymbol>().wrapped;
 +                        auto scope = wrapped.getParentScope();
-+                        if (wrapped.kind != SymbolKind::EnumValue || !scope ||
++                        if (!scope ||
 +                            (!isLocal(wrapped) && !isFixedCompilation(scope->getCompilation()))) {
 +                            reject("transparent-member-dependency", wrapped.name);
 +                            return;
 +                        }
-+                        if (!isFixedIntegralType(wrapped.template as<EnumValueSymbol>().getType()))
-+                            reject("transparent-member-type");
++                        if (wrapped.kind == SymbolKind::EnumValue) {
++                            if (!isFixedIntegralType(wrapped.template as<EnumValueSymbol>().getType()))
++                                reject("transparent-member-type");
++                        }
++                        else if (scope->asSymbol().kind != SymbolKind::ClassType ||
++                                 (wrapped.kind != SymbolKind::Subroutine &&
++                                  wrapped.kind != SymbolKind::MethodPrototype &&
++                                  wrapped.kind != SymbolKind::ClassProperty &&
++                                  wrapped.kind != SymbolKind::TypeAlias)) {
++                            reject("transparent-member-dependency", wrapped.name);
++                        }
++                        // Inherited class members are aliases, not fresh bodies.
++                        // Their base is either an immutable provider class or a
++                        // local class queued for the same complete AST audit.
++
 +                        break;
 +                    }
 +                    case SymbolKind::WildcardImport: {
@@ -4996,6 +5764,7 @@ index ed7528f2c..d675b0d40 100644
 +                    case SymbolKind::GenerateBlockArray:
 +                    case SymbolKind::Genvar:
 +                    case SymbolKind::Variable:
++                    case SymbolKind::LocalAssertionVar:
 +                    case SymbolKind::ClassProperty:
 +                    case SymbolKind::Iterator:
 +                    case SymbolKind::Net:
@@ -5005,8 +5774,12 @@ index ed7528f2c..d675b0d40 100644
 +                    case SymbolKind::EmptyMember:
 +                        break;
 +                    case SymbolKind::ClassType:
-+                        if (!closedClasses.contains(&node.template as<ClassType>()))
-+                            reject("unclosed-class");
++                        // Declarations can precede their first handle. Close the
++                        // class at the declaration, then audit the full body;
++                        // requiring a prior value use makes eligibility depend
++                        // on declaration order (notably bind monitor proxies).
++                        if (!isFixedBodyValueType(node.template as<ClassType>(), true))
++                            reject("unclosed-class", node.name);
 +                        break;
 +                    case SymbolKind::Port:
 +                        if (node.template as<PortSymbol>().direction != ArgumentDirection::In &&
@@ -5019,9 +5792,9 @@ index ed7528f2c..d675b0d40 100644
 +                }
 +                if (auto value = node.template as_if<ValueSymbol>()) {
 +                    if (!(node.kind == SymbolKind::Parameter
-+                              ? isFixedIntegralType(value->getType())
++                              ? fixedParameterType(fixedParameterType, value->getType())
 +                              : isFixedBodyValueType(value->getType(), true)))
-+                        reject("value-type", toString(value->getType().getCanonicalType().kind));
++                        reject("value-type", fmt::format("{}: {}", node.name, value->getType().toString()));
 +                }
 +                if constexpr (std::same_as<T, TypeParameterSymbol>) {
 +                    // Native name-checking still visits overridden defaults.
@@ -5054,15 +5827,51 @@ index ed7528f2c..d675b0d40 100644
 +                }
 +            }
 +            else if constexpr (std::derived_from<T, Expression>) {
++                if (node.kind == ExpressionKind::AssertionInstance) {
++                    const auto& instance = node.template as<AssertionInstanceExpression>();
++                    if (!isLocal(instance.symbol) || instance.isRecursiveProperty ||
++                        !instance.arguments.empty() ||
++                        (instance.symbol.kind != SymbolKind::Sequence &&
++                         instance.symbol.kind != SymbolKind::Property)) {
++                        reject("assertion-instance-context", instance.symbol.name);
++                        return;
++                    }
++                    for (const auto variable : instance.localVars) {
++                        if (!isLocal(*variable) || !isFixedIntegralType(variable->getType())) {
++                            reject("assertion-local-variable-context", variable->name);
++                            return;
++                        }
++                        variable->visit(visitor);
++                    }
++                    // Sequence/property wrapper types are not runtime values.
++                    // Audit their complete expanded clock, disable and body
++                    // expressions through the normal visitor instead.
++                    visitor.visitDefault(node);
++                    return;
++                }
++                if (node.kind == ExpressionKind::NewClass && node.type->isVoid() &&
++                    node.template as<NewClassExpression>().isSuperClass) {
++                    // super.new is a void wrapper, not a value. Its actual
++                    // constructor call and every argument still pass through
++                    // the ordinary closed-function and dependency checks.
++                    visitor.visitDefault(node);
++                    return;
++                }
 +                if (node.kind == ExpressionKind::Call) {
 +                    const auto& call = node.template as<CallExpression>();
 +                    if (diagnosticCall(call) || runtimeFormatCall(call) ||
-+                        localContainerCall(call)) {
++                        localScopeRandomizeCall(call) ||
++                        localContainerCall(call) || localStringCall(call) || fixedCoverageCall(call) ||
++                        (call.isSystemCall() && !call.thisClass() &&
++                         call.getKnownSystemName() == parsing::KnownSystemName::Cast &&
++                         call.arguments().size() == 2 &&
++                         isLocal(std::get<1>(call.subroutine).scope->asSymbol()))) {
 +                        visitor.visitDefault(node);
 +                        return;
 +                    }
 +                    if (!(call.isSystemCall() ? fixedSystemCall(call)
-+                                              : closedFunction(*std::get<0>(call.subroutine)))) {
++                                              : (closedFunction(*std::get<0>(call.subroutine)) ||
++                                                 fixedForeignCall(*std::get<0>(call.subroutine))))) {
 +                        reject("unproven-call", call.getSubroutineName());
 +                        return;
 +                    }
@@ -5095,12 +5904,15 @@ index ed7528f2c..d675b0d40 100644
 +                if (node.kind == ExpressionKind::StringLiteral)
 +                    return; // immutable literal data
 +                if (node.kind == ExpressionKind::NullLiteral ||
++                    node.kind == ExpressionKind::UnboundedLiteral ||
 +                    node.kind == ExpressionKind::EmptyArgument)
 +                    return;
 +                if (node.kind == ExpressionKind::ValueRange ||
++                    node.kind == ExpressionKind::Dist ||
 +                    (node.kind == ExpressionKind::Replication && node.type->isVoid())) {
-+                    // The range wrapper deliberately has void type. Its two
-+                    // bounds are the actual values and must pass the full audit.
++                    // These constraint wrappers deliberately have void type.
++                    // Audit all bounds, items and distribution weights; only
++                    // their bindings are retained, never a randomized result.
 +                    visitor.visitDefault(node);
 +                    return;
 +                }
@@ -5122,8 +5934,19 @@ index ed7528f2c..d675b0d40 100644
 +                        return;
 +                    }
 +                }
-+                if (node.kind == ExpressionKind::ArbitrarySymbol ||
-+                    !isFixedBodyValueType(*node.type, true)) {
++                if (node.kind == ExpressionKind::ArbitrarySymbol) {
++                    const auto& ref = node.template as<ArbitrarySymbolExpression>();
++                    const auto vif = node.type->getCanonicalType().template as_if<VirtualInterfaceType>();
++                    if (!vif || !vif->isRealIface || ref.symbol->kind != SymbolKind::Instance ||
++                        ref.symbol != &vif->iface || !isLocal(*ref.symbol) ||
++                        ref.hierRef.isUpward() || ref.hierRef.isViaIfacePort() ||
++                        std::ranges::any_of(ref.hierRef.path, [&](const auto& element) {
++                            return !isLocal(*element.symbol);
++                        }) || !isFixedBodyValueType(*node.type, true))
++                        reject("outside-interface-handle");
++                    return;
++                }
++                if (!isFixedBodyValueType(*node.type, true)) {
 +                    reject("expression-kind-or-type",
 +                           fmt::format("{} / {}", toString(node.kind),
 +                                       toString(node.type->getCanonicalType().kind)));
@@ -5132,33 +5955,101 @@ index ed7528f2c..d675b0d40 100644
 +                if (auto reference = node.getSymbolReference(/* allowPacked */ false);
 +                    reference && !isLocal(*reference)) {
 +                    auto scope = reference->getParentScope();
++                    const bool fixedRuntimeVariable = isFixedRuntimeBinding(*reference);
++                    if (fixedRuntimeVariable && !completeBodyReferenceTracking) {
++                        certificate.requiresFreshOwner = true;
++                        reject("fixed-reference-tracking", reference->name);
++                        return;
++                    }
 +                    if (!scope || !isFixedCompilation(scope->getCompilation()) ||
 +                        (reference->kind != SymbolKind::Parameter &&
-+                         reference->kind != SymbolKind::EnumValue)) {
++                         reference->kind != SymbolKind::EnumValue && !fixedRuntimeVariable)) {
 +                        reject("outside-expression-reference", reference->name);
 +                        return;
 +                    }
-+                    // A reference inside a borrowed body does not bind again in
-+                    // the consumer. Replay this actual immutable constant read,
-+                    // without inheriting other consumers' package usage flags.
-+                    if (auto syntax = reference->getSyntax())
-+                        certificate.references[syntax].first = true;
++                    // A retained package / class variable's binding is fixed,
++                    // not its runtime value. Complete cross-reference tracking below replays the
++                    // actual subtree reads / writes without taking aggregate
++                    // usage from unrelated callers. Constants are simple reads.
++                    if (!fixedRuntimeVariable)
++                        if (auto syntax = reference->getSyntax())
++                            certificate.references[syntax].first = true;
 +                }
 +            }
 +            if constexpr (std::same_as<T, ParameterSymbol>) {
 +                if (!node.getValue().isInteger()) {
 +                    size_t storageBytes = 0;
-+                    // Local constant tables are reconstructed by the fixed
-+                    // declaration, not by a root override / variant signature.
-+                    // Their full initializer and declared dimensions are audited
-+                    // below, just like scalar localparams.
-+                    if (!node.isLocalParam() ||
-+                        !fixedArrayConstant(fixedArrayConstant, node.getType(), node.getValue(),
++                    // Finite integral arrays have an owned deep value. Their
++                    // dimensions, nominal element types and actual values must
++                    // also match at import, including ordinary root overrides.
++                    // Audit defaults and internal initializers below as for
++                    // scalar parameters; an outside override is detached only
++                    // after the complete subtree certificate succeeds.
++                    if (!fixedArrayConstant(fixedArrayConstant, node.getType(), node.getValue(),
 +                                            storageBytes)) {
 +                        reject("noninteger-parameter", node.name);
 +                        return;
 +                    }
 +                    certificate.constantStorageBytes += storageBytes;
++                }
++                // A localparam (or a parameter inside this retained subtree)
++                // can query a local signal's fixed type without reading its
++                // runtime value. Keep the bound operand in the normal graph
++                // audit, but distinguish it from evaluated initializer inputs.
++                // Public root defaults still have to bind in parameter-only
++                // mode and must not depend on later ports or members.
++                const auto parameterBody = node.getParentScope()->getContainingInstance();
++                const bool allowTypeQuery = node.isLocalParam() || parameterBody != &retained;
++                auto fixedTypeQuery = [&](const CallExpression& call) {
++                    if (!allowTypeQuery || !fixedSystemCall(call) || call.arguments().empty() ||
++                        !call.arguments()[0]->type->isFixedSize() ||
++                        !isFixedIntegralType(*call.arguments()[0]->type))
++                        return false;
++                    using parsing::KnownSystemName;
++                    switch (call.getKnownSystemName()) {
++                        case KnownSystemName::Bits:
++                        case KnownSystemName::Low:
++                        case KnownSystemName::High:
++                        case KnownSystemName::Left:
++                        case KnownSystemName::Right:
++                        case KnownSystemName::Size:
++                        case KnownSystemName::Increment:
++                        case KnownSystemName::Dimensions:
++                        case KnownSystemName::UnpackedDimensions:
++                            return std::get<1>(call.subroutine).subroutine->isArgUnevaluated(0) &&
++                                   call.arguments()[0]->syntax;
++                        default:
++                            return false;
++                    }
++                };
++                flat_hash_set<const SyntaxNode*> typeQuerySyntax;
++                SmallVector<const Expression*, 8> queryExpressions;
++                auto queries = makeVisitor([&](auto& visitor, const auto& expression) {
++                    using E = std::remove_cvref_t<decltype(expression)>;
++                    if constexpr (std::same_as<E, CallExpression>) {
++                        if (fixedTypeQuery(expression)) {
++                            auto syntax = makeSyntaxVisitor([&](auto& self, const auto& part) {
++                                typeQuerySyntax.emplace(&part);
++                                self.visitDefault(part);
++                            });
++                            expression.arguments()[0]->syntax->visit(syntax);
++                        }
++                    }
++                    if constexpr (std::same_as<E, BinaryExpression>) {
++                        queryExpressions.push_back(&expression.right());
++                        queryExpressions.push_back(&expression.left());
++                    }
++                    else {
++                        visitor.visitDefault(expression);
++                    }
++                });
++                if (allowTypeQuery)
++                    if (auto initializer = node.getInitializer())
++                        queryExpressions.push_back(initializer);
++                while (!queryExpressions.empty()) {
++                    const auto expression = queryExpressions.back();
++                    queryExpressions.pop_back();
++                    expression->visit(queries);
 +                }
 +                // Even overridden defaults are name-checked natively. Replay
 +                // their actual fixed declaration uses (functions, types, enums)
@@ -5175,7 +6066,11 @@ index ed7528f2c..d675b0d40 100644
 +                        Lookup::name(syntax, context, LookupFlags::ForceHierarchical, result);
 +                        if (auto symbol = result.found) {
 +                            auto scope = symbol->getParentScope();
-+                            if ((isLocal(*symbol) &&
++                            const auto value = symbol->template as_if<ValueSymbol>();
++                            const bool localType = typeQuerySyntax.contains(&syntax) &&
++                                                   isLocal(*symbol) && value &&
++                                                   isFixedIntegralType(value->getType());
++                            if (localType || (isLocal(*symbol) &&
 +                                 (symbol->kind == SymbolKind::Parameter ||
 +                                  symbol->kind == SymbolKind::TypeParameter ||
 +                                  (symbol->kind == SymbolKind::TypeAlias &&
@@ -5183,8 +6078,12 @@ index ed7528f2c..d675b0d40 100644
 +                                    (closedClasses.contains(scope) &&
 +                                     isFixedIntegralType(symbol->as<Type>())))))) ||
 +                                (scope && isFixedCompilation(scope->getCompilation()))) {
-+                                if (auto declaration = symbol->getSyntax())
-+                                    certificate.references[declaration].first = true;
++                                // The symbol audit records the native read /
++                                // write flags for type-only operands; do not
++                                // manufacture a value read for this query.
++                                if (!localType)
++                                    if (auto declaration = symbol->getSyntax())
++                                        certificate.references[declaration].first = true;
 +                            }
 +                            else {
 +                                reject("parameter-default-dependency", symbol->name);
@@ -5204,11 +6103,18 @@ index ed7528f2c..d675b0d40 100644
 +                    syntax->visit(sourceUsage);
 +                // Overrides are independently evaluated in the current parent;
 +                // only their immutable value enters the retained body signature.
-+                const auto parameterBody = node.getParentScope()->getContainingInstance();
 +                if (!node.isOverridden() || parameterBody != &retained) {
 +                    SmallVector<const Expression*, 8> pendingInitializers;
 +                    auto probe = makeVisitor([&](auto& inner, const auto& expression) {
 +                        using E = std::remove_cvref_t<decltype(expression)>;
++                        if constexpr (std::same_as<E, CallExpression>) {
++                            if (fixedTypeQuery(expression)) {
++                                pendingExpressions.push_back(expression.arguments()[0]);
++                                for (auto argument : expression.arguments().subspan(1))
++                                    pendingInitializers.push_back(argument);
++                                return;
++                            }
++                        }
 +                        if constexpr (std::derived_from<E, Expression>) {
 +                            if (auto reference = expression.getSymbolReference()) {
 +                                auto scope = reference->getParentScope();
@@ -5246,6 +6152,8 @@ index ed7528f2c..d675b0d40 100644
 +                        using S = std::remove_cvref_t<decltype(syntax)>;
 +                        if constexpr (std::same_as<S, IdentifierNameSyntax> ||
 +                                      std::same_as<S, IdentifierSelectNameSyntax>) {
++                            if (typeQuerySyntax.contains(&syntax))
++                                return;
 +                            if (auto symbol = node.getParentScope()->find(
 +                                    syntax.identifier.valueText());
 +                                symbol && symbol->kind != SymbolKind::Parameter &&
@@ -5283,16 +6191,69 @@ index ed7528f2c..d675b0d40 100644
 +        };
 +        retained.visit(audit);
 +        drainExpressions();
++        for (const auto& [scope, expression] : defaultDisableMap) {
++            if (isLocal(scope->asSymbol())) {
++                expression->visit(audit);
++                drainExpressions();
++                certificate.defaultDisables.emplace_back(scope, expression);
++            }
++        }
++        for (const auto& [scope, clocking] : defaultClockingMap)
++            if (isLocal(*scope))
++                certificate.defaultClockings.emplace_back(scope, clocking);
 +        for (const auto& [scope, expression] : bodyElaborationControls)
 +            if (isLocal(scope->asSymbol())) {
 +                expression->visit(audit);
 +                drainExpressions();
 +            }
-+        for (size_t index = 0; independent && index < pendingTypes.size(); ++index) {
-+            pendingTypes[index]->visit(audit);
++        auto auditVirtualArguments = [&](const InstanceSymbol& instance) {
++            for (auto parameter : instance.body.getParameters()) {
++                const auto& symbol = parameter->symbol;
++                if (const auto value = symbol.as_if<ParameterSymbol>();
++                    value && value->isOverridden()) {
++                    if (auto expression = value->getInitializer())
++                        expression->visit(audit);
++                    if (auto syntax = value->getDeclaredType()->getInitializerSyntax())
++                        declarationNames(*syntax, *value, instance.getParentScope());
++                }
++                else if (const auto type = symbol.as_if<TypeParameterSymbol>();
++                         type && type->isOverridden()) {
++                    if (auto syntax = type->targetType.getTypeSyntax())
++                        declarationNames(*syntax, *type, instance.getParentScope());
++                }
++            }
++        };
++        size_t typeIndex = 0, prototypeIndex = 0, siteIndex = 0;
++        while (independent && (typeIndex < pendingTypes.size() ||
++                               prototypeIndex < pendingVirtualPrototypes.size() ||
++                               siteIndex < bodyVirtualIfaceSites.size())) {
++            if (typeIndex < pendingTypes.size())
++                pendingTypes[typeIndex++]->visit(audit);
++            else if (prototypeIndex < pendingVirtualPrototypes.size()) {
++                const auto* body = pendingVirtualPrototypes[prototypeIndex++];
++                auditVirtualArguments(*body->parentInstance);
++                body->visit(audit);
++            }
++            else {
++                const auto* instance = bodyVirtualIfaceSites[siteIndex++];
++                if (isLocal(*instance))
++                    auditVirtualArguments(*instance);
++            }
 +            drainExpressions();
 +        }
 +        if (independent) {
++            // Visiting later children can bind port expressions that refer to
++            // declarations visited earlier. Snapshot their final local usage
++            // only after the complete subtree and its dependencies are bound.
++            for (const auto& [symbol, usage] : bodyReferenceStatus) {
++                if (isLocal(*symbol)) {
++                    if (auto syntax = symbol->getSyntax()) {
++                        auto& profile = certificate.references[syntax];
++                        profile.first |= usage.first;
++                        profile.second |= usage.second;
++                    }
++                }
++            }
 +            for (const auto& [binding, usage] : bodyCrossReferences) {
 +                if (!isLocal(binding.first->asSymbol()))
 +                    continue;
@@ -5311,6 +6272,8 @@ index ed7528f2c..d675b0d40 100644
 +            if (isLocal(scope->asSymbol()))
 +                certificate.instantiationSites.push_back(definition);
 +        flat_hash_set<const DefinitionSymbol*> subtreeDefinitions{&retained.getDefinition()};
++        subtreeDefinitions.insert(virtualPrototypeDefinitions.begin(),
++                                   virtualPrototypeDefinitions.end());
 +        for (auto body : certificate.descendants)
 +            subtreeDefinitions.emplace(&body->getDefinition());
 +        // Keep raw occurrences: producer coalescing has already discarded instance
@@ -5318,7 +6281,10 @@ index ed7528f2c..d675b0d40 100644
 +        auto fixedLocation = [&](SourceLocation location) {
 +            if (!location)
 +                return true;
-+            location = sourceManager->getFullyOriginalLoc(location);
++            // The frozen invocation owns the expanded code. Its spelling can
++            // reside in an included macro header outside any module declaration.
++            // Keep ordinary caller locations outside this boundary rejected.
++            location = sourceManager->getFullyExpandedLoc(location);
 +            for (auto definition : subtreeDefinitions) {
 +                auto range = definition->getSyntax()->sourceRange();
 +                if (location.buffer() == range.start().buffer() &&
@@ -5336,8 +6302,50 @@ index ed7528f2c..d675b0d40 100644
 +                }
 +            return false;
 +        };
++        auto fixedAssertionTargetError = [&](const Diagnostic& diagnostic) {
++            if (diagnostic.code != diag::ExpectedScopeOrAssert || !diagnostic.symbol)
++                return false;
++            const auto syntax = diagnostic.symbol->getSyntax();
++            if (!syntax)
++                return false;
++            bool literalTarget = false;
++            auto visitor = makeSyntaxVisitor([&](auto& self, const auto& node) {
++                using T = std::remove_cvref_t<decltype(node)>;
++                if constexpr (std::same_as<T, InvocationExpressionSyntax>) {
++                    if (node.left->kind != SyntaxKind::SystemName || !node.arguments ||
++                        node.arguments->parameters.size() != 2 || !node.attributes.empty())
++                        return;
++                    const auto name = node.left->template as<SystemNameSyntax>()
++                                          .systemIdentifier.valueText();
++                    if (name != "$asserton" && name != "$assertoff" && name != "$assertkill")
++                        return;
++                    auto argument = [&](size_t index) -> const ExpressionSyntax* {
++                        const auto ordered = node.arguments->parameters[index]
++                                                 ->template as_if<OrderedArgumentSyntax>();
++                        if (!ordered || ordered->expr->kind != SyntaxKind::SimplePropertyExpr)
++                            return nullptr;
++                        const auto& sequence = ordered->expr->template as<SimplePropertyExprSyntax>();
++                        const auto simple = sequence.expr->template as_if<SimpleSequenceExprSyntax>();
++                        return simple && !simple->repetition ? simple->expr : nullptr;
++                    };
++                    const auto level = argument(0), target = argument(1);
++                    // Native rejects a string literal as a scope target before
++                    // doing any hierarchy lookup. With a literal level as well,
++                    // this exact error cannot depend on a mutable caller. Keep
++                    // and replay it; other errors and dynamic arguments decline.
++                    if (level && target && level->kind == SyntaxKind::IntegerLiteralExpression &&
++                        target->kind == SyntaxKind::StringLiteralExpression &&
++                        target->sourceRange().start() == diagnostic.location)
++                        literalTarget = true;
++                }
++                else
++                    self.visitDefault(node);
++            });
++            syntax->visit(visitor);
++            return literalTarget;
++        };
 +        auto fixedDiagnostic = [&](auto&& self, const Diagnostic& diagnostic) -> bool {
-+            if (diagnostic.isError() || diagnostic.coalesceCount ||
++            if ((diagnostic.isError() && !fixedAssertionTargetError(diagnostic)) || diagnostic.coalesceCount ||
 +                !fixedLocation(diagnostic.location) ||
 +                (diagnostic.symbol && !isLocal(*diagnostic.symbol)))
 +                return false;
@@ -5359,10 +6367,18 @@ index ed7528f2c..d675b0d40 100644
 +            if (!isLocal(*diagnostic.symbol))
 +                return; // Outside root port / parameter connections are rebound.
 +            if (!fixedDiagnostic(fixedDiagnostic, diagnostic)) {
++                if (std::getenv("SLANG_SCOPE_BODY_TRACE")) {
++                    Diagnostics one;
++                    one.push_back(diagnostic);
++                    auto text = DiagnosticEngine::reportAll(*sourceManager, one);
++                    std::replace(text.begin(), text.end(), '\n', ' ');
++                    fmt::print(stderr, "scope-body decline-diagnostic\t{}\t{}\n",
++                               retained.getHierarchicalPath(), text);
++                }
 +                reject("mutable-diagnostic-context");
 +                return;
 +            }
-+            certificate.diagnostics.push_back(&diagnostic);
++            certificate.diagnostics.push_back(diagnostic);
 +        });
 +
 +        // Reference profiles contain only body-local binding origins. Current
@@ -5378,6 +6394,34 @@ index ed7528f2c..d675b0d40 100644
 +           found->second->requiresFreshOwner;
 +}
 +
++bool Compilation::hasUncertifiedInstanceBodyErrors() {
++    if (!isElaborated() || hasFatalErrors() ||
++        std::ranges::any_of(getParseDiagnostics(),
++                           [](const Diagnostic& diagnostic) { return diagnostic.isError(); }))
++        return true;
++    if (!hasIssuedErrors())
++        return false;
++    using Occurrence = std::tuple<DiagCode, SourceLocation, const Symbol*>;
++    flat_hash_set<Occurrence> certified;
++    for (const auto& [_, certificate] : bodyReuseCertificates)
++        if (certificate->independent)
++            for (const auto& diagnostic : certificate->diagnostics)
++                if (diagnostic.isError())
++                    certified.emplace(diagnostic.code, diagnostic.location, diagnostic.symbol);
++    // The compiler's error counter counts code/location groups, while coverage
++    // must account for every instance occurrence within each group.
++    flat_hash_set<std::tuple<DiagCode, SourceLocation>> errors;
++    bool unclaimed = false;
++    diagMap.visitRaw([&](const Diagnostic& diagnostic) {
++        if (diagnostic.isError()) {
++            errors.emplace(diagnostic.code, diagnostic.location);
++            unclaimed |= !certified.contains(
++                Occurrence{diagnostic.code, diagnostic.location, diagnostic.symbol});
++        }
++    });
++    return unclaimed || errors.size() != numErrors;
++}
++
 +bool Compilation::hasMatchingInstanceBodyParameters(const InstanceBodySymbol& retained,
 +                                                    const InstanceBodySymbol& target) const {
 +    if (&target.getCompilation() != this || retained.parameters.size() != target.parameters.size())
@@ -5387,6 +6431,11 @@ index ed7528f2c..d675b0d40 100644
 +    const auto previousMode = target.parameterLookupMode;
 +    target.parameterLookupMode = true;
 +    auto restore = ScopeGuard([&] { target.parameterLookupMode = previousMode; });
++    const auto& provider = retained.getCompilation();
++    const auto proof = provider.bodyReuseCertificates.find(&retained);
++    const bool certified = proof != provider.bodyReuseCertificates.end() &&
++                           proof->second->independent &&
++                           &retained.getDefinition() == &target.getDefinition();
 +    auto origin = [](const Symbol& x, const Symbol& y) {
 +        if (x.isType() && y.isType()) {
 +            const auto& xt = x.as<Type>();
@@ -5436,6 +6485,8 @@ index ed7528f2c..d675b0d40 100644
 +            return x.as<FixedSizeUnpackedArrayType>().range ==
 +                       y.as<FixedSizeUnpackedArrayType>().range &&
 +                   self(self, *x.getArrayElementType(), *y.getArrayElementType());
++        if (x.isString())
++            return y.isString();
 +        if (!x.isIntegral() || !y.isIntegral() || x.getBitWidth() != y.getBitWidth() ||
 +            x.isSigned() != y.isSigned() || x.isFourState() != y.isFourState())
 +            return false;
@@ -5483,6 +6534,14 @@ index ed7528f2c..d675b0d40 100644
 +        const auto& right = target.parameters[i]->symbol;
 +        if (left.kind != right.kind)
 +            return false;
++        // A certified localparam is derived entirely from the fixed declaration,
++        // closed type dependencies and the public parameters checked below. It
++        // cannot be overridden. Rebinding it could require ports / members while
++        // this lookup must remain reentrant and parameter-only.
++        if (certified && retained.parameters[i]->isLocalParam() &&
++            target.parameters[i]->isLocalParam() && left.getSyntax() &&
++            left.getSyntax() == right.getSyntax() && left.name == right.name)
++            continue;
 +        if (left.kind == SymbolKind::TypeParameter) {
 +            if (!preparedEnums) {
 +                target.elaborate(); // enum previews only while parameterLookupMode is set
@@ -5518,16 +6577,17 @@ index ed7528f2c..d675b0d40 100644
 +        const auto& bt = b.getType();
 +        const bool scalar = at.isIntegral() && bt.isIntegral() && a.getValue().isInteger() &&
 +                            b.getValue().isInteger();
-+        // Body localparams also appear in the native parameter vector. They
-+        // cannot be overridden, but their shape and deep value still form part
-+        // of the certificate for a new parameterization of this instance.
-+        const bool localArray =
-+            a.isLocalParam() && b.isLocalParam() &&
++        const bool string = at.isString() && bt.isString() &&
++                            retainableStringConstant(a.getValue()) &&
++                            retainableStringConstant(b.getValue());
++        // Shape, nominal elements and every array element form the signature,
++        // whether the value came from a default or a current-parent override.
++        const bool fixedArray =
 +            at.getCanonicalType().kind == SymbolKind::FixedSizeUnpackedArrayType &&
 +            bt.getCanonicalType().kind == SymbolKind::FixedSizeUnpackedArrayType &&
 +            isFixedInstanceBodyTypeArgument(bt, target) && a.getValue().isUnpacked() &&
 +            b.getValue().isUnpacked();
-+        if ((!scalar && !localArray) || a.isLocalParam() != b.isLocalParam() ||
++        if ((!scalar && !string && !fixedArray) || a.isLocalParam() != b.isLocalParam() ||
 +            !sameType(sameType, at, bt) || a.isOverridden() != b.isOverridden() ||
 +            a.getValue() != b.getValue() || a.isImplicitString({}) != b.isImplicitString({}))
 +            return false;
@@ -5544,8 +6604,34 @@ index ed7528f2c..d675b0d40 100644
 +        auto& value = const_cast<ParameterSymbol&>(parameter->symbol.as<ParameterSymbol>());
 +        if (value.isOverridden()) {
 +            auto range = SourceRange(value.location, value.location + value.name.length());
-+            auto literal = emplace<IntegerLiteral>(*this, value.getType(),
-+                                                   value.getValue().integer(), false, range);
++            auto ownedLiteral = [&](auto&& self, const Type& type,
++                                     const ConstantValue& constant) -> Expression* {
++                if (constant.isInteger())
++                    return emplace<IntegerLiteral>(*this, type, constant.integer(), false, range);
++                if (constant.isString()) {
++                    SLANG_ASSERT(retainableStringConstant(constant));
++                    const auto& value = constant.str();
++                    auto valueBytes = copyFrom<char>(std::span(value.data(), value.size()));
++                    const auto raw = quoteSVString(value);
++                    auto rawBytes = copyFrom<char>(std::span(raw.data(), raw.size()));
++                    auto integer = constant.convertToInt();
++                    auto& literalType = getType(integer.integer().getBitWidth(),
++                                                IntegralFlags::Unsigned);
++                    auto literal = emplace<StringLiteral>(
++                        literalType, std::string_view(valueBytes.data(), valueBytes.size()),
++                        std::string_view(rawBytes.data(), rawBytes.size()),
++                        *allocConstant(std::move(integer)), range);
++                    return emplace<ConversionExpression>(type, ConversionKind::Implicit, *literal,
++                                                          range);
++                }
++                const auto& array = type.getCanonicalType().as<FixedSizeUnpackedArrayType>();
++                SmallVector<const Expression*> elements;
++                for (const auto& element : std::get<ConstantValue::Elements>(constant.getVariant()))
++                    elements.push_back(self(self, array.elementType, element));
++                return emplace<SimpleAssignmentPatternExpression>(
++                    type, false, elements.copy(*this), range);
++            };
++            auto literal = ownedLiteral(ownedLiteral, value.getType(), value.getValue());
 +            value.getDeclaredType()->setRetainedInitializer(*literal, value.location);
 +        }
 +    }
@@ -5598,7 +6684,8 @@ index ed7528f2c..d675b0d40 100644
 +    size_t result = mapBytes(bodyReferenceStatus) + mapBytes(bodyCrossReferences) +
 +                    mapBytes(bodyReuseCertificates) + mapBytes(importedBodyCanonicalInstances) +
 +                    mapBytes(fixedBodyTypeOrigins) + mapBytes(importedBodyTypeIdentities) +
-+                    mapBytes(fixedBodyTypePresentations);
++                    mapBytes(fixedBodyTypePresentations) + mapBytes(forcedImportedWildcardScopes) +
++                    mapBytes(bodyVirtualIfaceProofs);
 +    {
 +        std::lock_guard lock(bodyDependencyMutex);
 +        result += mapBytes(externalBodyDependencySyntax);
@@ -5608,6 +6695,17 @@ index ed7528f2c..d675b0d40 100644
 +    for (const auto& [_, origin] : fixedBodyTypeOrigins)
 +        result += origin.capacity() + 1;
 +    result += bodyDefinitionSites.capacity() * sizeof(decltype(bodyDefinitionSites)::value_type);
++    result += bodyVirtualIfaceSites.capacity() * sizeof(const InstanceSymbol*);
++    result += importedVirtualIfaceOverrides.capacity() *
++              sizeof(std::unique_ptr<HierarchyOverrideNode>);
++    for (const auto& overrides : importedVirtualIfaceOverrides) {
++        result += sizeof(HierarchyOverrideNode) + mapBytes(overrides->paramOverrides) +
++                  mapBytes(overrides->childNodes) +
++                  overrides->binds.capacity() * sizeof(decltype(overrides->binds)::value_type);
++        for (const auto& [_, argument] : overrides->paramOverrides)
++            if (auto value = std::get_if<HierarchyOverrideNode::ValueParamOverride>(&argument))
++                result += fixedOverrideStorage(value->value).value_or(0);
++    }
 +    result += bodyElaborationControls.capacity() *
 +              sizeof(decltype(bodyElaborationControls)::value_type);
 +    result += bodyReuseCertificates.size() * sizeof(BodyReuseCertificate);
@@ -5617,9 +6715,19 @@ index ed7528f2c..d675b0d40 100644
 +        result += certificate->descendants.capacity() * sizeof(const InstanceBodySymbol*);
 +        result += certificate->classes.capacity() * sizeof(const Type*);
 +        result += certificate->instantiationSites.capacity() * sizeof(const DefinitionSymbol*);
-+        result += certificate->diagnostics.capacity() * sizeof(const Diagnostic*);
++        result += certificate->diagnostics.capacity() * sizeof(Diagnostic);
++        for (const auto& diagnostic : certificate->diagnostics)
++            result += retainedDiagnosticStorage(diagnostic);
++        result += certificate->defaultDisables.capacity() *
++                  sizeof(decltype(certificate->defaultDisables)::value_type);
++        result += certificate->defaultClockings.capacity() *
++                  sizeof(decltype(certificate->defaultClockings)::value_type);
 +    }
 +    result += importedBodyClasses.capacity() * sizeof(const Type*);
++    result += mapBytes(certifiedBodyClassStates);
++    for (const auto& [_, state] : certifiedBodyClassStates)
++        result += sizeof(detail::ClassSpecializationState) + mapBytes(state->instantiated) +
++                  mapBytes(state->uninstantiated);
 +    return result;
 +}
 +
@@ -5631,6 +6739,15 @@ index ed7528f2c..d675b0d40 100644
 +
 +bool Compilation::isImportedInstanceBody(const InstanceBodySymbol& body) const {
 +    return importedBodyViews.contains(&body);
++}
++
++std::vector<std::string> Compilation::getImportedInstanceBodyPaths() const {
++    std::vector<std::string> result;
++    for (auto certificate : importedBodyCertificates)
++        result.push_back(certificate->root->getHierarchicalPath());
++    std::ranges::sort(result);
++    result.erase(std::unique(result.begin(), result.end()), result.end());
++    return result;
 +}
 +
 +const InstanceBodySymbol* Compilation::getCanonicalInstanceBody(
@@ -5708,6 +6825,24 @@ index ed7528f2c..d675b0d40 100644
 +    return nullptr;
 +}
 +
++const Type* Compilation::findCertifiedBodyClass(const GenericClassDefSymbol& symbol,
++                                                const detail::ClassSpecializationKey& key,
++                                                bool uninstantiated) const {
++    for (const Compilation* context : {this, static_cast<const Compilation*>(bodyQueryContext.get())}) {
++        if (!context)
++            continue;
++        auto found = context->certifiedBodyClassStates.find(&symbol);
++        if (found == context->certifiedBodyClassStates.end())
++            continue;
++        const auto& cache = uninstantiated ? found->second->uninstantiated
++                                          : found->second->instantiated;
++        for (const auto& [existing, type] : cache)
++            if (key.matchesArguments(existing) && canReuseBodyClassSpecialization(*type))
++                return type;
++    }
++    return nullptr;
++}
++
 +bool Compilation::canReuseBodyClassSpecialization(const Type& type) const {
 +    if (!bodyQueryContext)
 +        return true;
@@ -5717,13 +6852,43 @@ index ed7528f2c..d675b0d40 100644
 +
 +void Compilation::addSyntaxTree(std::shared_ptr<SyntaxTree> tree, bool reuseImportedPackages) {
 +    bodyBindContextCompatible.reset();
-     SLANG_ASSERT(!isFrozen());
- 
-     if (!tree)
-@@ -205,6 +2095,36 @@ void Compilation::addSyntaxTree(std::shared_ptr<SyntaxTree> tree) {
-     root->addMember(*unit);
-     compilationUnits.push_back(unit);
- 
++    SLANG_ASSERT(!isFrozen());
++
++    if (!tree)
++        SLANG_THROW(std::invalid_argument("tree cannot be null"));
++
++    if (finalized)
++        SLANG_THROW(std::logic_error("The compilation has already been finalized"));
++
++    if (&tree->sourceManager() != sourceManager) {
++        if (!sourceManager)
++            sourceManager = &tree->sourceManager();
++        else {
++            SLANG_THROW(std::logic_error(
++                "All syntax trees added to the compilation must use the same source manager"));
++        }
++    }
++
++    auto lib = tree->getSourceLibrary();
++    if (lib) {
++        auto& entry = libraryNameMap[lib->name];
++        SLANG_ASSERT(entry == nullptr || entry == lib);
++        entry = lib;
++    }
++    else {
++        lib = defaultLibPtr;
++    }
++
++    const SyntaxNode& node = tree->root();
++    const SyntaxNode* topNode = &node;
++    while (topNode->parent)
++        topNode = topNode->parent;
++
++    auto unit = emplace<CompilationUnitSymbol>(*this, *lib);
++    unit->setSyntax(*topNode);
++    root->addMember(*unit);
++    compilationUnits.push_back(unit);
++
 +    if (reuseImportedPackages && !importedUnitDeclarations.empty()) {
 +        std::vector<const Symbol*> fixed;
 +        for (const auto& [_, symbols] : importedUnitDeclarations)
@@ -5754,13 +6919,32 @@ index ed7528f2c..d675b0d40 100644
 +        }
 +    }
 +
-     for (auto& [n, meta] : tree->getMetadata().nodeMeta) {
-         SyntaxMetadata result;
-         result.tree = tree.get();
-@@ -231,16 +2151,57 @@ void Compilation::addSyntaxTree(std::shared_ptr<SyntaxTree> tree) {
-     for (auto& inst : tree->getMetadata().globalInstances)
-         globalInstantiations.emplace(inst->type.valueText());
- 
++    for (auto& [n, meta] : tree->getMetadata().nodeMeta) {
++        SyntaxMetadata result;
++        result.tree = tree.get();
++        result.defaultNetType = &getNetType(meta.defaultNetType);
++        result.timeScale = meta.timeScale;
++
++        switch (meta.unconnectedDrive) {
++            case TokenKind::Pull0Keyword:
++                result.unconnectedDrive = UnconnectedDrive::Pull0;
++                break;
++            case TokenKind::Pull1Keyword:
++                result.unconnectedDrive = UnconnectedDrive::Pull1;
++                break;
++            default:
++                result.unconnectedDrive = UnconnectedDrive::None;
++                break;
++        }
++
++        result.cellDefine = meta.cellDefine;
++
++        syntaxMetadata[n] = result;
++    }
++
++    for (auto& inst : tree->getMetadata().globalInstances)
++        globalInstantiations.emplace(inst->type.valueText());
++
 +    auto addMember = [&](const SyntaxNode& member) {
 +        if (reuseImportedPackages && !importedUnitDeclarations.empty()) {
 +            auto original = importedUnitDeclarations.find(&member);
@@ -5802,49 +6986,74 @@ index ed7528f2c..d675b0d40 100644
 +        }
 +        unit->addMembers(member);
 +    };
-     if (node.kind == SyntaxKind::CompilationUnit) {
-         for (auto member : node.as<CompilationUnitSyntax>().members)
--            unit->addMembers(*member);
++    if (node.kind == SyntaxKind::CompilationUnit) {
++        for (auto member : node.as<CompilationUnitSyntax>().members)
 +            addMember(*member);
-     }
-     else if (node.kind == SyntaxKind::LibraryMap) {
-         for (auto member : node.as<LibraryMapSyntax>().members)
-             unit->addMembers(*member);
-     }
-     else {
--        unit->addMembers(node);
++    }
++    else if (node.kind == SyntaxKind::LibraryMap) {
++        for (auto member : node.as<LibraryMapSyntax>().members)
++            unit->addMembers(*member);
++    }
++    else {
 +        addMember(node);
-     }
- 
-     syntaxTrees.emplace_back(std::move(tree));
-@@ -262,10 +2223,14 @@ std::span<const std::shared_ptr<SyntaxTree>> Compilation::getSyntaxTrees() const
- }
- 
- std::span<const CompilationUnitSymbol* const> Compilation::getCompilationUnits() const {
++    }
++
++    syntaxTrees.emplace_back(std::move(tree));
++    cachedParseDiagnostics.reset();
++}
++
++HierarchyOverrideNode& Compilation::getOrAddTopLevelHierarchyOverride(
++    const SyntaxNode& definitionSyntax) {
++    SLANG_ASSERT(!isFrozen());
++
++    if (finalized)
++        SLANG_THROW(std::logic_error("The compilation has already been finalized"));
++
++    return hierarchyOverrides.childNodes[definitionSyntax];
++}
++
++std::span<const std::shared_ptr<SyntaxTree>> Compilation::getSyntaxTrees() const {
++    return syntaxTrees;
++}
++
++std::span<const CompilationUnitSymbol* const> Compilation::getCompilationUnits() const {
 +    if (bodyQueryContext)
 +        return bodyQueryContext->getCompilationUnits();
-     return compilationUnits;
- }
- 
- std::vector<const Symbol*> Compilation::getDefinitions() const {
++    return compilationUnits;
++}
++
++std::vector<const Symbol*> Compilation::getDefinitions() const {
 +    if (bodyQueryContext)
 +        return bodyQueryContext->getDefinitions();
-     std::vector<const Symbol*> result;
-     for (auto& [key, val] : definitionMap) {
-         for (auto sym : val.first) {
-@@ -279,6 +2244,8 @@ std::vector<const Symbol*> Compilation::getDefinitions() const {
- }
- 
- std::vector<const PackageSymbol*> Compilation::getPackages() const {
++    std::vector<const Symbol*> result;
++    for (auto& [key, val] : definitionMap) {
++        for (auto sym : val.first) {
++            result.insert(std::ranges::upper_bound(result, sym->name, {},
++                                                   [](auto item) { return item->name; }),
++                          sym);
++        }
++    }
++
++    return result;
++}
++
++std::vector<const PackageSymbol*> Compilation::getPackages() const {
 +    if (bodyQueryContext)
 +        return bodyQueryContext->getPackages();
-     std::vector<const PackageSymbol*> result;
-     for (auto& [name, pkg] : packageMap) {
-         result.insert(
-@@ -293,11 +2260,240 @@ const SourceLibrary* Compilation::getSourceLibrary(std::string_view name) const
-     return nullptr;
- }
- 
++    std::vector<const PackageSymbol*> result;
++    for (auto& [name, pkg] : packageMap) {
++        result.insert(
++            std::ranges::upper_bound(result, name, {}, [](auto item) { return item->name; }), pkg);
++    }
++    return result;
++}
++
++const SourceLibrary* Compilation::getSourceLibrary(std::string_view name) const {
++    if (auto it = libraryNameMap.find(name); it != libraryNameMap.end())
++        return it->second;
++    return nullptr;
++}
++
 +namespace {
 +thread_local Compilation* bodyQueryReferenceTarget = nullptr;
 +thread_local const SubroutineSymbol* bodyReferenceOrigin = nullptr;
@@ -5967,8 +7176,9 @@ index ed7528f2c..d675b0d40 100644
 +                mark(cls);
 +            else
 +                dependents[use.parent].push_back(cls);
-+        }
-+    }
+         }
+     }
+-
 +    for (size_t i = 0; i < pending.size(); ++i) {
 +        poll();
 +        if (auto found = dependents.find(pending[i]); found != dependents.end())
@@ -5985,9 +7195,14 @@ index ed7528f2c..d675b0d40 100644
 +    }
 +    if (checkpoint)
 +        checkpoint();
-+    return result;
-+}
-+
+     return result;
+ }
+ 
+-std::vector<const PackageSymbol*> Compilation::getPackages() const {
+-    std::vector<const PackageSymbol*> result;
+-    for (auto& [name, pkg] : packageMap) {
+-        result.insert(
+-            std::ranges::upper_bound(result, name, {}, [](auto item) { return item->name; }), pkg);
 +void Compilation::setBodyQueryContext(std::shared_ptr<Compilation> owner,
 +                                      std::shared_ptr<SyntaxTree> bodyTree) {
 +    if (!owner || owner.get() == this || bodyQueryContext || finalized || !owner->isFinalized())
@@ -5999,14 +7214,19 @@ index ed7528f2c..d675b0d40 100644
 +    if (bodyTree) {
 +        sourceManager = &bodyTree->sourceManager();
 +        syntaxTrees.push_back(std::move(bodyTree));
-+    }
+     }
+-    return result;
 +    // Built-in process / mailbox / semaphore handles must retain nominal identity
 +    // with declarations in the borrowed lexical scopes.
 +    stdPkg = bodyQueryContext->stdPkg;
 +    packageMap[stdPkg->name] = stdPkg;
 +    finalized = true;
-+}
-+
+ }
+ 
+-const SourceLibrary* Compilation::getSourceLibrary(std::string_view name) const {
+-    if (auto it = libraryNameMap.find(name); it != libraryNameMap.end())
+-        return it->second;
+-    return nullptr;
 +Diagnostics Compilation::getBodyQueryDiagnostics(const std::function<void()>& checkpoint) {
 +    if (!bodyQueryContext)
 +        SLANG_THROW(std::logic_error("detached body context required"));
@@ -6053,8 +7273,8 @@ index ed7528f2c..d675b0d40 100644
 +    if (!hierarchicalAssignments.empty() || !virtualIfaceInstances.empty())
 +        SLANG_THROW(std::logic_error("detached body requires design-dependent finalization"));
 +    return diagMap.coalesce(sourceManager, this);
-+}
-+
+ }
+ 
  const RootSymbol& Compilation::getRoot() {
 +    // Keep finalized lookups on the ordinary path free of callback temporaries.
 +    if (bodyQueryContext)
@@ -6083,7 +7303,7 @@ index ed7528f2c..d675b0d40 100644
      if (finalized)
          return *root;
  
-@@ -310,9 +2506,19 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
+@@ -310,20 +3433,43 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
              defaultLiblist.push_back(lib);
      }
  
@@ -6103,16 +7323,32 @@ index ed7528f2c..d675b0d40 100644
  
      // If there are defparams we need to fully resolve their values up front before
      // we start elaborating any instances.
-@@ -320,7 +2526,7 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
+     if (!skipDefParamsAndBinds) {
++        bool resolve = false;
          for (auto& tree : syntaxTrees) {
              auto& meta = tree->getMetadata();
              if (meta.hasDefparams || meta.hasBindDirectives) {
 -                resolveDefParamsAndBinds();
-+                resolveDefParamsAndBinds(checkpoint);
++                resolve = true;
                  break;
              }
          }
-@@ -398,7 +2604,7 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
++        if (!resolve)
++            for (const auto definition : importedDefinitions) {
++                if (definition->syntaxTree) {
++                    const auto& meta = definition->syntaxTree->getMetadata();
++                    if (meta.hasDefparams || meta.hasBindDirectives) {
++                        resolve = true;
++                        break;
++                    }
++                }
++            }
++        if (resolve)
++            resolveDefParamsAndBinds(checkpoint);
+     }
+ 
+     SLANG_ASSERT(!finalizing);
+@@ -398,7 +3544,7 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
              if (inserted) {
                  topDefs.push_back({result, sourceRange});
                  SLANG_ASSERT(def->kind == SymbolKind::Definition);
@@ -6121,7 +7357,7 @@ index ed7528f2c..d675b0d40 100644
              }
              else {
                  auto& diag = root->addDiag(diag::MultipleTopDupName, sourceRange.start()
-@@ -465,8 +2671,7 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
+@@ -465,8 +3611,7 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
                          else {
                              // Otherwise, issue an error because the user asked us to instantiate
                              // this.
@@ -6131,7 +7367,7 @@ index ed7528f2c..d675b0d40 100644
                                  << userProvidedName;
                          }
                          continue;
-@@ -510,7 +2715,7 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
+@@ -510,7 +3655,7 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
  
                  auto& def = defSym->as<DefinitionSymbol>();
                  if (globalInstantiations.find(def.name) == globalInstantiations.end() &&
@@ -6140,7 +7376,7 @@ index ed7528f2c..d675b0d40 100644
                      unreferencedDefs.push_back(&def);
                  }
              }
-@@ -549,10 +2754,16 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
+@@ -549,10 +3694,16 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
              hierarchyOverrideNode = &sit->second;
          }
  
@@ -6157,7 +7393,7 @@ index ed7528f2c..d675b0d40 100644
      }
  
      if (!hasFlag(CompilationFlags::LintMode | CompilationFlags::AllowTopLevelIfacePorts) &&
-@@ -562,7 +2773,7 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
+@@ -562,7 +3713,7 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
  
      // For unreferenced definitions, go through and instantiate them with all empty
      // parameter values so that we get at least some semantic checking of the contents.
@@ -6166,7 +7402,7 @@ index ed7528f2c..d675b0d40 100644
          for (auto def : unreferencedDefs) {
              const HierarchyOverrideNode* hierarchyOverrideNode = nullptr;
              if (auto* syntax = def->getSyntax()) {
-@@ -571,10 +2782,13 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
+@@ -571,10 +3722,13 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
                      hierarchyOverrideNode = &it->second;
                  }
              }
@@ -6180,7 +7416,7 @@ index ed7528f2c..d675b0d40 100644
      root->topInstances = topList.copy(*this);
      root->compilationUnits = compilationUnits;
      finalizing = false;
-@@ -595,6 +2809,8 @@ const CompilationUnitSymbol* Compilation::getCompilationUnit(
+@@ -595,6 +3749,8 @@ const CompilationUnitSymbol* Compilation::getCompilationUnit(
  
  Compilation::DefinitionLookupResult Compilation::tryGetDefinition(std::string_view lookupName,
                                                                    const Scope& scope) const {
@@ -6189,7 +7425,7 @@ index ed7528f2c..d675b0d40 100644
      // Try to find a config block for this scope to help choose the right definition.
      const ResolvedConfig* resolvedConfig = nullptr;
      if (auto inst = scope.getContainingInstance(); inst && inst->parentInstance)
-@@ -734,6 +2950,10 @@ const DefinitionSymbol* Compilation::getDefinition(const Scope& scope,
+@@ -734,6 +3890,10 @@ const DefinitionSymbol* Compilation::getDefinition(const Scope& scope,
  
              lookupScope = lookupScope->asSymbol().getParentScope();
          } while (lookupScope);
@@ -6200,7 +7436,7 @@ index ed7528f2c..d675b0d40 100644
      }
      return nullptr;
  }
-@@ -824,6 +3044,27 @@ void Compilation::createDefinition(const Scope& scope, LookupLocation location,
+@@ -824,6 +3984,27 @@ void Compilation::createDefinition(const Scope& scope, LookupLocation location,
                                     const ModuleDeclarationSyntax& syntax) {
      SLANG_ASSERT(!isFrozen());
  
@@ -6228,7 +7464,7 @@ index ed7528f2c..d675b0d40 100644
      // We can only be missing metadata if the definition is created programmatically
      // (i.e. not via the parser) so we just fill in the parent's default net type
      // so that it's not a null pointer.
-@@ -893,7 +3134,7 @@ void Compilation::insertDefinition(Symbol& symbol, const Scope& scope) {
+@@ -893,7 +4074,7 @@ void Compilation::insertDefinition(Symbol& symbol, const Scope& scope) {
              for (auto v = vecIt; v != defList.end(); v++) {
                  auto vSym = *v;
                  auto vLib = vSym->getSourceLibrary();
@@ -6237,7 +7473,7 @@ index ed7528f2c..d675b0d40 100644
                      // Duplicate in the same library.
                      if (hasFlag(CompilationFlags::AllowLibModuleRedefinition)) {
                          // Silently keep the first definition and discard all subsequent ones,
-@@ -971,12 +3212,31 @@ void Compilation::insertDefinition(Symbol& symbol, const Scope& scope) {
+@@ -971,12 +4152,31 @@ void Compilation::insertDefinition(Symbol& symbol, const Scope& scope) {
  }
  
  const PackageSymbol* Compilation::getPackage(std::string_view lookupName) const {
@@ -6270,7 +7506,7 @@ index ed7528f2c..d675b0d40 100644
  const PackageSymbol& Compilation::createPackage(const Scope& scope,
                                                  const ModuleDeclarationSyntax& syntax) {
      SLANG_ASSERT(!isFrozen());
-@@ -1077,6 +3337,8 @@ void Compilation::addSystemMethod(SymbolKind typeKind,
+@@ -1077,6 +4277,8 @@ void Compilation::addSystemMethod(SymbolKind typeKind,
  }
  
  const SystemSubroutine* Compilation::getSystemSubroutine(std::string_view name) const {
@@ -6279,7 +7515,7 @@ index ed7528f2c..d675b0d40 100644
      auto it = subroutineNameMap.find(name);
      if (it == subroutineNameMap.end())
          return nullptr;
-@@ -1085,12 +3347,15 @@ const SystemSubroutine* Compilation::getSystemSubroutine(std::string_view name)
+@@ -1085,12 +4287,15 @@ const SystemSubroutine* Compilation::getSystemSubroutine(std::string_view name)
  
  const SystemSubroutine* Compilation::getSystemSubroutine(
      parsing::KnownSystemName knownNameId) const {
@@ -6296,7 +7532,7 @@ index ed7528f2c..d675b0d40 100644
      auto it = methodMap.find(std::make_tuple(name, typeKind));
      if (it == methodMap.end())
          return nullptr;
-@@ -1136,10 +3401,14 @@ std::span<const AttributeSymbol* const> Compilation::getAttributes(
+@@ -1136,10 +4341,14 @@ std::span<const AttributeSymbol* const> Compilation::getAttributes(
  
  std::span<const AttributeSymbol* const> Compilation::getAttributes(const void* ptr) const {
      auto it = attributeMap.find(ptr);
@@ -6315,7 +7551,7 @@ index ed7528f2c..d675b0d40 100644
  }
  
  void Compilation::noteBindDirective(const BindDirectiveSyntax& syntax, const Scope& scope) {
-@@ -1254,7 +3523,7 @@ const Symbol* Compilation::getDefaultClocking(const Scope& scope) const {
+@@ -1254,7 +4463,7 @@ const Symbol* Compilation::getDefaultClocking(const Scope& scope) const {
              return getDefaultClocking(*parent);
      }
  
@@ -6324,7 +7560,16 @@ index ed7528f2c..d675b0d40 100644
  }
  
  void Compilation::noteGlobalClocking(const Scope& scope, const Symbol& clocking,
-@@ -1409,7 +3678,7 @@ const Expression* Compilation::getDefaultDisable(const Scope& scope) const {
+@@ -1390,6 +4599,8 @@ void Compilation::noteHierarchicalAssignment(const HierarchicalReference& ref) {
+ }
+ 
+ const InstanceSymbol& Compilation::getOrAddVirtualIface(const InstanceSymbol& symbol) {
++    if (trackBodyReferences)
++        bodyVirtualIfaceSites.push_back(&symbol);
+     bool valid = true;
+     SmallSet<const InstanceSymbol*, 2> visited;
+     InstanceCacheKey key(symbol, valid, visited);
+@@ -1409,7 +4620,7 @@ const Expression* Compilation::getDefaultDisable(const Scope& scope) const {
  
          curr = curr->asSymbol().getParentScope();
          if (!curr || curr->asSymbol().kind == SymbolKind::CompilationUnit)
@@ -6333,7 +7578,7 @@ index ed7528f2c..d675b0d40 100644
      }
  }
  
-@@ -1458,27 +3727,281 @@ const SyntaxNode* Compilation::getExternDefinition(std::string_view name,
+@@ -1458,27 +4669,281 @@ const SyntaxNode* Compilation::getExternDefinition(std::string_view name,
      return nullptr;
  }
  
@@ -6624,16 +7869,80 @@ index ed7528f2c..d675b0d40 100644
  }
  
  const NameSyntax& Compilation::parseName(std::string_view name) {
-@@ -1510,7 +4033,7 @@ CompilationUnitSymbol& Compilation::createScriptScope() {
+@@ -1510,7 +4975,66 @@ CompilationUnitSymbol& Compilation::createScriptScope() {
      return *unit;
  }
  
 -void Compilation::elaborate() {
++void Compilation::prepareImportedVirtualInterfaceChecks(const std::function<void()>& checkpoint) {
++    if (instanceBodyCacheContext || hasFlag(CompilationFlags::PackageAnalysis))
++        return;
++    flat_hash_set<const Compilation*> seen;
++    std::vector<std::pair<const Compilation*, bool>> pending;
++    for (auto it = importedCompilations.rbegin(); it != importedCompilations.rend(); ++it)
++        pending.emplace_back(it->get(), false);
++    while (!pending.empty()) {
++        const auto [owner, expanded] = pending.back();
++        pending.pop_back();
++        if (checkpoint)
++            checkpoint();
++        if (!expanded) {
++            if (!seen.emplace(owner).second)
++                continue;
++            pending.emplace_back(owner, true);
++            for (auto it = owner->importedCompilations.rbegin();
++                 it != owner->importedCompilations.rend(); ++it)
++                pending.emplace_back(it->get(), false);
++            continue;
++        }
++        for (auto original : owner->deferredVirtualIfaceInstances) {
++            if (checkpoint)
++                checkpoint();
++            if (!importedVirtualIfaceChecks.emplace(original).second)
++                continue;
++            const auto& definition = original->getDefinition();
++            // Even a type-only import must not update the provider's instance
++            // counts when its diagnostic instance is built in this consumer.
++            importedDefinitions.emplace(&definition);
++            auto overrides = std::make_unique<HierarchyOverrideNode>();
++            for (auto parameter : original->body.getParameters()) {
++                if (parameter->isLocalParam())
++                    continue;
++                const auto& symbol = parameter->symbol;
++                if (auto value = symbol.as_if<ParameterSymbol>()) {
++                    overrides->paramOverrides.emplace(
++                        symbol.getSyntax(), HierarchyOverrideNode::ValueParamOverride{
++                                                .value = value->getValue()});
++                }
++                else {
++                    overrides->paramOverrides.emplace(
++                        symbol.getSyntax(), HierarchyOverrideNode::TypeParamOverride{
++                                                .type = &symbol.as<TypeParameterSymbol>()
++                                                             .targetType.getType()});
++                }
++            }
++            auto* contextOverrides = overrides.get();
++            importedVirtualIfaceOverrides.push_back(std::move(overrides));
++            auto& body = InstanceBodySymbol::fromDefinition(*this, definition, original->location,
++                                                            InstanceFlags::None, contextOverrides,
++                                                            nullptr, nullptr);
++            auto instance = emplace<InstanceSymbol>(original->name, original->location, body, 0u);
++            instance->setParent(*root);
++            getOrAddVirtualIface(*instance);
++        }
++    }
++}
++
 +void Compilation::elaborate(const std::function<void()>& checkpoint) {
      SLANG_ASSERT(!isFrozen());
  
      // Make sure our root is created. It's possible that this results in a fatal
-@@ -1523,8 +4046,10 @@ void Compilation::elaborate() {
+@@ -1520,11 +5044,15 @@ void Compilation::elaborate() {
+     if (sawFatalError)
+         return;
+ 
++    prepareImportedVirtualInterfaceChecks(checkpoint);
++
      // Touch every symbol, scope, statement, and expression tree so that
      // we can be sure we have all the diagnostics.
      uint32_t errorLimit = options.errorLimit == 0 ? UINT32_MAX : options.errorLimit;
@@ -6645,7 +7954,7 @@ index ed7528f2c..d675b0d40 100644
  
      if (!elabVisitor.finishedEarly() && !elabVisitor.instanceDepthExceeded)
          elabVisitor.finalize();
-@@ -1560,10 +4085,12 @@ void Compilation::elaborate() {
+@@ -1560,10 +5088,12 @@ void Compilation::elaborate() {
      // Double check any bind directives for correctness. These were already
      // resolved prior to full elaboration but their diagnostics were not
      // issued so we need to check again.
@@ -6662,7 +7971,7 @@ index ed7528f2c..d675b0d40 100644
      }
  
      // Report any lingering name conflicts.
-@@ -1680,14 +4207,439 @@ const Diagnostics& Compilation::getParseDiagnostics() {
+@@ -1680,14 +5210,439 @@ const Diagnostics& Compilation::getParseDiagnostics() {
      return *cachedParseDiagnostics;
  }
  
@@ -6672,12 +7981,12 @@ index ed7528f2c..d675b0d40 100644
 +            continue;
 +        if (!replayedBodyDiagnostics.emplace(&body).second)
 +            return;
-+        for (auto raw : certificate->diagnostics) {
++        for (const auto& raw : certificate->diagnostics) {
 +            // Native elaboration only visits the canonical occurrence of an
 +            // equivalent body. The independent owner binds every occurrence
 +            // for certification, so discard diagnostics in skipped bodies.
 +            bool skipped = false;
-+            auto symbol = raw->symbol;
++            auto symbol = raw.symbol;
 +            while (symbol) {
 +                if (auto body = symbol->as_if<InstanceBodySymbol>()) {
 +                    auto& current = getCurrentInstanceBody(*body);
@@ -6696,7 +8005,7 @@ index ed7528f2c..d675b0d40 100644
 +            }
 +            if (skipped)
 +                continue;
-+            Diagnostic diagnostic = *raw;
++            Diagnostic diagnostic = raw;
 +            auto remap = [&](auto&& self, Diagnostic& value) -> void {
 +                if (value.symbol && value.symbol->kind == SymbolKind::InstanceBody)
 +                    value.symbol = &getCurrentInstanceBody(value.symbol->as<InstanceBodySymbol>());
@@ -7105,8 +8414,25 @@ index ed7528f2c..d675b0d40 100644
      return *cachedSemanticDiagnostics;
  }
  
-@@ -1796,15 +4748,24 @@ const ImplicitTypeSyntax& Compilation::createEmptyTypeSyntax(SourceLocation loc)
+@@ -1794,17 +5749,53 @@ const ImplicitTypeSyntax& Compilation::createEmptyTypeSyntax(SourceLocation loc)
+                                         Token(*this, TokenKind::Placeholder, {}, {}, loc));
+ }
  
++void Compilation::forceElaborateForWildcardLookup(const Scope& scope) {
++    const auto data = scope.getWildcardImportData();
++    if (!data)
++        return;
++    if (&scope.getCompilation() == this) {
++        if (data->hasForceElaborated)
++            return;
++        data->hasForceElaborated = true;
++    }
++    else if (!forcedImportedWildcardScopes.emplace(&scope).second) {
++        return;
++    }
++    forceElaborate(scope.asSymbol());
++}
++
  void Compilation::forceElaborate(const Symbol& symbol) {
      SLANG_ASSERT(!isFrozen());
 +    // An interrupted private bind clone is discarded in its entirety. Ordinary
@@ -7128,13 +8454,25 @@ index ed7528f2c..d675b0d40 100644
 +    for (size_t index = 0; index < visitor.genericClasses.size(); ++index) {
 +        if (checkpoint)
 +            checkpoint();
-+        visitor.genericClasses[index]->getInvalidSpecialization().visit(visitor);
++        const auto& generic = *visitor.genericClasses[index];
++        if (&generic.getParentScope()->getCompilation() == this) {
++            generic.getInvalidSpecialization().visit(visitor);
++        }
++        else {
++            // A wildcard lookup can force a retained package after its owner's
++            // diagnostics were finalized. Keep the provisional specialization
++            // and any new diagnostics in this consumer, never mutate the owner.
++            const Scope& bindingScope = ownerScope && &ownerScope->getCompilation() == this
++                                            ? *ownerScope : *root;
++            generic.getInvalidSpecialization(ASTContext(bindingScope, LookupLocation::max))
++                .visit(visitor);
++        }
 +    }
  }
  
  const Type& Compilation::getType(SyntaxKind typeKind) const {
 diff --git a/source/ast/DefParamResolver.cpp b/source/ast/DefParamResolver.cpp
-index 20da49191..02e84af53 100644
+index 20da49191..fbd15a914 100644
 --- a/source/ast/DefParamResolver.cpp
 +++ b/source/ast/DefParamResolver.cpp
 @@ -11,6 +11,7 @@
@@ -7145,21 +8483,22 @@ index 20da49191..02e84af53 100644
  
  namespace slang::ast {
  
-@@ -29,10 +30,11 @@ struct ReachabilityResult {
+@@ -29,10 +30,12 @@ struct ReachabilityResult {
  class ReachbilityGraph {
  public:
      static ReachabilityResult compute(
 -        std::span<const std::shared_ptr<syntax::SyntaxTree>> syntaxTrees) {
 +        std::span<const std::shared_ptr<syntax::SyntaxTree>> syntaxTrees,
++        std::span<const ModuleDeclarationSyntax* const> importedDefinitions,
 +        const std::function<void()>& checkpoint) {
          TimeTraceScope timeScope("computeReachability"sv, ""sv);
  
 -        ReachbilityGraph graph(syntaxTrees);
-+        ReachbilityGraph graph(syntaxTrees, checkpoint);
++        ReachbilityGraph graph(syntaxTrees, importedDefinitions, checkpoint);
          ReachabilityResult result;
          result.reachable = std::move(graph.reachable);
          for (auto& [name, nodes] : graph.nameMap) {
-@@ -62,7 +64,11 @@ private:
+@@ -62,13 +65,25 @@ private:
      flat_hash_set<const SyntaxNode*> reachable;
      SmallVector<const BindDirectiveSyntax*> bindDirectives;
  
@@ -7168,11 +8507,25 @@ index 20da49191..02e84af53 100644
 +    size_t scannedNodes = 0;
 +
 +    ReachbilityGraph(std::span<const std::shared_ptr<syntax::SyntaxTree>> syntaxTrees,
++                     std::span<const ModuleDeclarationSyntax* const> importedDefinitions,
 +                     const std::function<void()>& checkpoint) : checkpoint(checkpoint) {
          // First scan all members, looking for module/interface definitions,
          // defparams, and bind directives. Leaf nodes that directly contain
          // defparams and binds will be marked reachable.
-@@ -112,6 +118,8 @@ private:
+         DefinitionInfo rootInfo;
+         for (auto& tree : syntaxTrees)
+             scanMembers(tree->root(), rootInfo);
++        // Imported definitions keep the provider's actual CST identity, which
++        // can differ from an equivalent node in the consumer's resumed unit.
++        // The visitor and bind entries use that identity. Include its complete
++        // declaration graph rather than silently pruning its bind / defparam
++        // containers because only the consumer's aliases were scanned.
++        for (auto definition : importedDefinitions)
++            scanMembers(*definition, rootInfo);
+ 
+         // Any bind directive that targets a definition unconditionally (or even looks
+         // like it does, since we can't be sure for the ambiguous single-name case)
+@@ -112,6 +127,8 @@ private:
  
      // Recursively scan CST members for defparams, binds, and instantiation names.
      void scanMembers(const SyntaxNode& node, DefinitionInfo& info) {
@@ -7181,7 +8534,16 @@ index 20da49191..02e84af53 100644
          switch (node.kind) {
              case SyntaxKind::DefParam:
              case SyntaxKind::BindDirective:
-@@ -346,14 +354,18 @@ static bool hasReachableInstanceOverride(const ConfigBlockSymbol::InstanceOverri
+@@ -162,6 +179,8 @@ private:
+                 break;
+             case SyntaxKind::ModuleDeclaration:
+             case SyntaxKind::InterfaceDeclaration: {
++                if (syntaxMap.contains(&node))
++                    break;
+                 auto& decl = node.as<ModuleDeclarationSyntax>();
+                 auto name = decl.header->name.valueText();
+                 if (!name.empty()) {
+@@ -346,14 +365,18 @@ static bool hasReachableInstanceOverride(const ConfigBlockSymbol::InstanceOverri
  struct DefParamVisitor : public ASTVisitor<DefParamVisitor> {
      DefParamVisitor(size_t maxInstanceDepth, size_t maxBlocks, size_t generateLevel,
                      const ReachabilityResult& reachabilityResult,
@@ -7202,7 +8564,7 @@ index 20da49191..02e84af53 100644
          if (generateDepth <= generateLevel)
              found.push_back(&symbol);
          else
-@@ -361,6 +373,8 @@ struct DefParamVisitor : public ASTVisitor<DefParamVisitor> {
+@@ -361,6 +384,8 @@ struct DefParamVisitor : public ASTVisitor<DefParamVisitor> {
      }
  
      void handle(const InstanceSymbol& symbol) {
@@ -7211,7 +8573,7 @@ index 20da49191..02e84af53 100644
          if (symbol.name.empty() || symbol.body.flags.has(InstanceFlags::Uninstantiated) ||
              hierarchyProblem) {
              return;
-@@ -405,6 +419,8 @@ struct DefParamVisitor : public ASTVisitor<DefParamVisitor> {
+@@ -405,6 +430,8 @@ struct DefParamVisitor : public ASTVisitor<DefParamVisitor> {
      }
  
      void handle(const GenerateBlockSymbol& symbol) {
@@ -7220,7 +8582,7 @@ index 20da49191..02e84af53 100644
          if (symbol.isUninstantiated || hierarchyProblem)
              return;
  
-@@ -426,6 +442,8 @@ struct DefParamVisitor : public ASTVisitor<DefParamVisitor> {
+@@ -426,6 +453,8 @@ struct DefParamVisitor : public ASTVisitor<DefParamVisitor> {
      }
  
      void handle(const GenerateBlockArraySymbol& symbol) {
@@ -7229,7 +8591,7 @@ index 20da49191..02e84af53 100644
          for (auto& member : symbol.members()) {
              if (hierarchyProblem)
                  return;
-@@ -440,6 +458,7 @@ struct DefParamVisitor : public ASTVisitor<DefParamVisitor> {
+@@ -440,6 +469,7 @@ struct DefParamVisitor : public ASTVisitor<DefParamVisitor> {
      flat_hash_set<const DefinitionSymbol*> activeInstances;
      const ReachabilityResult& reachabilityResult;
      const ActiveTargetedBinds& activeTargetedBinds;
@@ -7237,7 +8599,7 @@ index 20da49191..02e84af53 100644
      size_t instanceDepth = 0;
      size_t maxInstanceDepth = 0;
      size_t generateLevel = 0;
-@@ -534,12 +553,18 @@ private:
+@@ -534,12 +564,21 @@ private:
  
  } // namespace
  
@@ -7253,12 +8615,15 @@ index 20da49191..02e84af53 100644
      // Compute CST-level reachability so we can later skip definitions that
      // can't contain defparams or bind directives.
 -    auto reachabilityResult = ReachbilityGraph::compute(syntaxTrees);
-+    auto reachabilityResult = ReachbilityGraph::compute(syntaxTrees, checkpoint);
++    SmallVector<const ModuleDeclarationSyntax*> importedSyntax;
++    for (const auto definition : importedDefinitions)
++        importedSyntax.push_back(&definition->getSyntax()->as<ModuleDeclarationSyntax>());
++    auto reachabilityResult = ReachbilityGraph::compute(syntaxTrees, importedSyntax, checkpoint);
 +    check();
  
      struct OverrideEntry {
          OpaqueInstancePath path;
-@@ -610,7 +635,7 @@ void Compilation::resolveDefParamsAndBinds() {
+@@ -610,7 +649,7 @@ void Compilation::resolveDefParamsAndBinds() {
                      if (def) {
                          // const_cast is fine; we accessed the private data of the compilation
                          // through a public interface that added the const on top.
@@ -7267,7 +8632,7 @@ index 20da49191..02e84af53 100644
                      }
                  }
              }
-@@ -624,10 +649,22 @@ void Compilation::resolveDefParamsAndBinds() {
+@@ -624,10 +663,22 @@ void Compilation::resolveDefParamsAndBinds() {
      auto cloneInto = [&](Compilation& c) {
          c.diagsDisabled = true;
          c.options = options;
@@ -7292,7 +8657,7 @@ index 20da49191..02e84af53 100644
      };
  
      auto saveState = [&](DefParamVisitor& visitor, Compilation& c) {
-@@ -651,7 +688,15 @@ void Compilation::resolveDefParamsAndBinds() {
+@@ -651,7 +702,15 @@ void Compilation::resolveDefParamsAndBinds() {
          auto bindDirs = c.bindDirectives;
          for (auto [syntax, scope] : bindDirs) {
              ResolvedBind resolvedBind;
@@ -7309,7 +8674,7 @@ index 20da49191..02e84af53 100644
  
              BindDirectiveInfo info;
              info.bindSyntax = syntax;
-@@ -737,8 +782,9 @@ void Compilation::resolveDefParamsAndBinds() {
+@@ -737,8 +796,9 @@ void Compilation::resolveDefParamsAndBinds() {
  
              while (true) {
                  DefParamVisitor v(options.maxInstanceDepth, options.maxDefParamBlocks,
@@ -7321,7 +8686,7 @@ index 20da49191..02e84af53 100644
                  if (checkProblem(v))
                      return;
  
-@@ -784,8 +830,8 @@ void Compilation::resolveDefParamsAndBinds() {
+@@ -784,8 +844,8 @@ void Compilation::resolveDefParamsAndBinds() {
              auto activeTargetedBinds = getActiveTargetedBinds();
  
              DefParamVisitor v(options.maxInstanceDepth, options.maxDefParamBlocks, generateLevel,
@@ -7333,7 +8698,7 @@ index 20da49191..02e84af53 100644
                  return;
  
 diff --git a/source/ast/ElabVisitors.h b/source/ast/ElabVisitors.h
-index 2f346fa60..4b95d3209 100644
+index 2f346fa60..34393eb97 100644
 --- a/source/ast/ElabVisitors.h
 +++ b/source/ast/ElabVisitors.h
 @@ -7,8 +7,11 @@
@@ -7577,7 +8942,7 @@ index 2f346fa60..4b95d3209 100644
              if (symbol->numSpecializations() == 0)
                  symbol->getInvalidSpecialization().visit(*this);
          }
-@@ -525,6 +620,34 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
+@@ -525,6 +620,36 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
              for (auto attr : attrList)
                  attr->getValue();
          }
@@ -7602,8 +8967,10 @@ index 2f346fa60..4b95d3209 100644
 +                    SLANG_THROW(std::logic_error("detached interface must be privately owned"));
 +                // Virtual interface types are still bound on demand during declaration
 +                // analysis, but visiting their bodies would also elaborate unrelated RTL.
-+                if (compilation.hasFlag(CompilationFlags::PackageAnalysis))
++                if (compilation.hasFlag(CompilationFlags::PackageAnalysis)) {
++                    compilation.deferredVirtualIfaceInstances.push_back(inst);
 +                    continue;
++                }
 +
 +                inst->visit(*this);
 +                compilation.checkVirtualIfaceInstance(*inst);
@@ -7612,7 +8979,7 @@ index 2f346fa60..4b95d3209 100644
      }
  
      static bool isWithinInterface(const InstanceSymbol& symbol) {
-@@ -543,7 +666,7 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
+@@ -543,7 +668,7 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
      }
  
      bool tryApplyFromCache(const InstanceSymbol& symbol) {
@@ -7621,7 +8988,7 @@ index 2f346fa60..4b95d3209 100644
              return false;
  
          // We can use a cached version of this instance's body if we have already
-@@ -597,7 +720,14 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
+@@ -597,7 +722,14 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
          // Assuming we find an appropriately cached instance, we will store a pointer to it
          // in other instances to facilitate downstream consumers in not needing to recreate
          // this duplication detection logic again.
@@ -7637,7 +9004,7 @@ index 2f346fa60..4b95d3209 100644
  
          // If this is an interface or an instance instantiated within an interface
          // we want to return false so that we continue visiting the body. This is
-@@ -625,6 +755,8 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
+@@ -625,6 +757,8 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
      Compilation& compilation;
      const size_t& numErrors;
      uint32_t errorLimit;
@@ -7646,7 +9013,7 @@ index 2f346fa60..4b95d3209 100644
      bool visitInstances = true;
      bool disableCache = false;
      bool hierarchyProblem = false;
-@@ -633,7 +765,10 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
+@@ -633,7 +767,10 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
      flat_hash_map<InstanceCacheKey, InstanceCacheEntry> instanceCache;
      flat_hash_set<const InstanceBodySymbol*> activeInstanceBodies;
      flat_hash_set<const DefinitionSymbol*> usedIfacePorts;
@@ -7712,7 +9079,7 @@ index ff5f11750..20bb06266 100644
  
      return expr;
 diff --git a/source/ast/Lookup.cpp b/source/ast/Lookup.cpp
-index 9210c3588..0542040b4 100644
+index 9210c3588..b0be389bd 100644
 --- a/source/ast/Lookup.cpp
 +++ b/source/ast/Lookup.cpp
 @@ -157,7 +157,7 @@ struct NamePlusLoc {
@@ -7768,7 +9135,19 @@ index 9210c3588..0542040b4 100644
                      break;
                  case SymbolKind::ForwardingTypedef:
                      // If we find a forwarding typedef, the actual typedef was never defined.
-@@ -2133,7 +2136,7 @@ void Lookup::unqualifiedImpl(const Scope& scope, std::string_view name, LookupLo
+@@ -2067,10 +2070,7 @@ void Lookup::unqualifiedImpl(const Scope& scope, std::string_view name, LookupLo
+             // but we can still reference any symbols that were previously imported
+             // that way from some other lookup. In order to be sure we've seen all of
+             // those lookups we need to force elaborate the scope first.
+-            if (!wildcardImportData->hasForceElaborated) {
+-                wildcardImportData->hasForceElaborated = true;
+-                scope.getCompilation().forceElaborate(scope.asSymbol());
+-            }
++            originalScope.getCompilation().forceElaborateForWildcardLookup(scope);
+ 
+             if (auto it = wildcardImportData->importedSymbols.find(name);
+                 it != wildcardImportData->importedSymbols.end()) {
+@@ -2133,7 +2133,7 @@ void Lookup::unqualifiedImpl(const Scope& scope, std::string_view name, LookupLo
  
                  result.flags |= LookupResultFlags::WasImported;
                  result.found = imports[0].imported;
@@ -7912,6 +9291,38 @@ index fcdb3f436..1e4ab3f97 100644
                  context.addDiag(diag::ExpectedClassPropertyName, arg->sourceRange);
                  return comp.getErrorType();
              }
+diff --git a/source/ast/builtins/SystemTasks.cpp b/source/ast/builtins/SystemTasks.cpp
+index 745d257cd..e5d5bf3b8 100644
+--- a/source/ast/builtins/SystemTasks.cpp
++++ b/source/ast/builtins/SystemTasks.cpp
+@@ -614,6 +614,27 @@ public:
+                     reportWarning(destType.isAssignmentCompatible(srcType));
+                 }
+             }
++            else if (auto unknownClass = [](const Type& type) {
++                         const auto cls = type.getCanonicalType().as_if<ClassType>();
++                         if (!cls || !cls->isUninstantiated)
++                             return false;
++                         for (const auto parameter : cls->genericParameters) {
++                             if (const auto tp = parameter->as_if<TypeParameterSymbol>();
++                                 tp && tp->targetType.getType().isError())
++                                 return true;
++                             if (const auto vp = parameter->as_if<ParameterSymbol>();
++                                 vp && vp->getValue().bad())
++                                 return true;
++                         }
++                         return false;
++                     };
++                     &destType.getCanonicalType() != &srcType.getCanonicalType() &&
++                     (unknownClass(destType) || unknownClass(srcType))) {
++                // Unbound generic compatibility is deliberately permissive to
++                // keep checking templates. It is not proof that a runtime cast
++                // always succeeds (or fails). Concrete instances are checked
++                // normally once their parameter types and values are known.
++            }
+             else if (destType.isAssignmentCompatible(srcType)) {
+                 // Source is already statically a subtype of (or equal to) the destination,
+                 // so the cast always succeeds.
 diff --git a/source/ast/expressions/CallExpression.cpp b/source/ast/expressions/CallExpression.cpp
 index 18ed6845d..fdf802672 100644
 --- a/source/ast/expressions/CallExpression.cpp
@@ -8010,7 +9421,7 @@ index 1609a2073..3bc61ed3d 100644
      auto condExpr = *boundIt++;
  
 diff --git a/source/ast/symbols/ClassSymbols.cpp b/source/ast/symbols/ClassSymbols.cpp
-index a9250508e..c57c98673 100644
+index a9250508e..0c8fb0ea8 100644
 --- a/source/ast/symbols/ClassSymbols.cpp
 +++ b/source/ast/symbols/ClassSymbols.cpp
 @@ -691,7 +691,7 @@ const SubroutineSymbol* ClassType::getConstructor() const {
@@ -8106,11 +9517,22 @@ index a9250508e..c57c98673 100644
              }
              else {
                  auto& tps = sym.as<TypeParameterSymbol>();
-@@ -1111,18 +1150,34 @@ const Type* GenericClassDefSymbol::getSpecializationImpl(
+@@ -1111,18 +1150,54 @@ const Type* GenericClassDefSymbol::getSpecializationImpl(
      classType->genericParameters = paramSymbols.copy(comp);
      if (!forceInvalidParams) {
          detail::ClassSpecializationKey key(paramValues.copy(comp), typeParams.copy(comp));
 +        if (imported) {
++            auto& local = classType->isUninstantiated ? imported->uninstantiated
++                                                     : imported->instantiated;
++            if (auto found = local.find(key); found != local.end() &&
++                (&found->second->as<ClassType>().getCompilation() == &comp ||
++                 comp.canReuseBodyClassSpecialization(*found->second)))
++                return record(found->second);
++            if (auto retained = comp.findCertifiedBodyClass(*this, key,
++                                                            classType->isUninstantiated)) {
++                local.emplace(key, retained);
++                return record(retained);
++            }
 +            if (auto retained = comp.findRetainedBodyClassState(*this)) {
 +                const auto& cache = classType->isUninstantiated ? retained->uninstantiated
 +                                                                : retained->instantiated;
@@ -8123,6 +9545,15 @@ index a9250508e..c57c98673 100644
 +            if (auto found = fixed.find(key);
 +                found != fixed.end() && comp.canReuseBodyClassSpecialization(*found->second))
 +                return record(found->second);
++            // Read-only providers and consumers do not share virtual-interface
++            // instance addresses. Keep one specialization for matching semantic
++            // arguments, and index its alias with this consumer's native key.
++            for (const auto& [existing, type] : fixed) {
++                if (key.matchesArguments(existing) && comp.canReuseBodyClassSpecialization(*type)) {
++                    local.emplace(key, type);
++                    return record(type);
++                }
++            }
 +        }
          if (classType->isUninstantiated) {
              // If we're in an uninstantiated scope we save this specialization
@@ -8145,7 +9576,7 @@ index a9250508e..c57c98673 100644
          }
      }
  
-@@ -1134,7 +1189,7 @@ const Type* GenericClassDefSymbol::getSpecializationImpl(
+@@ -1134,7 +1209,7 @@ const Type* GenericClassDefSymbol::getSpecializationImpl(
      else
          classType->populate(*scope, getSyntax()->as<ClassDeclarationSyntax>());
  
@@ -8154,6 +9585,19 @@ index a9250508e..c57c98673 100644
  }
  
  void GenericClassDefSymbol::addForwardDecl(const ForwardingTypedefSymbol& decl) const {
+@@ -1182,7 +1257,11 @@ ClassSpecializationKey::ClassSpecializationKey(std::span<const ConstantValue* co
+ }
+ 
+ bool ClassSpecializationKey::operator==(const ClassSpecializationKey& other) const {
+-    if (savedHash != other.savedHash || paramValues.size() != other.paramValues.size() ||
++    return savedHash == other.savedHash && matchesArguments(other);
++}
++
++bool ClassSpecializationKey::matchesArguments(const ClassSpecializationKey& other) const {
++    if (paramValues.size() != other.paramValues.size() ||
+         typeParams.size() != other.typeParams.size()) {
+         return false;
+     }
 diff --git a/source/ast/symbols/InstanceSymbols.cpp b/source/ast/symbols/InstanceSymbols.cpp
 index 15e54e38a..657cbbc31 100644
 --- a/source/ast/symbols/InstanceSymbols.cpp
@@ -8209,6 +9653,40 @@ index 15e54e38a..657cbbc31 100644
              handleBind(bindInfo);
      }
  }
+diff --git a/source/ast/symbols/MemberSymbols.cpp b/source/ast/symbols/MemberSymbols.cpp
+index 0c2dc3596..2f3cc742c 100644
+--- a/source/ast/symbols/MemberSymbols.cpp
++++ b/source/ast/symbols/MemberSymbols.cpp
+@@ -1721,7 +1721,13 @@ SequenceSymbol& SequenceSymbol::fromSyntax(const Scope& scope,
+ }
+ 
+ void SequenceSymbol::makeDefaultInstance() const {
+-    AssertionInstanceExpression::makeDefault(*this);
++    (void)getDefaultInstance();
++}
++
++const Expression& SequenceSymbol::getDefaultInstance() const {
++    if (!defaultInstance)
++        defaultInstance = &AssertionInstanceExpression::makeDefault(*this);
++    return *defaultInstance;
+ }
+ 
+ PropertySymbol::PropertySymbol(Compilation& compilation, std::string_view name,
+@@ -1746,7 +1752,13 @@ PropertySymbol& PropertySymbol::fromSyntax(const Scope& scope,
+ }
+ 
+ void PropertySymbol::makeDefaultInstance() const {
+-    AssertionInstanceExpression::makeDefault(*this);
++    (void)getDefaultInstance();
++}
++
++const Expression& PropertySymbol::getDefaultInstance() const {
++    if (!defaultInstance)
++        defaultInstance = &AssertionInstanceExpression::makeDefault(*this);
++    return *defaultInstance;
+ }
+ 
+ LetDeclSymbol::LetDeclSymbol(Compilation& compilation, const ExpressionSyntax& exprSyntax,
 diff --git a/source/ast/symbols/ParameterBuilder.cpp b/source/ast/symbols/ParameterBuilder.cpp
 index ae1880f3f..0edd581b8 100644
 --- a/source/ast/symbols/ParameterBuilder.cpp
@@ -9730,10 +11208,10 @@ index e86c15c68..0a360224a 100644
                      else {
                          addDiag(diag::ExpectedDiagPragmaArg, simple.value.range());
 diff --git a/source/syntax/SyntaxTree.cpp b/source/syntax/SyntaxTree.cpp
-index ac681a4db..2c0332ca7 100644
+index ac681a4db..582111eb1 100644
 --- a/source/syntax/SyntaxTree.cpp
 +++ b/source/syntax/SyntaxTree.cpp
-@@ -7,16 +7,168 @@
+@@ -7,16 +7,172 @@
  //------------------------------------------------------------------------------
  #include "slang/syntax/SyntaxTree.h"
  
@@ -9755,6 +11233,15 @@ index ac681a4db..2c0332ca7 100644
  
  using namespace parsing;
 +namespace {
++struct PersistentDirectives {
++    std::optional<TimeScale> timeScale;
++    TokenKind netType = TokenKind::WireKeyword;
++    TokenKind drive = TokenKind::Unknown;
++    bool cellDefine = false;
++};
++PersistentDirectives persistentDirectives(const Preprocessor& pp) {
++    return {pp.getTimeScale(), pp.getDefaultNetType(), pp.getUnconnectedDrive(), pp.getCellDefine()};
++}
 +struct InitialCheckpoint {
 +    BufferID root;
 +    std::vector<BufferID> roots;
@@ -9762,6 +11249,7 @@ index ac681a4db..2c0332ca7 100644
 +    bool allowUpdatedSuffix = false;
 +    std::string cwd;
 +    PreprocessorMetadata pp;
++    PersistentDirectives directives;
 +    std::vector<std::pair<const char*, std::string_view>> guards;
 +};
 +struct DirectiveSummary {
@@ -9790,13 +11278,6 @@ index ac681a4db..2c0332ca7 100644
 +    summary.sourceEffects |= node.kind == SyntaxKind::LineDirective ||
 +                             node.kind == SyntaxKind::PragmaDirective;
 +    switch (node.kind) {
-+        case SyntaxKind::TimeScaleDirective:
-+        case SyntaxKind::DefaultNetTypeDirective:
-+        case SyntaxKind::UnconnectedDriveDirective:
-+        case SyntaxKind::NoUnconnectedDriveDirective:
-+        case SyntaxKind::CellDefineDirective:
-+        case SyntaxKind::EndCellDefineDirective:
-+        case SyntaxKind::ResetAllDirective:
 +        case SyntaxKind::BeginKeywordsDirective:
 +        case SyntaxKind::EndKeywordsDirective:
 +            summary.resumeSafe = false;
@@ -9888,6 +11369,7 @@ index ac681a4db..2c0332ca7 100644
 +
 +// Published fragment state belongs to the tree. No process-global pointer registry.
 +struct SyntaxTree::PrefixState {
++    PersistentDirectives directives;
 +    std::optional<InitialCheckpoint> checkpoint;
 +    std::optional<DirectiveSummary> capturedPackageDirectives;
 +    std::optional<DirectiveSummary> wholeTreeDirectives;
@@ -9902,7 +11384,7 @@ index ac681a4db..2c0332ca7 100644
  
  SyntaxTree::SyntaxTree(SyntaxNode* root, SourceManager& sourceManager, BumpAllocator&& alloc,
                         const SourceLibrary* library,
-@@ -27,7 +179,728 @@ SyntaxTree::SyntaxTree(SyntaxNode* root, SourceManager& sourceManager, BumpAlloc
+@@ -27,7 +183,780 @@ SyntaxTree::SyntaxTree(SyntaxNode* root, SourceManager& sourceManager, BumpAlloc
          metadata.eofToken = preTransform->getMetadata().eofToken.deepClone(this->alloc);
  }
  
@@ -10087,7 +11569,7 @@ index ac681a4db..2c0332ca7 100644
 +        throw std::runtime_error("parse archives require a prepared error-free prefix");
 +    ArchiveWriter out(stream, &sourceMan);
 +    out.allowExternalPaths = allowExternalPaths;
-+    out.text("slang-uvm-cst-3");
++    out.text("slang-uvm-cst-4");
 +    sourceMan.writeParseArchive(out, rootPath);
 +    out.node(rootNode);
 +    auto writeDiag = [&](auto&& self, const Diagnostic& d) -> void {
@@ -10193,6 +11675,17 @@ index ac681a4db..2c0332ca7 100644
 +    const auto& summary = *prefixState->wholeTreeDirectives;
 +    out.number(summary.sourceEffects | ((summary.resumeSafe && summary.plainProtectDepth == 0) << 1) | (summary.defparams << 2) |
 +               (summary.binds << 3));
++    const auto& directives = prefixState->directives;
++    out.number(directives.timeScale.has_value());
++    if (directives.timeScale) {
++        out.number(uint64_t(directives.timeScale->base.unit));
++        out.number(uint64_t(directives.timeScale->base.magnitude));
++        out.number(uint64_t(directives.timeScale->precision.unit));
++        out.number(uint64_t(directives.timeScale->precision.magnitude));
++    }
++    out.number(uint64_t(directives.netType));
++    out.number(uint64_t(directives.drive));
++    out.number(directives.cellDefine);
 +    if (prefixState->macroAccessArchive) {
 +        const auto& encoded = *prefixState->macroAccessArchive;
 +        if (stream.rdbuf()->sputn(encoded.data(), std::streamsize(encoded.size())) !=
@@ -10218,7 +11711,8 @@ index ac681a4db..2c0332ca7 100644
 +    ArchiveReader in(stream, arena, uint32_t(sm.getSourceLocationEntryCount() - 1), &sm);
 +    in.allowExternalPaths = allowExternalPaths;
 +    const auto format = in.text();
-+    const bool hasMacroTrace = format == "slang-uvm-cst-3";
++    const bool hasDirectiveState = format == "slang-uvm-cst-4";
++    const bool hasMacroTrace = hasDirectiveState || format == "slang-uvm-cst-3";
 +    if (!hasMacroTrace && format != "slang-uvm-cst-2")
 +        throw std::runtime_error("incompatible UVM parse archive");
 +    {
@@ -10349,6 +11843,44 @@ index ac681a4db..2c0332ca7 100644
 +    if (flags > 15)
 +        throw std::runtime_error("invalid archive directive summary");
 +    DirectiveSummary summary{bool(flags & 1), bool(flags & 2), bool(flags & 4), bool(flags & 8)};
++    if (hasDirectiveState) {
++        auto boolean = [&] {
++            auto value = in.number();
++            if (value > 1)
++                throw std::runtime_error("invalid archive directive boolean");
++            return bool(value);
++        };
++        if (boolean()) {
++            auto timeValue = [&] {
++                auto unit = in.number(), magnitude = in.number();
++                if (unit > uint64_t(TimeUnit::Femtoseconds) ||
++                    (magnitude != 1 && magnitude != 10 && magnitude != 100))
++                    throw std::runtime_error("invalid archive directive timescale");
++                return TimeScaleValue(TimeUnit(unit), TimeScaleMagnitude(magnitude));
++            };
++            auto base = timeValue(), precision = timeValue();
++            if (precision > base)
++                throw std::runtime_error("invalid archive directive precision");
++            state->directives.timeScale = TimeScale(base, precision);
++        }
++        auto net = in.number(), drive = in.number();
++        constexpr TokenKind netTypes[] = {
++            TokenKind::Unknown, TokenKind::WireKeyword, TokenKind::UWireKeyword,
++            TokenKind::WAndKeyword, TokenKind::WOrKeyword, TokenKind::TriKeyword,
++            TokenKind::Tri0Keyword, TokenKind::Tri1Keyword, TokenKind::TriAndKeyword,
++            TokenKind::TriOrKeyword, TokenKind::TriRegKeyword};
++        bool validNet = false;
++        for (auto kind : netTypes)
++            validNet |= net == uint64_t(kind);
++        if (!validNet)
++            throw std::runtime_error("invalid archive default net type");
++        if (drive != uint64_t(TokenKind::Unknown) && drive != uint64_t(TokenKind::Pull0Keyword) &&
++            drive != uint64_t(TokenKind::Pull1Keyword))
++            throw std::runtime_error("invalid archive unconnected drive");
++        state->directives.netType = TokenKind(net);
++        state->directives.drive = TokenKind(drive);
++        state->directives.cellDefine = boolean();
++    }
 +    if (hasMacroTrace) {
 +        const auto encoded = in.remainingView();
 +        readMacroAccessTrace(in, pp, options.getOrDefault<PreprocessorOptions>());
@@ -10575,6 +12107,8 @@ index ac681a4db..2c0332ca7 100644
 +    auto ownerSources = prefix->getRetainedSourceBytes() + suffix->getRetainedSourceBytes();
 +    result->prefixState = std::make_unique<PrefixState>();
 +    result->prefixState->extraBytes = ownerBytes;
++    if (suffix->prefixState)
++        result->prefixState->directives = suffix->prefixState->directives;
 +    result->prefixState->extraSourceBytes = ownerSources;
 +    if (consumeSuffix && suffix->prefixState && suffix->prefixState->checkpoint &&
 +        suffix->prefixState->inheritedMacroOwner == prefix) {
@@ -10631,7 +12165,7 @@ index ac681a4db..2c0332ca7 100644
  
  SyntaxTree::TreeOrError SyntaxTree::fromFile(std::string_view path) {
      return fromFile(path, getDefaultSourceManager());
-@@ -110,6 +983,26 @@ std::shared_ptr<SyntaxTree> SyntaxTree::fromBuffers(std::span<const SourceBuffer
+@@ -110,6 +1039,26 @@ std::shared_ptr<SyntaxTree> SyntaxTree::fromBuffers(std::span<const SourceBuffer
      return create(sourceManager, buffers, options, inheritedMacros, false);
  }
  
@@ -10658,7 +12192,7 @@ index ac681a4db..2c0332ca7 100644
  SourceManager& SyntaxTree::getDefaultSourceManager() {
      static SourceManager instance;
      return instance;
-@@ -126,7 +1019,50 @@ SyntaxTree::SyntaxTree(SyntaxNode* root, const SourceLibrary* library, SourceMan
+@@ -126,7 +1075,50 @@ SyntaxTree::SyntaxTree(SyntaxNode* root, const SourceLibrary* library, SourceMan
  std::shared_ptr<SyntaxTree> SyntaxTree::create(SourceManager& sourceManager,
                                                 std::span<const SourceBuffer> sources,
                                                 const Bag& options, MacroList inheritedMacros,
@@ -10710,7 +12244,7 @@ index ac681a4db..2c0332ca7 100644
      if (sources.empty())
          SLANG_THROW(std::invalid_argument("sources cannot be empty"));
  
-@@ -139,8 +1075,62 @@ std::shared_ptr<SyntaxTree> SyntaxTree::create(SourceManager& sourceManager,
+@@ -139,8 +1131,68 @@ std::shared_ptr<SyntaxTree> SyntaxTree::create(SourceManager& sourceManager,
  
      BumpAllocator alloc;
      Diagnostics diagnostics;
@@ -10741,6 +12275,7 @@ index ac681a4db..2c0332ca7 100644
 +                checkpoint->cwd = cwd.string();
 +            const auto& state = active->getMetadata();
 +            checkpoint->pp = state;
++            checkpoint->directives = persistentDirectives(*active);
 +            checkpoint->neutralProtection = active->protectEncryptDepth == 0 &&
 +                                             active->protectDecryptDepth == 0;
 +            for (auto& pair : active->includeOnceHeaders)
@@ -10770,11 +12305,16 @@ index ac681a4db..2c0332ca7 100644
 +            SLANG_THROW(std::runtime_error("missing prefix header-guard state"));
 +        for (auto& [key, value] : cachedPrefix->prefixState->guards)
 +            preprocessor.includeOnceHeaders.emplace(key, value);
++        const auto& directives = cachedPrefix->prefixState->directives;
++        preprocessor.activeTimeScale = directives.timeScale;
++        preprocessor.defaultNetType = directives.netType;
++        preprocessor.unconnectedDrive = directives.drive;
++        preprocessor.cellDefine = directives.cellDefine;
 +    }
      const SourceLibrary* library = nullptr;
      for (auto it = sources.rbegin(); it != sources.rend(); it++) {
          preprocessor.pushSource(*it);
-@@ -168,9 +1158,62 @@ std::shared_ptr<SyntaxTree> SyntaxTree::create(SourceManager& sourceManager,
+@@ -168,9 +1220,63 @@ std::shared_ptr<SyntaxTree> SyntaxTree::create(SourceManager& sourceManager,
              return create(sourceManager, sources, options, inheritedMacros, false);
      }
  
@@ -10827,6 +12367,7 @@ index ac681a4db..2c0332ca7 100644
 +            if (!result->prefixState)
 +                result->prefixState = std::make_unique<PrefixState>();
 +            result->prefixState->wholeTreeDirectives = summary;
++            result->prefixState->directives = persistentDirectives(preprocessor);
 +            if (!cwdError)
 +                result->prefixState->cwd = cwd.string();
 +            auto& guards = result->prefixState->guards;
@@ -10838,7 +12379,7 @@ index ac681a4db..2c0332ca7 100644
  }
  
  std::shared_ptr<SyntaxTree> SyntaxTree::fromLibraryMapFile(std::string_view path,
-@@ -216,6 +1259,290 @@ std::shared_ptr<SyntaxTree> SyntaxTree::fromLibraryMapBuffer(const SourceBuffer&
+@@ -216,6 +1322,292 @@ std::shared_ptr<SyntaxTree> SyntaxTree::fromLibraryMapBuffer(const SourceBuffer&
                         parser.getMetadata(), preprocessor.getMetadata(), options));
  }
  
@@ -11064,6 +12605,7 @@ index ac681a4db..2c0332ca7 100644
 +    result->prefixState = std::make_unique<PrefixState>();
 +    result->prefixState->wholeTreeDirectives = summary;
 +    result->prefixState->guards = std::move(checkpoint.guards);
++    result->prefixState->directives = checkpoint.directives;
 +    result->prefixState->extraBytes = ownerBytes;
 +    result->prefixState->extraSourceBytes = ownerSources;
 +    result->prefixState->cwd = std::move(checkpoint.cwd);
@@ -11086,6 +12628,7 @@ index ac681a4db..2c0332ca7 100644
 +    combinedSummary.binds |= summary.binds;
 +    combined->prefixState->wholeTreeDirectives = combinedSummary;
 +    combined->prefixState->guards = view->prefixState->guards;
++    combined->prefixState->directives = view->prefixState->directives;
 +    combined->prefixState->cwd = view->prefixState->cwd;
 +    // The parsed capture already pins and charges this exact inherited owner.
 +    combined->prefixState->extraBytes -= inheritedPrefix->getRetainedSyntaxBytes();
@@ -11129,7 +12672,7 @@ index ac681a4db..2c0332ca7 100644
  bool SyntaxTree::validate() const {
      auto text = SyntaxPrinter(sourceManager())
                      .setIncludeDirectives(true)
-@@ -244,3 +1571,173 @@ bool SyntaxTree::validate() const {
+@@ -244,3 +1636,173 @@ bool SyntaxTree::validate() const {
  }
  
  } // namespace slang::syntax
@@ -13364,6 +14907,37 @@ index 386684b5a..b55b3d112 100644
 +    unnamedBufferCount = uint32_t(in.number()) + unnamedBufferCount.load();
 +}
  } // namespace slang
+diff --git a/source/util/String.cpp b/source/util/String.cpp
+index 7e429004a..f1822fe68 100644
+--- a/source/util/String.cpp
++++ b/source/util/String.cpp
+@@ -14,6 +14,26 @@
+ 
+ namespace slang {
+ 
++std::string quoteSVString(std::string_view value) {
++    std::string result = "\"";
++    for (unsigned char c : value) {
++        if (c == '"' || c == '\\') {
++            result += '\\';
++            result += char(c);
++        }
++        else if (c < 32 || c > 126) {
++            result += '\\';
++            result += char('0' + (c >> 6));
++            result += char('0' + ((c >> 3) & 7));
++            result += char('0' + (c & 7));
++        }
++        else
++            result += char(c);
++    }
++    result += '"';
++    return result;
++}
++
+ template<typename T>
+ void uintToStrImpl(SmallVectorBase<char>& buffer, const char* format, T value) {
+     size_t sz = (size_t)snprintf(nullptr, 0, format, value);
 diff --git a/tests/regression/driver/suppress-macro-warnings.sv b/tests/regression/driver/suppress-macro-warnings.sv
 index 33564b4e0..5afd75590 100644
 --- a/tests/regression/driver/suppress-macro-warnings.sv
@@ -16515,7 +18089,7 @@ index 4e4ca233f..8ccf55323 100644
 +    }
 +}
 diff --git a/tests/unittests/parsing/SyntaxPrinterTests.cpp b/tests/unittests/parsing/SyntaxPrinterTests.cpp
-index d7e50037e..b5a55eb08 100644
+index d7e50037e..9f67faad7 100644
 --- a/tests/unittests/parsing/SyntaxPrinterTests.cpp
 +++ b/tests/unittests/parsing/SyntaxPrinterTests.cpp
 @@ -3,9 +3,16 @@
@@ -16535,7 +18109,7 @@ index d7e50037e..b5a55eb08 100644
  
  TEST_CASE("SyntaxPrinter - line comments") {
      auto& cu = parseCompilationUnit(R"(
-@@ -246,3 +253,334 @@ endmodule)");
+@@ -246,3 +253,366 @@ endmodule)");
  module m; // Inline comment
  endmodule)");
  }
@@ -16722,10 +18296,42 @@ index d7e50037e..b5a55eb08 100644
 +    retained->writeParseArchive(rewritten, root);
 +    CHECK(rewritten.str().ends_with(nativeTail));
 +
-+    auto legacy = base;
-+    const auto magic = legacy.find("slang-uvm-cst-3");
++    // Version 4 appends the terminal directive state before the macro trace.
++    // This fixture has the default state, whose four fields are varints.
++    std::ostringstream directiveState(std::ios::binary);
++    ArchiveWriter directiveWriter(directiveState);
++    directiveWriter.number(0); // no timescale
++    directiveWriter.number(uint64_t(TokenKind::WireKeyword));
++    directiveWriter.number(uint64_t(TokenKind::Unknown));
++    directiveWriter.number(0); // outside celldefine
++    REQUIRE(base.ends_with(directiveState.str()));
++    auto legacy = base.substr(0, base.size() - directiveState.str().size());
++    const auto magic = legacy.find("slang-uvm-cst-4");
 +    REQUIRE(magic != std::string::npos);
-+    legacy.replace(magic, std::string_view("slang-uvm-cst-3").size(), "slang-uvm-cst-2");
++    auto directiveRecord = [](std::initializer_list<uint64_t> fields) {
++        std::ostringstream stream(std::ios::binary);
++        ArchiveWriter writer(stream);
++        for (auto value : fields)
++            writer.number(value);
++        return stream.str();
++    };
++    // Validate raw integers before narrowing token / unit enums. In particular,
++    // a large integer must not wrap back into a valid token kind.
++    const auto archiveBase = legacy;
++    for (const auto& malformed : {
++             directiveRecord({2}),
++             directiveRecord({1, 256, 1, 0, 1}),
++             directiveRecord({1, 3, 2, 4, 1}),
++             directiveRecord({1, 4, 1, 3, 1}),
++             directiveRecord({0, (uint64_t(1) << 32) + uint64_t(TokenKind::WireKeyword), 0, 0}),
++             directiveRecord({0, uint64_t(TokenKind::WireKeyword), 65535, 0}),
++             directiveRecord({0, uint64_t(TokenKind::WireKeyword), 0, 2})}) {
++        CHECK_THROWS_AS(read(archiveBase + malformed + nativeTail, tracked), std::runtime_error);
++    }
++    auto version3 = legacy;
++    version3.replace(magic, std::string_view("slang-uvm-cst-4").size(), "slang-uvm-cst-3");
++    CHECK(read(version3 + nativeTail, tracked).names == restored.names);
++    legacy.replace(magic, std::string_view("slang-uvm-cst-4").size(), "slang-uvm-cst-2");
 +    const auto old = read(legacy, tracked);
 +    CHECK_FALSE(old.complete);
 +    CHECK_FALSE(old.eof);
@@ -18651,10 +20257,10 @@ index 000000000..7a1d33f3c
 +}
 diff --git a/tests/unittests/ast/PackageAnalysisTests.cpp b/tests/unittests/ast/PackageAnalysisTests.cpp
 new file mode 100644
-index 000000000..0c2323ae6
+index 000000000..7a842f9ce
 --- /dev/null
 +++ b/tests/unittests/ast/PackageAnalysisTests.cpp
-@@ -0,0 +1,923 @@
+@@ -0,0 +1,1000 @@
 +// SPDX-FileCopyrightText: Michael Popoloski
 +// SPDX-License-Identifier: MIT
 +
@@ -19576,5 +21182,82 @@ index 000000000..0c2323ae6
 +        CHECK(retry.getSemanticDiagnostics().empty() == !broken);
 +        CHECK(generic.numSpecializations() == fixedSpecializations);
 +        CHECK(library->getTotalBytesAllocated() == bytes);
++    }
++}
++
++TEST_CASE("Imported virtual interfaces complete diagnostics in each current consumer",
++          "[trusted-package][imported-virtual-interface-diagnostics]") {
++    const bool transitive = GENERATE(false, true);
++    CAPTURE(transitive);
++    SourceManager sources;
++    TempFile provider(R"(
++interface diagnostic_bus #(parameter int WIDTH=4);
++    logic [WIDTH-1:0] data;
++    task check_body();
++        $assertoff(0, "top");
++        $display($root.top.limit);
++        if (int'(data)) $display("active");
++    endtask
++endinterface
++package fixed_interfaces;
++    class Holder;
++        virtual diagnostic_bus#(4) a;
++        virtual diagnostic_bus#(8) b;
++    endclass
++endpackage
++)", ".sv");
++    auto parsed = SyntaxTree::fromFile(provider.path.generic_string(), sources);
++    REQUIRE(parsed);
++    auto tree = *parsed;
++    CompilationOptions libraryOptions;
++    libraryOptions.flags = CompilationFlags::PackageAnalysis;
++    auto owner = std::make_shared<Compilation>(libraryOptions);
++    owner->addSyntaxTree(tree);
++    REQUIRE(owner->getSemanticDiagnostics().empty());
++    auto exported = owner;
++    std::shared_ptr<SyntaxTree> facadeTree;
++    std::vector<BufferID> graph(tree->getSourceBufferIds().begin(), tree->getSourceBufferIds().end());
++    if (transitive) {
++        auto facade = std::make_shared<Compilation>(libraryOptions);
++        facade->importPackage(owner, "fixed_interfaces", sources);
++        facadeTree = SyntaxTree::fromText(
++            "package facade; typedef fixed_interfaces::Holder Holder; endpackage", sources,
++            "facade.sv", "");
++        facade->addSyntaxTree(facadeTree);
++        REQUIRE(facade->getSemanticDiagnostics().empty());
++        graph.insert(graph.end(), facadeTree->getSourceBufferIds().begin(),
++                     facadeTree->getSourceBufferIds().end());
++        exported = facade;
++    }
++    const auto prefix = sources.captureImmutablePrefix(graph);
++    CompilationOptions options;
++    options.topModules.emplace("top");
++    for (bool hasLimit : {true, false, true}) {
++        CAPTURE(hasLimit);
++        SourceManager currentSources, nativeSources;
++        currentSources.inheritImmutablePrefix(prefix);
++        nativeSources.inheritImmutablePrefix(prefix);
++        auto currentBuffers = currentSources.retainBuffers(tree->getSourceBufferIds());
++        auto nativeBuffers = nativeSources.retainBuffers(tree->getSourceBufferIds());
++        Compilation current(options), native(options);
++        current.importPackage(exported, transitive ? "facade" : "fixed_interfaces", currentSources);
++        if (!transitive)
++            current.importDefinition(owner, "diagnostic_bus", currentSources);
++        native.addSyntaxTree(SyntaxTree::sharedPrefixView(tree, nativeSources));
++        if (facadeTree)
++            native.addSyntaxTree(SyntaxTree::sharedPrefixView(facadeTree, nativeSources));
++        const std::string text = std::string("module top; ") +
++                                 (hasLimit ? "int limit;" : "int another;") +
++                                 (transitive ? "facade::Holder holder; endmodule"
++                                             : "fixed_interfaces::Holder holder; endmodule");
++        current.addSyntaxTree(SyntaxTree::fromText(text, currentSources, "consumer.sv", ""));
++        native.addSyntaxTree(SyntaxTree::fromText(text, nativeSources, "consumer.sv", ""));
++        const auto expected = DiagnosticEngine::reportAll(nativeSources,
++                                                         native.getSemanticDiagnostics());
++        REQUIRE_FALSE(expected.empty());
++        CHECK(expected.find("expected scope or assertion name") != std::string::npos);
++        CHECK(DiagnosticEngine::reportAll(currentSources, current.getSemanticDiagnostics()) ==
++              expected);
++        CHECK(owner->getSemanticDiagnostics().empty());
 +    }
 +}

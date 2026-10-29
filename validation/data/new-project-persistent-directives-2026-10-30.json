@@ -1,0 +1,161 @@
+{
+  "status": "Persistent prefix states implemented and regression-tested; original5 pure-RTL fixtures have explicit fixed-prefix edit restrictions. Full optimization goal remains active.",
+  "mainHead": "41758aa9e865903a0e283861f19331f9a36eab5b",
+  "binarySha256": "49571f17de19b06f899418472b1bb8a8ac781c827f4ed09c9b72b1d0b2b56aaa",
+  "sdkPatchSha256": "3c592224843522823ebe3d75823ece536ec6209b8f0461db56b750eba6c4ccc1",
+  "asanBinarySha256": "1a6786c01e7e03c8f1ccfc4c355aed79cde5ed83d93bfd149fd6d95f1d7e428a",
+  "sourceSeal": "untracked/project-optimization-2026-10-29/persistent-directives-source-seal.json",
+  "sourceArchive": "untracked/project-optimization-2026-10-29/source-receipts/persistent-directives-49571f17",
+  "implemented": [
+    "Capture/restore terminal timescale, default_nettype, unconnected_drive, celldefine including resets at standalone and native interior checkpoints",
+    "Preserve terminal state in prefix extension and shared source namespaces; archive format4 with raw value validation and backward readers for legitimate safe2/3 archives",
+    "Keep keyword-stack and unsupported pragma/protection state declined; experiments remain default off"
+  ],
+  "verification": {
+    "ctest": {
+      "passed": 1012,
+      "failed": 0,
+      "seconds": 18.12,
+      "TMPDIR": "/private/tmp",
+      "concurrentAsanBuild": true
+    },
+    "sdk": {
+      "cases": 2645,
+      "assertions": 37010
+    },
+    "persistentDirectiveCaseAssertions": 2196,
+    "workerDirectiveCaseAssertions": 16,
+    "sdkFilesVerified": 709,
+    "reversePatchCheck": true,
+    "asan": {
+      "states": 45,
+      "passed": true,
+      "normalExits": 3,
+      "sanitizerErrors": 0,
+      "leakDetection": false,
+      "timingAccepted": false,
+      "evidence": "untracked/project-optimization-2026-10-29/serdes-pcs-verification-fixed-prefix-compatible-persistent-directives-asan-final.json",
+      "sha256": "c0162520f5deaa911ec060bc0f9aa2aa3fa83fef7395df13eea41cb79b16ffd0",
+      "exitReceipt": "untracked/project-optimization-2026-10-29/persistent-directives-asan-exit-receipt.json",
+      "exitReceiptSha256": "9dac7cddef349402d9716040916d034a0136f789b7757a80f3878fc5e4fac84e"
+    }
+  },
+  "remaining": [
+    "Original five broad pure-RTL configurations include the edit target in the fixed ordered prefix and require manual rebuild; not qualified as successful edit workloads",
+    "MAC/UDP partial cases reach prepared generation but RTL bodies decline child lfsr outside fixed prefix. Study dependency closure across separated source roots without freezing mutable intervening files. UDP edits lfsr itself, so consumer dependency may be mutable by design",
+    "SerDes verification partial case has no selected decoder root in active hierarchy; do not infer reuse from prepared=true",
+    "Unchanged signature/parameter hover expansion, model/summary memory overlap and precise refusal attribution, final all-project release/package/cache checks, cleanup and main push remain open"
+  ],
+  "limitations": [
+    "All three runtime arms use the same binary: optimization on/off correctness comparison, not historical binary performance comparison",
+    "Sequential edits; memory at edit boundaries, not sampled peak or burst/cold disk measurements",
+    "Partial pure-RTL cases are not whole DUT or joint UVM reuse; original broader fixtures retained unchanged"
+  ],
+  "evidence": {
+    "path": "untracked/project-optimization-2026-10-29/persistent-directives-qualification.json",
+    "sha256": "c867cc19b9429f1615f71cfba6ade975f905f13ecee71b49f5f52c44dfa095cb"
+  },
+  "originalMatrix": {
+    "passed": 10,
+    "fixedSourceEditRefusals": 5,
+    "runtime": "untracked/project-optimization-2026-10-29/persistent-directives-cross-project-runtime.json",
+    "all15PerformanceAccepted": false
+  },
+  "additionalPartialRtlCases": {
+    "passed": 5,
+    "states": 225,
+    "replacesOriginalBroaderScopes": false
+  },
+  "wholeRtlUvm": {
+    "aes": {
+      "passed": true,
+      "wholeDutPerformanceAccepted": true,
+      "states": 45,
+      "evidence": "untracked/rtl-uvm-fallback-2026-10-29/opentitan-aes-uvm-persistent-directives.json",
+      "sha256": "8611f1c6cb6f7067f0525dbe416346f9035f27efc83d1d1c97db0e53d8b65003",
+      "frozenLocal": {
+        "2": {
+          "state": "body",
+          "queryMs": 10.302666,
+          "diagnosticMs": 22.731291,
+          "footprintMiB": 448.5008239746094
+        },
+        "9": {
+          "state": "repair",
+          "queryMs": 2.037584,
+          "diagnosticMs": 3.2515,
+          "footprintMiB": 448.5320739746094
+        },
+        "10": {
+          "state": "structural",
+          "queryMs": 78.253541,
+          "diagnosticMs": 241.663541,
+          "footprintMiB": 478.50084686279297
+        },
+        "11": {
+          "state": "repair",
+          "queryMs": 80.397208,
+          "diagnosticMs": 240.133083,
+          "footprintMiB": 483.2508239746094
+        },
+        "12": {
+          "state": "body",
+          "queryMs": 9.280417,
+          "diagnosticMs": 20.904459,
+          "footprintMiB": 483.6570739746094
+        },
+        "15": {
+          "state": "repair",
+          "queryMs": 2.067542,
+          "diagnosticMs": 3.4205,
+          "footprintMiB": 483.6570739746094
+        }
+      }
+    },
+    "uart": {
+      "passed": true,
+      "wholeDutPerformanceAccepted": true,
+      "states": 45,
+      "evidence": "untracked/rtl-uvm-fallback-2026-10-29/opentitan-uart-uvm-persistent-directives.json",
+      "sha256": "ce776c3ee71a399f5b13a098ac5824f9f256f8a859968e098b3314dbff6c5d7a",
+      "frozenLocal": {
+        "2": {
+          "state": "body",
+          "queryMs": 10.122583,
+          "diagnosticMs": 18.659541,
+          "footprintMiB": 350.219482421875
+        },
+        "9": {
+          "state": "repair",
+          "queryMs": 2.418459,
+          "diagnosticMs": 3.717875,
+          "footprintMiB": 350.250732421875
+        },
+        "10": {
+          "state": "structural",
+          "queryMs": 107.016042,
+          "diagnosticMs": 249.076875,
+          "footprintMiB": 392.8913803100586
+        },
+        "11": {
+          "state": "repair",
+          "queryMs": 96.424083,
+          "diagnosticMs": 240.486166,
+          "footprintMiB": 396.2507781982422
+        },
+        "12": {
+          "state": "body",
+          "queryMs": 10.2095,
+          "diagnosticMs": 18.611625,
+          "footprintMiB": 396.5007781982422
+        },
+        "15": {
+          "state": "repair",
+          "queryMs": 1.921458,
+          "diagnosticMs": 3.15325,
+          "footprintMiB": 396.5007781982422
+        }
+      }
+    }
+  }
+}

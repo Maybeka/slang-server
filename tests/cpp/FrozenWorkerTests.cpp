@@ -161,10 +161,10 @@ TEST_CASE("Generic diagnostic decline restarts native parsing and can recover",
         snapshot.metadata.trees[0].frozenPrefix->packages = {"not_a_package"};
         job = server::encodeDiagnosticJob(snapshot.metadata, *snapshot.input);
     }
-    SECTION("directive effects cannot be replayed") {
+    SECTION("keyword stack effects cannot be replayed") {
         auto input = *snapshot.input;
         replaceFile(input, "first.sv",
-                    "`timescale 1ns/1ps\n`include \"shared.svh\"\n`define LIB_WIDTH 4\n"
+                    "`begin_keywords \"1800-2017\"\n`include \"shared.svh\"\n`define LIB_WIDTH 4\n"
                     "package lib_first; typedef int word_t; localparam int WIDTH=3; endpackage\n");
         job = server::encodeDiagnosticJob(snapshot.metadata, input);
     }
@@ -192,6 +192,30 @@ TEST_CASE("Generic diagnostic decline restarts native parsing and can recover",
     CHECK(restored.genericPrefixCaptureParses == 1);
     worker.execute(repaired, {}, &hit);
     CHECK(hit.reusedGenericPrefixes == 1);
+}
+
+TEST_CASE("Generic diagnostic workers resume persistent prefix directives",
+          "[frozen-worker][prefix-directives]") {
+    FrozenWorkerFixture fixture;
+    auto snapshot = fixture.snapshot();
+    auto input = *snapshot.input;
+    replaceFile(input, "second.sv",
+        "package lib_second; localparam int WIDTH=lib_first::WIDTH; endpackage\n"
+        "`timescale 1ns/1ps\n`default_nettype none\n`unconnected_drive pull1\n`celldefine\n");
+    replaceFile(input, "owner.sv",
+        "module inherited; assign implicit_net = 1'b0; endmodule\n"
+        "`resetall\n`include \"shared.svh\"\npackage app;\n"
+        "`include \"item.svh\"\nendpackage\n");
+    auto job = server::encodeDiagnosticJob(snapshot.metadata, input);
+    const auto expected = rendered(server::executeDiagnosticJob(job));
+    server::DiagnosticJobSession worker;
+    server::DiagnosticJobStatistics capture, hit;
+    CHECK(rendered(worker.execute(job, {}, &capture)) == expected);
+    CHECK(capture.genericPrefixCaptureParses == 1);
+    CHECK(capture.genericDeclines == 0);
+    CHECK(rendered(worker.execute(job, {}, &hit)) == expected);
+    CHECK(hit.reusedGenericPrefixes == 1);
+    CHECK(hit.genericDeclines == 0);
 }
 
 TEST_CASE("Generic worker hints are gated, validated and independently budgeted",

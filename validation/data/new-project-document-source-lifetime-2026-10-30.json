@@ -1,0 +1,2384 @@
+{
+  "status": "Published document syntax source-storage lifetime qualified; full objective remains active",
+  "mainHead": "41758aa9e865903a0e283861f19331f9a36eab5b",
+  "binarySha256": "823b290ea520a88d7e8d9e2fccf6085f9842396e60fed279011c9a417c49c1d5",
+  "asanBinarySha256": "9c31c7e45649a984aa48ca8649eabe7d9cae999fd9cbf4cb09ad2acbc1172a5d",
+  "baselineBinarySha256": "bf260c141dd392038aa15e413db68afe02139cfa5d85c2abf65d2cb674d37706",
+  "sourceSeal": "untracked/project-optimization-2026-10-29/document-lease-source-seal.json",
+  "sourceArchive": "untracked/project-optimization-2026-10-29/source-receipts/document-source-lease",
+  "implemented": [
+    "Share Native publication source leases with ordinary SlangDoc standalone/preinclude/native reparses",
+    "Acquire leases before the post-parse cancellation checkpoint; retain old file and command-line macro bytes with the tree",
+    "Destroy managed owner before source leases at last strong reference; expired weak tree caches retain only a control block"
+  ],
+  "reproducedBeforeFix": {
+    "productionBinarySha256": "713381c33a3bef03ab070949ad863182d93d90281bd52ac722dca5e5010b91da",
+    "realFailures": [
+      "standalone root text released while old tree retained",
+      "preinclude consumer root text released while old tree retained"
+    ],
+    "initialProbeAssertions": 32,
+    "initialProbeFailures": 3,
+    "initialProbeCorrection": "Third failure assumed old preinclude storage had no other owner. Source-manager aliases legitimately keep it; final regression checks release when the source context retires. Do not count that invalid expectation as a third defect.",
+    "asanFailureBeforeFixClaimed": false
+  },
+  "verification": {
+    "ctest": {
+      "passed": 1017,
+      "failed": 0,
+      "seconds": 15.37,
+      "TMPDIR": "/private/tmp",
+      "concurrentAsanBuild": false
+    },
+    "lifetimeRegression": {
+      "generatorContexts": 6,
+      "assertions": 121,
+      "includesPostParseCancellation": true
+    },
+    "asanUnits": {
+      "cases": 23,
+      "assertions": 2948,
+      "leakDetection": false
+    },
+    "asanProtocol": {
+      "states": 90,
+      "normalExitProcesses": 6,
+      "sanitizerErrors": 0,
+      "timingAccepted": false,
+      "leakDetection": false
+    },
+    "sdkFilesVerifiedUnchanged": 709,
+    "releaseStates": 1035
+  },
+  "cases": {
+    "opentitan-soc-large": {
+      "status": "passed",
+      "evidence": "untracked/project-optimization-2026-10-29/opentitan-soc-large-document-source-lease.json",
+      "sha256": "13feb78b774127760a46416796eb0adc2adfef376d7aec858e986a8c509be97c",
+      "arms": {
+        "native": {
+          "warmQueryMedianMs": 619.776708,
+          "warmDiagnosticMedianMs": 1221.471083,
+          "firstEdit": {
+            "queryMs": 681.486667,
+            "diagnosticMs": 1309.077
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 621.167291,
+              "diagnosticMs": 1221.468708
+            }
+          ],
+          "lastEditFootprintMiB": 834.5803909301758,
+          "postStatusFootprintMiB": 834.5960159301758,
+          "allocatorInUseBytes": 1642494112,
+          "source": {
+            "dataBytes": 21624535,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 147033,
+            "indexBytes": 23975
+          },
+          "locationTableBytes": 117440623,
+          "scopePrepared": false,
+          "lastModelSharedRoots": []
+        },
+        "baseline": {
+          "warmQueryMedianMs": 16.030459,
+          "warmDiagnosticMedianMs": 30.645709,
+          "firstEdit": {
+            "queryMs": 41.359084,
+            "diagnosticMs": 67.968542
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 711.055542,
+              "diagnosticMs": 1390.492333
+            }
+          ],
+          "lastEditFootprintMiB": 882.2522888183594,
+          "postStatusFootprintMiB": 882.2835388183594,
+          "allocatorInUseBytes": 1774773072,
+          "source": {
+            "dataBytes": 41550158,
+            "queryBytes": 92228,
+            "queryBuffers": 2,
+            "retainedNameBytes": 158364,
+            "indexBytes": 72675
+          },
+          "locationTableBytes": 16120831,
+          "scopePrepared": true,
+          "lastModelSharedRoots": []
+        },
+        "candidate": {
+          "warmQueryMedianMs": 16.067,
+          "warmDiagnosticMedianMs": 30.643541,
+          "firstEdit": {
+            "queryMs": 39.800166,
+            "diagnosticMs": 65.944041
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 702.973208,
+              "diagnosticMs": 1371.822167
+            }
+          ],
+          "lastEditFootprintMiB": 885.7679138183594,
+          "postStatusFootprintMiB": 885.7835388183594,
+          "allocatorInUseBytes": 1774785312,
+          "source": {
+            "dataBytes": 41550158,
+            "queryBytes": 92228,
+            "queryBuffers": 2,
+            "retainedNameBytes": 158364,
+            "indexBytes": 72675
+          },
+          "locationTableBytes": 16120831,
+          "scopePrepared": true,
+          "lastModelSharedRoots": []
+        }
+      }
+    },
+    "opentitan-soc-inside-body": {
+      "status": "passed",
+      "evidence": "untracked/project-optimization-2026-10-29/opentitan-soc-inside-body-document-source-lease.json",
+      "sha256": "d9264a89cac9b40bacf76fba8651b7f451f57314fa352a9feddc1799e07c5700",
+      "arms": {
+        "native": {
+          "warmQueryMedianMs": 621.138667,
+          "warmDiagnosticMedianMs": 1226.095583,
+          "firstEdit": {
+            "queryMs": 672.882625,
+            "diagnosticMs": 1299.553125
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 617.582333,
+              "diagnosticMs": 1216.802041
+            }
+          ],
+          "lastEditFootprintMiB": 835.4085159301758,
+          "postStatusFootprintMiB": 835.4241409301758,
+          "allocatorInUseBytes": 1642494112,
+          "source": {
+            "dataBytes": 21624535,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 147033,
+            "indexBytes": 23975
+          },
+          "locationTableBytes": 117440623,
+          "scopePrepared": false,
+          "lastModelSharedRoots": []
+        },
+        "baseline": {
+          "warmQueryMedianMs": 15.765,
+          "warmDiagnosticMedianMs": 30.228917,
+          "firstEdit": {
+            "queryMs": 40.78075,
+            "diagnosticMs": 66.609375
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 697.830125,
+              "diagnosticMs": 1359.119166
+            }
+          ],
+          "lastEditFootprintMiB": 882.7054138183594,
+          "postStatusFootprintMiB": 882.7210388183594,
+          "allocatorInUseBytes": 1774777168,
+          "source": {
+            "dataBytes": 41550158,
+            "queryBytes": 92228,
+            "queryBuffers": 2,
+            "retainedNameBytes": 158364,
+            "indexBytes": 72675
+          },
+          "locationTableBytes": 16120831,
+          "scopePrepared": true,
+          "lastModelSharedRoots": []
+        },
+        "candidate": {
+          "warmQueryMedianMs": 16.188083,
+          "warmDiagnosticMedianMs": 30.975208,
+          "firstEdit": {
+            "queryMs": 40.006958,
+            "diagnosticMs": 66.647
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 700.741333,
+              "diagnosticMs": 1374.483166
+            }
+          ],
+          "lastEditFootprintMiB": 882.8929138183594,
+          "postStatusFootprintMiB": 882.9085388183594,
+          "allocatorInUseBytes": 1774789408,
+          "source": {
+            "dataBytes": 41550158,
+            "queryBytes": 92228,
+            "queryBuffers": 2,
+            "retainedNameBytes": 158364,
+            "indexBytes": 72675
+          },
+          "locationTableBytes": 16120831,
+          "scopePrepared": true,
+          "lastModelSharedRoots": []
+        }
+      }
+    },
+    "opentitan-aes": {
+      "status": "passed",
+      "evidence": "untracked/project-optimization-2026-10-29/opentitan-aes-document-source-lease.json",
+      "sha256": "e9177afd0e4792a6759f31dad37295a63f2c204221ddbc715be48b17f5c627fa",
+      "arms": {
+        "native": {
+          "warmQueryMedianMs": 58.812667,
+          "warmDiagnosticMedianMs": 94.242042,
+          "firstEdit": {
+            "queryMs": 61.700916,
+            "diagnosticMs": 98.221125
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 59.256,
+              "diagnosticMs": 94.669042
+            }
+          ],
+          "lastEditFootprintMiB": 125.85992431640625,
+          "postStatusFootprintMiB": 125.87554931640625,
+          "allocatorInUseBytes": 115855344,
+          "source": {
+            "dataBytes": 3090325,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 49684,
+            "indexBytes": 11975
+          },
+          "locationTableBytes": 14680175,
+          "scopePrepared": false,
+          "lastModelSharedRoots": []
+        },
+        "baseline": {
+          "warmQueryMedianMs": 4.787792,
+          "warmDiagnosticMedianMs": 9.255,
+          "firstEdit": {
+            "queryMs": 11.084125,
+            "diagnosticMs": 19.081083
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 62.087709,
+              "diagnosticMs": 98.107917
+            }
+          ],
+          "lastEditFootprintMiB": 83.04744720458984,
+          "postStatusFootprintMiB": 83.06307220458984,
+          "allocatorInUseBytes": 124027456,
+          "source": {
+            "dataBytes": 5275850,
+            "queryBytes": 92228,
+            "queryBuffers": 2,
+            "retainedNameBytes": 55773,
+            "indexBytes": 36675
+          },
+          "locationTableBytes": 2449047,
+          "scopePrepared": true,
+          "lastModelSharedRoots": []
+        },
+        "candidate": {
+          "warmQueryMedianMs": 4.788166,
+          "warmDiagnosticMedianMs": 9.247167,
+          "firstEdit": {
+            "queryMs": 11.358916,
+            "diagnosticMs": 19.381375
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 62.282792,
+              "diagnosticMs": 98.379042
+            }
+          ],
+          "lastEditFootprintMiB": 83.26617431640625,
+          "postStatusFootprintMiB": 83.28179931640625,
+          "allocatorInUseBytes": 124027408,
+          "source": {
+            "dataBytes": 5275850,
+            "queryBytes": 92228,
+            "queryBuffers": 2,
+            "retainedNameBytes": 55773,
+            "indexBytes": 36675
+          },
+          "locationTableBytes": 2449047,
+          "scopePrepared": true,
+          "lastModelSharedRoots": []
+        }
+      }
+    },
+    "opentitan-aes-inside-body": {
+      "status": "passed",
+      "evidence": "untracked/project-optimization-2026-10-29/opentitan-aes-inside-body-document-source-lease.json",
+      "sha256": "f6e14329daedc31e9a6a7c6950b3cadbcc8553dcc2c619f5ac9c51e7f3b4b1c9",
+      "arms": {
+        "native": {
+          "warmQueryMedianMs": 59.244083,
+          "warmDiagnosticMedianMs": 94.782208,
+          "firstEdit": {
+            "queryMs": 61.063375,
+            "diagnosticMs": 97.587958
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 60.016709,
+              "diagnosticMs": 95.735375
+            }
+          ],
+          "lastEditFootprintMiB": 126.17242431640625,
+          "postStatusFootprintMiB": 126.18804931640625,
+          "allocatorInUseBytes": 115855344,
+          "source": {
+            "dataBytes": 3090325,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 49684,
+            "indexBytes": 11975
+          },
+          "locationTableBytes": 14680175,
+          "scopePrepared": false,
+          "lastModelSharedRoots": []
+        },
+        "baseline": {
+          "warmQueryMedianMs": 4.822167,
+          "warmDiagnosticMedianMs": 9.368625,
+          "firstEdit": {
+            "queryMs": 11.414,
+            "diagnosticMs": 19.523958
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 62.591,
+              "diagnosticMs": 99.394458
+            }
+          ],
+          "lastEditFootprintMiB": 82.98494720458984,
+          "postStatusFootprintMiB": 83.00057220458984,
+          "allocatorInUseBytes": 124027456,
+          "source": {
+            "dataBytes": 5275850,
+            "queryBytes": 92228,
+            "queryBuffers": 2,
+            "retainedNameBytes": 55773,
+            "indexBytes": 36675
+          },
+          "locationTableBytes": 2449047,
+          "scopePrepared": true,
+          "lastModelSharedRoots": []
+        },
+        "candidate": {
+          "warmQueryMedianMs": 4.819167,
+          "warmDiagnosticMedianMs": 9.292917,
+          "firstEdit": {
+            "queryMs": 11.263791,
+            "diagnosticMs": 19.233416
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 62.319375,
+              "diagnosticMs": 98.6335
+            }
+          ],
+          "lastEditFootprintMiB": 83.48492431640625,
+          "postStatusFootprintMiB": 83.51617431640625,
+          "allocatorInUseBytes": 124031504,
+          "source": {
+            "dataBytes": 5275850,
+            "queryBytes": 92228,
+            "queryBuffers": 2,
+            "retainedNameBytes": 55773,
+            "indexBytes": 36675
+          },
+          "locationTableBytes": 2449047,
+          "scopePrepared": true,
+          "lastModelSharedRoots": []
+        }
+      }
+    },
+    "aes-small": {
+      "status": "passed",
+      "evidence": "untracked/project-optimization-2026-10-29/aes-small-document-source-lease.json",
+      "sha256": "02d7b75e941665a2bad5c4ea64a6969824df439240eba3f1638a9a87bda50aa9",
+      "arms": {
+        "native": {
+          "warmQueryMedianMs": 2.083417,
+          "warmDiagnosticMedianMs": 5.651958,
+          "firstEdit": {
+            "queryMs": 2.22625,
+            "diagnosticMs": 5.845625
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 2.004584,
+              "diagnosticMs": 5.559584
+            }
+          ],
+          "lastEditFootprintMiB": 9.703559875488281,
+          "postStatusFootprintMiB": 9.734809875488281,
+          "allocatorInUseBytes": 5318384,
+          "source": {
+            "dataBytes": 393188,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 5531,
+            "indexBytes": 2975
+          },
+          "locationTableBytes": 21107,
+          "scopePrepared": false,
+          "lastModelSharedRoots": []
+        },
+        "baseline": {
+          "warmQueryMedianMs": 0.397042,
+          "warmDiagnosticMedianMs": 0.583625,
+          "firstEdit": {
+            "queryMs": 0.745333,
+            "diagnosticMs": 4.909708
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 2.854125,
+              "diagnosticMs": 6.347875
+            }
+          ],
+          "lastEditFootprintMiB": 13.781684875488281,
+          "postStatusFootprintMiB": 13.797309875488281,
+          "allocatorInUseBytes": 8021888,
+          "source": {
+            "dataBytes": 262781,
+            "queryBytes": 16776,
+            "queryBuffers": 2,
+            "retainedNameBytes": 2055,
+            "indexBytes": 3650
+          },
+          "locationTableBytes": 30448,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "aes.core.dec_block",
+            "aes.core.keymem",
+            "aes.core.sbox_inst"
+          ]
+        },
+        "candidate": {
+          "warmQueryMedianMs": 0.368958,
+          "warmDiagnosticMedianMs": 0.538792,
+          "firstEdit": {
+            "queryMs": 0.778833,
+            "diagnosticMs": 5.0205
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 2.931625,
+              "diagnosticMs": 6.45325
+            }
+          ],
+          "lastEditFootprintMiB": 13.859809875488281,
+          "postStatusFootprintMiB": 13.875434875488281,
+          "allocatorInUseBytes": 8022160,
+          "source": {
+            "dataBytes": 262781,
+            "queryBytes": 16776,
+            "queryBuffers": 2,
+            "retainedNameBytes": 2055,
+            "indexBytes": 3650
+          },
+          "locationTableBytes": 30448,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "aes.core.dec_block",
+            "aes.core.keymem",
+            "aes.core.sbox_inst"
+          ]
+        }
+      }
+    },
+    "aes-inside-body": {
+      "status": "passed",
+      "evidence": "untracked/project-optimization-2026-10-29/aes-inside-body-document-source-lease.json",
+      "sha256": "a122e626f45559bfc657076d9f27b11c7a4af62e333cfa27e0fa2d81d1007e69",
+      "arms": {
+        "native": {
+          "warmQueryMedianMs": 2.081666,
+          "warmDiagnosticMedianMs": 5.589875,
+          "firstEdit": {
+            "queryMs": 2.203791,
+            "diagnosticMs": 5.829166
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 2.073042,
+              "diagnosticMs": 5.626584
+            }
+          ],
+          "lastEditFootprintMiB": 9.719184875488281,
+          "postStatusFootprintMiB": 9.750434875488281,
+          "allocatorInUseBytes": 5318384,
+          "source": {
+            "dataBytes": 393188,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 5531,
+            "indexBytes": 2975
+          },
+          "locationTableBytes": 21107,
+          "scopePrepared": false,
+          "lastModelSharedRoots": []
+        },
+        "baseline": {
+          "warmQueryMedianMs": 0.398875,
+          "warmDiagnosticMedianMs": 0.578042,
+          "firstEdit": {
+            "queryMs": 0.743541,
+            "diagnosticMs": 4.918541
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 2.805083,
+              "diagnosticMs": 6.28725
+            }
+          ],
+          "lastEditFootprintMiB": 13.781684875488281,
+          "postStatusFootprintMiB": 13.797309875488281,
+          "allocatorInUseBytes": 8021888,
+          "source": {
+            "dataBytes": 262781,
+            "queryBytes": 16776,
+            "queryBuffers": 2,
+            "retainedNameBytes": 2055,
+            "indexBytes": 3650
+          },
+          "locationTableBytes": 30448,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "aes.core.dec_block",
+            "aes.core.keymem",
+            "aes.core.sbox_inst"
+          ]
+        },
+        "candidate": {
+          "warmQueryMedianMs": 0.379584,
+          "warmDiagnosticMedianMs": 0.553667,
+          "firstEdit": {
+            "queryMs": 0.72775,
+            "diagnosticMs": 4.888167
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 2.824125,
+              "diagnosticMs": 6.3415
+            }
+          ],
+          "lastEditFootprintMiB": 13.828559875488281,
+          "postStatusFootprintMiB": 13.844184875488281,
+          "allocatorInUseBytes": 8022160,
+          "source": {
+            "dataBytes": 262781,
+            "queryBytes": 16776,
+            "queryBuffers": 2,
+            "retainedNameBytes": 2055,
+            "indexBytes": 3650
+          },
+          "locationTableBytes": 30448,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "aes.core.dec_block",
+            "aes.core.keymem",
+            "aes.core.sbox_inst"
+          ]
+        }
+      }
+    },
+    "ethernet-mac-medium": {
+      "status": "passed",
+      "evidence": "untracked/project-optimization-2026-10-29/ethernet-mac-medium-document-source-lease.json",
+      "sha256": "fb5fb797dd3359bf9ac05fb212227c695aeb2b3118e9b21334aaeec4f59bd114",
+      "arms": {
+        "native": {
+          "warmQueryMedianMs": 9.435334,
+          "warmDiagnosticMedianMs": 12.262959,
+          "firstEdit": {
+            "queryMs": 10.013417,
+            "diagnosticMs": 12.921
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 9.413542,
+              "diagnosticMs": 12.2355
+            }
+          ],
+          "lastEditFootprintMiB": 21.375457763671875,
+          "postStatusFootprintMiB": 21.406707763671875,
+          "allocatorInUseBytes": 13887616,
+          "source": {
+            "dataBytes": 619568,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 4849,
+            "indexBytes": 2975
+          },
+          "locationTableBytes": 234482,
+          "scopePrepared": false,
+          "lastModelSharedRoots": []
+        },
+        "baseline": {
+          "warmQueryMedianMs": 22.701083,
+          "warmDiagnosticMedianMs": 25.583291,
+          "firstEdit": {
+            "queryMs": 23.279834,
+            "diagnosticMs": 26.23625
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 13.118625,
+              "diagnosticMs": 16.017541
+            }
+          ],
+          "lastEditFootprintMiB": 25.406707763671875,
+          "postStatusFootprintMiB": 25.453582763671875,
+          "allocatorInUseBytes": 16768688,
+          "source": {
+            "dataBytes": 910587,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 58253,
+            "indexBytes": 26150
+          },
+          "locationTableBytes": 277825,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "eth_mac_10g.genblk1.axis_xgmii_rx_inst"
+          ]
+        },
+        "candidate": {
+          "warmQueryMedianMs": 22.675209,
+          "warmDiagnosticMedianMs": 25.553875,
+          "firstEdit": {
+            "queryMs": 23.266291,
+            "diagnosticMs": 26.202708
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 13.165458,
+              "diagnosticMs": 16.061041
+            }
+          ],
+          "lastEditFootprintMiB": 25.594207763671875,
+          "postStatusFootprintMiB": 25.609832763671875,
+          "allocatorInUseBytes": 16768800,
+          "source": {
+            "dataBytes": 910587,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 58253,
+            "indexBytes": 26150
+          },
+          "locationTableBytes": 277825,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "eth_mac_10g.genblk1.axis_xgmii_rx_inst"
+          ]
+        }
+      }
+    },
+    "ethernet-mac-ptp-medium": {
+      "status": "passed",
+      "evidence": "untracked/project-optimization-2026-10-29/ethernet-mac-ptp-medium-document-source-lease.json",
+      "sha256": "cc38f266a0b4759a7f625deaf2b5acdadc10bf2f81ba2a6d5d557f847dbc5331",
+      "arms": {
+        "native": {
+          "warmQueryMedianMs": 12.518917,
+          "warmDiagnosticMedianMs": 15.500166,
+          "firstEdit": {
+            "queryMs": 13.188666,
+            "diagnosticMs": 16.206625
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 12.6175,
+              "diagnosticMs": 15.606375
+            }
+          ],
+          "lastEditFootprintMiB": 22.766082763671875,
+          "postStatusFootprintMiB": 22.797332763671875,
+          "allocatorInUseBytes": 15051312,
+          "source": {
+            "dataBytes": 739384,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 33289,
+            "indexBytes": 23975
+          },
+          "locationTableBytes": 274442,
+          "scopePrepared": false,
+          "lastModelSharedRoots": []
+        },
+        "baseline": {
+          "warmQueryMedianMs": 25.516833,
+          "warmDiagnosticMedianMs": 28.588083,
+          "firstEdit": {
+            "queryMs": 26.173417,
+            "diagnosticMs": 29.277125
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 16.432875,
+              "diagnosticMs": 19.493458
+            }
+          ],
+          "lastEditFootprintMiB": 35.531707763671875,
+          "postStatusFootprintMiB": 35.609832763671875,
+          "allocatorInUseBytes": 26532304,
+          "source": {
+            "dataBytes": 1033082,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 87641,
+            "indexBytes": 50900
+          },
+          "locationTableBytes": 352650,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "eth_mac_10g.genblk1.axis_xgmii_rx_inst",
+            "eth_mac_10g.mac_ctrl.mac_ctrl_rx_inst",
+            "eth_mac_10g.mac_ctrl.mac_pause_ctrl_rx_inst"
+          ]
+        },
+        "candidate": {
+          "warmQueryMedianMs": 25.496583,
+          "warmDiagnosticMedianMs": 28.568333,
+          "firstEdit": {
+            "queryMs": 26.167,
+            "diagnosticMs": 29.302708
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 16.297667,
+              "diagnosticMs": 19.361834
+            }
+          ],
+          "lastEditFootprintMiB": 35.531707763671875,
+          "postStatusFootprintMiB": 35.562957763671875,
+          "allocatorInUseBytes": 26532416,
+          "source": {
+            "dataBytes": 1033082,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 87641,
+            "indexBytes": 50900
+          },
+          "locationTableBytes": 352650,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "eth_mac_10g.genblk1.axis_xgmii_rx_inst",
+            "eth_mac_10g.mac_ctrl.mac_ctrl_rx_inst",
+            "eth_mac_10g.mac_ctrl.mac_pause_ctrl_rx_inst"
+          ]
+        }
+      }
+    },
+    "ethernet-udp-medium": {
+      "status": "expected-fixed-dependency-refusal",
+      "performanceAccepted": false,
+      "evidence": "untracked/project-optimization-2026-10-29/ethernet-udp-medium-document-source-lease.json",
+      "sha256": "99b888fb97f15a9b7d7f4afd5592dcb6c6dfa80306297806a6a30601879e6814"
+    },
+    "openofdm-wifi": {
+      "status": "passed",
+      "evidence": "untracked/project-optimization-2026-10-29/openofdm-wifi-document-source-lease.json",
+      "sha256": "d58cd1eee53e46e72cded3cce933eec43b124cb7050fac25ab179d939dce7910",
+      "arms": {
+        "native": {
+          "warmQueryMedianMs": 138.037,
+          "warmDiagnosticMedianMs": 145.736709,
+          "firstEdit": {
+            "queryMs": 147.3595,
+            "diagnosticMs": 155.30275
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 138.631084,
+              "diagnosticMs": 146.336459
+            }
+          ],
+          "lastEditFootprintMiB": 203.2507095336914,
+          "postStatusFootprintMiB": 203.2663345336914,
+          "allocatorInUseBytes": 233387488,
+          "source": {
+            "dataBytes": 12954766,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 46648,
+            "indexBytes": 23975
+          },
+          "locationTableBytes": 286097,
+          "scopePrepared": false,
+          "lastModelSharedRoots": []
+        },
+        "baseline": {
+          "warmQueryMedianMs": 142.272583,
+          "warmDiagnosticMedianMs": 151.082459,
+          "firstEdit": {
+            "queryMs": 151.961417,
+            "diagnosticMs": 161.038375
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 158.265208,
+              "diagnosticMs": 167.127917
+            }
+          ],
+          "lastEditFootprintMiB": 214.969482421875,
+          "postStatusFootprintMiB": 214.985107421875,
+          "allocatorInUseBytes": 244150864,
+          "source": {
+            "dataBytes": 12954766,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 46648,
+            "indexBytes": 23975
+          },
+          "locationTableBytes": 286097,
+          "scopePrepared": false,
+          "lastModelSharedRoots": []
+        },
+        "candidate": {
+          "warmQueryMedianMs": 142.608834,
+          "warmDiagnosticMedianMs": 151.50575,
+          "firstEdit": {
+            "queryMs": 153.492166,
+            "diagnosticMs": 162.472125
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 163.483292,
+              "diagnosticMs": 172.457334
+            }
+          ],
+          "lastEditFootprintMiB": 215.7507553100586,
+          "postStatusFootprintMiB": 215.7663803100586,
+          "allocatorInUseBytes": 244150752,
+          "source": {
+            "dataBytes": 12954766,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 46648,
+            "indexBytes": 23975
+          },
+          "locationTableBytes": 286097,
+          "scopePrepared": false,
+          "lastModelSharedRoots": []
+        }
+      }
+    },
+    "openofdm-demodulator": {
+      "status": "passed",
+      "evidence": "untracked/project-optimization-2026-10-29/openofdm-demodulator-document-source-lease.json",
+      "sha256": "10551430d7b378dde7f15d9a7c480fbd15874bd9616e95c05e345d275f109ef0",
+      "arms": {
+        "native": {
+          "warmQueryMedianMs": 0.886875,
+          "warmDiagnosticMedianMs": 3.574167,
+          "firstEdit": {
+            "queryMs": 0.968083,
+            "diagnosticMs": 3.679416
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 0.895667,
+              "diagnosticMs": 3.509959
+            }
+          ],
+          "lastEditFootprintMiB": 5.109809875488281,
+          "postStatusFootprintMiB": 5.125434875488281,
+          "allocatorInUseBytes": 1425536,
+          "source": {
+            "dataBytes": 91843,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 5210,
+            "indexBytes": 2975
+          },
+          "locationTableBytes": 21107,
+          "scopePrepared": false,
+          "lastModelSharedRoots": []
+        },
+        "baseline": {
+          "warmQueryMedianMs": 1.019125,
+          "warmDiagnosticMedianMs": 3.713875,
+          "firstEdit": {
+            "queryMs": 1.081375,
+            "diagnosticMs": 3.745167
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 0.979625,
+              "diagnosticMs": 3.669125
+            }
+          ],
+          "lastEditFootprintMiB": 5.609809875488281,
+          "postStatusFootprintMiB": 5.641059875488281,
+          "allocatorInUseBytes": 1868624,
+          "source": {
+            "dataBytes": 97668,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 5447,
+            "indexBytes": 4425
+          },
+          "locationTableBytes": 35554,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "demodulate.stb_delay_inst"
+          ]
+        },
+        "candidate": {
+          "warmQueryMedianMs": 1.009792,
+          "warmDiagnosticMedianMs": 3.700334,
+          "firstEdit": {
+            "queryMs": 1.130125,
+            "diagnosticMs": 3.895834
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 1.069875,
+              "diagnosticMs": 3.749708
+            }
+          ],
+          "lastEditFootprintMiB": 5.641059875488281,
+          "postStatusFootprintMiB": 5.656684875488281,
+          "allocatorInUseBytes": 1868496,
+          "source": {
+            "dataBytes": 97668,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 5447,
+            "indexBytes": 4425
+          },
+          "locationTableBytes": 35554,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "demodulate.stb_delay_inst"
+          ]
+        }
+      }
+    },
+    "serdes-pcs-rtl": {
+      "status": "passed",
+      "evidence": "untracked/project-optimization-2026-10-29/serdes-pcs-rtl-document-source-lease.json",
+      "sha256": "a7e0ea30cf761d6d00f9e5584e2d64e4e97bc29ce80b8929479d7e17c2bafae3",
+      "arms": {
+        "native": {
+          "warmQueryMedianMs": 4.756292,
+          "warmDiagnosticMedianMs": 7.786583,
+          "firstEdit": {
+            "queryMs": 4.96825,
+            "diagnosticMs": 8.0825
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 4.902708,
+              "diagnosticMs": 8.037541
+            }
+          ],
+          "lastEditFootprintMiB": 11.531684875488281,
+          "postStatusFootprintMiB": 11.547309875488281,
+          "allocatorInUseBytes": 5928720,
+          "source": {
+            "dataBytes": 453653,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 7611,
+            "indexBytes": 2975
+          },
+          "locationTableBytes": 119794,
+          "scopePrepared": false,
+          "lastModelSharedRoots": []
+        },
+        "baseline": {
+          "warmQueryMedianMs": 9.623959,
+          "warmDiagnosticMedianMs": 12.769834,
+          "firstEdit": {
+            "queryMs": 11.564833,
+            "diagnosticMs": 14.80275
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 9.53675,
+              "diagnosticMs": 12.670416
+            }
+          ],
+          "lastEditFootprintMiB": 14.547309875488281,
+          "postStatusFootprintMiB": 14.562934875488281,
+          "allocatorInUseBytes": 8704336,
+          "source": {
+            "dataBytes": 582422,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 12746,
+            "indexBytes": 4425
+          },
+          "locationTableBytes": 120127,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "ge_1000baseX.decoder_8b10bi",
+            "ge_1000baseX.ge_1000baseX_an_i",
+            "ge_1000baseX.ge_1000baseX_sync_i"
+          ]
+        },
+        "candidate": {
+          "warmQueryMedianMs": 9.451833,
+          "warmDiagnosticMedianMs": 12.586041,
+          "firstEdit": {
+            "queryMs": 9.797208,
+            "diagnosticMs": 12.991167
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 9.382625,
+              "diagnosticMs": 12.54375
+            }
+          ],
+          "lastEditFootprintMiB": 14.484809875488281,
+          "postStatusFootprintMiB": 14.500434875488281,
+          "allocatorInUseBytes": 8705136,
+          "source": {
+            "dataBytes": 582422,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 12746,
+            "indexBytes": 4425
+          },
+          "locationTableBytes": 120127,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "ge_1000baseX.decoder_8b10bi",
+            "ge_1000baseX.ge_1000baseX_an_i",
+            "ge_1000baseX.ge_1000baseX_sync_i"
+          ]
+        }
+      }
+    },
+    "serdes-pcs-verification": {
+      "status": "passed",
+      "evidence": "untracked/project-optimization-2026-10-29/serdes-pcs-verification-document-source-lease.json",
+      "sha256": "fb328bf8bdb096e4b4fe7b5cf341a681263d77748b5695dda9eba0290e3a37c5",
+      "arms": {
+        "native": {
+          "warmQueryMedianMs": 19.994541,
+          "warmDiagnosticMedianMs": 23.721375,
+          "firstEdit": {
+            "queryMs": 20.235834,
+            "diagnosticMs": 24.037042
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 20.101333,
+              "diagnosticMs": 23.84575
+            }
+          ],
+          "lastEditFootprintMiB": 13.687957763671875,
+          "postStatusFootprintMiB": 13.703582763671875,
+          "allocatorInUseBytes": 22015728,
+          "source": {
+            "dataBytes": 652222,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 10395,
+            "indexBytes": 2975
+          },
+          "locationTableBytes": 234482,
+          "scopePrepared": false,
+          "lastModelSharedRoots": []
+        },
+        "baseline": {
+          "warmQueryMedianMs": 22.960417,
+          "warmDiagnosticMedianMs": 26.935667,
+          "firstEdit": {
+            "queryMs": 23.71425,
+            "diagnosticMs": 27.827375
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 22.712208,
+              "diagnosticMs": 26.715333
+            }
+          ],
+          "lastEditFootprintMiB": 17.547332763671875,
+          "postStatusFootprintMiB": 17.562957763671875,
+          "allocatorInUseBytes": 26638704,
+          "source": {
+            "dataBytes": 933562,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 16794,
+            "indexBytes": 8925
+          },
+          "locationTableBytes": 164927,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "ge_1000baseX_tb.ge_1000baseX_testi.ge_1000baseX_i.decoder_8b10bi",
+            "ge_1000baseX_tb.ge_1000baseX_testi.ge_1000baseX_i.ge_1000baseX_an_i",
+            "ge_1000baseX_tb.ge_1000baseX_testi.ge_1000baseX_i.ge_1000baseX_sync_i"
+          ]
+        },
+        "candidate": {
+          "warmQueryMedianMs": 23.288125,
+          "warmDiagnosticMedianMs": 27.2895,
+          "firstEdit": {
+            "queryMs": 23.691666,
+            "diagnosticMs": 27.789958
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 23.147583,
+              "diagnosticMs": 27.14075
+            }
+          ],
+          "lastEditFootprintMiB": 17.516082763671875,
+          "postStatusFootprintMiB": 17.531707763671875,
+          "allocatorInUseBytes": 26733392,
+          "source": {
+            "dataBytes": 933562,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 16794,
+            "indexBytes": 8925
+          },
+          "locationTableBytes": 164927,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "ge_1000baseX_tb.ge_1000baseX_testi.ge_1000baseX_i.decoder_8b10bi",
+            "ge_1000baseX_tb.ge_1000baseX_testi.ge_1000baseX_i.ge_1000baseX_an_i",
+            "ge_1000baseX_tb.ge_1000baseX_testi.ge_1000baseX_i.ge_1000baseX_sync_i"
+          ]
+        }
+      }
+    },
+    "serdes-8b10b-codec": {
+      "status": "passed",
+      "evidence": "untracked/project-optimization-2026-10-29/serdes-8b10b-codec-document-source-lease.json",
+      "sha256": "89b719c720e1154ecdb32172069b0bd9595a073c77c1db295ab7a828623e691e",
+      "arms": {
+        "native": {
+          "warmQueryMedianMs": 1.246791,
+          "warmDiagnosticMedianMs": 3.899875,
+          "firstEdit": {
+            "queryMs": 1.584042,
+            "diagnosticMs": 4.285209
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 1.222,
+              "diagnosticMs": 3.891375
+            }
+          ],
+          "lastEditFootprintMiB": 5.937934875488281,
+          "postStatusFootprintMiB": 5.953559875488281,
+          "allocatorInUseBytes": 2188416,
+          "source": {
+            "dataBytes": 254272,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 2793,
+            "indexBytes": 1475
+          },
+          "locationTableBytes": 10609,
+          "scopePrepared": false,
+          "lastModelSharedRoots": []
+        },
+        "baseline": {
+          "warmQueryMedianMs": 1.0895,
+          "warmDiagnosticMedianMs": 3.759917,
+          "firstEdit": {
+            "queryMs": 1.213417,
+            "diagnosticMs": 3.91175
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 1.077,
+              "diagnosticMs": 3.735166
+            }
+          ],
+          "lastEditFootprintMiB": 6.500434875488281,
+          "postStatusFootprintMiB": 6.516059875488281,
+          "allocatorInUseBytes": 2770400,
+          "source": {
+            "dataBytes": 265797,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 2897,
+            "indexBytes": 2925
+          },
+          "locationTableBytes": 18057,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "decoder_8b10b"
+          ]
+        },
+        "candidate": {
+          "warmQueryMedianMs": 1.075042,
+          "warmDiagnosticMedianMs": 3.746667,
+          "firstEdit": {
+            "queryMs": 1.170292,
+            "diagnosticMs": 3.864292
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 1.190958,
+              "diagnosticMs": 3.863291
+            }
+          ],
+          "lastEditFootprintMiB": 6.562934875488281,
+          "postStatusFootprintMiB": 6.578559875488281,
+          "allocatorInUseBytes": 2770288,
+          "source": {
+            "dataBytes": 265797,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 2897,
+            "indexBytes": 2925
+          },
+          "locationTableBytes": 18057,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "decoder_8b10b"
+          ]
+        }
+      }
+    },
+    "cva6-uvm": {
+      "status": "passed",
+      "evidence": "untracked/project-optimization-2026-10-29/cva6-uvm-document-source-lease.json",
+      "sha256": "1d768577c5d2af827509f067314d2ba450487a0c681adf325b3eb62fffcddf09",
+      "arms": {
+        "native": {
+          "warmQueryMedianMs": 1501.686,
+          "warmDiagnosticMedianMs": 1867.582208,
+          "firstEdit": {
+            "queryMs": 1522.716375,
+            "diagnosticMs": 1901.404167
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 1505.055875,
+              "diagnosticMs": 1870.788208
+            }
+          ],
+          "lastEditFootprintMiB": 520.9699630737305,
+          "postStatusFootprintMiB": 521.0012130737305,
+          "allocatorInUseBytes": 823963600,
+          "source": {
+            "dataBytes": 10453933,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 103049,
+            "indexBytes": 23975
+          },
+          "locationTableBytes": 58720367,
+          "scopePrepared": false,
+          "lastModelSharedRoots": []
+        },
+        "baseline": {
+          "warmQueryMedianMs": 6.584083,
+          "warmDiagnosticMedianMs": 11.619666,
+          "firstEdit": {
+            "queryMs": 28.921542,
+            "diagnosticMs": 47.966167
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 385.6895,
+              "diagnosticMs": 862.82975
+            }
+          ],
+          "lastEditFootprintMiB": 776.7512817382812,
+          "postStatusFootprintMiB": 776.7669067382812,
+          "allocatorInUseBytes": 728910320,
+          "source": {
+            "dataBytes": 12440015,
+            "queryBytes": 29660,
+            "queryBuffers": 2,
+            "retainedNameBytes": 114144,
+            "indexBytes": 96650
+          },
+          "locationTableBytes": 6312038,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "uvmt_cva6_tb.cva6_dut_wrap.cva6_tb_wrapper_i.i_cva6"
+          ]
+        },
+        "candidate": {
+          "warmQueryMedianMs": 6.451917,
+          "warmDiagnosticMedianMs": 11.519792,
+          "firstEdit": {
+            "queryMs": 27.646125,
+            "diagnosticMs": 47.875708
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 382.619042,
+              "diagnosticMs": 861.515875
+            }
+          ],
+          "lastEditFootprintMiB": 775.9856338500977,
+          "postStatusFootprintMiB": 776.0012588500977,
+          "allocatorInUseBytes": 728924400,
+          "source": {
+            "dataBytes": 12440015,
+            "queryBytes": 29660,
+            "queryBuffers": 2,
+            "retainedNameBytes": 114144,
+            "indexBytes": 96650
+          },
+          "locationTableBytes": 6312038,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "uvmt_cva6_tb.cva6_dut_wrap.cva6_tb_wrapper_i.i_cva6"
+          ]
+        }
+      }
+    },
+    "ethernet-udp-consumer-edit": {
+      "status": "passed",
+      "evidence": "untracked/project-optimization-2026-10-29/ethernet-udp-consumer-edit-document-source-lease.json",
+      "sha256": "753c98a89a1a6ffd02a8b9ee4a1c6c9a786abee966db08a33dcb610378320b12",
+      "arms": {
+        "native": {
+          "warmQueryMedianMs": 8.160167,
+          "warmDiagnosticMedianMs": 11.304917,
+          "firstEdit": {
+            "queryMs": 8.470583,
+            "diagnosticMs": 11.629
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 8.011416,
+              "diagnosticMs": 11.132958
+            }
+          ],
+          "lastEditFootprintMiB": 21.328582763671875,
+          "postStatusFootprintMiB": 21.344207763671875,
+          "allocatorInUseBytes": 12885776,
+          "source": {
+            "dataBytes": 882070,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 5785,
+            "indexBytes": 2975
+          },
+          "locationTableBytes": 463858,
+          "scopePrepared": false,
+          "lastModelSharedRoots": []
+        },
+        "baseline": {
+          "warmQueryMedianMs": 14.512292,
+          "warmDiagnosticMedianMs": 17.755584,
+          "firstEdit": {
+            "queryMs": 15.217791,
+            "diagnosticMs": 18.521583
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 14.68625,
+              "diagnosticMs": 17.92075
+            }
+          ],
+          "lastEditFootprintMiB": 26.578582763671875,
+          "postStatusFootprintMiB": 26.609832763671875,
+          "allocatorInUseBytes": 18491008,
+          "source": {
+            "dataBytes": 1202739,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 18109,
+            "indexBytes": 13425
+          },
+          "locationTableBytes": 330648,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "udp_complete_64.ip_arb_mux_inst.arb_inst",
+            "udp_complete_64.ip_complete_64_inst.arp_inst.arp_cache_inst",
+            "udp_complete_64.ip_complete_64_inst.eth_arb_mux_inst.arb_inst",
+            "udp_complete_64.udp_64_inst.genblk1.udp_checksum_gen_64_inst.payload_fifo"
+          ]
+        },
+        "candidate": {
+          "warmQueryMedianMs": 14.663208,
+          "warmDiagnosticMedianMs": 17.933417,
+          "firstEdit": {
+            "queryMs": 14.881375,
+            "diagnosticMs": 18.238292
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 14.545542,
+              "diagnosticMs": 17.819875
+            }
+          ],
+          "lastEditFootprintMiB": 26.484832763671875,
+          "postStatusFootprintMiB": 26.500457763671875,
+          "allocatorInUseBytes": 18490832,
+          "source": {
+            "dataBytes": 1202739,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 18109,
+            "indexBytes": 13425
+          },
+          "locationTableBytes": 330648,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "udp_complete_64.ip_arb_mux_inst.arb_inst",
+            "udp_complete_64.ip_complete_64_inst.arp_inst.arp_cache_inst",
+            "udp_complete_64.ip_complete_64_inst.eth_arb_mux_inst.arb_inst",
+            "udp_complete_64.udp_64_inst.genblk1.udp_checksum_gen_64_inst.payload_fifo"
+          ]
+        }
+      }
+    },
+    "cva6-uvm-signature-argument": {
+      "status": "passed",
+      "evidence": "untracked/project-optimization-2026-10-29/cva6-uvm-signature-argument-document-source-lease.json",
+      "sha256": "ecded38601e10fd032c469bd0dc283b9a5b6513c04fcf512396127593d738c98",
+      "arms": {
+        "native": {
+          "warmQueryMedianMs": 1509.248792,
+          "warmDiagnosticMedianMs": 1877.204958,
+          "firstEdit": {
+            "queryMs": 1521.63125,
+            "diagnosticMs": 1901.080791
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 1509.172084,
+              "diagnosticMs": 1878.689375
+            }
+          ],
+          "lastEditFootprintMiB": 531.5324859619141,
+          "postStatusFootprintMiB": 531.5481109619141,
+          "allocatorInUseBytes": 825588048,
+          "source": {
+            "dataBytes": 10453933,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 103049,
+            "indexBytes": 23975
+          },
+          "locationTableBytes": 58720367,
+          "scopePrepared": false,
+          "lastModelSharedRoots": []
+        },
+        "baseline": {
+          "warmQueryMedianMs": 6.282083,
+          "warmDiagnosticMedianMs": 11.555166,
+          "firstEdit": {
+            "queryMs": 27.173667,
+            "diagnosticMs": 46.118458
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 382.469042,
+              "diagnosticMs": 862.35225
+            }
+          ],
+          "lastEditFootprintMiB": 777.7981796264648,
+          "postStatusFootprintMiB": 777.8138046264648,
+          "allocatorInUseBytes": 728918512,
+          "source": {
+            "dataBytes": 12440015,
+            "queryBytes": 29660,
+            "queryBuffers": 2,
+            "retainedNameBytes": 114144,
+            "indexBytes": 96650
+          },
+          "locationTableBytes": 6312038,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "uvmt_cva6_tb.cva6_dut_wrap.cva6_tb_wrapper_i.i_cva6"
+          ]
+        },
+        "candidate": {
+          "warmQueryMedianMs": 6.399542,
+          "warmDiagnosticMedianMs": 11.5125,
+          "firstEdit": {
+            "queryMs": 30.053792,
+            "diagnosticMs": 49.759167
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 386.313792,
+              "diagnosticMs": 865.298708
+            }
+          ],
+          "lastEditFootprintMiB": 775.9544067382812,
+          "postStatusFootprintMiB": 775.9700317382812,
+          "allocatorInUseBytes": 728920304,
+          "source": {
+            "dataBytes": 12440015,
+            "queryBytes": 29660,
+            "queryBuffers": 2,
+            "retainedNameBytes": 114144,
+            "indexBytes": 96650
+          },
+          "locationTableBytes": 6312038,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "uvmt_cva6_tb.cva6_dut_wrap.cva6_tb_wrapper_i.i_cva6"
+          ]
+        }
+      }
+    },
+    "cva6-uvm-signature-function": {
+      "status": "passed",
+      "evidence": "untracked/project-optimization-2026-10-29/cva6-uvm-signature-function-document-source-lease.json",
+      "sha256": "ca35dc4925bd5e46e8da89a27a53b75a3681f83683e57940fdef44e1fb922dc7",
+      "arms": {
+        "native": {
+          "warmQueryMedianMs": 1278.638,
+          "warmDiagnosticMedianMs": 1652.361333,
+          "firstEdit": {
+            "queryMs": 1296.017292,
+            "diagnosticMs": 1672.670458
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 1278.857125,
+              "diagnosticMs": 1647.995541
+            }
+          ],
+          "lastEditFootprintMiB": 510.40746307373047,
+          "postStatusFootprintMiB": 510.42308807373047,
+          "allocatorInUseBytes": 665116384,
+          "source": {
+            "dataBytes": 10297773,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 103049,
+            "indexBytes": 23975
+          },
+          "locationTableBytes": 58720367,
+          "scopePrepared": false,
+          "lastModelSharedRoots": []
+        },
+        "baseline": {
+          "warmQueryMedianMs": 6.313917,
+          "warmDiagnosticMedianMs": 11.428792,
+          "firstEdit": {
+            "queryMs": 23.295375,
+            "diagnosticMs": 43.105375
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 294.479042,
+              "diagnosticMs": 771.321375
+            }
+          ],
+          "lastEditFootprintMiB": 696.1574630737305,
+          "postStatusFootprintMiB": 696.1887130737305,
+          "allocatorInUseBytes": 728918512,
+          "source": {
+            "dataBytes": 12440015,
+            "queryBytes": 29660,
+            "queryBuffers": 2,
+            "retainedNameBytes": 114144,
+            "indexBytes": 96650
+          },
+          "locationTableBytes": 6312038,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "uvmt_cva6_tb.cva6_dut_wrap.cva6_tb_wrapper_i.i_cva6"
+          ]
+        },
+        "candidate": {
+          "warmQueryMedianMs": 6.345875,
+          "warmDiagnosticMedianMs": 11.518209,
+          "firstEdit": {
+            "queryMs": 24.83875,
+            "diagnosticMs": 44.12
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 292.723667,
+              "diagnosticMs": 772.909708
+            }
+          ],
+          "lastEditFootprintMiB": 694.3918380737305,
+          "postStatusFootprintMiB": 694.4074630737305,
+          "allocatorInUseBytes": 728928496,
+          "source": {
+            "dataBytes": 12440015,
+            "queryBytes": 29660,
+            "queryBuffers": 2,
+            "retainedNameBytes": 114144,
+            "indexBytes": 96650
+          },
+          "locationTableBytes": 6312038,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "uvmt_cva6_tb.cva6_dut_wrap.cva6_tb_wrapper_i.i_cva6"
+          ]
+        }
+      }
+    },
+    "opentitan-soc-signature-argument": {
+      "status": "passed",
+      "evidence": "untracked/project-optimization-2026-10-29/opentitan-soc-signature-argument-document-source-lease.json",
+      "sha256": "ed435f88e6a415063e0415eafa150227c08f1a6746806890b34240d7bbac8250",
+      "arms": {
+        "native": {
+          "warmQueryMedianMs": 623.297208,
+          "warmDiagnosticMedianMs": 1227.756,
+          "firstEdit": {
+            "queryMs": 678.171208,
+            "diagnosticMs": 1316.835666
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 624.965375,
+              "diagnosticMs": 1227.806334
+            }
+          ],
+          "lastEditFootprintMiB": 838.8928909301758,
+          "postStatusFootprintMiB": 838.9085159301758,
+          "allocatorInUseBytes": 1642494112,
+          "source": {
+            "dataBytes": 21624535,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 147033,
+            "indexBytes": 23975
+          },
+          "locationTableBytes": 117440623,
+          "scopePrepared": false,
+          "lastModelSharedRoots": []
+        },
+        "baseline": {
+          "warmQueryMedianMs": 16.132917,
+          "warmDiagnosticMedianMs": 30.764417,
+          "firstEdit": {
+            "queryMs": 41.38575,
+            "diagnosticMs": 67.435041
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 703.681833,
+              "diagnosticMs": 1379.870167
+            }
+          ],
+          "lastEditFootprintMiB": 883.2522888183594,
+          "postStatusFootprintMiB": 883.2835388183594,
+          "allocatorInUseBytes": 1774777168,
+          "source": {
+            "dataBytes": 41550158,
+            "queryBytes": 92228,
+            "queryBuffers": 2,
+            "retainedNameBytes": 158364,
+            "indexBytes": 72675
+          },
+          "locationTableBytes": 16120831,
+          "scopePrepared": true,
+          "lastModelSharedRoots": []
+        },
+        "candidate": {
+          "warmQueryMedianMs": 16.236375,
+          "warmDiagnosticMedianMs": 30.875833,
+          "firstEdit": {
+            "queryMs": 40.762708,
+            "diagnosticMs": 67.879333
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 705.127167,
+              "diagnosticMs": 1376.3285
+            }
+          ],
+          "lastEditFootprintMiB": 882.596061706543,
+          "postStatusFootprintMiB": 882.611686706543,
+          "allocatorInUseBytes": 1774793504,
+          "source": {
+            "dataBytes": 41550158,
+            "queryBytes": 92228,
+            "queryBuffers": 2,
+            "retainedNameBytes": 158364,
+            "indexBytes": 72675
+          },
+          "locationTableBytes": 16120831,
+          "scopePrepared": true,
+          "lastModelSharedRoots": []
+        }
+      }
+    },
+    "opentitan-soc-signature-function": {
+      "status": "passed",
+      "evidence": "untracked/project-optimization-2026-10-29/opentitan-soc-signature-function-document-source-lease.json",
+      "sha256": "bfece937f80d86f35ad241dcb95b74e92de18fc15e804fa0a4bd0c5b3311fc96",
+      "arms": {
+        "native": {
+          "warmQueryMedianMs": 623.434584,
+          "warmDiagnosticMedianMs": 1226.633125,
+          "firstEdit": {
+            "queryMs": 684.804458,
+            "diagnosticMs": 1315.968458
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 620.606333,
+              "diagnosticMs": 1227.893958
+            }
+          ],
+          "lastEditFootprintMiB": 836.5647659301758,
+          "postStatusFootprintMiB": 836.5803909301758,
+          "allocatorInUseBytes": 1642413344,
+          "source": {
+            "dataBytes": 21624535,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 147033,
+            "indexBytes": 23975
+          },
+          "locationTableBytes": 117440623,
+          "scopePrepared": false,
+          "lastModelSharedRoots": []
+        },
+        "baseline": {
+          "warmQueryMedianMs": 16.327375,
+          "warmDiagnosticMedianMs": 31.346417,
+          "firstEdit": {
+            "queryMs": 44.169375,
+            "diagnosticMs": 70.734541
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 707.635125,
+              "diagnosticMs": 1379.99025
+            }
+          ],
+          "lastEditFootprintMiB": 882.283561706543,
+          "postStatusFootprintMiB": 882.314811706543,
+          "allocatorInUseBytes": 1774781264,
+          "source": {
+            "dataBytes": 41550158,
+            "queryBytes": 92228,
+            "queryBuffers": 2,
+            "retainedNameBytes": 158364,
+            "indexBytes": 72675
+          },
+          "locationTableBytes": 16120831,
+          "scopePrepared": true,
+          "lastModelSharedRoots": []
+        },
+        "candidate": {
+          "warmQueryMedianMs": 16.223417,
+          "warmDiagnosticMedianMs": 31.072458,
+          "firstEdit": {
+            "queryMs": 39.828084,
+            "diagnosticMs": 65.89025
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 699.92025,
+              "diagnosticMs": 1373.10075
+            }
+          ],
+          "lastEditFootprintMiB": 882.8617095947266,
+          "postStatusFootprintMiB": 882.8773345947266,
+          "allocatorInUseBytes": 1774785312,
+          "source": {
+            "dataBytes": 41550158,
+            "queryBytes": 92228,
+            "queryBuffers": 2,
+            "retainedNameBytes": 158364,
+            "indexBytes": 72675
+          },
+          "locationTableBytes": 16120831,
+          "scopePrepared": true,
+          "lastModelSharedRoots": []
+        }
+      }
+    },
+    "aes-small-signature-argument": {
+      "status": "passed",
+      "evidence": "untracked/project-optimization-2026-10-29/aes-small-signature-argument-document-source-lease.json",
+      "sha256": "ad48e813ad17630987c01004ccb56a8e30810a778151f6af0dbc0b4deafcf428",
+      "arms": {
+        "native": {
+          "warmQueryMedianMs": 2.080709,
+          "warmDiagnosticMedianMs": 5.65075,
+          "firstEdit": {
+            "queryMs": 2.160541,
+            "diagnosticMs": 5.800625
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 2.1065,
+              "diagnosticMs": 5.627875
+            }
+          ],
+          "lastEditFootprintMiB": 9.672286987304688,
+          "postStatusFootprintMiB": 9.687911987304688,
+          "allocatorInUseBytes": 5318384,
+          "source": {
+            "dataBytes": 393188,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 5531,
+            "indexBytes": 2975
+          },
+          "locationTableBytes": 21107,
+          "scopePrepared": false,
+          "lastModelSharedRoots": []
+        },
+        "baseline": {
+          "warmQueryMedianMs": 0.370875,
+          "warmDiagnosticMedianMs": 0.54325,
+          "firstEdit": {
+            "queryMs": 0.788916,
+            "diagnosticMs": 5.009583
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 2.924833,
+              "diagnosticMs": 6.417708
+            }
+          ],
+          "lastEditFootprintMiB": 13.766059875488281,
+          "postStatusFootprintMiB": 13.781684875488281,
+          "allocatorInUseBytes": 8021888,
+          "source": {
+            "dataBytes": 262781,
+            "queryBytes": 16776,
+            "queryBuffers": 2,
+            "retainedNameBytes": 2055,
+            "indexBytes": 3650
+          },
+          "locationTableBytes": 30448,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "aes.core.dec_block",
+            "aes.core.keymem",
+            "aes.core.sbox_inst"
+          ]
+        },
+        "candidate": {
+          "warmQueryMedianMs": 0.376625,
+          "warmDiagnosticMedianMs": 0.5505,
+          "firstEdit": {
+            "queryMs": 0.77075,
+            "diagnosticMs": 5.07675
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 2.883667,
+              "diagnosticMs": 6.367167
+            }
+          ],
+          "lastEditFootprintMiB": 13.828559875488281,
+          "postStatusFootprintMiB": 13.844184875488281,
+          "allocatorInUseBytes": 8022160,
+          "source": {
+            "dataBytes": 262781,
+            "queryBytes": 16776,
+            "queryBuffers": 2,
+            "retainedNameBytes": 2055,
+            "indexBytes": 3650
+          },
+          "locationTableBytes": 30448,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "aes.core.dec_block",
+            "aes.core.keymem",
+            "aes.core.sbox_inst"
+          ]
+        }
+      }
+    },
+    "aes-small-signature-function": {
+      "status": "passed",
+      "evidence": "untracked/project-optimization-2026-10-29/aes-small-signature-function-document-source-lease.json",
+      "sha256": "f46d00165d608a84d7450801d09634c7f4cd63844085ca2a32682cee8f844fb2",
+      "arms": {
+        "native": {
+          "warmQueryMedianMs": 1.71325,
+          "warmDiagnosticMedianMs": 5.276958,
+          "firstEdit": {
+            "queryMs": 1.75725,
+            "diagnosticMs": 5.391583
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 1.639208,
+              "diagnosticMs": 5.195708
+            }
+          ],
+          "lastEditFootprintMiB": 9.609809875488281,
+          "postStatusFootprintMiB": 9.625434875488281,
+          "allocatorInUseBytes": 4945648,
+          "source": {
+            "dataBytes": 384398,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 3161,
+            "indexBytes": 2975
+          },
+          "locationTableBytes": 17777,
+          "scopePrepared": false,
+          "lastModelSharedRoots": []
+        },
+        "baseline": {
+          "warmQueryMedianMs": 0.3805,
+          "warmDiagnosticMedianMs": 0.55325,
+          "firstEdit": {
+            "queryMs": 0.870917,
+            "diagnosticMs": 3.744333
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 1.432416,
+              "diagnosticMs": 4.937416
+            }
+          ],
+          "lastEditFootprintMiB": 10.547309875488281,
+          "postStatusFootprintMiB": 10.562934875488281,
+          "allocatorInUseBytes": 5946416,
+          "source": {
+            "dataBytes": 224177,
+            "queryBytes": 16776,
+            "queryBuffers": 2,
+            "retainedNameBytes": 1897,
+            "indexBytes": 3650
+          },
+          "locationTableBytes": 30226,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "aes.core.dec_block",
+            "aes.core.keymem",
+            "aes.core.sbox_inst"
+          ]
+        },
+        "candidate": {
+          "warmQueryMedianMs": 0.375167,
+          "warmDiagnosticMedianMs": 0.546125,
+          "firstEdit": {
+            "queryMs": 0.915667,
+            "diagnosticMs": 3.805167
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 1.433458,
+              "diagnosticMs": 4.954708
+            }
+          ],
+          "lastEditFootprintMiB": 10.641059875488281,
+          "postStatusFootprintMiB": 10.656684875488281,
+          "allocatorInUseBytes": 5946480,
+          "source": {
+            "dataBytes": 224177,
+            "queryBytes": 16776,
+            "queryBuffers": 2,
+            "retainedNameBytes": 1897,
+            "indexBytes": 3650
+          },
+          "locationTableBytes": 30226,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "aes.core.dec_block",
+            "aes.core.keymem",
+            "aes.core.sbox_inst"
+          ]
+        }
+      }
+    },
+    "opentitan-aes-uvm": {
+      "status": "passed",
+      "evidence": "untracked/rtl-uvm-fallback-2026-10-29/opentitan-aes-uvm-document-source-lease.json",
+      "sha256": "fbf5db317b8a873fb1c6201fa1d3de02f2755bf16309d143923db9a8b9699a06",
+      "arms": {
+        "native": {
+          "warmQueryMedianMs": 2441.843791,
+          "warmDiagnosticMedianMs": 2615.392416,
+          "firstEdit": {
+            "queryMs": 2451.726209,
+            "diagnosticMs": 2626.70075
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 2452.92925,
+              "diagnosticMs": 2626.892458
+            }
+          ],
+          "lastEditFootprintMiB": 278.15716552734375,
+          "postStatusFootprintMiB": 278.17279052734375,
+          "allocatorInUseBytes": 561556544,
+          "source": {
+            "dataBytes": 8049559,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 166148,
+            "indexBytes": 47975
+          },
+          "locationTableBytes": 58762769,
+          "scopePrepared": false,
+          "lastModelSharedRoots": []
+        },
+        "frozen-full": {
+          "warmQueryMedianMs": 77.798417,
+          "warmDiagnosticMedianMs": 230.202459,
+          "firstEdit": {
+            "queryMs": 81.961334,
+            "diagnosticMs": 245.267084
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 77.427166,
+              "diagnosticMs": 227.255
+            }
+          ],
+          "lastEditFootprintMiB": 459.7351989746094,
+          "postStatusFootprintMiB": 459.7508239746094,
+          "allocatorInUseBytes": 419192112,
+          "source": {
+            "dataBytes": 8056630,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 133529,
+            "indexBytes": 71925
+          },
+          "locationTableBytes": 5992783,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "tb.dut"
+          ]
+        },
+        "frozen-local": {
+          "warmQueryMedianMs": 2.089208,
+          "warmDiagnosticMedianMs": 3.369625,
+          "firstEdit": {
+            "queryMs": 9.383583,
+            "diagnosticMs": 21.200792
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 79.569458,
+              "diagnosticMs": 244.304708
+            }
+          ],
+          "lastEditFootprintMiB": 483.1101989746094,
+          "postStatusFootprintMiB": 483.1258239746094,
+          "allocatorInUseBytes": 453794320,
+          "source": {
+            "dataBytes": 8018108,
+            "queryBytes": 16344,
+            "queryBuffers": 2,
+            "retainedNameBytes": 133608,
+            "indexBytes": 72650
+          },
+          "locationTableBytes": 5261031,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "tb.dut"
+          ]
+        }
+      },
+      "actualWholeDutImportCheckedEveryFullEdit": true
+    },
+    "opentitan-uart-uvm": {
+      "status": "passed",
+      "evidence": "untracked/rtl-uvm-fallback-2026-10-29/opentitan-uart-uvm-document-source-lease.json",
+      "sha256": "30905e04ecf4d632ffc6749cb5d8298a5fd89ee814be053cdc01fde7815cf649",
+      "arms": {
+        "native": {
+          "warmQueryMedianMs": 2091.038583,
+          "warmDiagnosticMedianMs": 2234.396292,
+          "firstEdit": {
+            "queryMs": 2102.500791,
+            "diagnosticMs": 2251.131625
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 2102.4285,
+              "diagnosticMs": 2243.702583
+            }
+          ],
+          "lastEditFootprintMiB": 327.54772186279297,
+          "postStatusFootprintMiB": 327.56334686279297,
+          "allocatorInUseBytes": 463919856,
+          "source": {
+            "dataBytes": 6719161,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 141106,
+            "indexBytes": 23975
+          },
+          "locationTableBytes": 58748783,
+          "scopePrepared": false,
+          "lastModelSharedRoots": []
+        },
+        "frozen-full": {
+          "warmQueryMedianMs": 92.17575,
+          "warmDiagnosticMedianMs": 223.052333,
+          "firstEdit": {
+            "queryMs": 106.188875,
+            "diagnosticMs": 238.267
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 91.679291,
+              "diagnosticMs": 222.3475
+            }
+          ],
+          "lastEditFootprintMiB": 372.9382781982422,
+          "postStatusFootprintMiB": 372.9539031982422,
+          "allocatorInUseBytes": 372620656,
+          "source": {
+            "dataBytes": 6893944,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 123447,
+            "indexBytes": 71925
+          },
+          "locationTableBytes": 4956167,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "tb.dut"
+          ]
+        },
+        "frozen-local": {
+          "warmQueryMedianMs": 2.167,
+          "warmDiagnosticMedianMs": 3.426959,
+          "firstEdit": {
+            "queryMs": 10.272333,
+            "diagnosticMs": 19.013125
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 109.86425,
+              "diagnosticMs": 253.476583
+            }
+          ],
+          "lastEditFootprintMiB": 392.8445053100586,
+          "postStatusFootprintMiB": 392.8601303100586,
+          "allocatorInUseBytes": 383461056,
+          "source": {
+            "dataBytes": 6882197,
+            "queryBytes": 3724,
+            "queryBuffers": 2,
+            "retainedNameBytes": 123526,
+            "indexBytes": 72650
+          },
+          "locationTableBytes": 4650071,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "tb.dut"
+          ]
+        }
+      },
+      "actualWholeDutImportCheckedEveryFullEdit": true
+    },
+    "asan:cva6-uvm-signature-argument": {
+      "status": "passed",
+      "evidence": "untracked/project-optimization-2026-10-29/cva6-uvm-signature-argument-document-source-lease-asan.json",
+      "sha256": "abd74c416dc100336e641eefa7b5023346f38fa20f4a1bd3464e4ef0d87414e2",
+      "arms": {
+        "native": {
+          "warmQueryMedianMs": 3297.874667,
+          "warmDiagnosticMedianMs": 4966.28075,
+          "firstEdit": {
+            "queryMs": 3161.572417,
+            "diagnosticMs": 4698.4975
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 3301.854041,
+              "diagnosticMs": 4990.2295
+            }
+          ],
+          "lastEditFootprintMiB": 2447.398452758789,
+          "postStatusFootprintMiB": 2447.460952758789,
+          "allocatorInUseBytes": 37188121744,
+          "source": {
+            "dataBytes": 10452125,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 103049,
+            "indexBytes": 23975
+          },
+          "locationTableBytes": 58720367,
+          "scopePrepared": false,
+          "lastModelSharedRoots": []
+        },
+        "baseline": {
+          "warmQueryMedianMs": 8.524708,
+          "warmDiagnosticMedianMs": 14.6075,
+          "firstEdit": {
+            "queryMs": 59.066292,
+            "diagnosticMs": 106.009875
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 886.59825,
+              "diagnosticMs": 2623.870042
+            }
+          ],
+          "lastEditFootprintMiB": 2633.32039642334,
+          "postStatusFootprintMiB": 2633.42977142334,
+          "allocatorInUseBytes": 6350760700,
+          "source": {
+            "dataBytes": 12437455,
+            "queryBytes": 29660,
+            "queryBuffers": 2,
+            "retainedNameBytes": 114144,
+            "indexBytes": 96650
+          },
+          "locationTableBytes": 6312038,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "uvmt_cva6_tb.cva6_dut_wrap.cva6_tb_wrapper_i.i_cva6"
+          ]
+        },
+        "candidate": {
+          "warmQueryMedianMs": 8.529458,
+          "warmDiagnosticMedianMs": 14.811458,
+          "firstEdit": {
+            "queryMs": 62.229458,
+            "diagnosticMs": 110.649917
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 886.2865,
+              "diagnosticMs": 2598.148167
+            }
+          ],
+          "lastEditFootprintMiB": 2630.2734985351562,
+          "postStatusFootprintMiB": 2630.3828735351562,
+          "allocatorInUseBytes": 6350752508,
+          "source": {
+            "dataBytes": 12437455,
+            "queryBytes": 29660,
+            "queryBuffers": 2,
+            "retainedNameBytes": 114144,
+            "indexBytes": 96650
+          },
+          "locationTableBytes": 6312038,
+          "scopePrepared": true,
+          "lastModelSharedRoots": [
+            "uvmt_cva6_tb.cva6_dut_wrap.cva6_tb_wrapper_i.i_cva6"
+          ]
+        }
+      },
+      "timingAccepted": false,
+      "exitReceipt": "untracked/project-optimization-2026-10-29/cva6-uvm-signature-argument-document-source-lease-asan-exit.json",
+      "exitReceiptSha256": "50794adfd676330eba00fd5bca1eb10ee4f915e9cb1683cc601860dc7e94d876"
+    },
+    "asan:opentitan-soc-signature-function": {
+      "status": "passed",
+      "evidence": "untracked/project-optimization-2026-10-29/opentitan-soc-signature-function-document-source-lease-asan.json",
+      "sha256": "7af2c2bc88dc507957d8e9511d22c85b99e35dcd705155dfcfbf5939a217118e",
+      "arms": {
+        "native": {
+          "warmQueryMedianMs": 1725.337167,
+          "warmDiagnosticMedianMs": 4155.979334,
+          "firstEdit": {
+            "queryMs": 1742.595042,
+            "diagnosticMs": 4054.2035
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 1730.678,
+              "diagnosticMs": 4168.908708
+            }
+          ],
+          "lastEditFootprintMiB": 4353.1810302734375,
+          "postStatusFootprintMiB": 4353.2591552734375,
+          "allocatorInUseBytes": 46168357522,
+          "source": {
+            "dataBytes": 21621455,
+            "queryBytes": 0,
+            "queryBuffers": 0,
+            "retainedNameBytes": 147033,
+            "indexBytes": 23975
+          },
+          "locationTableBytes": 117440623,
+          "scopePrepared": false,
+          "lastModelSharedRoots": []
+        },
+        "baseline": {
+          "warmQueryMedianMs": 17.7755,
+          "warmDiagnosticMedianMs": 33.846417,
+          "firstEdit": {
+            "queryMs": 56.195833,
+            "diagnosticMs": 104.999083
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 1785.808125,
+              "diagnosticMs": 4025.705542
+            }
+          ],
+          "lastEditFootprintMiB": 4623.868667602539,
+          "postStatusFootprintMiB": 4623.931167602539,
+          "allocatorInUseBytes": 11043643219,
+          "source": {
+            "dataBytes": 41544014,
+            "queryBytes": 92228,
+            "queryBuffers": 2,
+            "retainedNameBytes": 158364,
+            "indexBytes": 72675
+          },
+          "locationTableBytes": 16120831,
+          "scopePrepared": true,
+          "lastModelSharedRoots": []
+        },
+        "candidate": {
+          "warmQueryMedianMs": 18.977542,
+          "warmDiagnosticMedianMs": 36.30175,
+          "firstEdit": {
+            "queryMs": 70.287084,
+            "diagnosticMs": 125.022375
+          },
+          "structuralFallback": [
+            {
+              "queryMs": 1825.195041,
+              "diagnosticMs": 4093.262958
+            }
+          ],
+          "lastEditFootprintMiB": 4621.556167602539,
+          "postStatusFootprintMiB": 4621.618667602539,
+          "allocatorInUseBytes": 11043634499,
+          "source": {
+            "dataBytes": 41544014,
+            "queryBytes": 92228,
+            "queryBuffers": 2,
+            "retainedNameBytes": 158364,
+            "indexBytes": 72675
+          },
+          "locationTableBytes": 16120831,
+          "scopePrepared": true,
+          "lastModelSharedRoots": []
+        }
+      },
+      "timingAccepted": false,
+      "exitReceipt": "untracked/project-optimization-2026-10-29/opentitan-soc-signature-function-document-source-lease-asan-exit.json",
+      "exitReceiptSha256": "936683adebc07f5ad02eca7fd085c2fadfbba50b5c3774d73fdf1a8cfb50ab7b"
+    }
+  },
+  "limitations": [
+    "One repeat per protocol case, with5 warm samples; no statistical or cold disk performance claim",
+    "Historical exact bf260c14 binary controls for generic A/B; strict AES/UART uses current binary in all three arms",
+    "Original fixed UDP dependency edit is refused and excluded from accepted performance; same selectors with mutable UDP consumer remain tested",
+    "Memory sampled at edit boundaries/status; source bytes can have independent source-manager aliases until context retirement",
+    "This fixes actual server publication paths, not every SDK parse consumer or cross-source-manager lifetime",
+    "No claim that overall model/summary/native-CST ownership audit or entire objective is complete"
+  ],
+  "remaining": [
+    "Inspect SDK prefix/composed-tree weak-control-block captures and measure model/summary/native-CST overlap before further memory reduction",
+    "Continue required first current parse/full-model costs, preserving first/continuous/error-repair/structural/recovery behavior",
+    "Final complete release audit: fresh install, packaging, default bundled UVM profile, project variant caches/manual rebuild, cleanup and main push"
+  ]
+}

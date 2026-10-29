@@ -1,0 +1,387 @@
+{
+  "status": "Official masked AES whole-DUT + UVM reuse qualified, UART nonregression passed; full objective remains active",
+  "mainHead": "41758aa9e865903a0e283861f19331f9a36eab5b",
+  "binarySha256": "aa6417bfcb2d971fc6f082be0d37740ee0e991afcc85574d67ff7125838a2e84",
+  "sdkPatchSha256": "c0f941cad23559a9d498ccc4056966a4a3d5cfbf373ef3766b09a06275315415",
+  "sourceSeal": "untracked/project-optimization-2026-10-29/whole-aes-source-seal.json",
+  "sourceArchive": "untracked/project-optimization-2026-10-29/source-receipts/whole-aes-c0f941ca",
+  "projectCommit": "8e7f977585b8e8304feaf688d7e8429059bfd097",
+  "selectedRoot": "tb.dut",
+  "officialFiBindingsPreserved": true,
+  "nativeAssertionControlErrorsPreserved": 32,
+  "initialFourArmDiagnosticControl": {
+    "evidence": "untracked/rtl-uvm-fallback-2026-10-29/opentitan-aes-uvm-whole-aes-closure-control.json",
+    "sha256": "6937bd5665b4a2cafd21cf9acf5f8314d1d81688519eff65958cff42d7ad5495",
+    "allEqualNative": true
+  },
+  "implemented": [
+    "Private complete-body proof for fixed-prefix virtual-interface prototypes, with resolved fixed arguments and original type identity; proof instances and certificates do not become actual DUT hierarchy or replayed DUT diagnostics",
+    "Certify and preserve only native ExpectedScopeOrAssert errors for two literal arguments of assert-on/off/kill; require every owner error occurrence to be covered by a successful certificate, count distinct source error groups correctly, and retain parse/fatal/unclaimed error refusal",
+    "Own diagnostic replay snapshots so appended proof diagnostics cannot invalidate map-vector pointers; charge snapshots, argument overrides and private proof maps against memory budget",
+    "Allow type-only $bits of local fixed integral signals in declarations without inventing runtime reads; retain external shape dependency refusal",
+    "Support immutable unbounded range literals; retain mutable assertion bound checks"
+  ],
+  "checks": {
+    "ctest": {
+      "passed": 1008,
+      "failed": 0,
+      "seconds": 15.08,
+      "TMPDIR": "/private/tmp"
+    },
+    "sdk": {
+      "cases": 2645,
+      "assertions": 37001
+    },
+    "targeted": {
+      "cases": 3,
+      "assertions": 1513
+    },
+    "sdkIntegrityFiles": 709,
+    "reversePatchCheck": true
+  },
+  "aes": {
+    "evidence": "untracked/rtl-uvm-fallback-2026-10-29/opentitan-aes-uvm-whole-aes-closure.json",
+    "sha256": "6fa051fcd0c35b7ffd6df7a957f84396277246ffc4cba5d72359d1856721fc88",
+    "repeats": 3,
+    "states": 135,
+    "allPublicResultsEqualNative": true,
+    "actualRootImportCheckedEveryFullEdit": true,
+    "measurements": {
+      "native": {
+        "rootHits": [
+          0,
+          0,
+          0
+        ],
+        "initializeAndBuildCommandMedianMs": 4758.359333005501,
+        "firstEdit": {
+          "queryMedianMs": 2450.484458,
+          "diagnosticMedianMs": 2626.934708,
+          "footprintMedianMiB": 315.43834686279297,
+          "samples": 3
+        },
+        "steadyEdits": {
+          "queryMedianMs": 2444.607,
+          "diagnosticMedianMs": 2617.356083,
+          "footprintMedianMiB": 257.92276763916016,
+          "samples": 15
+        },
+        "structuralFallback": {
+          "queryMedianMs": 2445.700125,
+          "diagnosticMedianMs": 2619.075417,
+          "footprintMedianMiB": 295.73529052734375,
+          "samples": 3
+        },
+        "structuralUndo": {
+          "queryMedianMs": 2444.193667,
+          "diagnosticMedianMs": 2619.017458,
+          "footprintMedianMiB": 298.78216552734375,
+          "samples": 3
+        },
+        "firstLocalRecovery": {
+          "queryMedianMs": 2448.293292,
+          "diagnosticMedianMs": 2621.544959,
+          "footprintMedianMiB": 301.76654052734375,
+          "samples": 3
+        },
+        "steadyAfterRecovery": {
+          "queryMedianMs": 2446.046542,
+          "diagnosticMedianMs": 2617.911917,
+          "footprintMedianMiB": 300.84466552734375,
+          "samples": 9
+        }
+      },
+      "frozen-full": {
+        "rootHits": [
+          14,
+          14,
+          14
+        ],
+        "initializeAndBuildCommandMedianMs": 2035.4121249984019,
+        "firstEdit": {
+          "queryMedianMs": 78.325083,
+          "diagnosticMedianMs": 231.675708,
+          "footprintMedianMiB": 450.06334686279297,
+          "samples": 3
+        },
+        "steadyEdits": {
+          "queryMedianMs": 77.127459,
+          "diagnosticMedianMs": 229.774375,
+          "footprintMedianMiB": 458.1883010864258,
+          "samples": 15
+        },
+        "structuralFallback": {
+          "queryMedianMs": 77.327542,
+          "diagnosticMedianMs": 228.541292,
+          "footprintMedianMiB": 458.62584686279297,
+          "samples": 3
+        },
+        "structuralUndo": {
+          "queryMedianMs": 77.056416,
+          "diagnosticMedianMs": 228.530958,
+          "footprintMedianMiB": 458.6726989746094,
+          "samples": 3
+        },
+        "firstLocalRecovery": {
+          "queryMedianMs": 76.99075,
+          "diagnosticMedianMs": 228.157666,
+          "footprintMedianMiB": 458.95397186279297,
+          "samples": 3
+        },
+        "steadyAfterRecovery": {
+          "queryMedianMs": 78.246459,
+          "diagnosticMedianMs": 229.802459,
+          "footprintMedianMiB": 459.04772186279297,
+          "samples": 9
+        },
+        "owners": [
+          1,
+          1,
+          1
+        ],
+        "evictions": [
+          0,
+          0,
+          0
+        ],
+        "budgetMiB": 512.0,
+        "chargeMedianMiB": 317.0461959838867,
+        "compactPublications": [
+          0,
+          0,
+          0
+        ]
+      },
+      "frozen-local": {
+        "rootHits": [
+          2,
+          2,
+          2
+        ],
+        "initializeAndBuildCommandMedianMs": 2091.7205000005197,
+        "firstEdit": {
+          "queryMedianMs": 9.483917,
+          "diagnosticMedianMs": 21.836417,
+          "footprintMedianMiB": 449.6414260864258,
+          "samples": 3
+        },
+        "steadyEdits": {
+          "queryMedianMs": 2.1505,
+          "diagnosticMedianMs": 3.437083,
+          "footprintMedianMiB": 449.6570510864258,
+          "samples": 15
+        },
+        "structuralFallback": {
+          "queryMedianMs": 80.075792,
+          "diagnosticMedianMs": 244.816959,
+          "footprintMedianMiB": 478.96959686279297,
+          "samples": 3
+        },
+        "structuralUndo": {
+          "queryMedianMs": 80.920792,
+          "diagnosticMedianMs": 243.648917,
+          "footprintMedianMiB": 483.1570739746094,
+          "samples": 3
+        },
+        "firstLocalRecovery": {
+          "queryMedianMs": 9.531917,
+          "diagnosticMedianMs": 21.729542,
+          "footprintMedianMiB": 483.2508239746094,
+          "samples": 3
+        },
+        "steadyAfterRecovery": {
+          "queryMedianMs": 2.169792,
+          "diagnosticMedianMs": 3.444167,
+          "footprintMedianMiB": 483.2664489746094,
+          "samples": 9
+        },
+        "owners": [
+          1,
+          1,
+          1
+        ],
+        "evictions": [
+          0,
+          0,
+          0
+        ],
+        "budgetMiB": 512.0,
+        "chargeMedianMiB": 318.1393795013428,
+        "compactPublications": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    "limitations": "Sequential: await query and matching full diagnostic publication. No burst or cold-disk claim. Process memory read at boundaries, not independent sampled peak."
+  },
+  "uartNonregression": {
+    "evidence": "untracked/rtl-uvm-fallback-2026-10-29/opentitan-uart-uvm-whole-aes-closure-nonregression.json",
+    "sha256": "32c65ede2b9f36c24e52b9087aac102e8149f3ddb334729372043361223301be",
+    "repeats": 1,
+    "states": 45,
+    "allPublicResultsEqualNative": true,
+    "actualRootImportCheckedEveryFullEdit": true,
+    "measurements": {
+      "native": {
+        "rootHits": [
+          0
+        ],
+        "initializeAndBuildCommandMedianMs": 4225.032625021413,
+        "firstEdit": {
+          "queryMedianMs": 2114.04525,
+          "diagnosticMedianMs": 2261.1415,
+          "footprintMedianMiB": 243.6257553100586,
+          "samples": 1
+        },
+        "steadyEdits": {
+          "queryMedianMs": 2094.723542,
+          "diagnosticMedianMs": 2239.277125,
+          "footprintMedianMiB": 315.9851989746094,
+          "samples": 5
+        },
+        "structuralFallback": {
+          "queryMedianMs": 2094.389667,
+          "diagnosticMedianMs": 2237.90725,
+          "footprintMedianMiB": 352.14147186279297,
+          "samples": 1
+        },
+        "structuralUndo": {
+          "queryMedianMs": 2102.098833,
+          "diagnosticMedianMs": 2245.13675,
+          "footprintMedianMiB": 354.84459686279297,
+          "samples": 1
+        },
+        "firstLocalRecovery": {
+          "queryMedianMs": 2110.92775,
+          "diagnosticMedianMs": 2254.390958,
+          "footprintMedianMiB": 357.73522186279297,
+          "samples": 1
+        },
+        "steadyAfterRecovery": {
+          "queryMedianMs": 2095.576917,
+          "diagnosticMedianMs": 2239.621458,
+          "footprintMedianMiB": 360.53209686279297,
+          "samples": 3
+        }
+      },
+      "frozen-full": {
+        "rootHits": [
+          14
+        ],
+        "initializeAndBuildCommandMedianMs": 2083.290582988411,
+        "firstEdit": {
+          "queryMedianMs": 106.16925,
+          "diagnosticMedianMs": 239.559542,
+          "footprintMedianMiB": 356.5788803100586,
+          "samples": 1
+        },
+        "steadyEdits": {
+          "queryMedianMs": 91.639667,
+          "diagnosticMedianMs": 224.068542,
+          "footprintMedianMiB": 363.8601303100586,
+          "samples": 5
+        },
+        "structuralFallback": {
+          "queryMedianMs": 93.203125,
+          "diagnosticMedianMs": 227.116916,
+          "footprintMedianMiB": 363.9382553100586,
+          "samples": 1
+        },
+        "structuralUndo": {
+          "queryMedianMs": 91.729791,
+          "diagnosticMedianMs": 223.392041,
+          "footprintMedianMiB": 363.9538803100586,
+          "samples": 1
+        },
+        "firstLocalRecovery": {
+          "queryMedianMs": 91.41125,
+          "diagnosticMedianMs": 223.917042,
+          "footprintMedianMiB": 363.9695053100586,
+          "samples": 1
+        },
+        "steadyAfterRecovery": {
+          "queryMedianMs": 93.199167,
+          "diagnosticMedianMs": 225.764,
+          "footprintMedianMiB": 364.0007553100586,
+          "samples": 3
+        },
+        "owners": [
+          1
+        ],
+        "evictions": [
+          0
+        ],
+        "budgetMiB": 512.0,
+        "chargeMedianMiB": 255.13813591003418,
+        "compactPublications": [
+          0
+        ]
+      },
+      "frozen-local": {
+        "rootHits": [
+          2
+        ],
+        "initializeAndBuildCommandMedianMs": 1680.9010409924667,
+        "firstEdit": {
+          "queryMedianMs": 10.097875,
+          "diagnosticMedianMs": 18.95525,
+          "footprintMedianMiB": 350.110107421875,
+          "samples": 1
+        },
+        "steadyEdits": {
+          "queryMedianMs": 2.164,
+          "diagnosticMedianMs": 3.437583,
+          "footprintMedianMiB": 350.141357421875,
+          "samples": 5
+        },
+        "structuralFallback": {
+          "queryMedianMs": 109.137583,
+          "diagnosticMedianMs": 253.906458,
+          "footprintMedianMiB": 391.4851531982422,
+          "samples": 1
+        },
+        "structuralUndo": {
+          "queryMedianMs": 98.207625,
+          "diagnosticMedianMs": 241.553959,
+          "footprintMedianMiB": 394.6414031982422,
+          "samples": 1
+        },
+        "firstLocalRecovery": {
+          "queryMedianMs": 10.348708,
+          "diagnosticMedianMs": 19.359042,
+          "footprintMedianMiB": 394.8445281982422,
+          "samples": 1
+        },
+        "steadyAfterRecovery": {
+          "queryMedianMs": 2.307084,
+          "diagnosticMedianMs": 3.611,
+          "footprintMedianMiB": 394.8445281982422,
+          "samples": 3
+        },
+        "owners": [
+          1
+        ],
+        "evictions": [
+          0
+        ],
+        "budgetMiB": 512.0,
+        "chargeMedianMiB": 256.12543773651123,
+        "compactPublications": [
+          0
+        ]
+      }
+    },
+    "limitations": "Sequential: await query and matching full diagnostic publication. No burst or cold-disk claim. Process memory read at boundaries, not independent sampled peak."
+  },
+  "limitations": [
+    "Sequential edit/query/diagnostic cadence; no burst/cold-disk acceptance",
+    "Process memory is sampled at edit boundaries, not peak",
+    "AES frozen-local footprint after recovery is higher than Native; current owners retain full context (compactPublications zero), and ownership/memory reduction remains open",
+    "UART current binary has one-repeat nonregression; earlier three-repeat UART evidence belongs to its separately sealed version"
+  ],
+  "remainingObjective": "All original plan stages remain active: all project groups cross-regression; signature/parameter hover; preprocessing/multi-unit replay; memory/refusal attribution; sanitizer/package/cache/default-off checks; cleanup; main push and remote verification.",
+  "networkFetches": false,
+  "pushed": false
+}

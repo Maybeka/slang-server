@@ -18,6 +18,7 @@
 #include "slang/analysis/ValueDriver.h"
 #include "slang/ast/ASTVisitor.h"
 #include "slang/ast/EvalContext.h"
+#include "slang/ast/InstanceCacheKey.h"
 #include "slang/ast/expressions/CallExpression.h"
 #include "slang/ast/expressions/MiscExpressions.h"
 #include "slang/ast/expressions/SelectExpressions.h"
@@ -79,6 +80,87 @@ void require(bool condition, const char* reason) {
     if (!condition)
         throw std::runtime_error(reason);
 }
+// Warm complete lazy binding operations before the final semantic traversal.
+// Checkpoints are outside binders: cancellation keeps completed caches valid and
+// never interrupts a shared mutable AST in the middle of a binding operation.
+// This is only preparation; the ordinary complete diagnostic pass still runs.
+struct SharedSemanticWarmup : ast::ASTVisitor<SharedSemanticWarmup, ast::VisitFlags::Canonical> {
+    ast::Compilation& owner;
+    const lsp::RequestContext& ctx;
+    std::unordered_set<const ast::Symbol*> visited;
+    std::unordered_set<ast::InstanceCacheKey, slang::hash<ast::InstanceCacheKey>> instances;
+
+    SharedSemanticWarmup(ast::Compilation& owner, const lsp::RequestContext& ctx) :
+        owner(owner), ctx(ctx) {}
+
+    template<typename T>
+    bool bind(const T& symbol) {
+        const ast::Scope* scope = symbol.getParentScope();
+        if constexpr (std::is_base_of_v<ast::Scope, T>)
+            scope = &symbol;
+        if ((scope && &scope->getCompilation() != &owner) || !visited.insert(&symbol).second)
+            return false;
+        ctx.checkpoint("before shared semantic binding warmup");
+        if constexpr (std::is_same_v<T, ast::InstanceBodySymbol>) {
+            if (owner.isImportedInstanceBody(symbol))
+                return false;
+        }
+        if constexpr (std::is_same_v<T, ast::InstanceSymbol>) {
+            // Optional warmup must not replace Native hierarchy depth checks.
+            if (symbol.instanceDepth > std::min<uint32_t>(64, owner.getOptions().maxInstanceDepth))
+                return false;
+            if (!owner.hasFlag(ast::CompilationFlags::DisableInstanceCaching) &&
+                ast::InstanceCacheKey::isEligibleForCaching(symbol)) {
+                bool valid = true;
+                SmallSet<const ast::InstanceSymbol*, 2> seen;
+                ast::InstanceCacheKey key(symbol, valid, seen);
+                // This only chooses warmup work. Native still performs every
+                // context / side-effect check and decides actual body reuse.
+                if (valid && !instances.insert(std::move(key)).second)
+                    return false;
+            }
+        }
+        if constexpr (std::is_same_v<T, ast::CheckerInstanceBodySymbol>) {
+            if (symbol.instanceDepth > owner.getOptions().maxCheckerInstanceDepth)
+                return false;
+        }
+        if constexpr (std::is_same_v<T, ast::GenerateBlockSymbol>) {
+            if (symbol.isUninstantiated)
+                return false;
+        }
+        if (auto type = symbol.getDeclaredType()) {
+            (void)type->getType();
+            (void)type->getInitializer();
+        }
+        if constexpr (requires { symbol.getBody().bad(); })
+            (void)symbol.getBody();
+        if constexpr (std::is_same_v<T, ast::SubroutineSymbol>)
+            ctx.checkpoint("after shared method body warmup");
+        ctx.checkpoint("after shared semantic binding warmup");
+        return true;
+    }
+
+    template<typename T>
+    void handle(const T& symbol) {
+        if constexpr (std::is_base_of_v<ast::Symbol, T>) {
+            if (bind(symbol))
+                visitDefault(symbol);
+        }
+    }
+
+    void handle(const ast::GenericClassDefSymbol& symbol) {
+        if (!bind(symbol))
+            return;
+        // Binding can instantiate another specialization of this same class.
+        // Snapshot pointers instead of keeping an iterator into its mutable map.
+        std::vector<const ast::Type*> specializations;
+        for (const auto& type : symbol.specializations())
+            specializations.push_back(&type);
+        for (auto type : specializations)
+            type->visit(*this);
+    }
+};
+
 bool contained(const ast::Symbol* symbol, const ast::SubroutineSymbol* fn) {
     for (; symbol;) {
         if (symbol == fn)
@@ -302,7 +384,8 @@ std::vector<std::string> rendered(const Diagnostics& diagnostics, SourceManager&
 } // namespace
 
 std::shared_ptr<const BodyDiagnosticBaseline> BodyDiagnosticCache::capture(
-    ServerDriver& d, const URI& uri, size_t start, size_t stop, const lsp::RequestContext& ctx) {
+    ServerDriver& d, const URI& uri, size_t start, size_t stop, const lsp::RequestContext& ctx,
+    bool deferPreparation) {
     ctx.checkpoint("before method diagnostic capture");
     auto baseline = std::make_shared<BodyDiagnosticBaseline>(uri);
     baseline->driver = &d;
@@ -312,7 +395,13 @@ std::shared_ptr<const BodyDiagnosticBaseline> BodyDiagnosticCache::capture(
     baseline->bufferLimit = uint32_t(d.sm.getSourceLocationEntryCount());
     baseline->settings = d.diagEngine.captureSettings();
     baseline->analysisOptions = d.options.getOrDefault<analysis::AnalysisOptions>();
-    require(d.comp && d.m_fullDiagnosticGeneration &&
+    // A foreground query can replace the root after the last publication.
+    // Its current source buffers and the driver's publication generation do
+    // not prove that this new root's analysis is ready. Capture only borrows
+    // prepared semantics/dataflow. An explicitly deferred capture retains the exact
+    // pre-edit owner and witnesses, without preparing analysis on the caller.
+    require(d.comp && (deferPreparation || !d.comp->needsDiagnosticPreparation()) &&
+                d.m_fullDiagnosticGeneration &&
                 d.m_fullDiagnosticGeneration == d.m_diagnosticGeneration &&
                 d.comp->containsCurrentSource(d.sm.getFullPath(d.getDocument(uri)->getBuffer())),
             "local diagnostics require a completed current full-design baseline");
@@ -324,7 +413,49 @@ std::shared_ptr<const BodyDiagnosticBaseline> BodyDiagnosticCache::capture(
     auto design = d.comp->createActiveDesignContext({}, ctx);
     auto owner = design.retainCompilation();
     baseline->owner = owner;
+    baseline->pendingDesign = std::make_shared<ActiveDesignContext>(std::move(design));
+    baseline->text = std::string(d.getDocument(uri)->getText());
+    baseline->config = rfl::json::write(d.m_config);
+    baseline->targetPath = d.sm.getFullPath(d.getDocument(uri)->getBuffer());
+    auto publication = d.m_nativeDiagnosticSnapshot;
+    if (publication && publication->generation == d.m_fullDiagnosticGeneration &&
+        publication->context.lock() == d.m_snapshotOwner && publication->owner.lock() == owner &&
+        publication->config == baseline->config) {
+        baseline->publication = std::move(publication);
+        ctx.checkpoint("native diagnostic routes reused");
+    }
+    if (deferPreparation && d.comp->needsDiagnosticPreparation())
+        return baseline;
+    return completeCapture(d, std::move(baseline), ctx);
+}
+
+std::shared_ptr<const BodyDiagnosticBaseline> BodyDiagnosticCache::completeCapture(
+    ServerDriver& d, std::shared_ptr<const BodyDiagnosticBaseline> saved,
+    const lsp::RequestContext& ctx) {
+    if (!saved->pendingDesign)
+        return saved;
+    require(saved->driver == &d && saved->context.lock() == d.m_snapshotOwner &&
+                saved->config == rfl::json::write(d.m_config),
+            "deferred diagnostic baseline belongs to another context");
+    // Work on a private copy: cancellation leaves the exact pre-edit witness available.
+    auto baseline = std::make_shared<BodyDiagnosticBaseline>(*saved);
+    auto& design = *baseline->pendingDesign;
+    auto owner = baseline->owner;
+    const auto start = baseline->begin;
     require(!owner->hasFatalErrors(), "fatal baseline diagnostics require native analysis");
+    if (!design.getAnalysis().diagnosticsReady()) {
+        UvmPhaseTrace phases;
+        if (!owner->isElaborated()) {
+            SharedSemanticWarmup warmup(*owner, ctx);
+            owner->getRoot().visit(warmup);
+        }
+        phases.mark("shared-baseline-binding-warmup");
+        ctx.checkpoint("before shared baseline semantic diagnostics");
+        (void)owner->getSemanticDiagnostics();
+        phases.mark("shared-baseline-final-semantics");
+        ctx.checkpoint("after shared baseline semantic diagnostics");
+        require(!owner->hasFatalErrors(), "fatal baseline diagnostics require native analysis");
+    }
     auto& manager = design.getAnalysis().getAnalysisManager(ctx);
     baseline->completeAnalysis = &manager;
     baseline->procedureReuseAnalysis = &design.getAnalysis().getProcedureReuseBaseline(ctx);
@@ -332,7 +463,7 @@ std::shared_ptr<const BodyDiagnosticBaseline> BodyDiagnosticCache::capture(
     if (modelOwnerTraceEnabled())
         traceModelOwner("baseline-pin", owner.get(), nullptr, owner->getTotalBytesAllocated(),
                         design.getAnalysis().analysisMemoryBytes(), owner.use_count());
-    auto path = d.sm.getFullPath(d.getDocument(uri)->getBuffer());
+    const auto& path = baseline->targetPath;
     for (auto fn : manager.getAnalyzedSubroutines()) {
         auto syntax = fn->getSyntax();
         if (!syntax)
@@ -386,29 +517,9 @@ std::shared_ptr<const BodyDiagnosticBaseline> BodyDiagnosticCache::capture(
 
     // replaceBuffer clears the editor BufferID's FileInfo even while old FileData
     // is pinned. Keep one target-file value, not a chain of edited source owners.
-    baseline->text = std::string(d.getDocument(uri)->getText());
     baseline->targetBuffer =
         baseline->originals.front()->getSyntax()->getFirstToken().location().buffer();
     baseline->sourcePins = d.sm.retainBuffers({&baseline->targetBuffer, 1});
-    auto publication = d.m_nativeDiagnosticSnapshot;
-    UvmPhaseTrace capturePhases;
-    capturePhases.mark(!publication ? "body-native-publication-missing"
-                       : publication->generation != d.m_fullDiagnosticGeneration
-                           ? "body-native-publication-generation-changed"
-                       : publication->context.lock() != d.m_snapshotOwner
-                           ? "body-native-publication-context-changed"
-                       : publication->owner.lock() != owner
-                           ? "body-native-publication-owner-changed"
-                       : publication->config != rfl::json::write(d.m_config)
-                           ? "body-native-publication-config-changed"
-                           : "body-native-publication-matched");
-    if (publication && publication->generation == d.m_fullDiagnosticGeneration &&
-        publication->context.lock() == d.m_snapshotOwner && publication->owner.lock() == owner &&
-        publication->config == rfl::json::write(d.m_config)) {
-        baseline->publication = std::move(publication);
-        ctx.checkpoint("native diagnostic routes reused");
-    }
-
     if (!baseline->publication) {
         for (const auto& tree : owner->getSyntaxTrees())
             baseline->diagnostics[0].append_range(tree->diagnostics());
@@ -418,8 +529,9 @@ std::shared_ptr<const BodyDiagnosticBaseline> BodyDiagnosticCache::capture(
     ctx.checkpoint("after method diagnostic capture");
     // Transfer the committed publication to this certificate. Its immutable
     // physical renderings can be retained without pinning an extra semantic owner.
-    if (baseline->publication)
+    if (baseline->publication && d.m_nativeDiagnosticSnapshot == baseline->publication)
         d.m_nativeDiagnosticSnapshot.reset();
+    baseline->pendingDesign.reset();
     return baseline;
 }
 

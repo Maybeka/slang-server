@@ -1937,6 +1937,20 @@ bool MethodScopeOverlay::generalApply(const lsp::DidChangeTextDocumentParams& p,
     ast::BodyQueryEvaluationGuard guard(blocked, blockedSyntax);
     ctx.checkpoint("before method mini parse");
     auto tree = query.parse(treeOptions->bag(), bodyMacros);
+    // The mini source blanks outer code, including comments before the keyword.
+    // Keep the native leading trivia for documentation without executing its
+    // directives again. Install it before publishing / binding this fresh tree.
+    SmallVector<parsing::Trivia> leading;
+    for (auto trivia : bodyOriginals.front()->getSyntax()->getFirstToken().trivia()) {
+        if (auto raw = trivia.getRawText(); !raw.empty()) {
+            auto owned = tree->allocator().copyFrom<char>(std::span(raw.data(), raw.size()));
+            leading.emplace_back(trivia.kind, std::string_view(owned.data(), owned.size()));
+        }
+        else
+            leading.push_back(trivia.clone(tree->allocator(), true));
+    }
+    auto* first = tree->root().getFirstTokenPtr();
+    *first = first->withTrivia(tree->allocator(), leading);
     for (const auto& reference : tree->getPreprocessorMetadata().macroRefs)
         validateMacroPreprocessing(reference, bodyMacros, ctx);
     phases.mark("body-apply-parse");
@@ -2275,8 +2289,13 @@ catch (const std::exception&) {
 std::optional<std::optional<lsp::Hover>> MethodScopeOverlay::hoverImpl(
     const URI& target, const lsp::Position& position, const Config& config,
     const lsp::RequestContext& ctx, std::optional<Config::HoverConfig::MacroView> view) try {
-    if (!generalBody || !accepted || target != uri || !validForWork(config, ctx) ||
-        !generalSite(position))
+    if (!generalBody || !accepted || target != uri || !validForWork(config, ctx))
+        return {};
+    const auto at = toSourceLocation(driver->getDocument(uri)->getBuffer(), position, driver->sm);
+    // The isolated parse includes the unchanged prototype. generalApply also
+    // checks current return/argument types and defaults, including non-ANSI
+    // declarations in the body, before exposing any of these symbols.
+    if (!at || at->offset() < functionBegin || at->offset() >= bodyEnd)
         return {};
     ensureGeneralBinding(config, ctx);
     std::optional<ast::BodyQueryEvaluationGuard> guard(std::in_place, bodyBlocked,
@@ -2492,9 +2511,10 @@ void MethodScopeOverlay::captureLocalBaseline(const Config& config,
         else validateBodyPreprocessing(text.substr(functionBegin, functionEnd - functionBegin));
         UvmPhaseTrace phases;
         diagnosticBaseline = BodyDiagnosticCache::capture(*driver, uri, functionBegin, functionEnd,
-                                                          ctx);
+                                                          ctx, true);
         phases.mark("body-diagnostic-capture");
         diagnosticDecline.clear();
+        diagnosticCaptureDecline.clear();
     }
     catch (const lsp::RequestCancelled&) {
         diagnosticCaptureVersion = -1;
@@ -2502,17 +2522,23 @@ void MethodScopeOverlay::captureLocalBaseline(const Config& config,
     }
     catch (const std::exception& error) {
         diagnosticDecline = error.what();
+        diagnosticCaptureDecline = diagnosticDecline;
     }
 }
 
 void MethodScopeOverlay::prepareLocalDiagnostics(const Config& config,
-                                                 const lsp::RequestContext& ctx) {
+                                                 const lsp::RequestContext& ctx,
+                                                 bool completeDeferred) {
+    if (diagnosticBaseline && diagnosticBaseline->pendingDesign && !completeDeferred)
+        return;
     if (!generalBody || !config.experimentalMethodBodyDiagnostics.value() || bodyDiagnostics ||
         diagnosticBaselineVersion == version)
         return;
     diagnosticBaselineVersion = version;
     try {
         UvmPhaseTrace phases;
+        if (diagnosticBaseline && diagnosticBaseline->pendingDesign)
+            diagnosticBaseline = BodyDiagnosticCache::completeCapture(*driver, diagnosticBaseline, ctx);
         const auto baselineEnd = diagnosticBaseline ? diagnosticBaseline->end : functionEnd;
         auto baselineText = diagnosticBaseline ? std::string_view(diagnosticBaseline->text)
                                                : std::string_view(text);
@@ -2554,13 +2580,19 @@ void MethodScopeOverlay::prepareLocalDiagnostics(const Config& config,
         diagnosticBaseline.reset();
         phases.mark("body-diagnostic-certification");
         diagnosticDecline.clear();
+        diagnosticCaptureDecline.clear();
     }
     catch (const lsp::RequestCancelled&) {
         diagnosticBaselineVersion = -1;
         throw;
     }
     catch (const std::exception& error) {
-        diagnosticDecline = error.what();
+        // Capture precedes text synchronization and can report the actual
+        // eligibility boundary. A later retry sees an invalidated full model;
+        // keep that original cause instead of replacing it with missing-baseline
+        // fallout. A successful capture or certification clears the old cause.
+        diagnosticDecline = diagnosticCaptureDecline.empty() ? error.what()
+                                                            : diagnosticCaptureDecline;
         diagnosticBaseline.reset();
     }
 }
@@ -2596,7 +2628,7 @@ bool MethodScopeOverlay::publishLocalDiagnostics(const Config& config,
     try {
         ensureGeneralBinding(config, ctx);
         if (optimizedCertification(config) && !bodyDiagnostics)
-            prepareLocalDiagnostics(config, ctx);
+            prepareLocalDiagnostics(config, ctx, true);
         if (!bodyDiagnostics)
             return false;
         bodyDiagnostics->publish(

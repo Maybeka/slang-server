@@ -70,6 +70,15 @@ use the sequential diagnostic path with an explicit fallback reason. Foreground 
 use their native context. A later supported context can resume isolated diagnostics. This is
 not a claim of independent diagnostics for every native compiler configuration.
 
+Configured units that inherit preprocessing context are reparsed together through
+the native SourceLoader after edits. This preserves source order, unsaved input
+text, per-unit definitions, include paths and named-library identity. Queries and
+full-design syntax collection synchronize these units before building a new model.
+Cancelled replay keeps the previous published recipes and can be retried; open
+documents keep their object identity and editor version. This does not enable
+frozen semantic-prefix reuse for inherited-unit layouts that still require native
+analysis.
+
 ## Full-design boundary
 
 Explicit complete-filelist authority and package-only dependency selection apply to
@@ -84,3 +93,17 @@ this fork preserves main's first-source default and include picker. Automatic
 candidate discovery remains bounded before opening candidate roots. Explicit
 filelists and physical source hints continue to report conflicting or ambiguous
 contexts instead of choosing a provider.
+
+Published native input-unit trees retain their source and command-line macro storage.
+Cancellation keeps both the prior recipe and its borrowed token characters valid;
+releasing the last strong tree reference releases that storage even if a weak
+cache entry remains. This lease does not certify unchanged input contents.
+
+Ordinary document and exploration-preinclude parses use the same storage lease
+before publishing a completed parse, including when the following cancellation
+checkpoint aborts its caller. Retained analyses can therefore read their old CST
+tokens after editor replacement without retaining every editing generation in
+the document. Source-manager aliases can independently keep old preinclude bytes
+until their owning source context retires; an expired weak tree alone adds no
+such ownership. Current-input checks and version fences remain required for
+answering new queries.

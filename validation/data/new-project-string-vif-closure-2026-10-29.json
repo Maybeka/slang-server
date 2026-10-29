@@ -1,0 +1,123 @@
+{
+  "status": "Virtual-interface consumer diagnostics and string parameter closure implemented; full all-project goal active",
+  "mainHead": "41758aa9e865903a0e283861f19331f9a36eab5b",
+  "binarySha256": "ad9e4b7139e38618193a52968c220314d8f36cedd69d107509060e087ca8949e",
+  "sdkPatchSha256": "0ceb2f39f9c386acf31611e60914c53fffb62db457011d3b3439aeb0acbfae84",
+  "sourceSeal": "untracked/project-optimization-2026-10-29/string-vif-source-seal.json",
+  "changes": {
+    "virtualInterfaces": "Declaration-only analysis keeps deferred checks. Complete consumers reconstruct private diagnostic instances with exact actual parameter values, traverse transitive providers, preserve provider type identity and evaluate current root references. Independent subtree owners remain restricted to their own certificates. Cancellation checkpoints cover the worklist.",
+    "strings": "Exact byte/value signatures for scalar and finite array parameters; builtin string type arguments; escaped wrapper literal generation; owned detached string initializers; owned-byte accounting. Embedded zero-byte values or widths beyond native packed literal capacity decline reuse, preserving Native values."
+  },
+  "verification": {
+    "ctest": {
+      "passed": 1007,
+      "failed": 0,
+      "seconds": 14.89,
+      "TMPDIR": "/private/tmp"
+    },
+    "sdk": {
+      "cases": 2645,
+      "assertions": 37001
+    },
+    "virtualInterfaceTargetedAssertions": 29,
+    "stringAndMutableDependencyTargeted": {
+      "cases": 2,
+      "assertions": 890
+    },
+    "sdkHashes": 709,
+    "reversePatchCheck": true
+  },
+  "aes": {
+    "evidence": "untracked/rtl-uvm-fallback-2026-10-29/opentitan-aes-uvm-string-vif-final-diagnostic-control.json",
+    "sha256": "1e8fc78710a36ca18b2e756866d6f3d5b9afa93c9c0fac641d956af1725ec618",
+    "initialFourArmsEqualNative": true,
+    "nativeErrorCount": 32,
+    "sourceCompatibilityErrorsPreserved": true,
+    "wholeDutPerformanceAccepted": false,
+    "lastWholeRootRefusal": "unproven-call set",
+    "next": "Certify virtual-interface type arguments and opaque handle flow in fixed FI wrappers; independently audit the existing Native assertion-control errors before changing any error certificate boundary."
+  },
+  "uart": {
+    "evidence": "untracked/rtl-uvm-fallback-2026-10-29/opentitan-uart-uvm-string-vif-nonregression.json",
+    "sha256": "41083fba9c7a2d842d42bdbd43e232fafe20982b2d384b530acc414ed8168a8c",
+    "states": 45,
+    "repeats": 1,
+    "publicResultsEqualNative": true,
+    "nativeDiagnosticHash": "613e55b4ce08cef203a9621b24fe31bd1508bf13019111f6ccbef75c22418d1c",
+    "measurements": {
+      "native": {
+        "rootHits": 0,
+        "warmQueryMedianMs": 2088.748708,
+        "warmDiagnosticMedianMs": 2231.8755,
+        "structural": {
+          "queryMs": 2088.515583,
+          "diagnosticMs": 2229.682833,
+          "local": false,
+          "footprintMiB": 352.82897186279297
+        },
+        "firstRecovery": {
+          "queryMs": 2105.998167,
+          "diagnosticMs": 2259.44175,
+          "local": false,
+          "footprintMiB": 358.45397186279297
+        },
+        "steadyAfterRecovery": {
+          "queryMs": 2102.317125,
+          "diagnosticMs": 2247.222916,
+          "local": false,
+          "footprintMiB": 350.18834686279297
+        }
+      },
+      "frozen-full": {
+        "rootHits": 14,
+        "warmQueryMedianMs": 90.498375,
+        "warmDiagnosticMedianMs": 222.543333,
+        "structural": {
+          "queryMs": 92.876042,
+          "diagnosticMs": 226.645542,
+          "local": false,
+          "footprintMiB": 367.6570053100586
+        },
+        "firstRecovery": {
+          "queryMs": 93.093875,
+          "diagnosticMs": 226.523167,
+          "local": false,
+          "footprintMiB": 367.6882553100586
+        },
+        "steadyAfterRecovery": {
+          "queryMs": 90.54725,
+          "diagnosticMs": 223.087708,
+          "local": false,
+          "footprintMiB": 367.7351303100586
+        }
+      },
+      "frozen-local": {
+        "rootHits": 2,
+        "warmQueryMedianMs": 2.124583,
+        "warmDiagnosticMedianMs": 3.381167,
+        "structural": {
+          "queryMs": 109.082834,
+          "diagnosticMs": 255.020125,
+          "local": false,
+          "footprintMiB": 394.9226531982422
+        },
+        "firstRecovery": {
+          "queryMs": 10.305083,
+          "diagnosticMs": 19.253708,
+          "local": true,
+          "footprintMiB": 398.2195281982422
+        },
+        "steadyAfterRecovery": {
+          "queryMs": 2.370166,
+          "diagnosticMs": 3.662541,
+          "local": true,
+          "footprintMiB": 398.2195281982422
+        }
+      }
+    },
+    "limitations": "Sequential: await query and matching full diagnostic publication. No burst or cold-disk claim. Process memory read at boundaries, not independent sampled peak.",
+    "priorThreeRepeatQualification": "source/validation/data/new-project-whole-rtl-uvm-reuse-2026-10-29.json"
+  },
+  "remainingObjective": "Full original plan remains in untracked/project-optimization-2026-10-29/plan.txt; AES full root, all project groups, signature/parameter hover, preprocessing/multi-unit compatibility, memory/refusal followups, full sanitizer/package/cache/default-off checks and main push remain open.",
+  "networkFetches": false
+}

@@ -1,0 +1,2033 @@
+{
+  "status": "Actual Native SourceLoader replay implemented and qualified; remaining full goal remains active",
+  "mainHead": "41758aa9e865903a0e283861f19331f9a36eab5b",
+  "binarySha256": "8d6a29d75b33e3b12c85484b1f34862a24744f4cf0c4f13c690082ba913a0c19",
+  "asanBinarySha256": "b41bf5f23ea73678f5c939aab1d9c2bf3061ab40c804f49cbcd196ddd7d2a243",
+  "sdkPatchSha256": "02b057362f72d6f38bd8fe59233f73e62400b70b60fa721ffadb33f8301070cc",
+  "sourceSeal": "untracked/project-optimization-2026-10-29/native-replay-source-seal.json",
+  "sourceArchive": "untracked/project-optimization-2026-10-29/source-receipts/native-replay-8d6a29d7",
+  "implemented": [
+    "Route inherited-context Native document edits through the actual SourceLoader with original ordered input groups",
+    "Preserve document object identity and editor versions when rebinding native recipes; synchronize complete design input units before syntax collection/model rebuild",
+    "Guard replay against reentrant refresh and restore unpublished Driver syntaxTrees on cancellation; request checkpoints cannot escape as live callbacks",
+    "Preserve inherited macros, per-unit defines/include paths, named library identity, unsaved overlays and undefineall provenance requirements",
+    "Avoid redundant source-validity traversal for Native documents that do not require replay"
+  ],
+  "checks": {
+    "ctest": {
+      "passed": 1010,
+      "failed": 0,
+      "seconds": 15.0,
+      "TMPDIR": "/private/tmp"
+    },
+    "targeted": {
+      "cases": 31,
+      "assertions": 848
+    },
+    "sdk": {
+      "cases": 2645,
+      "assertions": 37001
+    },
+    "sdkIntegrityFiles": 709,
+    "reversePatchCheck": true,
+    "asanWifi": {
+      "states": 45,
+      "allPublicResultsEqualNative": true,
+      "leakDetection": false,
+      "evidence": "untracked/project-optimization-2026-10-29/openofdm-wifi-native-replay-final-asan.json",
+      "sha256": "bdc1237e3afd46a8c71b99e7eb0e306e8460e58107a7618bb1afa58cb6b868da"
+    }
+  },
+  "crossProjectRuntime": {
+    "evidence": "untracked/project-optimization-2026-10-29/native-replay-cross-project-runtime.json",
+    "sha256": "ffef569bab6fc63429ad2330cd446f26a2ddd2d811d98e5e524fe70deb90f53e",
+    "configurations": 15,
+    "states": 675,
+    "allPassed": true,
+    "baselineMeaning": "All arms use current binary. Native disables experiments; baseline and candidate are duplicate runs of the configured experimental arm. No historical post-edit performance comparison exists for WiFi because historical Native failed."
+  },
+  "projects": [
+    {
+      "case": "opentitan-soc-large",
+      "evidence": "untracked/project-optimization-2026-10-29/opentitan-soc-large-native-replay-cross-project.json",
+      "sha256": "5108b86149506332d530bd5f06f152aa8346d708a879665a39bc312d990b3e8d",
+      "states": 45,
+      "allPublicResultsEqualNative": true,
+      "measurements": {
+        "native": {
+          "warmQueryMedianMs": 606.801833,
+          "warmDiagnosticMedianMs": 1187.58675,
+          "firstEdit": {
+            "queryMs": 720.782708,
+            "diagnosticMs": 1344.723042,
+            "footprintMiB": 1126.2207870483398,
+            "local": false
+          },
+          "structuralFallback": {
+            "queryMs": 614.569542,
+            "diagnosticMs": 1197.998209,
+            "footprintMiB": 754.377197265625,
+            "local": false
+          },
+          "structuralUndo": {
+            "queryMs": 612.428291,
+            "diagnosticMs": 1194.60725,
+            "footprintMiB": 759.377197265625,
+            "local": false
+          },
+          "firstLocalRecovery": {
+            "queryMs": 645.908458,
+            "diagnosticMs": 1233.721083,
+            "footprintMiB": 820.4709930419922,
+            "local": false
+          },
+          "finalLocalEdit": {
+            "queryMs": 612.086875,
+            "diagnosticMs": 1213.961334,
+            "footprintMiB": 836.3147659301758,
+            "local": false
+          },
+          "scopePrepared": false,
+          "scopeReason": "",
+          "lastModelSharedRoots": []
+        },
+        "baseline": {
+          "warmQueryMedianMs": 688.960458,
+          "warmDiagnosticMedianMs": 1311.22175,
+          "firstEdit": {
+            "queryMs": 740.360875,
+            "diagnosticMs": 1389.050708,
+            "footprintMiB": 1275.439697265625,
+            "local": false
+          },
+          "structuralFallback": {
+            "queryMs": 633.164125,
+            "diagnosticMs": 1261.230791,
+            "footprintMiB": 1196.5181427001953,
+            "local": false
+          },
+          "structuralUndo": {
+            "queryMs": 644.507292,
+            "diagnosticMs": 1272.334792,
+            "footprintMiB": 1251.5181884765625,
+            "local": false
+          },
+          "firstLocalRecovery": {
+            "queryMs": 692.455584,
+            "diagnosticMs": 1342.986334,
+            "footprintMiB": 1312.7369842529297,
+            "local": false
+          },
+          "finalLocalEdit": {
+            "queryMs": 692.629083,
+            "diagnosticMs": 1322.038166,
+            "footprintMiB": 380.53365325927734,
+            "local": false
+          },
+          "scopePrepared": true,
+          "scopeReason": "retained fixed package semantic generation",
+          "lastModelSharedRoots": []
+        },
+        "candidate": {
+          "warmQueryMedianMs": 684.119042,
+          "warmDiagnosticMedianMs": 1315.418875,
+          "firstEdit": {
+            "queryMs": 752.883917,
+            "diagnosticMs": 1421.711375,
+            "footprintMiB": 1274.330322265625,
+            "local": false
+          },
+          "structuralFallback": {
+            "queryMs": 654.050458,
+            "diagnosticMs": 1279.777042,
+            "footprintMiB": 1196.3931884765625,
+            "local": false
+          },
+          "structuralUndo": {
+            "queryMs": 649.752084,
+            "diagnosticMs": 1281.854292,
+            "footprintMiB": 1251.3619842529297,
+            "local": false
+          },
+          "firstLocalRecovery": {
+            "queryMs": 688.0045,
+            "diagnosticMs": 1318.402708,
+            "footprintMiB": 1312.6120300292969,
+            "local": false
+          },
+          "finalLocalEdit": {
+            "queryMs": 704.39575,
+            "diagnosticMs": 1340.373709,
+            "footprintMiB": 380.7680969238281,
+            "local": false
+          },
+          "scopePrepared": true,
+          "scopeReason": "retained fixed package semantic generation",
+          "lastModelSharedRoots": []
+        }
+      }
+    },
+    {
+      "case": "opentitan-soc-inside-body",
+      "evidence": "untracked/project-optimization-2026-10-29/opentitan-soc-inside-body-native-replay-cross-project.json",
+      "sha256": "68eeed7cf6fce2dc6e41af41473fa145cd33bd9fa8c0905dc51cdaed2c0483c0",
+      "states": 45,
+      "allPublicResultsEqualNative": true,
+      "measurements": {
+        "native": {
+          "warmQueryMedianMs": 627.963584,
+          "warmDiagnosticMedianMs": 1226.622417,
+          "firstEdit": {
+            "queryMs": 684.753542,
+            "diagnosticMs": 1309.775042,
+            "footprintMiB": 1126.6113891601562,
+            "local": false
+          },
+          "structuralFallback": {
+            "queryMs": 621.802041,
+            "diagnosticMs": 1217.370541,
+            "footprintMiB": 753.080322265625,
+            "local": false
+          },
+          "structuralUndo": {
+            "queryMs": 626.725042,
+            "diagnosticMs": 1222.822084,
+            "footprintMiB": 758.080322265625,
+            "local": false
+          },
+          "firstLocalRecovery": {
+            "queryMs": 629.363958,
+            "diagnosticMs": 1223.7265,
+            "footprintMiB": 819.1584930419922,
+            "local": false
+          },
+          "finalLocalEdit": {
+            "queryMs": 631.751667,
+            "diagnosticMs": 1230.332083,
+            "footprintMiB": 834.2522659301758,
+            "local": false
+          },
+          "scopePrepared": false,
+          "scopeReason": "",
+          "lastModelSharedRoots": []
+        },
+        "baseline": {
+          "warmQueryMedianMs": 16.142042,
+          "warmDiagnosticMedianMs": 31.157667,
+          "firstEdit": {
+            "queryMs": 41.1125,
+            "diagnosticMs": 67.594375,
+            "footprintMiB": 1579.6891708374023,
+            "local": true
+          },
+          "structuralFallback": {
+            "queryMs": 700.55975,
+            "diagnosticMs": 1361.194083,
+            "footprintMiB": 1275.861572265625,
+            "local": false
+          },
+          "structuralUndo": {
+            "queryMs": 715.927417,
+            "diagnosticMs": 1374.850333,
+            "footprintMiB": 880.861686706543,
+            "local": false
+          },
+          "firstLocalRecovery": {
+            "queryMs": 44.89025,
+            "diagnosticMs": 70.983541,
+            "footprintMiB": 884.189811706543,
+            "local": true
+          },
+          "finalLocalEdit": {
+            "queryMs": 15.978375,
+            "diagnosticMs": 31.157917,
+            "footprintMiB": 884.205436706543,
+            "local": true
+          },
+          "scopePrepared": true,
+          "scopeReason": "retained fixed package semantic generation",
+          "lastModelSharedRoots": []
+        },
+        "candidate": {
+          "warmQueryMedianMs": 16.136542,
+          "warmDiagnosticMedianMs": 31.135917,
+          "firstEdit": {
+            "queryMs": 39.769333,
+            "diagnosticMs": 66.612916,
+            "footprintMiB": 1580.361068725586,
+            "local": true
+          },
+          "structuralFallback": {
+            "queryMs": 712.638625,
+            "diagnosticMs": 1376.305917,
+            "footprintMiB": 1277.2521743774414,
+            "local": false
+          },
+          "structuralUndo": {
+            "queryMs": 712.6915,
+            "diagnosticMs": 1367.187542,
+            "footprintMiB": 880.1741638183594,
+            "local": false
+          },
+          "firstLocalRecovery": {
+            "queryMs": 40.187791,
+            "diagnosticMs": 66.379625,
+            "footprintMiB": 884.2366638183594,
+            "local": true
+          },
+          "finalLocalEdit": {
+            "queryMs": 16.014125,
+            "diagnosticMs": 30.636708,
+            "footprintMiB": 884.2366638183594,
+            "local": true
+          },
+          "scopePrepared": true,
+          "scopeReason": "retained fixed package semantic generation",
+          "lastModelSharedRoots": []
+        }
+      }
+    },
+    {
+      "case": "opentitan-aes",
+      "evidence": "untracked/project-optimization-2026-10-29/opentitan-aes-native-replay-cross-project.json",
+      "sha256": "8ab5f926e5b77371afc67fde62cb2bff0c7c9fa4f86e852c8d96d51825e364ea",
+      "states": 45,
+      "allPublicResultsEqualNative": true,
+      "measurements": {
+        "native": {
+          "warmQueryMedianMs": 59.413917,
+          "warmDiagnosticMedianMs": 94.702625,
+          "firstEdit": {
+            "queryMs": 62.175291,
+            "diagnosticMs": 98.825916,
+            "footprintMiB": 84.53177642822266,
+            "local": false
+          },
+          "structuralFallback": {
+            "queryMs": 59.725167,
+            "diagnosticMs": 95.0955,
+            "footprintMiB": 122.34429931640625,
+            "local": false
+          },
+          "structuralUndo": {
+            "queryMs": 59.104916,
+            "diagnosticMs": 94.452375,
+            "footprintMiB": 123.07867431640625,
+            "local": false
+          },
+          "firstLocalRecovery": {
+            "queryMs": 59.468917,
+            "diagnosticMs": 94.848709,
+            "footprintMiB": 123.84429931640625,
+            "local": false
+          },
+          "finalLocalEdit": {
+            "queryMs": 59.002334,
+            "diagnosticMs": 94.34675,
+            "footprintMiB": 126.07867431640625,
+            "local": false
+          },
+          "scopePrepared": false,
+          "scopeReason": "",
+          "lastModelSharedRoots": []
+        },
+        "baseline": {
+          "warmQueryMedianMs": 71.522958,
+          "warmDiagnosticMedianMs": 107.7695,
+          "firstEdit": {
+            "queryMs": 73.906541,
+            "diagnosticMs": 110.136208,
+            "footprintMiB": 98.37552642822266,
+            "local": false
+          },
+          "structuralFallback": {
+            "queryMs": 60.907208,
+            "diagnosticMs": 95.963,
+            "footprintMiB": 131.26624298095703,
+            "local": false
+          },
+          "structuralUndo": {
+            "queryMs": 61.053125,
+            "diagnosticMs": 97.057875,
+            "footprintMiB": 139.59436798095703,
+            "local": false
+          },
+          "firstLocalRecovery": {
+            "queryMs": 71.695667,
+            "diagnosticMs": 107.407292,
+            "footprintMiB": 148.95376586914062,
+            "local": false
+          },
+          "finalLocalEdit": {
+            "queryMs": 71.294167,
+            "diagnosticMs": 106.795084,
+            "footprintMiB": 160.93814086914062,
+            "local": false
+          },
+          "scopePrepared": true,
+          "scopeReason": "retained fixed package semantic generation",
+          "lastModelSharedRoots": []
+        },
+        "candidate": {
+          "warmQueryMedianMs": 71.152875,
+          "warmDiagnosticMedianMs": 106.951042,
+          "firstEdit": {
+            "queryMs": 74.05625,
+            "diagnosticMs": 110.472125,
+            "footprintMiB": 97.64115142822266,
+            "local": false
+          },
+          "structuralFallback": {
+            "queryMs": 61.695375,
+            "diagnosticMs": 97.305542,
+            "footprintMiB": 130.32872009277344,
+            "local": false
+          },
+          "structuralUndo": {
+            "queryMs": 61.449125,
+            "diagnosticMs": 96.815208,
+            "footprintMiB": 138.68809509277344,
+            "local": false
+          },
+          "firstLocalRecovery": {
+            "queryMs": 72.856542,
+            "diagnosticMs": 108.609625,
+            "footprintMiB": 148.07874298095703,
+            "local": false
+          },
+          "finalLocalEdit": {
+            "queryMs": 71.485,
+            "diagnosticMs": 106.86275,
+            "footprintMiB": 160.10999298095703,
+            "local": false
+          },
+          "scopePrepared": true,
+          "scopeReason": "retained fixed package semantic generation",
+          "lastModelSharedRoots": []
+        }
+      }
+    },
+    {
+      "case": "opentitan-aes-inside-body",
+      "evidence": "untracked/project-optimization-2026-10-29/opentitan-aes-inside-body-native-replay-cross-project.json",
+      "sha256": "1cb23199bfd69c4107f7147d3329a27eeee9ba32a453259756c2e0bc94567586",
+      "states": 45,
+      "allPublicResultsEqualNative": true,
+      "measurements": {
+        "native": {
+          "warmQueryMedianMs": 59.366958,
+          "warmDiagnosticMedianMs": 94.676875,
+          "firstEdit": {
+            "queryMs": 61.8195,
+            "diagnosticMs": 98.115875,
+            "footprintMiB": 84.54742431640625,
+            "local": false
+          },
+          "structuralFallback": {
+            "queryMs": 61.262291,
+            "diagnosticMs": 96.326833,
+            "footprintMiB": 122.34429931640625,
+            "local": false
+          },
+          "structuralUndo": {
+            "queryMs": 59.706541,
+            "diagnosticMs": 94.91925,
+            "footprintMiB": 123.07867431640625,
+            "local": false
+          },
+          "firstLocalRecovery": {
+            "queryMs": 58.939667,
+            "diagnosticMs": 94.093792,
+            "footprintMiB": 123.84429931640625,
+            "local": false
+          },
+          "finalLocalEdit": {
+            "queryMs": 59.027166,
+            "diagnosticMs": 94.501416,
+            "footprintMiB": 126.07867431640625,
+            "local": false
+          },
+          "scopePrepared": false,
+          "scopeReason": "",
+          "lastModelSharedRoots": []
+        },
+        "baseline": {
+          "warmQueryMedianMs": 4.80925,
+          "warmDiagnosticMedianMs": 9.335959,
+          "firstEdit": {
+            "queryMs": 11.281875,
+            "diagnosticMs": 19.312166,
+            "footprintMiB": 107.78177642822266,
+            "local": true
+          },
+          "structuralFallback": {
+            "queryMs": 62.615125,
+            "diagnosticMs": 99.173167,
+            "footprintMiB": 98.09427642822266,
+            "local": false
+          },
+          "structuralUndo": {
+            "queryMs": 65.394959,
+            "diagnosticMs": 102.06225,
+            "footprintMiB": 82.79742431640625,
+            "local": false
+          },
+          "firstLocalRecovery": {
+            "queryMs": 11.130125,
+            "diagnosticMs": 19.195708,
+            "footprintMiB": 83.20367431640625,
+            "local": true
+          },
+          "finalLocalEdit": {
+            "queryMs": 4.970084,
+            "diagnosticMs": 9.542667,
+            "footprintMiB": 83.20367431640625,
+            "local": true
+          },
+          "scopePrepared": true,
+          "scopeReason": "retained fixed package semantic generation",
+          "lastModelSharedRoots": []
+        },
+        "candidate": {
+          "warmQueryMedianMs": 4.907666,
+          "warmDiagnosticMedianMs": 9.425333,
+          "firstEdit": {
+            "queryMs": 11.2085,
+            "diagnosticMs": 19.344834,
+            "footprintMiB": 107.67240142822266,
+            "local": true
+          },
+          "structuralFallback": {
+            "queryMs": 62.944833,
+            "diagnosticMs": 99.605791,
+            "footprintMiB": 98.06304931640625,
+            "local": false
+          },
+          "structuralUndo": {
+            "queryMs": 64.383375,
+            "diagnosticMs": 101.353709,
+            "footprintMiB": 82.84429931640625,
+            "local": false
+          },
+          "firstLocalRecovery": {
+            "queryMs": 11.320041,
+            "diagnosticMs": 19.334375,
+            "footprintMiB": 83.29742431640625,
+            "local": true
+          },
+          "finalLocalEdit": {
+            "queryMs": 4.900083,
+            "diagnosticMs": 9.389666,
+            "footprintMiB": 83.29742431640625,
+            "local": true
+          },
+          "scopePrepared": true,
+          "scopeReason": "retained fixed package semantic generation",
+          "lastModelSharedRoots": []
+        }
+      }
+    },
+    {
+      "case": "aes-small",
+      "evidence": "untracked/project-optimization-2026-10-29/aes-small-native-replay-cross-project.json",
+      "sha256": "f5967b6e322cb9bd621071e684ed49ee1546d45c0c34e2e526d05b3ef3b97bce",
+      "states": 45,
+      "allPublicResultsEqualNative": true,
+      "measurements": {
+        "native": {
+          "warmQueryMedianMs": 2.124916,
+          "warmDiagnosticMedianMs": 5.685333,
+          "firstEdit": {
+            "queryMs": 2.1165,
+            "diagnosticMs": 5.781916,
+            "footprintMiB": 8.625434875488281,
+            "local": false
+          },
+          "structuralFallback": {
+            "queryMs": 2.011333,
+            "diagnosticMs": 5.5545,
+            "footprintMiB": 9.687934875488281,
+            "local": false
+          },
+          "structuralUndo": {
+            "queryMs": 2.037667,
+            "diagnosticMs": 5.569625,
+            "footprintMiB": 9.734809875488281,
+            "local": false
+          },
+          "firstLocalRecovery": {
+            "queryMs": 2.081417,
+            "diagnosticMs": 5.654083,
+            "footprintMiB": 9.750434875488281,
+            "local": false
+          },
+          "finalLocalEdit": {
+            "queryMs": 2.095458,
+            "diagnosticMs": 5.659125,
+            "footprintMiB": 9.828559875488281,
+            "local": false
+          },
+          "scopePrepared": false,
+          "scopeReason": "",
+          "lastModelSharedRoots": []
+        },
+        "baseline": {
+          "warmQueryMedianMs": 2.727208,
+          "warmDiagnosticMedianMs": 6.430833,
+          "firstEdit": {
+            "queryMs": 2.956167,
+            "diagnosticMs": 6.918917,
+            "footprintMiB": 9.031684875488281,
+            "local": false
+          },
+          "structuralFallback": {
+            "queryMs": 2.114083,
+            "diagnosticMs": 5.84875,
+            "footprintMiB": 10.266059875488281,
+            "local": false
+          },
+          "structuralUndo": {
+            "queryMs": 2.125334,
+            "diagnosticMs": 5.935625,
+            "footprintMiB": 10.281684875488281,
+            "local": false
+          },
+          "firstLocalRecovery": {
+            "queryMs": 2.694333,
+            "diagnosticMs": 6.406041,
+            "footprintMiB": 10.281684875488281,
+            "local": false
+          },
+          "finalLocalEdit": {
+            "queryMs": 2.654625,
+            "diagnosticMs": 6.267958,
+            "footprintMiB": 10.422309875488281,
+            "local": false
+          },
+          "scopePrepared": false,
+          "scopeReason": "fixed package prefix has unsupported preprocessing state",
+          "lastModelSharedRoots": []
+        },
+        "candidate": {
+          "warmQueryMedianMs": 2.704584,
+          "warmDiagnosticMedianMs": 6.485458,
+          "firstEdit": {
+            "queryMs": 3.0585,
+            "diagnosticMs": 6.892084,
+            "footprintMiB": 9.031684875488281,
+            "local": false
+          },
+          "structuralFallback": {
+            "queryMs": 2.14475,
+            "diagnosticMs": 5.84075,
+            "footprintMiB": 10.266059875488281,
+            "local": false
+          },
+          "structuralUndo": {
+            "queryMs": 2.186625,
+            "diagnosticMs": 5.922292,
+            "footprintMiB": 10.281684875488281,
+            "local": false
+          },
+          "firstLocalRecovery": {
+            "queryMs": 2.682083,
+            "diagnosticMs": 6.395292,
+            "footprintMiB": 10.281684875488281,
+            "local": false
+          },
+          "finalLocalEdit": {
+            "queryMs": 2.733917,
+            "diagnosticMs": 6.503084,
+            "footprintMiB": 10.422309875488281,
+            "local": false
+          },
+          "scopePrepared": false,
+          "scopeReason": "fixed package prefix has unsupported preprocessing state",
+          "lastModelSharedRoots": []
+        }
+      }
+    },
+    {
+      "case": "aes-inside-body",
+      "evidence": "untracked/project-optimization-2026-10-29/aes-inside-body-native-replay-cross-project.json",
+      "sha256": "1f1365a3ce0eeb649ede33174de28b46732fc1622fd64d4f5d84f0902d2ada68",
+      "states": 45,
+      "allPublicResultsEqualNative": true,
+      "measurements": {
+        "native": {
+          "warmQueryMedianMs": 2.083666,
+          "warmDiagnosticMedianMs": 5.658,
+          "firstEdit": {
+            "queryMs": 2.24575,
+            "diagnosticMs": 5.902792,
+            "footprintMiB": 8.641059875488281,
+            "local": false
+          },
+          "structuralFallback": {
+            "queryMs": 2.082334,
+            "diagnosticMs": 5.632959,
+            "footprintMiB": 9.672309875488281,
+            "local": false
+          },
+          "structuralUndo": {
+            "queryMs": 1.996833,
+            "diagnosticMs": 5.519167,
+            "footprintMiB": 9.703559875488281,
+            "local": false
+          },
+          "firstLocalRecovery": {
+            "queryMs": 2.004917,
+            "diagnosticMs": 5.737458,
+            "footprintMiB": 9.719184875488281,
+            "local": false
+          },
+          "finalLocalEdit": {
+            "queryMs": 2.091708,
+            "diagnosticMs": 5.623083,
+            "footprintMiB": 9.812934875488281,
+            "local": false
+          },
+          "scopePrepared": false,
+          "scopeReason": "",
+          "lastModelSharedRoots": []
+        },
+        "baseline": {
+          "warmQueryMedianMs": 0.436292,
+          "warmDiagnosticMedianMs": 0.662917,
+          "firstEdit": {
+            "queryMs": 0.830708,
+            "diagnosticMs": 5.819917,
+            "footprintMiB": 10.937934875488281,
+            "local": true
+          },
+          "structuralFallback": {
+            "queryMs": 2.441084,
+            "diagnosticMs": 6.157334,
+            "footprintMiB": 11.375434875488281,
+            "local": false
+          },
+          "structuralUndo": {
+            "queryMs": 2.2985,
+            "diagnosticMs": 6.025209,
+            "footprintMiB": 11.391059875488281,
+            "local": false
+          },
+          "firstLocalRecovery": {
+            "queryMs": 0.738375,
+            "diagnosticMs": 5.845083,
+            "footprintMiB": 12.141059875488281,
+            "local": true
+          },
+          "finalLocalEdit": {
+            "queryMs": 0.413417,
+            "diagnosticMs": 0.635292,
+            "footprintMiB": 12.234809875488281,
+            "local": true
+          },
+          "scopePrepared": false,
+          "scopeReason": "fixed package prefix has unsupported preprocessing state",
+          "lastModelSharedRoots": []
+        },
+        "candidate": {
+          "warmQueryMedianMs": 0.415666,
+          "warmDiagnosticMedianMs": 0.635666,
+          "firstEdit": {
+            "queryMs": 0.905666,
+            "diagnosticMs": 5.842916,
+            "footprintMiB": 11.062934875488281,
+            "local": true
+          },
+          "structuralFallback": {
+            "queryMs": 2.385042,
+            "diagnosticMs": 6.158792,
+            "footprintMiB": 11.516059875488281,
+            "local": false
+          },
+          "structuralUndo": {
+            "queryMs": 2.166084,
+            "diagnosticMs": 5.990792,
+            "footprintMiB": 11.516059875488281,
+            "local": false
+          },
+          "firstLocalRecovery": {
+            "queryMs": 0.768458,
+            "diagnosticMs": 5.873833,
+            "footprintMiB": 12.156684875488281,
+            "local": true
+          },
+          "finalLocalEdit": {
+            "queryMs": 0.426291,
+            "diagnosticMs": 0.65075,
+            "footprintMiB": 12.234809875488281,
+            "local": true
+          },
+          "scopePrepared": false,
+          "scopeReason": "fixed package prefix has unsupported preprocessing state",
+          "lastModelSharedRoots": []
+        }
+      }
+    },
+    {
+      "case": "ethernet-mac-medium",
+      "evidence": "untracked/project-optimization-2026-10-29/ethernet-mac-medium-native-replay-cross-project.json",
+      "sha256": "139cc8fe29ce377d15e7988826be1c101c860e169dabbab03078121e653bee53",
+      "states": 45,
+      "allPublicResultsEqualNative": true,
+      "measurements": {
+        "native": {
+          "warmQueryMedianMs": 9.531834,
+          "warmDiagnosticMedianMs": 12.371667,
+          "firstEdit": {
+            "queryMs": 9.99325,
+            "diagnosticMs": 12.896708,
+            "footprintMiB": 19.266082763671875,
+            "local": false
+          },
+          "structuralFallback": {
+            "queryMs": 9.596875,
+            "diagnosticMs": 12.437083,
+            "footprintMiB": 20.922332763671875,
+            "local": false
+          },
+          "structuralUndo": {
+            "queryMs": 9.30325,
+            "diagnosticMs": 12.157375,
+            "footprintMiB": 20.969207763671875,
+            "local": false
+          },
+          "firstLocalRecovery": {
+            "queryMs": 9.646667,
+            "diagnosticMs": 12.487458,
+            "footprintMiB": 21.031707763671875,
+            "local": false
+          },
+          "finalLocalEdit": {
+            "queryMs": 9.999292,
+            "diagnosticMs": 12.874,
+            "footprintMiB": 21.281707763671875,
+            "local": false
+          },
+          "scopePrepared": false,
+          "scopeReason": "",
+          "lastModelSharedRoots": []
+        },
+        "baseline": {
+          "warmQueryMedianMs": 10.516458,
+          "warmDiagnosticMedianMs": 13.413916,
+          "firstEdit": {
+            "queryMs": 10.904375,
+            "diagnosticMs": 13.822375,
+            "footprintMiB": 20.016082763671875,
+            "local": false
+          },
+          "structuralFallback": {
+            "queryMs": 9.596834,
+            "diagnosticMs": 12.500792,
+            "footprintMiB": 21.906707763671875,
+            "local": false
+          },
+          "structuralUndo": {
+            "queryMs": 9.913958,
+            "diagnosticMs": 12.812958,
+            "footprintMiB": 21.984832763671875,
+            "local": false
+          },
+          "firstLocalRecovery": {
+            "queryMs": 10.714,
+            "diagnosticMs": 13.253083,
+            "footprintMiB": 22.156707763671875,
+            "local": false
+          },
+          "finalLocalEdit": {
+            "queryMs": 10.539458,
+            "diagnosticMs": 13.450083,
+            "footprintMiB": 22.344207763671875,
+            "local": false
+          },
+          "scopePrepared": false,
+          "scopeReason": "fixed package prefix has unsupported preprocessing state",
+          "lastModelSharedRoots": []
+        },
+        "candidate": {
+          "warmQueryMedianMs": 10.518125,
+          "warmDiagnosticMedianMs": 13.380708,
+          "firstEdit": {
+            "queryMs": 11.017042,
+            "diagnosticMs": 13.950792,
+            "footprintMiB": 20.047332763671875,
+            "local": false
+          },
+          "structuralFallback": {
+            "queryMs": 9.711166,
+            "diagnosticMs": 12.605291,
+            "footprintMiB": 21.922332763671875,
+            "local": false
+          },
+          "structuralUndo": {
+            "queryMs": 9.744,
+            "diagnosticMs": 12.637333,
+            "footprintMiB": 22.000457763671875,
+            "local": false
+          },
+          "firstLocalRecovery": {
+            "queryMs": 10.376042,
+            "diagnosticMs": 13.298584,
+            "footprintMiB": 22.172332763671875,
+            "local": false
+          },
+          "finalLocalEdit": {
+            "queryMs": 10.583125,
+            "diagnosticMs": 13.471541,
+            "footprintMiB": 22.344207763671875,
+            "local": false
+          },
+          "scopePrepared": false,
+          "scopeReason": "fixed package prefix has unsupported preprocessing state",
+          "lastModelSharedRoots": []
+        }
+      }
+    },
+    {
+      "case": "ethernet-mac-ptp-medium",
+      "evidence": "untracked/project-optimization-2026-10-29/ethernet-mac-ptp-medium-native-replay-cross-project.json",
+      "sha256": "7c1c0501eb61fb24f73c3695d8c002dbc9b5a39be31a0c7f8bd028690341985e",
+      "states": 45,
+      "allPublicResultsEqualNative": true,
+      "measurements": {
+        "native": {
+          "warmQueryMedianMs": 12.462125,
+          "warmDiagnosticMedianMs": 15.464209,
+          "firstEdit": {
+            "queryMs": 12.86775,
+            "diagnosticMs": 15.923458,
+            "footprintMiB": 20.71918487548828,
+            "local": false
+          },
+          "structuralFallback": {
+            "queryMs": 12.820708,
+            "diagnosticMs": 15.800291,
+            "footprintMiB": 22.484832763671875,
+            "local": false
+          },
+          "structuralUndo": {
+            "queryMs": 12.786209,
+            "diagnosticMs": 15.73975,
+            "footprintMiB": 22.578582763671875,
+            "local": false
+          },
+          "firstLocalRecovery": {
+            "queryMs": 12.829709,
+            "diagnosticMs": 15.837875,
+            "footprintMiB": 22.750457763671875,
+            "local": false
+          },
+          "finalLocalEdit": {
+            "queryMs": 12.863458,
+            "diagnosticMs": 15.888208,
+            "footprintMiB": 22.891082763671875,
+            "local": false
+          },
+          "scopePrepared": false,
+          "scopeReason": "",
+          "lastModelSharedRoots": []
+        },
+        "baseline": {
+          "warmQueryMedianMs": 13.562667,
+          "warmDiagnosticMedianMs": 16.64575,
+          "firstEdit": {
+            "queryMs": 13.859667,
+            "diagnosticMs": 16.985584,
+            "footprintMiB": 21.70355987548828,
+            "local": false
+          },
+          "structuralFallback": {
+            "queryMs": 12.665084,
+            "diagnosticMs": 15.750125,
+            "footprintMiB": 23.625457763671875,
+            "local": false
+          },
+          "structuralUndo": {
+            "queryMs": 12.862166,
+            "diagnosticMs": 15.979416,
+            "footprintMiB": 23.766082763671875,
+            "local": false
+          },
+          "firstLocalRecovery": {
+            "queryMs": 13.513125,
+            "diagnosticMs": 16.584458,
+            "footprintMiB": 23.875457763671875,
+            "local": false
+          },
+          "finalLocalEdit": {
+            "queryMs": 13.439334,
+            "diagnosticMs": 16.437375,
+            "footprintMiB": 24.031707763671875,
+            "local": false
+          },
+          "scopePrepared": false,
+          "scopeReason": "fixed package prefix has unsupported preprocessing state",
+          "lastModelSharedRoots": []
+        },
+        "candidate": {
+          "warmQueryMedianMs": 13.811333,
+          "warmDiagnosticMedianMs": 16.821958,
+          "firstEdit": {
+            "queryMs": 13.867083,
+            "diagnosticMs": 17.022375,
+            "footprintMiB": 21.828582763671875,
+            "local": false
+          },
+          "structuralFallback": {
+            "queryMs": 13.232583,
+            "diagnosticMs": 16.303,
+            "footprintMiB": 23.812957763671875,
+            "local": false
+          },
+          "structuralUndo": {
+            "queryMs": 12.8225,
+            "diagnosticMs": 15.934417,
+            "footprintMiB": 23.953582763671875,
+            "local": false
+          },
+          "firstLocalRecovery": {
+            "queryMs": 14.024458,
+            "diagnosticMs": 17.130375,
+            "footprintMiB": 24.062957763671875,
+            "local": false
+          },
+          "finalLocalEdit": {
+            "queryMs": 13.90525,
+            "diagnosticMs": 17.097875,
+            "footprintMiB": 24.219207763671875,
+            "local": false
+          },
+          "scopePrepared": false,
+          "scopeReason": "fixed package prefix has unsupported preprocessing state",
+          "lastModelSharedRoots": []
+        }
+      }
+    },
+    {
+      "case": "ethernet-udp-medium",
+      "evidence": "untracked/project-optimization-2026-10-29/ethernet-udp-medium-native-replay-cross-project.json",
+      "sha256": "52539567f006acb53388475967979772c9789fba38a993d50f635a7d9249122a",
+      "states": 45,
+      "allPublicResultsEqualNative": true,
+      "measurements": {
+        "native": {
+          "warmQueryMedianMs": 8.102625,
+          "warmDiagnosticMedianMs": 11.288666,
+          "firstEdit": {
+            "queryMs": 8.268208,
+            "diagnosticMs": 11.520791,
+            "footprintMiB": 17.78168487548828,
+            "local": false
+          },
+          "structuralFallback": {
+            "queryMs": 7.957,
+            "diagnosticMs": 11.095084,
+            "footprintMiB": 20.516082763671875,
+            "local": false
+          },
+          "structuralUndo": {
+            "queryMs": 8.071291,
+            "diagnosticMs": 11.221916,
+            "footprintMiB": 20.547332763671875,
+            "local": false
+          },
+          "firstLocalRecovery": {
+            "queryMs": 7.9555,
+            "diagnosticMs": 11.117583,
+            "footprintMiB": 20.547332763671875,
+            "local": false
+          },
+          "finalLocalEdit": {
+            "queryMs": 7.994583,
+            "diagnosticMs": 11.126583,
+            "footprintMiB": 20.875457763671875,
+            "local": false
+          },
+          "scopePrepared": false,
+          "scopeReason": "",
+          "lastModelSharedRoots": []
+        },
+        "baseline": {
+          "warmQueryMedianMs": 0.975792,
+          "warmDiagnosticMedianMs": 11.933334,
+          "firstEdit": {
+            "queryMs": 1.608875,
+            "diagnosticMs": 12.939334,
+            "footprintMiB": 24.53168487548828,
+            "local": true
+          },
+          "structuralFallback": {
+            "queryMs": 8.252542,
+            "diagnosticMs": 11.500958,
+            "footprintMiB": 33.141082763671875,
+            "local": false
+          },
+          "structuralUndo": {
+            "queryMs": 8.353583,
+            "diagnosticMs": 11.629666,
+            "footprintMiB": 33.156707763671875,
+            "local": false
+          },
+          "firstLocalRecovery": {
+            "queryMs": 1.46025,
+            "diagnosticMs": 11.920625,
+            "footprintMiB": 33.312957763671875,
+            "local": true
+          },
+          "finalLocalEdit": {
+            "queryMs": 0.908584,
+            "diagnosticMs": 11.810917,
+            "footprintMiB": 36.219207763671875,
+            "local": true
+          },
+          "scopePrepared": false,
+          "scopeReason": "fixed package prefix has unsupported preprocessing state",
+          "lastModelSharedRoots": []
+        },
+        "candidate": {
+          "warmQueryMedianMs": 0.972625,
+          "warmDiagnosticMedianMs": 12.099792,
+          "firstEdit": {
+            "queryMs": 1.515333,
+            "diagnosticMs": 12.925958,
+            "footprintMiB": 24.547332763671875,
+            "local": true
+          },
+          "structuralFallback": {
+            "queryMs": 8.306958,
+            "diagnosticMs": 11.573458,
+            "footprintMiB": 33.109832763671875,
+            "local": false
+          },
+          "structuralUndo": {
+            "queryMs": 7.951458,
+            "diagnosticMs": 11.199458,
+            "footprintMiB": 33.125457763671875,
+            "local": false
+          },
+          "firstLocalRecovery": {
+            "queryMs": 1.436833,
+            "diagnosticMs": 12.272625,
+            "footprintMiB": 33.312957763671875,
+            "local": true
+          },
+          "finalLocalEdit": {
+            "queryMs": 0.962125,
+            "diagnosticMs": 11.646041,
+            "footprintMiB": 36.203582763671875,
+            "local": true
+          },
+          "scopePrepared": false,
+          "scopeReason": "fixed package prefix has unsupported preprocessing state",
+          "lastModelSharedRoots": []
+        }
+      }
+    },
+    {
+      "case": "openofdm-wifi",
+      "evidence": "untracked/project-optimization-2026-10-29/openofdm-wifi-native-replay-cross-project.json",
+      "sha256": "c226eca73cdf4a8ec179f7b13efc5e5d4b9e32b7905042ed6d0a7ca48516e025",
+      "states": 45,
+      "allPublicResultsEqualNative": true,
+      "measurements": {
+        "native": {
+          "warmQueryMedianMs": 138.782167,
+          "warmDiagnosticMedianMs": 146.5425,
+          "firstEdit": {
+            "queryMs": 153.37725,
+            "diagnosticMs": 161.262375,
+            "footprintMiB": 276.5006866455078,
+            "local": false
+          },
+          "structuralFallback": {
+            "queryMs": 138.498583,
+            "diagnosticMs": 145.947708,
+            "footprintMiB": 203.1413116455078,
+            "local": false
+          },
+          "structuralUndo": {
+            "queryMs": 140.304958,
+            "diagnosticMs": 147.990458,
+            "footprintMiB": 203.1725616455078,
+            "local": false
+          },
+          "firstLocalRecovery": {
+            "queryMs": 140.014292,
+            "diagnosticMs": 147.705,
+            "footprintMiB": 203.1881866455078,
+            "local": false
+          },
+          "finalLocalEdit": {
+            "queryMs": 139.389542,
+            "diagnosticMs": 147.149084,
+            "footprintMiB": 203.2663116455078,
+            "local": false
+          },
+          "scopePrepared": false,
+          "scopeReason": "",
+          "lastModelSharedRoots": []
+        },
+        "baseline": {
+          "warmQueryMedianMs": 142.588917,
+          "warmDiagnosticMedianMs": 151.47575,
+          "firstEdit": {
+            "queryMs": 159.333792,
+            "diagnosticMs": 168.314042,
+            "footprintMiB": 285.9695053100586,
+            "local": false
+          },
+          "structuralFallback": {
+            "queryMs": 143.111708,
+            "diagnosticMs": 152.018208,
+            "footprintMiB": 215.0476303100586,
+            "local": false
+          },
+          "structuralUndo": {
+            "queryMs": 143.455625,
+            "diagnosticMs": 152.231833,
+            "footprintMiB": 215.1101303100586,
+            "local": false
+          },
+          "firstLocalRecovery": {
+            "queryMs": 144.281125,
+            "diagnosticMs": 153.239791,
+            "footprintMiB": 215.1257553100586,
+            "local": false
+          },
+          "finalLocalEdit": {
+            "queryMs": 143.538083,
+            "diagnosticMs": 152.505,
+            "footprintMiB": 215.1882553100586,
+            "local": false
+          },
+          "scopePrepared": false,
+          "scopeReason": "inherited compilation-unit preprocessing requires native analysis",
+          "lastModelSharedRoots": []
+        },
+        "candidate": {
+          "warmQueryMedianMs": 143.270084,
+          "warmDiagnosticMedianMs": 152.063292,
+          "firstEdit": {
+            "queryMs": 154.786083,
+            "diagnosticMs": 163.786666,
+            "footprintMiB": 285.672607421875,
+            "local": false
+          },
+          "structuralFallback": {
+            "queryMs": 144.456,
+            "diagnosticMs": 153.403708,
+            "footprintMiB": 214.766357421875,
+            "local": false
+          },
+          "structuralUndo": {
+            "queryMs": 144.056417,
+            "diagnosticMs": 152.838792,
+            "footprintMiB": 214.813232421875,
+            "local": false
+          },
+          "firstLocalRecovery": {
+            "queryMs": 144.570375,
+            "diagnosticMs": 153.394583,
+            "footprintMiB": 214.844482421875,
+            "local": false
+          },
+          "finalLocalEdit": {
+            "queryMs": 143.870875,
+            "diagnosticMs": 152.719125,
+            "footprintMiB": 214.922607421875,
+            "local": false
+          },
+          "scopePrepared": false,
+          "scopeReason": "inherited compilation-unit preprocessing requires native analysis",
+          "lastModelSharedRoots": []
+        }
+      }
+    },
+    {
+      "case": "openofdm-demodulator",
+      "evidence": "untracked/project-optimization-2026-10-29/openofdm-demodulator-native-replay-cross-project.json",
+      "sha256": "1fdfc01dd5f3d36237832b5e59b2862ba80ffecaac71ba9033f2ceba66f5042a",
+      "states": 45,
+      "allPublicResultsEqualNative": true,
+      "measurements": {
+        "native": {
+          "warmQueryMedianMs": 0.923292,
+          "warmDiagnosticMedianMs": 3.644125,
+          "firstEdit": {
+            "queryMs": 0.980292,
+            "diagnosticMs": 3.717667,
+            "footprintMiB": 4.766059875488281,
+            "local": false
+          },
+          "structuralFallback": {
+            "queryMs": 0.90125,
+            "diagnosticMs": 3.57275,
+            "footprintMiB": 5.000434875488281,
+            "local": false
+          },
+          "structuralUndo": {
+            "queryMs": 0.9835,
+            "diagnosticMs": 3.684459,
+            "footprintMiB": 5.031684875488281,
+            "local": false
+          },
+          "firstLocalRecovery": {
+            "queryMs": 0.899917,
+            "diagnosticMs": 3.582208,
+            "footprintMiB": 5.062934875488281,
+            "local": false
+          },
+          "finalLocalEdit": {
+            "queryMs": 0.927625,
+            "diagnosticMs": 3.545209,
+            "footprintMiB": 5.094184875488281,
+            "local": false
+          },
+          "scopePrepared": false,
+          "scopeReason": "",
+          "lastModelSharedRoots": []
+        },
+        "baseline": {
+          "warmQueryMedianMs": 1.012625,
+          "warmDiagnosticMedianMs": 3.716833,
+          "firstEdit": {
+            "queryMs": 1.1705,
+            "diagnosticMs": 3.924541,
+            "footprintMiB": 5.375434875488281,
+            "local": false
+          },
+          "structuralFallback": {
+            "queryMs": 0.965917,
+            "diagnosticMs": 3.689417,
+            "footprintMiB": 5.609809875488281,
+            "local": false
+          },
+          "structuralUndo": {
+            "queryMs": 1.027917,
+            "diagnosticMs": 3.722375,
+            "footprintMiB": 5.609809875488281,
+            "local": false
+          },
+          "firstLocalRecovery": {
+            "queryMs": 1.024042,
+            "diagnosticMs": 3.714875,
+            "footprintMiB": 5.609809875488281,
+            "local": false
+          },
+          "finalLocalEdit": {
+            "queryMs": 1.036584,
+            "diagnosticMs": 3.723625,
+            "footprintMiB": 5.687934875488281,
+            "local": false
+          },
+          "scopePrepared": true,
+          "scopeReason": "retained fixed package semantic generation",
+          "lastModelSharedRoots": [
+            "demodulate.stb_delay_inst"
+          ]
+        },
+        "candidate": {
+          "warmQueryMedianMs": 1.018667,
+          "warmDiagnosticMedianMs": 3.70825,
+          "firstEdit": {
+            "queryMs": 1.108,
+            "diagnosticMs": 3.842583,
+            "footprintMiB": 5.344184875488281,
+            "local": false
+          },
+          "structuralFallback": {
+            "queryMs": 1.01725,
+            "diagnosticMs": 3.69625,
+            "footprintMiB": 5.578559875488281,
+            "local": false
+          },
+          "structuralUndo": {
+            "queryMs": 0.991917,
+            "diagnosticMs": 3.672834,
+            "footprintMiB": 5.578559875488281,
+            "local": false
+          },
+          "firstLocalRecovery": {
+            "queryMs": 1.013083,
+            "diagnosticMs": 3.7155,
+            "footprintMiB": 5.578559875488281,
+            "local": false
+          },
+          "finalLocalEdit": {
+            "queryMs": 1.308375,
+            "diagnosticMs": 4.101917,
+            "footprintMiB": 5.625434875488281,
+            "local": false
+          },
+          "scopePrepared": true,
+          "scopeReason": "retained fixed package semantic generation",
+          "lastModelSharedRoots": [
+            "demodulate.stb_delay_inst"
+          ]
+        }
+      }
+    },
+    {
+      "case": "serdes-pcs-rtl",
+      "evidence": "untracked/project-optimization-2026-10-29/serdes-pcs-rtl-native-replay-cross-project.json",
+      "sha256": "e842b0b1e944883b9bb6f1f7d8b97a4dea64d14de1ad1585f322f48c79aa009e",
+      "states": 45,
+      "allPublicResultsEqualNative": true,
+      "measurements": {
+        "native": {
+          "warmQueryMedianMs": 4.774667,
+          "warmDiagnosticMedianMs": 7.867875,
+          "firstEdit": {
+            "queryMs": 5.048459,
+            "diagnosticMs": 8.157292,
+            "footprintMiB": 9.922309875488281,
+            "local": false
+          },
+          "structuralFallback": {
+            "queryMs": 4.731917,
+            "diagnosticMs": 7.760667,
+            "footprintMiB": 11.484809875488281,
+            "local": false
+          },
+          "structuralUndo": {
+            "queryMs": 4.741709,
+            "diagnosticMs": 7.794209,
+            "footprintMiB": 11.500434875488281,
+            "local": false
+          },
+          "firstLocalRecovery": {
+            "queryMs": 4.617416,
+            "diagnosticMs": 7.636125,
+            "footprintMiB": 11.531684875488281,
+            "local": false
+          },
+          "finalLocalEdit": {
+            "queryMs": 5.175042,
+            "diagnosticMs": 8.230625,
+            "footprintMiB": 11.625434875488281,
+            "local": false
+          },
+          "scopePrepared": false,
+          "scopeReason": "",
+          "lastModelSharedRoots": []
+        },
+        "baseline": {
+          "warmQueryMedianMs": 4.723166,
+          "warmDiagnosticMedianMs": 7.87925,
+          "firstEdit": {
+            "queryMs": 4.974542,
+            "diagnosticMs": 8.191084,
+            "footprintMiB": 10.953559875488281,
+            "local": false
+          },
+          "structuralFallback": {
+            "queryMs": 4.774958,
+            "diagnosticMs": 7.914708,
+            "footprintMiB": 12.453559875488281,
+            "local": false
+          },
+          "structuralUndo": {
+            "queryMs": 4.695,
+            "diagnosticMs": 7.852666,
+            "footprintMiB": 12.469184875488281,
+            "local": false
+          },
+          "firstLocalRecovery": {
+            "queryMs": 4.729209,
+            "diagnosticMs": 7.857459,
+            "footprintMiB": 12.500434875488281,
+            "local": false
+          },
+          "finalLocalEdit": {
+            "queryMs": 4.739625,
+            "diagnosticMs": 7.872125,
+            "footprintMiB": 12.578559875488281,
+            "local": false
+          },
+          "scopePrepared": false,
+          "scopeReason": "fixed package prefix has unsupported preprocessing state",
+          "lastModelSharedRoots": []
+        },
+        "candidate": {
+          "warmQueryMedianMs": 4.842375,
+          "warmDiagnosticMedianMs": 8.02725,
+          "firstEdit": {
+            "queryMs": 4.91025,
+            "diagnosticMs": 8.106083,
+            "footprintMiB": 10.906684875488281,
+            "local": false
+          },
+          "structuralFallback": {
+            "queryMs": 4.66525,
+            "diagnosticMs": 7.758042,
+            "footprintMiB": 12.391059875488281,
+            "local": false
+          },
+          "structuralUndo": {
+            "queryMs": 4.723459,
+            "diagnosticMs": 7.867375,
+            "footprintMiB": 12.406684875488281,
+            "local": false
+          },
+          "firstLocalRecovery": {
+            "queryMs": 4.972542,
+            "diagnosticMs": 8.186209,
+            "footprintMiB": 12.422309875488281,
+            "local": false
+          },
+          "finalLocalEdit": {
+            "queryMs": 4.634792,
+            "diagnosticMs": 7.671958,
+            "footprintMiB": 12.484809875488281,
+            "local": false
+          },
+          "scopePrepared": false,
+          "scopeReason": "fixed package prefix has unsupported preprocessing state",
+          "lastModelSharedRoots": []
+        }
+      }
+    },
+    {
+      "case": "serdes-pcs-verification",
+      "evidence": "untracked/project-optimization-2026-10-29/serdes-pcs-verification-native-replay-cross-project.json",
+      "sha256": "9a99c4a4c339fb9dbaecfff5654a119a103f9c87b6ef10d6f90b2727a414053f",
+      "states": 45,
+      "allPublicResultsEqualNative": true,
+      "measurements": {
+        "native": {
+          "warmQueryMedianMs": 19.562083,
+          "warmDiagnosticMedianMs": 23.262041,
+          "firstEdit": {
+            "queryMs": 19.670875,
+            "diagnosticMs": 23.517084,
+            "footprintMiB": 27.375457763671875,
+            "local": false
+          },
+          "structuralFallback": {
+            "queryMs": 19.513459,
+            "diagnosticMs": 23.180625,
+            "footprintMiB": 13.281707763671875,
+            "local": false
+          },
+          "structuralUndo": {
+            "queryMs": 19.399125,
+            "diagnosticMs": 23.079375,
+            "footprintMiB": 13.312957763671875,
+            "local": false
+          },
+          "firstLocalRecovery": {
+            "queryMs": 19.941958,
+            "diagnosticMs": 23.722292,
+            "footprintMiB": 13.406707763671875,
+            "local": false
+          },
+          "finalLocalEdit": {
+            "queryMs": 19.764875,
+            "diagnosticMs": 23.4545,
+            "footprintMiB": 13.453582763671875,
+            "local": false
+          },
+          "scopePrepared": false,
+          "scopeReason": "",
+          "lastModelSharedRoots": []
+        },
+        "baseline": {
+          "warmQueryMedianMs": 18.191292,
+          "warmDiagnosticMedianMs": 22.298542,
+          "firstEdit": {
+            "queryMs": 18.722125,
+            "diagnosticMs": 22.770708,
+            "footprintMiB": 29.078582763671875,
+            "local": false
+          },
+          "structuralFallback": {
+            "queryMs": 17.876458,
+            "diagnosticMs": 21.881791,
+            "footprintMiB": 14.625457763671875,
+            "local": false
+          },
+          "structuralUndo": {
+            "queryMs": 18.122583,
+            "diagnosticMs": 22.111875,
+            "footprintMiB": 14.625457763671875,
+            "local": false
+          },
+          "firstLocalRecovery": {
+            "queryMs": 17.911208,
+            "diagnosticMs": 22.114917,
+            "footprintMiB": 14.859832763671875,
+            "local": false
+          },
+          "finalLocalEdit": {
+            "queryMs": 17.9545,
+            "diagnosticMs": 21.91,
+            "footprintMiB": 14.906707763671875,
+            "local": false
+          },
+          "scopePrepared": false,
+          "scopeReason": "fixed package prefix has unsupported preprocessing state",
+          "lastModelSharedRoots": []
+        },
+        "candidate": {
+          "warmQueryMedianMs": 18.413958,
+          "warmDiagnosticMedianMs": 22.36725,
+          "firstEdit": {
+            "queryMs": 19.116459,
+            "diagnosticMs": 23.166875,
+            "footprintMiB": 28.953582763671875,
+            "local": false
+          },
+          "structuralFallback": {
+            "queryMs": 18.279,
+            "diagnosticMs": 22.253916,
+            "footprintMiB": 14.469207763671875,
+            "local": false
+          },
+          "structuralUndo": {
+            "queryMs": 18.485708,
+            "diagnosticMs": 22.492542,
+            "footprintMiB": 14.469207763671875,
+            "local": false
+          },
+          "firstLocalRecovery": {
+            "queryMs": 18.282,
+            "diagnosticMs": 22.293791,
+            "footprintMiB": 14.719207763671875,
+            "local": false
+          },
+          "finalLocalEdit": {
+            "queryMs": 18.468792,
+            "diagnosticMs": 22.450458,
+            "footprintMiB": 14.766082763671875,
+            "local": false
+          },
+          "scopePrepared": false,
+          "scopeReason": "fixed package prefix has unsupported preprocessing state",
+          "lastModelSharedRoots": []
+        }
+      }
+    },
+    {
+      "case": "serdes-8b10b-codec",
+      "evidence": "untracked/project-optimization-2026-10-29/serdes-8b10b-codec-native-replay-cross-project.json",
+      "sha256": "1eef3dbe4feb7b6d424f880ccb1e5c186777df4f94e3497ee8113f3994b1b206",
+      "states": 45,
+      "allPublicResultsEqualNative": true,
+      "measurements": {
+        "native": {
+          "warmQueryMedianMs": 1.2275,
+          "warmDiagnosticMedianMs": 3.867458,
+          "firstEdit": {
+            "queryMs": 1.282167,
+            "diagnosticMs": 3.988792,
+            "footprintMiB": 5.359809875488281,
+            "local": false
+          },
+          "structuralFallback": {
+            "queryMs": 1.227,
+            "diagnosticMs": 3.879084,
+            "footprintMiB": 5.844184875488281,
+            "local": false
+          },
+          "structuralUndo": {
+            "queryMs": 1.204875,
+            "diagnosticMs": 3.855958,
+            "footprintMiB": 5.875434875488281,
+            "local": false
+          },
+          "firstLocalRecovery": {
+            "queryMs": 1.285875,
+            "diagnosticMs": 3.879791,
+            "footprintMiB": 5.891059875488281,
+            "local": false
+          },
+          "finalLocalEdit": {
+            "queryMs": 1.234792,
+            "diagnosticMs": 3.89325,
+            "footprintMiB": 5.937934875488281,
+            "local": false
+          },
+          "scopePrepared": false,
+          "scopeReason": "",
+          "lastModelSharedRoots": []
+        },
+        "baseline": {
+          "warmQueryMedianMs": 1.315042,
+          "warmDiagnosticMedianMs": 3.966625,
+          "firstEdit": {
+            "queryMs": 1.395708,
+            "diagnosticMs": 4.116917,
+            "footprintMiB": 5.719184875488281,
+            "local": false
+          },
+          "structuralFallback": {
+            "queryMs": 1.323042,
+            "diagnosticMs": 3.997459,
+            "footprintMiB": 6.187934875488281,
+            "local": false
+          },
+          "structuralUndo": {
+            "queryMs": 1.319083,
+            "diagnosticMs": 3.98225,
+            "footprintMiB": 6.203559875488281,
+            "local": false
+          },
+          "firstLocalRecovery": {
+            "queryMs": 1.285375,
+            "diagnosticMs": 3.950708,
+            "footprintMiB": 6.219184875488281,
+            "local": false
+          },
+          "finalLocalEdit": {
+            "queryMs": 1.29525,
+            "diagnosticMs": 3.955167,
+            "footprintMiB": 6.281684875488281,
+            "local": false
+          },
+          "scopePrepared": false,
+          "scopeReason": "fixed package prefix has unsupported preprocessing state",
+          "lastModelSharedRoots": []
+        },
+        "candidate": {
+          "warmQueryMedianMs": 1.27525,
+          "warmDiagnosticMedianMs": 3.946375,
+          "firstEdit": {
+            "queryMs": 1.361292,
+            "diagnosticMs": 4.059833,
+            "footprintMiB": 5.719184875488281,
+            "local": false
+          },
+          "structuralFallback": {
+            "queryMs": 1.340542,
+            "diagnosticMs": 4.018,
+            "footprintMiB": 6.125434875488281,
+            "local": false
+          },
+          "structuralUndo": {
+            "queryMs": 1.360125,
+            "diagnosticMs": 4.016417,
+            "footprintMiB": 6.187934875488281,
+            "local": false
+          },
+          "firstLocalRecovery": {
+            "queryMs": 1.299167,
+            "diagnosticMs": 3.942542,
+            "footprintMiB": 6.187934875488281,
+            "local": false
+          },
+          "finalLocalEdit": {
+            "queryMs": 1.368333,
+            "diagnosticMs": 4.030917,
+            "footprintMiB": 6.250434875488281,
+            "local": false
+          },
+          "scopePrepared": false,
+          "scopeReason": "fixed package prefix has unsupported preprocessing state",
+          "lastModelSharedRoots": []
+        }
+      }
+    },
+    {
+      "case": "cva6-uvm",
+      "evidence": "untracked/project-optimization-2026-10-29/cva6-uvm-native-replay-cross-project.json",
+      "sha256": "959f32cb246e520c13499ba29489d1170ee1fc8e837417ad7dce59af495e333f",
+      "states": 45,
+      "allPublicResultsEqualNative": true,
+      "measurements": {
+        "native": {
+          "warmQueryMedianMs": 1500.68375,
+          "warmDiagnosticMedianMs": 1867.836333,
+          "firstEdit": {
+            "queryMs": 1515.782,
+            "diagnosticMs": 1892.57375,
+            "footprintMiB": 410.0323486328125,
+            "local": false
+          },
+          "structuralFallback": {
+            "queryMs": 1510.873959,
+            "diagnosticMs": 1877.85475,
+            "footprintMiB": 568.5637359619141,
+            "local": false
+          },
+          "structuralUndo": {
+            "queryMs": 1541.601417,
+            "diagnosticMs": 1910.42475,
+            "footprintMiB": 571.7512359619141,
+            "local": false
+          },
+          "firstLocalRecovery": {
+            "queryMs": 1507.980292,
+            "diagnosticMs": 1877.96775,
+            "footprintMiB": 517.5168609619141,
+            "local": false
+          },
+          "finalLocalEdit": {
+            "queryMs": 1507.859375,
+            "diagnosticMs": 1874.500083,
+            "footprintMiB": 527.0949859619141,
+            "local": false
+          },
+          "scopePrepared": false,
+          "scopeReason": "",
+          "lastModelSharedRoots": []
+        },
+        "baseline": {
+          "warmQueryMedianMs": 6.472917,
+          "warmDiagnosticMedianMs": 11.552458,
+          "firstEdit": {
+            "queryMs": 29.732,
+            "diagnosticMs": 48.971292,
+            "footprintMiB": 771.8604736328125,
+            "local": true
+          },
+          "structuralFallback": {
+            "queryMs": 384.230208,
+            "diagnosticMs": 862.094208,
+            "footprintMiB": 714.2200317382812,
+            "local": false
+          },
+          "structuralUndo": {
+            "queryMs": 244.534791,
+            "diagnosticMs": 710.950125,
+            "footprintMiB": 774.6419525146484,
+            "local": false
+          },
+          "firstLocalRecovery": {
+            "queryMs": 29.767208,
+            "diagnosticMs": 49.169708,
+            "footprintMiB": 776.2200775146484,
+            "local": true
+          },
+          "finalLocalEdit": {
+            "queryMs": 6.226875,
+            "diagnosticMs": 11.410334,
+            "footprintMiB": 776.2200775146484,
+            "local": true
+          },
+          "scopePrepared": true,
+          "scopeReason": "retained fixed package semantic generation",
+          "lastModelSharedRoots": [
+            "uvmt_cva6_tb.cva6_dut_wrap.cva6_tb_wrapper_i.i_cva6"
+          ]
+        },
+        "candidate": {
+          "warmQueryMedianMs": 6.376834,
+          "warmDiagnosticMedianMs": 11.446209,
+          "firstEdit": {
+            "queryMs": 28.696291,
+            "diagnosticMs": 48.975166,
+            "footprintMiB": 770.2823486328125,
+            "local": true
+          },
+          "structuralFallback": {
+            "queryMs": 383.035542,
+            "diagnosticMs": 863.182042,
+            "footprintMiB": 714.6887588500977,
+            "local": false
+          },
+          "structuralUndo": {
+            "queryMs": 248.486167,
+            "diagnosticMs": 709.286875,
+            "footprintMiB": 777.3137817382812,
+            "local": false
+          },
+          "firstLocalRecovery": {
+            "queryMs": 28.478708,
+            "diagnosticMs": 48.109458,
+            "footprintMiB": 778.8606567382812,
+            "local": true
+          },
+          "finalLocalEdit": {
+            "queryMs": 6.562042,
+            "diagnosticMs": 11.594709,
+            "footprintMiB": 778.8762817382812,
+            "local": true
+          },
+          "scopePrepared": true,
+          "scopeReason": "retained fixed package semantic generation",
+          "lastModelSharedRoots": [
+            "uvmt_cva6_tb.cva6_dut_wrap.cva6_tb_wrapper_i.i_cva6"
+          ]
+        }
+      }
+    }
+  ],
+  "wholeDutUvmNonregression": [
+    {
+      "case": "opentitan-aes-uvm",
+      "evidence": "untracked/rtl-uvm-fallback-2026-10-29/opentitan-aes-uvm-native-replay-nonregression.json",
+      "sha256": "d369107ae6eab1b96ac765118c93ae4fbd8e8f77a319ecb3c465d6de8b578394",
+      "states": 45,
+      "allPublicResultsEqualNative": true,
+      "measurements": {
+        "native": {
+          "warmQueryMedianMs": 2390.195709,
+          "warmDiagnosticMedianMs": 2556.41025,
+          "structuralFallback": {
+            "queryMs": 2396.222666,
+            "diagnosticMs": 2562.875625,
+            "footprintMiB": 298.01654052734375,
+            "local": false
+          },
+          "firstLocalRecovery": {
+            "queryMs": 2407.602625,
+            "diagnosticMs": 2574.87975,
+            "footprintMiB": 304.15716552734375,
+            "local": false
+          },
+          "finalLocalEdit": {
+            "queryMs": 2422.621125,
+            "diagnosticMs": 2590.610375,
+            "footprintMiB": 303.40716552734375,
+            "local": false
+          },
+          "actualWholeRootImportChecked": false,
+          "rootHits": 0
+        },
+        "frozen-full": {
+          "warmQueryMedianMs": 75.511625,
+          "warmDiagnosticMedianMs": 224.032833,
+          "structuralFallback": {
+            "queryMs": 75.815416,
+            "diagnosticMs": 223.51425,
+            "footprintMiB": 458.9226760864258,
+            "local": false
+          },
+          "firstLocalRecovery": {
+            "queryMs": 76.107083,
+            "diagnosticMs": 225.384,
+            "footprintMiB": 459.0320510864258,
+            "local": false
+          },
+          "finalLocalEdit": {
+            "queryMs": 75.485167,
+            "diagnosticMs": 230.051708,
+            "footprintMiB": 459.1570510864258,
+            "local": false
+          },
+          "actualWholeRootImportChecked": true,
+          "rootHits": 14
+        },
+        "frozen-local": {
+          "warmQueryMedianMs": 1.971166,
+          "warmDiagnosticMedianMs": 3.37425,
+          "structuralFallback": {
+            "queryMs": 78.574125,
+            "diagnosticMs": 239.336042,
+            "footprintMiB": 473.67272186279297,
+            "local": false
+          },
+          "firstLocalRecovery": {
+            "queryMs": 9.01775,
+            "diagnosticMs": 20.629958,
+            "footprintMiB": 478.21959686279297,
+            "local": true
+          },
+          "finalLocalEdit": {
+            "queryMs": 1.991042,
+            "diagnosticMs": 3.313542,
+            "footprintMiB": 478.21959686279297,
+            "local": true
+          },
+          "actualWholeRootImportChecked": true,
+          "rootHits": 2
+        }
+      }
+    },
+    {
+      "case": "opentitan-uart-uvm",
+      "evidence": "untracked/rtl-uvm-fallback-2026-10-29/opentitan-uart-uvm-native-replay-nonregression.json",
+      "sha256": "04b9f0ffad51c61dd7dc4f7a77db58bd7cbca9a3ebce4b7502458aba3f0cc79e",
+      "states": 45,
+      "allPublicResultsEqualNative": true,
+      "measurements": {
+        "native": {
+          "warmQueryMedianMs": 2081.003208,
+          "warmDiagnosticMedianMs": 2221.268708,
+          "structuralFallback": {
+            "queryMs": 2101.313542,
+            "diagnosticMs": 2247.859208,
+            "footprintMiB": 354.67272186279297,
+            "local": false
+          },
+          "firstLocalRecovery": {
+            "queryMs": 2083.924667,
+            "diagnosticMs": 2224.344917,
+            "footprintMiB": 360.20397186279297,
+            "local": false
+          },
+          "finalLocalEdit": {
+            "queryMs": 2095.593667,
+            "diagnosticMs": 2239.069792,
+            "footprintMiB": 353.09459686279297,
+            "local": false
+          },
+          "actualWholeRootImportChecked": false,
+          "rootHits": 0
+        },
+        "frozen-full": {
+          "warmQueryMedianMs": 90.731708,
+          "warmDiagnosticMedianMs": 221.533416,
+          "structuralFallback": {
+            "queryMs": 91.097792,
+            "diagnosticMs": 222.019584,
+            "footprintMiB": 374.7038803100586,
+            "local": false
+          },
+          "firstLocalRecovery": {
+            "queryMs": 91.262625,
+            "diagnosticMs": 221.993167,
+            "footprintMiB": 374.7351303100586,
+            "local": false
+          },
+          "finalLocalEdit": {
+            "queryMs": 91.334791,
+            "diagnosticMs": 222.080541,
+            "footprintMiB": 374.7976303100586,
+            "local": false
+          },
+          "actualWholeRootImportChecked": true,
+          "rootHits": 14
+        },
+        "frozen-local": {
+          "warmQueryMedianMs": 2.169125,
+          "warmDiagnosticMedianMs": 3.454708,
+          "structuralFallback": {
+            "queryMs": 108.857833,
+            "diagnosticMs": 251.50475,
+            "footprintMiB": 388.0632781982422,
+            "local": false
+          },
+          "firstLocalRecovery": {
+            "queryMs": 10.023,
+            "diagnosticMs": 18.63775,
+            "footprintMiB": 391.7195281982422,
+            "local": true
+          },
+          "finalLocalEdit": {
+            "queryMs": 2.311083,
+            "diagnosticMs": 3.677083,
+            "footprintMiB": 391.7195281982422,
+            "local": true
+          },
+          "actualWholeRootImportChecked": true,
+          "rootHits": 2
+        }
+      }
+    }
+  ],
+  "limitations": [
+    "WiFi inherited-unit layout still declines frozen semantic-prefix reuse and uses Native analysis; its new150ms-class response is correctness recovery, not frozen RTL/UVM performance",
+    "Sequential cadence and boundary footprint samples; no burst, cold-disk or peak-memory acceptance",
+    "This front does not yet implement persistent cached-prefix directive state (timescale/default_nettype/resetall/etc.); keyword/diagnostic state remains conservatively declined",
+    "Other full-goal stages including signature/parameter hover, ownership/memory, final sanitizer/package/cache/default-off/manual-rebuild checks and main delivery remain incomplete"
+  ],
+  "nextImplementationPlan": "untracked/project-optimization-2026-10-29/persistent-prefix-next.json",
+  "wholeGoalComplete": false,
+  "networkFetches": false,
+  "pushed": false
+}

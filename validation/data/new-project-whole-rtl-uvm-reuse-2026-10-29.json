@@ -1,0 +1,171 @@
+{
+  "status": "UART workload qualified; complete all-project objective remains active",
+  "mainHead": "41758aa9e865903a0e283861f19331f9a36eab5b",
+  "binarySha256": "5168ca65ec4c522751d8cd95556c26a345f0519c1e44e13c6d772ecbec48e010",
+  "sdkPatchSha256": "e252ea97fd1ee37d515c9495c0f8ac58548e272c81eb91314e24b856458a2045",
+  "sourceSeal": "untracked/project-optimization-2026-10-29/reference-final-source-seal.json",
+  "workload": "Official OpenTitan UART UVM verification environment, generic primitives, whole tb.dut root",
+  "projectCommit": "8e7f977585b8e8304feaf688d7e8429059bfd097",
+  "structuredEvidence": "untracked/rtl-uvm-fallback-2026-10-29/opentitan-uart-uvm-reference-final-qualified.json",
+  "evidenceSha256": "77b9d9bb9f4691f925f5324558bfa5eebd7a3e5e73e620d70da9970a30e5b099",
+  "repeats": 3,
+  "states": 135,
+  "nativeDiagnosticEquality": true,
+  "nativeHoverEquality": true,
+  "fixedRoot": "tb.dut",
+  "rootHits": {
+    "native": [
+      0,
+      0,
+      0
+    ],
+    "frozen-full": [
+      14,
+      14,
+      14
+    ],
+    "frozen-local": [
+      2,
+      2,
+      2
+    ]
+  },
+  "measurements": {
+    "native": {
+      "firstEdit": {
+        "queryMedianMs": 2077.326916,
+        "diagnosticMedianMs": 2222.118709,
+        "footprintMedianMiB": 245.3757781982422,
+        "samples": 3
+      },
+      "steadyEdits": {
+        "queryMedianMs": 2068.351542,
+        "diagnosticMedianMs": 2210.903833,
+        "footprintMedianMiB": 317.6726989746094,
+        "samples": 15
+      },
+      "structuralFallback": {
+        "queryMedianMs": 2076.353667,
+        "diagnosticMedianMs": 2217.821209,
+        "footprintMedianMiB": 353.82897186279297,
+        "samples": 3
+      },
+      "structuralUndo": {
+        "queryMedianMs": 2075.453209,
+        "diagnosticMedianMs": 2215.229583,
+        "footprintMedianMiB": 356.53209686279297,
+        "samples": 3
+      },
+      "firstLocalRecovery": {
+        "queryMedianMs": 2070.317375,
+        "diagnosticMedianMs": 2208.472625,
+        "footprintMedianMiB": 359.39147186279297,
+        "samples": 3
+      },
+      "steadyAfterRecovery": {
+        "queryMedianMs": 2074.013416,
+        "diagnosticMedianMs": 2215.31325,
+        "footprintMedianMiB": 362.43834686279297,
+        "samples": 9
+      }
+    },
+    "frozen-full": {
+      "firstEdit": {
+        "queryMedianMs": 104.8355,
+        "diagnosticMedianMs": 235.644916,
+        "footprintMedianMiB": 367.8601303100586,
+        "samples": 3
+      },
+      "steadyEdits": {
+        "queryMedianMs": 89.42625,
+        "diagnosticMedianMs": 217.904084,
+        "footprintMedianMiB": 375.3288803100586,
+        "samples": 15
+      },
+      "structuralFallback": {
+        "queryMedianMs": 89.970292,
+        "diagnosticMedianMs": 219.100292,
+        "footprintMedianMiB": 375.4070053100586,
+        "samples": 3
+      },
+      "structuralUndo": {
+        "queryMedianMs": 89.347708,
+        "diagnosticMedianMs": 219.174417,
+        "footprintMedianMiB": 375.4226303100586,
+        "samples": 3
+      },
+      "firstLocalRecovery": {
+        "queryMedianMs": 89.615959,
+        "diagnosticMedianMs": 219.182084,
+        "footprintMedianMiB": 375.4538803100586,
+        "samples": 3
+      },
+      "steadyAfterRecovery": {
+        "queryMedianMs": 90.082083,
+        "diagnosticMedianMs": 219.362458,
+        "footprintMedianMiB": 375.4851303100586,
+        "samples": 9
+      }
+    },
+    "frozen-local": {
+      "firstEdit": {
+        "queryMedianMs": 9.71,
+        "diagnosticMedianMs": 18.523792,
+        "footprintMedianMiB": 351.594482421875,
+        "samples": 3
+      },
+      "steadyEdits": {
+        "queryMedianMs": 1.892,
+        "diagnosticMedianMs": 3.143083,
+        "footprintMedianMiB": 351.625732421875,
+        "samples": 15
+      },
+      "structuralFallback": {
+        "queryMedianMs": 109.06325,
+        "diagnosticMedianMs": 251.855375,
+        "footprintMedianMiB": 390.4226303100586,
+        "samples": 3
+      },
+      "structuralUndo": {
+        "queryMedianMs": 94.791292,
+        "diagnosticMedianMs": 233.713334,
+        "footprintMedianMiB": 395.5788803100586,
+        "samples": 3
+      },
+      "firstLocalRecovery": {
+        "queryMedianMs": 9.691375,
+        "diagnosticMedianMs": 18.508625,
+        "footprintMedianMiB": 395.7038803100586,
+        "samples": 3
+      },
+      "steadyAfterRecovery": {
+        "queryMedianMs": 1.98625,
+        "diagnosticMedianMs": 3.263958,
+        "footprintMedianMiB": 395.7038803100586,
+        "samples": 9
+      }
+    }
+  },
+  "cadence": "Sequential: await query and matching full diagnostic publication. No burst or cold-disk claim. Process memory read at boundaries, not independent sampled peak.",
+  "memoryLimitations": "Footprint recorded at edit boundaries, not sampled peak; medians are not cold-start or burst measurements.",
+  "fixes": [
+    "Only emit deterministic generic-class cast warnings when types are known; concrete cast warnings retained",
+    "Certify complete static task/class type-argument/fixed runtime call dependencies, macro diagnostic invocation ownership",
+    "Collect final subtree-local symbol reference profiles after complete binding; retain outside caller isolation"
+  ],
+  "verification": {
+    "serverDefaultCases": 991,
+    "serverAssertions": 180344,
+    "sdkCases": 2644,
+    "sdkAssertions": 36972,
+    "sdkIntegrityFiles": 709,
+    "ctest": {
+      "passed": 1006,
+      "failed": 0,
+      "seconds": 14.48,
+      "environment": "TMPDIR=/private/tmp",
+      "noSourceChangesOnRerun": true
+    }
+  },
+  "remaining": "AES and all other project groups, signature/parameter query expansion, preprocessing/multi-unit replay gaps, model ownership and earliest refusal attribution, sanitizer/package/cache/default-off qualification, cleanup and main push remain open."
+}

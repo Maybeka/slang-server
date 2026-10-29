@@ -1,0 +1,174 @@
+{
+  "status": "UART actual-import qualification passed; AES whole-DUT reuse incomplete",
+  "mainHead": "41758aa9e865903a0e283861f19331f9a36eab5b",
+  "binarySha256": "4617e90b4cd7ce7a61a7fd364c178191497cf388adbe8f9860d143c979d84ebb",
+  "sdkPatchSha256": "6f3fb3535c06bbd093c20ff47029cc02768cda6e9e07e7409c747c04bf8efdbb",
+  "sourceSeal": "untracked/project-optimization-2026-10-29/class-import-source-seal.json",
+  "sourceArchive": "untracked/project-optimization-2026-10-29/source-receipts/class-import-6f3fb353",
+  "implemented": [
+    "Audit locally owned complete virtual-interface prototypes and all original argument binding occurrences, including canonicalized duplicates; keep auxiliary prototypes out of actual design hierarchy",
+    "Preserve generic static-class identity across retained DUT and mutable consumers through semantic argument matching and conflict refusal; do not change Native global type hashing or mutate shared providers",
+    "Publish value-only lastModelSharedRoots after completed full-model analysis; cumulative hit counts and prepared roots are insufficient proof of actual root reuse",
+    "Commit boundary initializer metadata only after class-identity preflight succeeds; document status semantics; correct three-arm benchmark resume accounting and enforce same binary"
+  ],
+  "checks": {
+    "ctest": {
+      "passed": 1008,
+      "failed": 0,
+      "seconds": 14.75,
+      "TMPDIR": "/private/tmp"
+    },
+    "sdk": {
+      "cases": 2645,
+      "assertions": 37001
+    },
+    "sdkIntegrityFiles": 709,
+    "reversePatchCheck": true,
+    "targetedPredecessor": {
+      "binarySha256": "a94cf254aff458c927689b34de1109799f9e7fd038a7515e3cc4a7fc11d558d8",
+      "cases": 2,
+      "assertions": 774,
+      "note": "Before final atomic boundary-metadata move; current full CTest includes both cases"
+    }
+  },
+  "uart": {
+    "evidence": "untracked/rtl-uvm-fallback-2026-10-29/opentitan-uart-uvm-class-import-atomic.json",
+    "sha256": "a01ff7cdcc370d7c5f6b17f0e8127ba484c08b037bb0e53cbe5cc95cbd362ea7",
+    "repeats": 1,
+    "states": 45,
+    "allPublicResultsEqualNative": true,
+    "actualImportProofChecked": true,
+    "measurements": {
+      "native": {
+        "warmQueryMedianMs": 2095.490833,
+        "warmDiagnosticMedianMs": 2239.903792,
+        "structuralFallback": {
+          "queryMs": 2091.338208,
+          "diagnosticMs": 2235.414666,
+          "footprintMiB": 352.65709686279297,
+          "local": false,
+          "lastModelSharedRoots": []
+        },
+        "structuralUndo": {
+          "queryMs": 2094.517667,
+          "diagnosticMs": 2237.5115,
+          "footprintMiB": 355.34459686279297,
+          "local": false,
+          "lastModelSharedRoots": []
+        },
+        "firstLocalRecovery": {
+          "queryMs": 2091.536375,
+          "diagnosticMs": 2235.792084,
+          "footprintMiB": 358.17272186279297,
+          "local": false,
+          "lastModelSharedRoots": []
+        },
+        "finalLocalEdit": {
+          "queryMs": 2108.909208,
+          "diagnosticMs": 2266.882791,
+          "footprintMiB": 352.40711975097656,
+          "local": false,
+          "lastModelSharedRoots": []
+        },
+        "cumulativeHits": 0
+      },
+      "frozen-full": {
+        "warmQueryMedianMs": 92.281417,
+        "warmDiagnosticMedianMs": 224.639333,
+        "structuralFallback": {
+          "queryMs": 94.37725,
+          "diagnosticMs": 226.724958,
+          "footprintMiB": 366.1726303100586,
+          "local": false,
+          "lastModelSharedRoots": [
+            "tb.dut"
+          ]
+        },
+        "structuralUndo": {
+          "queryMs": 92.812125,
+          "diagnosticMs": 226.285042,
+          "footprintMiB": 366.2663803100586,
+          "local": false,
+          "lastModelSharedRoots": [
+            "tb.dut"
+          ]
+        },
+        "firstLocalRecovery": {
+          "queryMs": 91.708708,
+          "diagnosticMs": 224.914958,
+          "footprintMiB": 366.2820053100586,
+          "local": false,
+          "lastModelSharedRoots": [
+            "tb.dut"
+          ]
+        },
+        "finalLocalEdit": {
+          "queryMs": 91.679208,
+          "diagnosticMs": 222.978625,
+          "footprintMiB": 366.3288803100586,
+          "local": false,
+          "lastModelSharedRoots": [
+            "tb.dut"
+          ]
+        },
+        "cumulativeHits": 14
+      },
+      "frozen-local": {
+        "warmQueryMedianMs": 2.252666,
+        "warmDiagnosticMedianMs": 3.540875,
+        "structuralFallback": {
+          "queryMs": 111.523958,
+          "diagnosticMs": 257.891708,
+          "footprintMiB": 393.9070510864258,
+          "local": false,
+          "lastModelSharedRoots": [
+            "tb.dut"
+          ]
+        },
+        "structuralUndo": {
+          "queryMs": 97.377959,
+          "diagnosticMs": 240.909334,
+          "footprintMiB": 397.1570510864258,
+          "local": false,
+          "lastModelSharedRoots": [
+            "tb.dut"
+          ]
+        },
+        "firstLocalRecovery": {
+          "queryMs": 9.943333,
+          "diagnosticMs": 18.899833,
+          "footprintMiB": 397.3133010864258,
+          "local": true,
+          "lastModelSharedRoots": [
+            "tb.dut"
+          ]
+        },
+        "finalLocalEdit": {
+          "queryMs": 2.253125,
+          "diagnosticMs": 3.5275,
+          "footprintMiB": 397.3133010864258,
+          "local": true,
+          "lastModelSharedRoots": [
+            "tb.dut"
+          ]
+        },
+        "cumulativeHits": 2
+      }
+    },
+    "limitations": "Sequential: await query and matching full diagnostic publication. No burst or cold-disk claim. Process memory read at boundaries, not independent sampled peak.",
+    "priorThreeRepeatQualification": "source/validation/data/new-project-whole-rtl-uvm-reuse-2026-10-29.json"
+  },
+  "aes": {
+    "evidence": "untracked/rtl-uvm-fallback-2026-10-29/opentitan-aes-uvm-class-import-atomic-diagnostic-control.json",
+    "sha256": "0661ceba4307d3599447d86b9b178bab226e455e185764ab83ef8e5f7d1eab83",
+    "initialFourArmsEqualNative": true,
+    "nativeErrorCount": 32,
+    "wholeDutPerformanceAccepted": false,
+    "predecessorReadinessEvidence": "untracked/rtl-uvm-fallback-2026-10-29/opentitan-aes-uvm-class-import-proof-readiness.json",
+    "lastWholeRootRefusal": "unproven-call set",
+    "next": "Independently certify foreign/shared-prefix virtual-interface prototypes without mutating shared nodes or discarding Native assertion-control errors; locally owned prototypes are covered, foreign prototypes remain refused."
+  },
+  "remainingObjective": "All original plan stages remain active: AES and all project groups; signature/parameter hover; preprocessing/multi-unit replay; memory/refusal attribution; sanitizer/package/cache/default-off checks; cleanup; main push and remote verification.",
+  "networkFetches": false,
+  "pushed": false
+}

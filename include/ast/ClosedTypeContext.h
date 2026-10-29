@@ -114,7 +114,7 @@ struct ClosedTypeContext {
             }
             declaration += "} " + name + ";\n";
         }
-        else if (type.isSimpleBitVector()) {
+        else if (type.isSimpleBitVector() || type.isString()) {
             declaration = "typedef " + type.toString() + " " + name + ";\n";
         }
         else

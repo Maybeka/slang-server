@@ -1,0 +1,250 @@
+{
+  "status": "Instrumented cold-query mechanism observation only",
+  "binarySha256": "bf260c141dd392038aa15e413db68afe02139cfa5d85c2abf65d2cb674d37706",
+  "timingAccepted": false,
+  "scenario": "Fresh process; initialize/open/body edit/hover queued together; no completed previous query baseline and no explicit build-file or selected-instance commands",
+  "limitations": [
+    "Messages queued before initialize reply, so this is server pipeline stress rather than ordinary sequential client startup",
+    "Only observed publication map including current target was compared; does not prove complete project diagnostic equality",
+    "Two fixed-order arms, one trial each, warm OS and project caches; does not establish cold disk performance",
+    "Scope preparation or body-cache configuration alone does not prove whole DUT sharing in this experiment"
+  ],
+  "conclusion": "Missing queried baseline correctly declines local overlay. Current source-owner parse dominates observed foreground work; optimizing certification alone cannot remove the required first current parse. Do not force synchronous full diagnostic preparation to obtain a baseline.",
+  "cases": [
+    {
+      "case": "cva6-uvm-signature-argument",
+      "evidence": "untracked/project-optimization-2026-10-29/cva6-uvm-signature-argument-cold-first-query.json",
+      "sha256": "5041c44c62ed090f8c9fa2c86eb09cfdcb8249e10abbcbfeedb0a9a9ca06a61a",
+      "hoverEqual": true,
+      "observedDiagnosticMapEqual": true,
+      "diagnosticFiles": 1,
+      "allProjectDiagnosticEqualityProven": false,
+      "overlayActive": false,
+      "overlayDecline": "current query context required",
+      "phases": {
+        "watch-path-seeds": {
+          "calls": 3,
+          "sumMs": 0.07200000000000001,
+          "maxMs": 0.035
+        },
+        "watch-path-tree-union": {
+          "calls": 3,
+          "sumMs": 0.146,
+          "maxMs": 0.075
+        },
+        "watch-path-hints": {
+          "calls": 3,
+          "sumMs": 0.0,
+          "maxMs": 0.0
+        },
+        "watch-path-normalize-sort": {
+          "calls": 2,
+          "sumMs": 0.921,
+          "maxMs": 0.477
+        },
+        "watch-collect": {
+          "calls": 3,
+          "sumMs": 1.73,
+          "maxMs": 0.959
+        },
+        "watch-normalize-sort": {
+          "calls": 3,
+          "sumMs": 0.0,
+          "maxMs": 0.0
+        },
+        "watch-compare": {
+          "calls": 3,
+          "sumMs": 0.009,
+          "maxMs": 0.009
+        },
+        "foreground-local-flush": {
+          "calls": 6,
+          "sumMs": 0.001,
+          "maxMs": 0.001
+        },
+        "foreground-file-watches": {
+          "calls": 6,
+          "sumMs": 0.864,
+          "maxMs": 0.698
+        },
+        "foreground-snapshot-check": {
+          "calls": 6,
+          "sumMs": 0.0,
+          "maxMs": 0.0
+        },
+        "foreground-source-accounting": {
+          "calls": 6,
+          "sumMs": 0.07,
+          "maxMs": 0.027
+        },
+        "watch-path-catalogue-reuse": {
+          "calls": 1,
+          "sumMs": 0.0,
+          "maxMs": 0.0
+        },
+        "analysis-input-fixed-context": {
+          "calls": 1,
+          "sumMs": 0.003,
+          "maxMs": 0.003
+        },
+        "captured-prefix-required-parse": {
+          "calls": 1,
+          "sumMs": 221.613,
+          "maxMs": 221.613
+        },
+        "captured-prefix-compose": {
+          "calls": 1,
+          "sumMs": 1.447,
+          "maxMs": 1.447
+        },
+        "captured-prefix-pending": {
+          "calls": 1,
+          "sumMs": 0.0,
+          "maxMs": 0.0
+        },
+        "owner-explicit-context": {
+          "calls": 2,
+          "sumMs": 235.983,
+          "maxMs": 235.768
+        },
+        "analysis-input-owner": {
+          "calls": 1,
+          "sumMs": 235.788,
+          "maxMs": 235.788
+        },
+        "analysis-input-dependencies": {
+          "calls": 1,
+          "sumMs": 4.105,
+          "maxMs": 4.105
+        },
+        "analysis-input-owner-recheck": {
+          "calls": 1,
+          "sumMs": 0.05,
+          "maxMs": 0.05
+        }
+      },
+      "instrumentedTimingsMs": {
+        "False": {
+          "startupToInitializeMs": 1115.386459,
+          "initializeReplyToHoverMs": 698.127875,
+          "initializeReplyToDiagnosticMs": 1038.346375
+        },
+        "True": {
+          "startupToInitializeMs": 785.435333,
+          "initializeReplyToHoverMs": 358.59375,
+          "initializeReplyToDiagnosticMs": 360.576292
+        }
+      }
+    },
+    {
+      "case": "opentitan-soc-signature-argument",
+      "evidence": "untracked/project-optimization-2026-10-29/opentitan-soc-signature-argument-cold-first-query.json",
+      "sha256": "2dba43bdbd191b511cc8bd9afa059c8ca2bf92d494a8748a069734ad1163a9b7",
+      "hoverEqual": true,
+      "observedDiagnosticMapEqual": true,
+      "diagnosticFiles": 1,
+      "allProjectDiagnosticEqualityProven": false,
+      "overlayActive": false,
+      "overlayDecline": "current query context required",
+      "phases": {
+        "watch-path-seeds": {
+          "calls": 3,
+          "sumMs": 0.07200000000000001,
+          "maxMs": 0.031
+        },
+        "watch-path-tree-union": {
+          "calls": 3,
+          "sumMs": 0.097,
+          "maxMs": 0.035
+        },
+        "watch-path-hints": {
+          "calls": 3,
+          "sumMs": 0.0,
+          "maxMs": 0.0
+        },
+        "watch-path-normalize-sort": {
+          "calls": 2,
+          "sumMs": 1.152,
+          "maxMs": 0.581
+        },
+        "watch-collect": {
+          "calls": 3,
+          "sumMs": 1.808,
+          "maxMs": 0.885
+        },
+        "watch-normalize-sort": {
+          "calls": 3,
+          "sumMs": 0.0,
+          "maxMs": 0.0
+        },
+        "watch-compare": {
+          "calls": 3,
+          "sumMs": 0.01,
+          "maxMs": 0.01
+        },
+        "foreground-local-flush": {
+          "calls": 6,
+          "sumMs": 0.0,
+          "maxMs": 0.0
+        },
+        "foreground-file-watches": {
+          "calls": 6,
+          "sumMs": 1.04,
+          "maxMs": 0.804
+        },
+        "foreground-snapshot-check": {
+          "calls": 6,
+          "sumMs": 0.0,
+          "maxMs": 0.0
+        },
+        "foreground-source-accounting": {
+          "calls": 6,
+          "sumMs": 0.059,
+          "maxMs": 0.023
+        },
+        "watch-path-catalogue-reuse": {
+          "calls": 1,
+          "sumMs": 0.0,
+          "maxMs": 0.0
+        },
+        "analysis-input-fixed-context": {
+          "calls": 1,
+          "sumMs": 0.002,
+          "maxMs": 0.002
+        },
+        "owner-explicit-context": {
+          "calls": 2,
+          "sumMs": 298.96999999999997,
+          "maxMs": 298.65
+        },
+        "analysis-input-owner": {
+          "calls": 1,
+          "sumMs": 298.772,
+          "maxMs": 298.772
+        },
+        "analysis-input-dependencies": {
+          "calls": 1,
+          "sumMs": 8.29,
+          "maxMs": 8.29
+        },
+        "analysis-input-owner-recheck": {
+          "calls": 1,
+          "sumMs": 0.159,
+          "maxMs": 0.159
+        }
+      },
+      "instrumentedTimingsMs": {
+        "False": {
+          "startupToInitializeMs": 450.95,
+          "initializeReplyToHoverMs": 366.3175,
+          "initializeReplyToDiagnosticMs": 665.020459
+        },
+        "True": {
+          "startupToInitializeMs": 462.314083,
+          "initializeReplyToHoverMs": 368.6395,
+          "initializeReplyToDiagnosticMs": 369.796083
+        }
+      }
+    }
+  ]
+}

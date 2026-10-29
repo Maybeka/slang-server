@@ -18,6 +18,7 @@
 #include "util/DisposableParseRequest.h"
 #include "util/Logging.h"
 #include "util/SlangExtensions.h"
+#include "util/SyntaxSourceLease.h"
 #include "util/UvmPhaseTrace.h"
 #include <algorithm>
 #include <atomic>
@@ -60,7 +61,7 @@ static SourceLocation diagnosticLocation(const SourceManager& sm, SourceLocation
 }
 
 namespace {
-// This prototype rejects prefix directives whose preprocessor state cannot be resumed by API.
+// Reject directive state not captured by SyntaxTree prefix checkpoints.
 struct PrefixDirectives : syntax::SyntaxVisitor<PrefixDirectives> {
     bool unsupported = false;
     void visitToken(parsing::Token token) {
@@ -68,13 +69,6 @@ struct PrefixDirectives : syntax::SyntaxVisitor<PrefixDirectives> {
             if (t.kind == parsing::TriviaKind::Directive) {
                 using K = syntax::SyntaxKind;
                 switch (t.syntax()->kind) {
-                    case K::TimeScaleDirective:
-                    case K::DefaultNetTypeDirective:
-                    case K::UnconnectedDriveDirective:
-                    case K::NoUnconnectedDriveDirective:
-                    case K::CellDefineDirective:
-                    case K::EndCellDefineDirective:
-                    case K::ResetAllDirective:
                     case K::BeginKeywordsDirective:
                     case K::EndKeywordsDirective:
                     case K::PragmaDirective:
@@ -317,6 +311,11 @@ std::shared_ptr<SlangDoc> SlangDoc::open(ServerDriver& driver, const URI& uri) {
     return std::make_shared<SlangDoc>(driver, uri, buffer);
 }
 
+std::optional<std::vector<std::shared_ptr<SlangDoc>>>
+SlangDoc::getNativeDesignCompilationUnits(const lsp::RequestContext& ctx) {
+    return m_driver.getNativeDesignCompilationUnits(ctx);
+}
+
 const std::string_view SlangDoc::getText() const {
     // null terminator is included in data
     return m_sourceManager.getSourceText(m_buffer.id);
@@ -343,6 +342,8 @@ bool SlangDoc::isMacroOnly() {
 std::shared_ptr<syntax::SyntaxTree> SlangDoc::getSyntaxTree(const lsp::RequestContext& ctx) {
     auto cwdPhase = m_sourceManager.beginFastCwdPhase();
     ctx.throwIfCancelled("before syntax tree");
+    if (isNativeCompilationUnit())
+        m_driver.refreshNativeCompilationUnit(*this, ctx);
     if (m_includeCompilation && m_driver.isPackageContextDeferred(m_uri)) {
         m_includeCompilation.reset();
         m_tree.reset();
@@ -458,6 +459,7 @@ std::shared_ptr<syntax::SyntaxTree> SlangDoc::getSyntaxTree(const lsp::RequestCo
                 m_tree = syntax::SyntaxTree::fromBuffers(buffers, m_sourceManager, parseOptions);
             }
         }
+        m_tree = retainSyntaxSourceStorage(m_sourceManager, std::move(m_tree));
         // A complete parse remains reusable even if its caller was cancelled.
         ctx.checkpoint("after syntax parsing");
     }
@@ -468,6 +470,14 @@ std::shared_ptr<syntax::SyntaxTree> SlangDoc::getSyntaxTree(const lsp::RequestCo
 void SlangDoc::releaseSemanticCaches() {
     m_analysis.reset();
     m_includeCompilation.reset();
+}
+
+bool SlangDoc::releaseUnborrowedDesignAnalysis() {
+    if (!m_analysis || m_analysis.use_count() != 1 ||
+        !m_analysis->getShallowCompilation()->hasActiveDesign())
+        return false;
+    m_analysis.reset();
+    return true;
 }
 
 SlangDoc::AnalysisInputs SlangDoc::getAnalysisInputs(const lsp::RequestContext& ctx) {

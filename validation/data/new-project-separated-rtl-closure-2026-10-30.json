@@ -1,0 +1,754 @@
+{
+  "status": "Separated RTL dependency closure and SourceLoader publication leases qualified; full optimization objective remains active",
+  "mainHead": "41758aa9e865903a0e283861f19331f9a36eab5b",
+  "binarySha256": "d9009781eab31be125378dba8a6dc9d484dca72c7ed5d5725891d2b8d3a0048f",
+  "asanBinarySha256": "ff0560ed0895c60a2e90be56d7ff7b71b751f0461104ea747832a803760f5444",
+  "sdkPatchSha256": "3c592224843522823ebe3d75823ece536ec6209b8f0461db56b750eba6c4ccc1",
+  "sourceSeal": "untracked/project-optimization-2026-10-29/rtl-closure-qualified-source-seal.json",
+  "sourceArchive": "untracked/project-optimization-2026-10-29/source-receipts/rtl-closure-qualified-d9009781",
+  "implemented": [
+    "Project selected pure RTL definitions plus recursive global child definitions across separated roots; keep intervening unselected roots mutable and input order unchanged",
+    "Check expanded declaration syntax, source locations, parser directive context, removed/duplicate definitions and new namespace/import conflicts before reusing projected provider semantics",
+    "Allow unrelated packages and explicit compilation-unit imports; scoped types, relevant unit imports, wildcard imports, mixed physical roots and unsupported type contexts keep the complete-provider/native route",
+    "Preserve contiguous-prefix fast path and default-off experiments; fixed child sources and retained includes require manual rebuild",
+    "Lease source and macro bytes with SourceLoader-published trees, including rollback recipes. Managed payload destruction releases source storage at the last strong reference despite expired weak caches"
+  ],
+  "verification": {
+    "ctest": {
+      "passed": 1014,
+      "failed": 0,
+      "seconds": 17.49,
+      "TMPDIR": "/private/tmp",
+      "concurrentAsanBuild": true
+    },
+    "sdk": {
+      "cases": 2645,
+      "assertions": 37010
+    },
+    "asanUnits": {
+      "cases": 19,
+      "assertions": 741,
+      "leakDetection": false
+    },
+    "sdkFilesVerified": 709,
+    "reversePatchCheck": true
+  },
+  "originalMatrix": {
+    "passed": 14,
+    "expectedFixedDependencyRefusals": 1,
+    "all15TimingsQualified": false,
+    "evidence": "untracked/project-optimization-2026-10-29/rtl-closure-qualified-runtime.json"
+  },
+  "additionalUdpConsumer": {
+    "sameOriginalFreezeSelectors": true,
+    "changesSourceOrFileOrder": false,
+    "target": "udp_checksum_gen_64.v",
+    "explanation": "Original lfsr edit touches an actual fixed arp_cache dependency and remains refused. Additional case edits a real mutable UDP consumer with unchanged fixed selectors."
+  },
+  "corrections": [
+    "Previous SerDes verification zero-hit result was not evidence that selected RTL was absent. Actual hierarchy contains decoder, autonegotiation and synchronizer; unrelated CU imports blocked body-cache installation. Current batch proves all3 instance roots shared."
+  ],
+  "qualifiedReleaseStates": 945,
+  "timingLimitations": [
+    "Sequential wait for hover and matching full diagnostic publication, no burst/cold-disk claim",
+    "Matrix single repeats; strict AES/UART3 alternating repeats preserve the initial slower trial and expose spread",
+    "All three arms use the same binary. Native versus optimization configuration comparison, not a historical binary A/B",
+    "Small pure-RTL designs are slower with reuse in these runs; do not claim a general performance improvement. They remain below50ms. Large SoC first/full-query diagnostic work remains around1s and is still a priority",
+    "Memory sampled at edit boundaries, not independent peak; ASan leak detection disabled"
+  ],
+  "remaining": [
+    "Unchanged signature/parameter hover reuse and first-query authentication cost; focus on remaining hundreds/thousands of milliseconds rather than sub50ms fluctuations",
+    "Reduce model/summary/native-CST overlap and audit broader document/query source ownership; current source lease change specifically covers SourceLoader publications/replays",
+    "Preserve earliest precise local-diagnostic refusal attribution",
+    "Final cross-project cold/first/continuous/error-repair/structural/recovery/memory qualification, fresh install/package/default-UVM one-profile/project cache/manual rebuild gates, full final checks, cleanup and main push remain open"
+  ],
+  "structuredEvidence": {
+    "path": "untracked/project-optimization-2026-10-29/rtl-closure-qualification.json",
+    "sha256": "4a3ec025e39265066616281b93334c85fb6a366529fee87883975ef3f1f90687"
+  },
+  "wholeRtlUvm": {
+    "aes": {
+      "repeats": 3,
+      "states": 135,
+      "frozenLocal": {
+        "firstEdit": {
+          "queryMedianMs": 10.9505,
+          "queryMinMs": 10.520416,
+          "queryMaxMs": 12.053083,
+          "diagnosticMedianMs": 23.673,
+          "diagnosticMinMs": 23.021208,
+          "diagnosticMaxMs": 24.35825,
+          "footprintMedianMiB": 450.6726989746094,
+          "samples": 3
+        },
+        "steadyEdits": {
+          "queryMedianMs": 2.287625,
+          "queryMinMs": 2.115916,
+          "queryMaxMs": 2.915375,
+          "diagnosticMedianMs": 3.625166,
+          "diagnosticMinMs": 3.379375,
+          "diagnosticMaxMs": 4.590458,
+          "footprintMedianMiB": 450.7039489746094,
+          "samples": 15
+        },
+        "structuralFallback": {
+          "queryMedianMs": 82.293666,
+          "queryMinMs": 80.8915,
+          "queryMaxMs": 96.130042,
+          "diagnosticMedianMs": 253.478166,
+          "diagnosticMinMs": 246.834959,
+          "diagnosticMaxMs": 266.352125,
+          "footprintMedianMiB": 482.8289489746094,
+          "samples": 3
+        },
+        "structuralUndo": {
+          "queryMedianMs": 84.010541,
+          "queryMinMs": 81.34925,
+          "queryMaxMs": 97.720625,
+          "diagnosticMedianMs": 253.045291,
+          "diagnosticMinMs": 245.194125,
+          "diagnosticMaxMs": 265.449334,
+          "footprintMedianMiB": 485.6258239746094,
+          "samples": 3
+        },
+        "firstLocalRecovery": {
+          "queryMedianMs": 9.804334,
+          "queryMinMs": 9.678292,
+          "queryMaxMs": 10.8085,
+          "diagnosticMedianMs": 21.949209,
+          "diagnosticMinMs": 21.9345,
+          "diagnosticMaxMs": 23.399125,
+          "footprintMedianMiB": 485.6726989746094,
+          "samples": 3
+        },
+        "steadyAfterRecovery": {
+          "queryMedianMs": 2.683833,
+          "queryMinMs": 2.254208,
+          "queryMaxMs": 3.184375,
+          "diagnosticMedianMs": 4.313,
+          "diagnosticMinMs": 3.529,
+          "diagnosticMaxMs": 5.148166,
+          "footprintMedianMiB": 485.6883239746094,
+          "samples": 9
+        },
+        "rootHits": [
+          2,
+          2,
+          2
+        ]
+      },
+      "nativeStructuralFallback": {
+        "queryMedianMs": 2650.901,
+        "queryMinMs": 2488.990875,
+        "queryMaxMs": 2937.942583,
+        "diagnosticMedianMs": 2825.069458,
+        "diagnosticMinMs": 2661.990708,
+        "diagnosticMaxMs": 3114.955375,
+        "footprintMedianMiB": 293.78218841552734,
+        "samples": 3
+      }
+    },
+    "uart": {
+      "repeats": 3,
+      "states": 135,
+      "frozenLocal": {
+        "firstEdit": {
+          "queryMedianMs": 10.565542,
+          "queryMinMs": 10.439417,
+          "queryMaxMs": 12.269709,
+          "diagnosticMedianMs": 19.175042,
+          "diagnosticMinMs": 19.093083,
+          "diagnosticMaxMs": 21.319875,
+          "footprintMedianMiB": 351.4695053100586,
+          "samples": 3
+        },
+        "steadyEdits": {
+          "queryMedianMs": 2.45125,
+          "queryMinMs": 2.26575,
+          "queryMaxMs": 3.41125,
+          "diagnosticMedianMs": 3.792625,
+          "diagnosticMinMs": 3.550166,
+          "diagnosticMaxMs": 5.180125,
+          "footprintMedianMiB": 351.5163803100586,
+          "samples": 15
+        },
+        "structuralFallback": {
+          "queryMedianMs": 115.11925,
+          "queryMinMs": 110.537292,
+          "queryMaxMs": 137.977208,
+          "diagnosticMedianMs": 269.66575,
+          "diagnosticMinMs": 255.473,
+          "diagnosticMaxMs": 296.225833,
+          "footprintMedianMiB": 393.6570281982422,
+          "samples": 3
+        },
+        "structuralUndo": {
+          "queryMedianMs": 103.607958,
+          "queryMinMs": 98.630709,
+          "queryMaxMs": 120.180208,
+          "diagnosticMedianMs": 251.463125,
+          "diagnosticMinMs": 241.424584,
+          "diagnosticMaxMs": 274.813333,
+          "footprintMedianMiB": 397.7039260864258,
+          "samples": 3
+        },
+        "firstLocalRecovery": {
+          "queryMedianMs": 10.753917,
+          "queryMinMs": 10.203084,
+          "queryMaxMs": 11.973875,
+          "diagnosticMedianMs": 19.383167,
+          "diagnosticMinMs": 18.7975,
+          "diagnosticMaxMs": 21.420833,
+          "footprintMedianMiB": 397.8758010864258,
+          "samples": 3
+        },
+        "steadyAfterRecovery": {
+          "queryMedianMs": 2.47875,
+          "queryMinMs": 2.332916,
+          "queryMaxMs": 3.234709,
+          "diagnosticMedianMs": 3.798875,
+          "diagnosticMinMs": 3.64975,
+          "diagnosticMaxMs": 5.152125,
+          "footprintMedianMiB": 397.8758010864258,
+          "samples": 9
+        },
+        "rootHits": [
+          2,
+          2,
+          2
+        ]
+      },
+      "nativeStructuralFallback": {
+        "queryMedianMs": 2192.570542,
+        "queryMinMs": 2150.184208,
+        "queryMaxMs": 2788.432834,
+        "diagnosticMedianMs": 2340.574709,
+        "diagnosticMinMs": 2294.118833,
+        "diagnosticMaxMs": 2934.301792,
+        "footprintMedianMiB": 353.65711975097656,
+        "samples": 3
+      }
+    }
+  },
+  "matrix": {
+    "opentitan-soc-large": {
+      "status": "passed",
+      "candidate": {
+        "warmQueryMedianMs": 697.035542,
+        "warmDiagnosticMedianMs": 1334.329583,
+        "scopePrepared": true,
+        "hits": 0,
+        "lastModelSharedRoots": [],
+        "owners": 0,
+        "evictions": 0,
+        "finalFootprintMiB": 378.72115325927734,
+        "structural": {
+          "queryMs": 645.14475,
+          "diagnosticMs": 1286.478791
+        }
+      },
+      "native": {
+        "warmQueryMedianMs": 615.09175,
+        "warmDiagnosticMedianMs": 1210.889125,
+        "scopePrepared": false,
+        "hits": 0,
+        "lastModelSharedRoots": [],
+        "owners": 0,
+        "evictions": 0,
+        "finalFootprintMiB": 838.5491409301758,
+        "structural": {
+          "queryMs": 618.954625,
+          "diagnosticMs": 1217.039542
+        }
+      },
+      "performanceAccepted": true
+    },
+    "opentitan-soc-inside-body": {
+      "status": "passed",
+      "candidate": {
+        "warmQueryMedianMs": 16.6695,
+        "warmDiagnosticMedianMs": 32.890125,
+        "scopePrepared": true,
+        "hits": 0,
+        "lastModelSharedRoots": [],
+        "owners": 0,
+        "evictions": 0,
+        "finalFootprintMiB": 882.3929595947266,
+        "structural": {
+          "queryMs": 711.21275,
+          "diagnosticMs": 1390.859209
+        }
+      },
+      "native": {
+        "warmQueryMedianMs": 633.475084,
+        "warmDiagnosticMedianMs": 1245.486042,
+        "scopePrepared": false,
+        "hits": 0,
+        "lastModelSharedRoots": [],
+        "owners": 0,
+        "evictions": 0,
+        "finalFootprintMiB": 848.8304138183594,
+        "structural": {
+          "queryMs": 642.326584,
+          "diagnosticMs": 1257.558542
+        }
+      },
+      "performanceAccepted": true
+    },
+    "opentitan-aes": {
+      "status": "passed",
+      "candidate": {
+        "warmQueryMedianMs": 72.055334,
+        "warmDiagnosticMedianMs": 108.049542,
+        "scopePrepared": true,
+        "hits": 0,
+        "lastModelSharedRoots": [],
+        "owners": 0,
+        "evictions": 0,
+        "finalFootprintMiB": 160.56314086914062,
+        "structural": {
+          "queryMs": 61.831792,
+          "diagnosticMs": 97.968709
+        }
+      },
+      "native": {
+        "warmQueryMedianMs": 60.088667,
+        "warmDiagnosticMedianMs": 95.930458,
+        "scopePrepared": false,
+        "hits": 0,
+        "lastModelSharedRoots": [],
+        "owners": 0,
+        "evictions": 0,
+        "finalFootprintMiB": 126.76617431640625,
+        "structural": {
+          "queryMs": 61.232083,
+          "diagnosticMs": 97.249875
+        }
+      },
+      "performanceAccepted": true
+    },
+    "opentitan-aes-inside-body": {
+      "status": "passed",
+      "candidate": {
+        "warmQueryMedianMs": 4.966042,
+        "warmDiagnosticMedianMs": 9.595666,
+        "scopePrepared": true,
+        "hits": 0,
+        "lastModelSharedRoots": [],
+        "owners": 0,
+        "evictions": 0,
+        "finalFootprintMiB": 82.92242431640625,
+        "structural": {
+          "queryMs": 63.331584,
+          "diagnosticMs": 100.28825
+        }
+      },
+      "native": {
+        "warmQueryMedianMs": 60.116792,
+        "warmDiagnosticMedianMs": 95.958875,
+        "scopePrepared": false,
+        "hits": 0,
+        "lastModelSharedRoots": [],
+        "owners": 0,
+        "evictions": 0,
+        "finalFootprintMiB": 126.89117431640625,
+        "structural": {
+          "queryMs": 60.569125,
+          "diagnosticMs": 96.553458
+        }
+      },
+      "performanceAccepted": true
+    },
+    "aes-small": {
+      "status": "passed",
+      "candidate": {
+        "warmQueryMedianMs": 3.1115,
+        "warmDiagnosticMedianMs": 6.548875,
+        "scopePrepared": true,
+        "hits": 42,
+        "lastModelSharedRoots": [
+          "aes.core.dec_block",
+          "aes.core.keymem",
+          "aes.core.sbox_inst"
+        ],
+        "owners": 3,
+        "evictions": 0,
+        "finalFootprintMiB": 12.062934875488281,
+        "structural": {
+          "queryMs": 2.515041,
+          "diagnosticMs": 6.005083
+        }
+      },
+      "native": {
+        "warmQueryMedianMs": 2.100542,
+        "warmDiagnosticMedianMs": 5.717,
+        "scopePrepared": false,
+        "hits": 0,
+        "lastModelSharedRoots": [],
+        "owners": 0,
+        "evictions": 0,
+        "finalFootprintMiB": 9.656684875488281,
+        "structural": {
+          "queryMs": 2.019542,
+          "diagnosticMs": 5.572667
+        }
+      },
+      "performanceAccepted": true
+    },
+    "aes-inside-body": {
+      "status": "passed",
+      "candidate": {
+        "warmQueryMedianMs": 0.371292,
+        "warmDiagnosticMedianMs": 0.546125,
+        "scopePrepared": true,
+        "hits": 12,
+        "lastModelSharedRoots": [
+          "aes.core.dec_block",
+          "aes.core.keymem",
+          "aes.core.sbox_inst"
+        ],
+        "owners": 3,
+        "evictions": 0,
+        "finalFootprintMiB": 13.750434875488281,
+        "structural": {
+          "queryMs": 3.106458,
+          "diagnosticMs": 6.64125
+        }
+      },
+      "native": {
+        "warmQueryMedianMs": 2.128416,
+        "warmDiagnosticMedianMs": 5.708375,
+        "scopePrepared": false,
+        "hits": 0,
+        "lastModelSharedRoots": [],
+        "owners": 0,
+        "evictions": 0,
+        "finalFootprintMiB": 9.766059875488281,
+        "structural": {
+          "queryMs": 2.077875,
+          "diagnosticMs": 5.630459
+        }
+      },
+      "performanceAccepted": true
+    },
+    "ethernet-mac-medium": {
+      "status": "passed",
+      "candidate": {
+        "warmQueryMedianMs": 23.219208,
+        "warmDiagnosticMedianMs": 26.095875,
+        "scopePrepared": true,
+        "hits": 11,
+        "lastModelSharedRoots": [
+          "eth_mac_10g.genblk1.axis_xgmii_rx_inst"
+        ],
+        "owners": 1,
+        "evictions": 0,
+        "finalFootprintMiB": 25.516082763671875,
+        "structural": {
+          "queryMs": 13.635791,
+          "diagnosticMs": 16.466083
+        }
+      },
+      "native": {
+        "warmQueryMedianMs": 9.8525,
+        "warmDiagnosticMedianMs": 12.691834,
+        "scopePrepared": false,
+        "hits": 0,
+        "lastModelSharedRoots": [],
+        "owners": 0,
+        "evictions": 0,
+        "finalFootprintMiB": 21.359832763671875,
+        "structural": {
+          "queryMs": 9.785791,
+          "diagnosticMs": 12.670291
+        }
+      },
+      "performanceAccepted": true
+    },
+    "ethernet-mac-ptp-medium": {
+      "status": "passed",
+      "candidate": {
+        "warmQueryMedianMs": 26.337916,
+        "warmDiagnosticMedianMs": 29.433166,
+        "scopePrepared": true,
+        "hits": 33,
+        "lastModelSharedRoots": [
+          "eth_mac_10g.genblk1.axis_xgmii_rx_inst",
+          "eth_mac_10g.mac_ctrl.mac_ctrl_rx_inst",
+          "eth_mac_10g.mac_ctrl.mac_pause_ctrl_rx_inst"
+        ],
+        "owners": 1,
+        "evictions": 0,
+        "finalFootprintMiB": 35.500457763671875,
+        "structural": {
+          "queryMs": 16.495208,
+          "diagnosticMs": 19.562291
+        }
+      },
+      "native": {
+        "warmQueryMedianMs": 12.743542,
+        "warmDiagnosticMedianMs": 15.747333,
+        "scopePrepared": false,
+        "hits": 0,
+        "lastModelSharedRoots": [],
+        "owners": 0,
+        "evictions": 0,
+        "finalFootprintMiB": 22.828582763671875,
+        "structural": {
+          "queryMs": 12.733125,
+          "diagnosticMs": 15.746125
+        }
+      },
+      "performanceAccepted": true
+    },
+    "ethernet-udp-medium": {
+      "status": "expected-fixed-dependency-refusal",
+      "candidate": null,
+      "native": null,
+      "performanceAccepted": false
+    },
+    "openofdm-wifi": {
+      "status": "passed",
+      "candidate": {
+        "warmQueryMedianMs": 143.817792,
+        "warmDiagnosticMedianMs": 152.619959,
+        "scopePrepared": false,
+        "hits": 0,
+        "lastModelSharedRoots": [],
+        "owners": 0,
+        "evictions": 0,
+        "finalFootprintMiB": 214.6413803100586,
+        "structural": {
+          "queryMs": 144.469542,
+          "diagnosticMs": 153.386667
+        }
+      },
+      "native": {
+        "warmQueryMedianMs": 138.949667,
+        "warmDiagnosticMedianMs": 146.7405,
+        "scopePrepared": false,
+        "hits": 0,
+        "lastModelSharedRoots": [],
+        "owners": 0,
+        "evictions": 0,
+        "finalFootprintMiB": 203.0944595336914,
+        "structural": {
+          "queryMs": 139.1655,
+          "diagnosticMs": 146.991417
+        }
+      },
+      "performanceAccepted": true
+    },
+    "openofdm-demodulator": {
+      "status": "passed",
+      "candidate": {
+        "warmQueryMedianMs": 0.963791,
+        "warmDiagnosticMedianMs": 3.653042,
+        "scopePrepared": true,
+        "hits": 14,
+        "lastModelSharedRoots": [
+          "demodulate.stb_delay_inst"
+        ],
+        "owners": 1,
+        "evictions": 0,
+        "finalFootprintMiB": 5.641059875488281,
+        "structural": {
+          "queryMs": 1.151458,
+          "diagnosticMs": 3.865625
+        }
+      },
+      "native": {
+        "warmQueryMedianMs": 0.937,
+        "warmDiagnosticMedianMs": 3.622625,
+        "scopePrepared": false,
+        "hits": 0,
+        "lastModelSharedRoots": [],
+        "owners": 0,
+        "evictions": 0,
+        "finalFootprintMiB": 5.094184875488281,
+        "structural": {
+          "queryMs": 0.949167,
+          "diagnosticMs": 3.631333
+        }
+      },
+      "performanceAccepted": true
+    },
+    "serdes-pcs-rtl": {
+      "status": "passed",
+      "candidate": {
+        "warmQueryMedianMs": 9.960959,
+        "warmDiagnosticMedianMs": 13.178625,
+        "scopePrepared": true,
+        "hits": 42,
+        "lastModelSharedRoots": [
+          "ge_1000baseX.decoder_8b10bi",
+          "ge_1000baseX.ge_1000baseX_an_i",
+          "ge_1000baseX.ge_1000baseX_sync_i"
+        ],
+        "owners": 3,
+        "evictions": 0,
+        "finalFootprintMiB": 14.547332763671875,
+        "structural": {
+          "queryMs": 9.835416,
+          "diagnosticMs": 12.997875
+        }
+      },
+      "native": {
+        "warmQueryMedianMs": 4.77125,
+        "warmDiagnosticMedianMs": 7.799958,
+        "scopePrepared": false,
+        "hits": 0,
+        "lastModelSharedRoots": [],
+        "owners": 0,
+        "evictions": 0,
+        "finalFootprintMiB": 11.656684875488281,
+        "structural": {
+          "queryMs": 4.87825,
+          "diagnosticMs": 7.9235
+        }
+      },
+      "performanceAccepted": true
+    },
+    "serdes-pcs-verification": {
+      "status": "passed",
+      "candidate": {
+        "warmQueryMedianMs": 24.237584,
+        "warmDiagnosticMedianMs": 28.332667,
+        "scopePrepared": true,
+        "hits": 42,
+        "lastModelSharedRoots": [
+          "ge_1000baseX_tb.ge_1000baseX_testi.ge_1000baseX_i.decoder_8b10bi",
+          "ge_1000baseX_tb.ge_1000baseX_testi.ge_1000baseX_i.ge_1000baseX_an_i",
+          "ge_1000baseX_tb.ge_1000baseX_testi.ge_1000baseX_i.ge_1000baseX_sync_i"
+        ],
+        "owners": 3,
+        "evictions": 0,
+        "finalFootprintMiB": 17.547332763671875,
+        "structural": {
+          "queryMs": 24.258042,
+          "diagnosticMs": 28.350583
+        }
+      },
+      "native": {
+        "warmQueryMedianMs": 20.195334,
+        "warmDiagnosticMedianMs": 23.920541,
+        "scopePrepared": false,
+        "hits": 0,
+        "lastModelSharedRoots": [],
+        "owners": 0,
+        "evictions": 0,
+        "finalFootprintMiB": 30.187957763671875,
+        "structural": {
+          "queryMs": 20.159917,
+          "diagnosticMs": 23.933
+        }
+      },
+      "performanceAccepted": true
+    },
+    "serdes-8b10b-codec": {
+      "status": "passed",
+      "candidate": {
+        "warmQueryMedianMs": 1.077333,
+        "warmDiagnosticMedianMs": 3.73475,
+        "scopePrepared": true,
+        "hits": 14,
+        "lastModelSharedRoots": [
+          "decoder_8b10b"
+        ],
+        "owners": 1,
+        "evictions": 0,
+        "finalFootprintMiB": 6.547309875488281,
+        "structural": {
+          "queryMs": 1.143333,
+          "diagnosticMs": 3.742458
+        }
+      },
+      "native": {
+        "warmQueryMedianMs": 1.2455,
+        "warmDiagnosticMedianMs": 3.908291,
+        "scopePrepared": false,
+        "hits": 0,
+        "lastModelSharedRoots": [],
+        "owners": 0,
+        "evictions": 0,
+        "finalFootprintMiB": 5.969184875488281,
+        "structural": {
+          "queryMs": 1.283167,
+          "diagnosticMs": 3.948292
+        }
+      },
+      "performanceAccepted": true
+    },
+    "cva6-uvm": {
+      "status": "passed",
+      "candidate": {
+        "warmQueryMedianMs": 8.347,
+        "warmDiagnosticMedianMs": 15.512916,
+        "scopePrepared": true,
+        "hits": 2,
+        "lastModelSharedRoots": [
+          "uvmt_cva6_tb.cva6_dut_wrap.cva6_tb_wrapper_i.i_cva6"
+        ],
+        "owners": 1,
+        "evictions": 0,
+        "finalFootprintMiB": 779.0950546264648,
+        "structural": {
+          "queryMs": 463.915083,
+          "diagnosticMs": 959.854458
+        }
+      },
+      "native": {
+        "warmQueryMedianMs": 1823.302125,
+        "warmDiagnosticMedianMs": 2205.565542,
+        "scopePrepared": false,
+        "hits": 0,
+        "lastModelSharedRoots": [],
+        "owners": 0,
+        "evictions": 0,
+        "finalFootprintMiB": 495.2511901855469,
+        "structural": {
+          "queryMs": 1804.871458,
+          "diagnosticMs": 2185.073
+        }
+      },
+      "performanceAccepted": true
+    },
+    "ethernet-udp-consumer-edit": {
+      "status": "passed",
+      "candidate": {
+        "warmQueryMedianMs": 16.4775,
+        "warmDiagnosticMedianMs": 19.745834,
+        "scopePrepared": true,
+        "hits": 56,
+        "lastModelSharedRoots": [
+          "udp_complete_64.ip_arb_mux_inst.arb_inst",
+          "udp_complete_64.ip_complete_64_inst.arp_inst.arp_cache_inst",
+          "udp_complete_64.ip_complete_64_inst.eth_arb_mux_inst.arb_inst",
+          "udp_complete_64.udp_64_inst.genblk1.udp_checksum_gen_64_inst.payload_fifo"
+        ],
+        "owners": 4,
+        "evictions": 0,
+        "finalFootprintMiB": 26.375457763671875,
+        "structural": {
+          "queryMs": 16.611166,
+          "diagnosticMs": 19.905083
+        }
+      },
+      "native": {
+        "warmQueryMedianMs": 9.36375,
+        "warmDiagnosticMedianMs": 12.496375,
+        "scopePrepared": false,
+        "hits": 0,
+        "lastModelSharedRoots": [],
+        "owners": 0,
+        "evictions": 0,
+        "finalFootprintMiB": 21.500457763671875,
+        "structural": {
+          "queryMs": 9.16975,
+          "diagnosticMs": 12.3135
+        }
+      },
+      "performanceAccepted": true
+    }
+  }
+}

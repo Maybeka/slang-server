@@ -57,6 +57,14 @@
           "description": "Experimental local function/task body queries. Default off. Supports changed local declarations, types, statements, member access, calls and macro expansions in retained class, package and module contexts. Signatures and external dependencies remain fixed; unsafe edits or queries use native analysis. Diagnostics analyze the complete current snapshot.",
           "type": "boolean"
         },
+        "experimentalMethodBodyMacroProof": {
+          "description": "Experimental full-unit macro dependency facts for body preprocessing proofs. Default off; requires experimentalMethodBodyQueries. Allows unchanged define/undef effects and proved unused macro names. Unsafe edits retain native analysis; private fragments never supply whole-unit absence proofs.",
+          "type": "boolean"
+        },
+        "methodBodyMacroProofMaxMiB": {
+          "type": "integer",
+          "description": "Macro proof recording / restore budget per compilation unit in MiB, default 16. Zero disables runtime recording and macro proof. This is not an RSS limit; fixed-library artifacts have their own bounded build-time facts."
+        },
         "experimentalMethodBodyDiagnostics": {
           "description": "Experimental local method-body diagnostics. Default off. Requires experimentalMethodBodyQueries and a completed full-design diagnostic context. Unsupported dependency changes use full current analysis.",
           "type": "boolean"
@@ -68,6 +76,22 @@
         "experimentalMethodBodyCertification": {
           "description": "Experimental method-body certification at publication boundaries. Default off. Requires experimentalMethodBodyQueries. Skips redundant preflight disk reads but still verifies complete input contents before returning local results. Retains one completed original diagnostic baseline across superseded edits and certifies its local slice on diagnostic demand.",
           "type": "boolean"
+        },
+        "experimentalQueryDiagnosticTransactions": {
+          "description": "Obsolete experimental query/diagnostic transaction key; ignored. Queries and background diagnostics certify their inputs independently.",
+          "type": "boolean"
+        },
+        "methodBodyLineSyntaxCacheKiB": {
+          "type": "integer",
+          "description": "Retained unchanged-suffix budget in KiB for the experimental later-macro syntax memo. Default 1024, zero disables; capped at 65536. Requires method-body queries, diagnostics and certification. Keeps one line coordinate, never a history of edits. Semantic dependencies and complete physical publication proofs are still checked each time."
+        },
+        "methodBodyRenderingCacheKiB": {
+          "type": "integer",
+          "description": "Charged retained diagnostic display memo budget in KiB. Default 256, zero disables; capped at 16384. Requires experimental method-body queries, diagnostics and certification. Holds one function-end coordinate and pure LSP payloads; no semantic owners or input-proof success is cached. Oversized entries use normal rendering."
+        },
+        "methodBodyDirectoryProofCacheKiB": {
+          "type": "integer",
+          "description": "Retained negative-input name plan budget in KiB. Default 512, zero disables; capped at 16384. Only experimental method-body certification uses it. At most 64 directories are pinned during each fresh proof; descriptors and successful proofs never survive the invocation. Budget or descriptor exhaustion uses the ordinary complete proof."
         },
         "experimentalCooperativeAnalysis": {
           "description": "Experimental cooperative syntax parsing and background context retirement. Default off. Cancelled syntax candidates are discarded; semantic model construction retains phase-boundary cancellation. Keeps the current query owner until a private replacement is ready; new input cancels replacement parsing. A hard source-storage limit still forces synchronous retirement to bound retained generations.",
@@ -92,6 +116,22 @@
         "experimentalDiagnosticDeltaPublishing": {
           "description": "Experimental diagnostic delta publication. Default off. Repeated results are compared before serialization; changed document versions, errors, repairs and URI retirements are still published.",
           "type": "boolean"
+        },
+        "experimentalParallelDiagnostics": {
+          "description": "Experimental bounded parallel full-design flow diagnostics. Default off. Observers or order-sensitive driver reports retain serial analysis.",
+          "type": "boolean"
+        },
+        "parallelDiagnosticThreads": {
+          "type": "integer",
+          "description": "Maximum full diagnostic workers, default2, capped8. Zero or one uses ordinary serial analysis. Does not parallelize local-body updates."
+        },
+        "experimentalSyntaxPrefixCache": {
+          "description": "Experimental authenticated syntax-prefix reuse for configured single-unit inputs. Default off. Requires cooperative analysis and a prepared fixed scope prefix. Mutable preceding roots and includes are rechecked before reuse; this does not declare them fixed or reuse their semantics.",
+          "type": "boolean"
+        },
+        "syntaxPrefixCacheMaxMiB": {
+          "type": "integer",
+          "description": "Retained mutable syntax-prefix cache budget in MiB, default 256. Zero disables this cache. Charges one pending or reusable CST owner, excluding the already charged fixed prefix. This budget is separate from frozenSources.maxMiB and sourceHistoryMaxMiB; it is not a process RSS limit."
         },
         "frozenSources": {
           "description": "Frozen source selections and cache budget. Does not enable the experiment.",
@@ -240,7 +280,7 @@
         },
         "modules": {
           "type": "array",
-          "description": "Exact module definition names in configured compilation inputs. Retains complete ordered source roots; instance parameterizations are elaborated independently. Does not enable the experiment.",
+          "description": "Exact module, interface or program definition names in configured inputs. Retains complete ordered source roots; instance parameterizations are elaborated independently. Does not enable the experiment.",
           "items": {
             "type": "string"
           }

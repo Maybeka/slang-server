@@ -42,3 +42,12 @@ Existing body-query, body-diagnostic and stable-library options remain independe
 To suppress unchanged diagnostic publications across retirement, also enable
 `experimentalDiagnosticDeltaPublishing`. The cooperative experiment preserves publication
 ownership with that option both on and off, and does not implicitly enable it.
+
+When a dirty complete model has no external borrowers, the cooperative path
+retains its symbol-to-source paths as value hints and releases the obsolete model
+before constructing its replacement. Current queried models and externally held
+query/diagnostic contexts retain the transactional replacement path. Cancellation
+can leave the new model pending; it preserves current editor text and the source
+hints needed for a fresh retry. This reduces obsolete/new model overlap, not the
+size of the one model needed for current complete diagnostics, and does not enable
+the experiment by default.

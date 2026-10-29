@@ -272,6 +272,9 @@ public:
     std::vector<std::filesystem::path> getContextWatchPaths() const;
     std::shared_ptr<const std::vector<std::filesystem::path>> getContextWatchCatalogue() const;
     bool configuredInputLoadFailed() const { return m_nativeInputsFailed; }
+    void refreshNativeCompilationUnit(SlangDoc& document, const lsp::RequestContext& ctx);
+    std::optional<std::vector<std::shared_ptr<SlangDoc>>> getNativeDesignCompilationUnits(
+        const lsp::RequestContext& ctx);
     bool isUvmConfigurationInput(const std::filesystem::path& path) const;
     uint64_t getOwnerDiscoveryAttemptCount() const { return m_ownerDiscoveryAttempts; }
     const SemanticDiagnosticBatch::Statistics& getSemanticDiagnosticBatchStatistics() const {
@@ -537,7 +540,9 @@ private:
     std::unordered_map<URI, std::vector<lsp::Diagnostic>> m_explicitContextErrors;
     flat_hash_set<URI> m_explicitContexts;
     flat_hash_set<URI> m_packageOnlyContexts;
-    void refreshConfiguredUnits(const lsp::RequestContext& ctx = {});
+    void refreshConfiguredUnits(const lsp::RequestContext& ctx = {}, bool forceNative = false);
+    void refreshNativeUnits(const lsp::RequestContext& ctx, bool force);
+    bool m_nativeReplayInProgress = false;
     void installConfiguredUnits(std::vector<std::shared_ptr<syntax::SyntaxTree>> trees);
     SourceContextHints getSourceHints(BufferID buffer, const lsp::RequestContext& ctx = {});
     const SourceContextImportHints& getImportHints(const std::shared_ptr<syntax::SyntaxTree>& tree,
