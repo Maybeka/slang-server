@@ -631,3 +631,71 @@ is unaffected. Cold UVM-path differences in other scenarios are not attributed
 solely to the optimization. Temporary instrumented builds, obsolete candidates and
 ended logs are removed; compact data, code-version receipts and still-used caches
 are retained. The supported language/dependency boundary is unchanged.
+
+
+## 2026-11-02: bounded direct initial-model retention
+
+[Versioned measurements](../../validation/macos-soc-direct-retention-2026-11-02.json)
+compare this candidate with main b7004f9, using the same five scenarios and three
+processes per Native/frozen/combined arm. Experiments remain disabled by default.
+Real-project semantic caches remain unlimited; source-history limits are unchanged.
+
+The initial model can retain its standalone Compilation without retaining the
+editing analysis wrapper. For a single selected top-level instance with no prior
+body groups, syntax views bind in a separately retained SourceManager namespace,
+with complete per-occurrence reference tracking enabled before elaboration.
+Structurally fragmented full-forest publication can reuse this model after required
+dataflow finishes, without constructing another owner. Compact type closure and
+Native fallback remain available, including whole-CVA6-DUT reuse. Ordinary publication
+keeps its existing cancellation timing. Direct eligibility is a restricted prototype,
+not a promise to eliminate library preparation, all analysis or certification.
+
+Reference metadata now indexes instance/class ancestor subtrees. Each certificate
+selects its own reference buckets rather than filtering every bucket in the design.
+The index follows native parent-instance links, rebuilds when reference maps grow,
+reads current usage bits, includes closed classes and retains final locality checks.
+Its allocated storage is charged to owner memory accounting.
+
+Complete occurrence tracking exposed warning representatives that depended on
+canonical body paths. Warning variants are ordered by semantic message before path,
+and the first eligible representative is retained consistently. Errors preserve
+legacy representative behavior; package diagnostics are unchanged. Dedicated tests
+cover warning parity and graph lifetime: retained roots survive while the editing
+wrapper and original source lease expire. Temporary project-specific tracing is removed.
+
+Same top_earlgrey background, 161 retained roots, combined mode (medians):
+
+| Metric | b7004f9 → current |
+|---|---:|
+| Startup | 15.77 → 12.65 s |
+| First-edit query | 11.11 → 10.85 ms |
+| First-edit diagnostic | 423.78 → 408.08 ms |
+| Continuous query | 1.02 → 1.08 ms |
+| Continuous diagnostic | 1.42 → 1.48 ms |
+| Lifetime peak physical footprint | 3073.19 → 2836.32 MiB |
+
+All three processes build zero additional owners at startup or first edit. A separate
+single-process trace records certification at 3.69s and total publication at
+5.34s, versus 6.31s / 9.54s in the previous stage. These timers nest and
+are not additive. Instrumented locality calls decrease from 90,226,784 to
+49,104,017; parent steps decrease from 110,471,844 to 60,483,329.
+There are still 171 candidate certificates and 161 accepted roots. Counters attribute
+work; concurrent instrumented elapsed times are not latency evidence.
+
+Validation: 1070/1070 CTest, 117 scope cases / 33783 assertions, full server ASan
+1056 cases / 205279 assertions (leak detection disabled), 16-project public API
+and original-file lifecycle parity, UBUS/CVA6/SoC ASan, installed default/custom
+cold/custom warm UVM, default-off behavior, 157 installed source files and offline
+709-file SDK/dependency integrity. Five serial scenarios × three processes × three
+arms × 15 states match the current Native oracle (675 states). Error/repair, structural
+fallback, reopening and full manual-rebuild readiness are included.
+
+Startup ends at the first hover response. Diagnostic timing ends at the matching
+edited-document notification, not whole-workspace completion. Memory is the median
+of process lifetime peak physical footprint, not peak RSS. OS/project parse caches
+may be warm. Small sub-50ms timing changes are retained in the data rather than hidden;
+continuous SoC diagnosis remains around 1.5ms. First-edit diagnosis remains hundreds
+of milliseconds. The original-file SoC scenario uses package reuse and does not freeze
+its edited RTL. Baseline/current UVM fixtures use identical canonical source paths.
+Compact evidence and code versions are preserved; ended logs and obsolete probe
+binaries are removed while active reusable caches remain.

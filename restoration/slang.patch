@@ -3968,15 +3968,16 @@ index 49c40373c..90810d826 100644
          // Modport ports are aliases for interface members; references to the
          // facade also count as references to the connected value(s).
 diff --git a/source/ast/ASTDiagMap.cpp b/source/ast/ASTDiagMap.cpp
-index cb4f631f8..e82f87013 100644
+index cb4f631f8..164f72153 100644
 --- a/source/ast/ASTDiagMap.cpp
 +++ b/source/ast/ASTDiagMap.cpp
-@@ -7,11 +7,15 @@
+@@ -7,11 +7,16 @@
  //------------------------------------------------------------------------------
  #include "slang/ast/ASTDiagMap.h"
  
 +#include <algorithm>
 +#include "slang/ast/Compilation.h"
++#include "slang/diagnostics/DiagnosticEngine.h"
 +
  #include "slang/ast/symbols/CheckerSymbols.h"
  #include "slang/ast/symbols/CompilationUnitSymbols.h"
@@ -3987,7 +3988,7 @@ index cb4f631f8..e82f87013 100644
  
  namespace slang::ast {
  
-@@ -22,7 +26,8 @@ Diagnostic& ASTDiagMap::add(Diagnostic diag, bool& isNew) {
+@@ -22,8 +27,10 @@ Diagnostic& ASTDiagMap::add(Diagnostic diag, bool& isNew) {
      return it->second.back();
  }
  
@@ -3995,9 +3996,11 @@ index cb4f631f8..e82f87013 100644
 +Diagnostics ASTDiagMap::coalesce(const SourceManager* sourceManager,
 +                                 const Compilation* compilation) {
      Diagnostics results;
++    std::unique_ptr<DiagnosticEngine> formatter;
      for (auto& [key, diagList] : map) {
          // If the location is NoLocation, just issue each diagnostic.
-@@ -32,6 +37,52 @@ Diagnostics ASTDiagMap::coalesce(const SourceManager* sourceManager) {
+         if (std::get<1>(key) == SourceLocation::NoLocation) {
+@@ -32,6 +39,62 @@ Diagnostics ASTDiagMap::coalesce(const SourceManager* sourceManager) {
              continue;
          }
  
@@ -4019,10 +4022,19 @@ index cb4f631f8..e82f87013 100644
 +        // aliases in imported contexts; do not reorder those representatives.
 +        if (diagList.size() > 1 && std::ranges::all_of(diagList, hasInstanceContext)) {
 +            using LocationKey = std::tuple<std::string, size_t, size_t>;
-+            using RepresentativeKey = std::pair<std::string, std::vector<LocationKey>>;
++            using RepresentativeKey = std::tuple<std::string, std::string, std::vector<LocationKey>>;
++            const bool semanticRepresentative = !diagList.front().isError();
++            if (sourceManager && semanticRepresentative && !formatter)
++                formatter = std::make_unique<DiagnosticEngine>(*sourceManager);
 +            std::vector<std::pair<RepresentativeKey, Diagnostic>> ordered;
 +            ordered.reserve(diagList.size());
 +            for (auto& diag : diagList) {
++                // Canonical body sharing changes symbol paths without changing
++                // the set of semantic warning variants. Pick the variant before
++                // its path, so complete occurrence tracking and native instance
++                // caching present the same coalesced warning.
++                auto message = semanticRepresentative && formatter
++                                   ? formatter->formatMessage(diag) : std::string{};
 +                auto path = diag.symbol ? diag.symbol->getHierarchicalPath() : std::string{};
 +                std::vector<LocationKey> locations;
 +                if (sourceManager) {
@@ -4039,7 +4051,8 @@ index cb4f631f8..e82f87013 100644
 +                // Canonical instances can share the same symbol path. Caller
 +                // notes still differ, so use their physical positions as a
 +                // stable tie break instead of analysis submission order.
-+                ordered.emplace_back(RepresentativeKey{std::move(path), std::move(locations)},
++                ordered.emplace_back(RepresentativeKey{std::move(message), std::move(path),
++                                                       std::move(locations)},
 +                                     std::move(diag));
 +            }
 +            std::ranges::stable_sort(ordered, {}, [](const auto& value) { return value.first; });
@@ -4050,7 +4063,17 @@ index cb4f631f8..e82f87013 100644
          // Try to find a diagnostic in an instance that isn't at the top-level
          // (printing such a path seems silly).
          const Diagnostic* found = nullptr;
-@@ -84,8 +135,12 @@ Diagnostics ASTDiagMap::coalesce(const SourceManager* sourceManager) {
+@@ -78,14 +141,20 @@ Diagnostics ASTDiagMap::coalesce(const SourceManager* sourceManager) {
+             if (auto scope = parent->getParentScope()) {
+                 auto& sym = scope->asSymbol();
+                 if (sym.kind != SymbolKind::Root && sym.kind != SymbolKind::CompilationUnit) {
+-                    found = &diag;
+-                    inst = parent;
++                    if (!found || diag.isError()) {
++                        found = &diag;
++                        inst = parent;
++                    }
+                 }
              }
          }
  
@@ -4066,7 +4089,7 @@ index cb4f631f8..e82f87013 100644
              // information to point the user towards the right ones.
              Diagnostic diag = *found;
 diff --git a/source/ast/Compilation.cpp b/source/ast/Compilation.cpp
-index ed7528f2c..708373ba0 100644
+index ed7528f2c..8d37a569c 100644
 --- a/source/ast/Compilation.cpp
 +++ b/source/ast/Compilation.cpp
 @@ -9,22 +9,28 @@
@@ -4099,7 +4122,7 @@ index ed7528f2c..708373ba0 100644
  
  using namespace slang::parsing;
  
-@@ -39,10 +45,261 @@ const PackageSymbol& createStdPackage(Compilation&);
+@@ -39,10 +45,262 @@ const PackageSymbol& createStdPackage(Compilation&);
  
  namespace slang::ast {
  
@@ -4342,6 +4365,7 @@ index ed7528f2c..708373ba0 100644
 +struct Compilation::BodyReuseMetadataIndex {
 +    flat_hash_map<const Scope*, std::vector<size_t>> controls;
 +    size_t indexedControls = 0;
++    flat_hash_map<const Scope*, std::vector<const Scope*>> referenceSubtrees;
 +};
 +
  Compilation::Compilation(const Bag& options, const SourceLibrary* defaultLib) :
@@ -4361,7 +4385,7 @@ index ed7528f2c..708373ba0 100644
      // Construct all built-in types.
      auto& bi = builtins::Builtins::Instance;
      bitType = &bi.bitType;
-@@ -148,11 +405,7 @@ Compilation::Compilation(const Bag& options, const SourceLibrary* defaultLib) :
+@@ -148,11 +406,7 @@ Compilation::Compilation(const Bag& options, const SourceLibrary* defaultLib) :
  
      // Set a default handler for printing types and symbol paths, for convenience.
      static std::once_flag onceFlag;
@@ -4374,7 +4398,7 @@ index ed7528f2c..708373ba0 100644
  
      // Reset systemId counters that may have been changed due to creation of types
      // in the std package.
-@@ -163,109 +416,3403 @@ Compilation::Compilation(const Bag& options, const SourceLibrary* defaultLib) :
+@@ -163,109 +417,3438 @@ Compilation::Compilation(const Bag& options, const SourceLibrary* defaultLib) :
  
  Compilation::~Compilation() = default;
  
@@ -7021,10 +7045,42 @@ index ed7528f2c..708373ba0 100644
 +                }
 +                for (const auto& [binding, _] : bodyCrossReferences)
 +                    bodyReferenceScopes[binding.first].cross.push_back(binding.second);
++                if (!bodyReuseMetadataIndex)
++                    bodyReuseMetadataIndex = std::make_unique<BodyReuseMetadataIndex>();
++                auto& subtrees = bodyReuseMetadataIndex->referenceSubtrees;
++                subtrees.clear();
++                // Index structural ownership once. Root proofs then visit only
++                // their own buckets, including independently closed classes.
++                for (const auto& [bindingScope, _] : bodyReferenceScopes) {
++                    for (auto scope = bindingScope; scope;) {
++                        const auto& symbol = scope->asSymbol();
++                        if (symbol.kind == SymbolKind::InstanceBody ||
++                            symbol.kind == SymbolKind::ClassType)
++                            subtrees[scope].push_back(bindingScope);
++                        if (symbol.kind == SymbolKind::InstanceBody) {
++                            auto instance = symbol.as<InstanceBodySymbol>().parentInstance;
++                            scope = instance ? instance->getParentScope() : nullptr;
++                        }
++                        else
++                            scope = symbol.getParentScope();
++                    }
++                }
 +                indexedBodyReferences = bodyReferenceStatus.size();
 +                indexedBodyCrossReferences = bodyCrossReferences.size();
 +            }
-+            for (const auto& [scope, bucket] : bodyReferenceScopes) {
++            flat_hash_set<const Scope*> localReferenceScopes;
++            auto includeReferenceScopes = [&](const Scope* root) {
++                if (!bodyReuseMetadataIndex)
++                    return;
++                auto& subtrees = bodyReuseMetadataIndex->referenceSubtrees;
++                if (auto it = subtrees.find(root); it != subtrees.end())
++                    localReferenceScopes.insert(it->second.begin(), it->second.end());
++            };
++            includeReferenceScopes(&retained);
++            for (auto cls : closedClasses)
++                includeReferenceScopes(cls);
++            for (auto scope : localReferenceScopes) {
++                const auto& bucket = bodyReferenceScopes.at(scope);
 +                if (!isLocal(scope->asSymbol()))
 +                    continue;
 +                for (auto symbol : bucket.local) {
@@ -7488,7 +7544,10 @@ index ed7528f2c..708373ba0 100644
 +    for (const auto& [_, bucket] : bodyReferenceScopes)
 +        result += (bucket.local.capacity() + bucket.cross.capacity()) * sizeof(const Symbol*);
 +    if (bodyReuseMetadataIndex) {
-+        result += sizeof(BodyReuseMetadataIndex) + mapBytes(bodyReuseMetadataIndex->controls);
++        result += sizeof(BodyReuseMetadataIndex) + mapBytes(bodyReuseMetadataIndex->controls) +
++                  mapBytes(bodyReuseMetadataIndex->referenceSubtrees);
++        for (const auto& [_, scopes] : bodyReuseMetadataIndex->referenceSubtrees)
++            result += scopes.capacity() * sizeof(const Scope*);
 +        for (const auto& [_, indices] : bodyReuseMetadataIndex->controls)
 +            result += indices.capacity() * sizeof(size_t);
 +    }
@@ -7851,7 +7910,7 @@ index ed7528f2c..708373ba0 100644
      std::vector<const Symbol*> result;
      for (auto& [key, val] : definitionMap) {
          for (auto sym : val.first) {
-@@ -279,25 +3826,256 @@ std::vector<const Symbol*> Compilation::getDefinitions() const {
+@@ -279,25 +3862,256 @@ std::vector<const Symbol*> Compilation::getDefinitions() const {
  }
  
  std::vector<const PackageSymbol*> Compilation::getPackages() const {
@@ -8114,7 +8173,7 @@ index ed7528f2c..708373ba0 100644
      if (finalized)
          return *root;
  
-@@ -310,20 +4088,43 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
+@@ -310,20 +4124,43 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
              defaultLiblist.push_back(lib);
      }
  
@@ -8159,7 +8218,7 @@ index ed7528f2c..708373ba0 100644
      }
  
      SLANG_ASSERT(!finalizing);
-@@ -398,7 +4199,7 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
+@@ -398,7 +4235,7 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
              if (inserted) {
                  topDefs.push_back({result, sourceRange});
                  SLANG_ASSERT(def->kind == SymbolKind::Definition);
@@ -8168,7 +8227,7 @@ index ed7528f2c..708373ba0 100644
              }
              else {
                  auto& diag = root->addDiag(diag::MultipleTopDupName, sourceRange.start()
-@@ -465,8 +4266,7 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
+@@ -465,8 +4302,7 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
                          else {
                              // Otherwise, issue an error because the user asked us to instantiate
                              // this.
@@ -8178,7 +8237,7 @@ index ed7528f2c..708373ba0 100644
                                  << userProvidedName;
                          }
                          continue;
-@@ -510,7 +4310,7 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
+@@ -510,7 +4346,7 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
  
                  auto& def = defSym->as<DefinitionSymbol>();
                  if (globalInstantiations.find(def.name) == globalInstantiations.end() &&
@@ -8187,7 +8246,7 @@ index ed7528f2c..708373ba0 100644
                      unreferencedDefs.push_back(&def);
                  }
              }
-@@ -549,10 +4349,16 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
+@@ -549,10 +4385,16 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
              hierarchyOverrideNode = &sit->second;
          }
  
@@ -8204,7 +8263,7 @@ index ed7528f2c..708373ba0 100644
      }
  
      if (!hasFlag(CompilationFlags::LintMode | CompilationFlags::AllowTopLevelIfacePorts) &&
-@@ -562,7 +4368,7 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
+@@ -562,7 +4404,7 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
  
      // For unreferenced definitions, go through and instantiate them with all empty
      // parameter values so that we get at least some semantic checking of the contents.
@@ -8213,7 +8272,7 @@ index ed7528f2c..708373ba0 100644
          for (auto def : unreferencedDefs) {
              const HierarchyOverrideNode* hierarchyOverrideNode = nullptr;
              if (auto* syntax = def->getSyntax()) {
-@@ -571,10 +4377,13 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
+@@ -571,10 +4413,13 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
                      hierarchyOverrideNode = &it->second;
                  }
              }
@@ -8227,7 +8286,7 @@ index ed7528f2c..708373ba0 100644
      root->topInstances = topList.copy(*this);
      root->compilationUnits = compilationUnits;
      finalizing = false;
-@@ -595,6 +4404,8 @@ const CompilationUnitSymbol* Compilation::getCompilationUnit(
+@@ -595,6 +4440,8 @@ const CompilationUnitSymbol* Compilation::getCompilationUnit(
  
  Compilation::DefinitionLookupResult Compilation::tryGetDefinition(std::string_view lookupName,
                                                                    const Scope& scope) const {
@@ -8236,7 +8295,7 @@ index ed7528f2c..708373ba0 100644
      // Try to find a config block for this scope to help choose the right definition.
      const ResolvedConfig* resolvedConfig = nullptr;
      if (auto inst = scope.getContainingInstance(); inst && inst->parentInstance)
-@@ -734,6 +4545,10 @@ const DefinitionSymbol* Compilation::getDefinition(const Scope& scope,
+@@ -734,6 +4581,10 @@ const DefinitionSymbol* Compilation::getDefinition(const Scope& scope,
  
              lookupScope = lookupScope->asSymbol().getParentScope();
          } while (lookupScope);
@@ -8247,7 +8306,7 @@ index ed7528f2c..708373ba0 100644
      }
      return nullptr;
  }
-@@ -824,6 +4639,27 @@ void Compilation::createDefinition(const Scope& scope, LookupLocation location,
+@@ -824,6 +4675,27 @@ void Compilation::createDefinition(const Scope& scope, LookupLocation location,
                                     const ModuleDeclarationSyntax& syntax) {
      SLANG_ASSERT(!isFrozen());
  
@@ -8275,7 +8334,7 @@ index ed7528f2c..708373ba0 100644
      // We can only be missing metadata if the definition is created programmatically
      // (i.e. not via the parser) so we just fill in the parent's default net type
      // so that it's not a null pointer.
-@@ -893,7 +4729,7 @@ void Compilation::insertDefinition(Symbol& symbol, const Scope& scope) {
+@@ -893,7 +4765,7 @@ void Compilation::insertDefinition(Symbol& symbol, const Scope& scope) {
              for (auto v = vecIt; v != defList.end(); v++) {
                  auto vSym = *v;
                  auto vLib = vSym->getSourceLibrary();
@@ -8284,7 +8343,7 @@ index ed7528f2c..708373ba0 100644
                      // Duplicate in the same library.
                      if (hasFlag(CompilationFlags::AllowLibModuleRedefinition)) {
                          // Silently keep the first definition and discard all subsequent ones,
-@@ -971,12 +4807,31 @@ void Compilation::insertDefinition(Symbol& symbol, const Scope& scope) {
+@@ -971,12 +4843,31 @@ void Compilation::insertDefinition(Symbol& symbol, const Scope& scope) {
  }
  
  const PackageSymbol* Compilation::getPackage(std::string_view lookupName) const {
@@ -8317,7 +8376,7 @@ index ed7528f2c..708373ba0 100644
  const PackageSymbol& Compilation::createPackage(const Scope& scope,
                                                  const ModuleDeclarationSyntax& syntax) {
      SLANG_ASSERT(!isFrozen());
-@@ -1077,6 +4932,8 @@ void Compilation::addSystemMethod(SymbolKind typeKind,
+@@ -1077,6 +4968,8 @@ void Compilation::addSystemMethod(SymbolKind typeKind,
  }
  
  const SystemSubroutine* Compilation::getSystemSubroutine(std::string_view name) const {
@@ -8326,7 +8385,7 @@ index ed7528f2c..708373ba0 100644
      auto it = subroutineNameMap.find(name);
      if (it == subroutineNameMap.end())
          return nullptr;
-@@ -1085,12 +4942,15 @@ const SystemSubroutine* Compilation::getSystemSubroutine(std::string_view name)
+@@ -1085,12 +4978,15 @@ const SystemSubroutine* Compilation::getSystemSubroutine(std::string_view name)
  
  const SystemSubroutine* Compilation::getSystemSubroutine(
      parsing::KnownSystemName knownNameId) const {
@@ -8343,7 +8402,7 @@ index ed7528f2c..708373ba0 100644
      auto it = methodMap.find(std::make_tuple(name, typeKind));
      if (it == methodMap.end())
          return nullptr;
-@@ -1136,10 +4996,14 @@ std::span<const AttributeSymbol* const> Compilation::getAttributes(
+@@ -1136,10 +5032,14 @@ std::span<const AttributeSymbol* const> Compilation::getAttributes(
  
  std::span<const AttributeSymbol* const> Compilation::getAttributes(const void* ptr) const {
      auto it = attributeMap.find(ptr);
@@ -8362,7 +8421,7 @@ index ed7528f2c..708373ba0 100644
  }
  
  void Compilation::noteBindDirective(const BindDirectiveSyntax& syntax, const Scope& scope) {
-@@ -1254,7 +5118,7 @@ const Symbol* Compilation::getDefaultClocking(const Scope& scope) const {
+@@ -1254,7 +5154,7 @@ const Symbol* Compilation::getDefaultClocking(const Scope& scope) const {
              return getDefaultClocking(*parent);
      }
  
@@ -8371,7 +8430,7 @@ index ed7528f2c..708373ba0 100644
  }
  
  void Compilation::noteGlobalClocking(const Scope& scope, const Symbol& clocking,
-@@ -1384,12 +5248,21 @@ void Compilation::noteUpwardReference(const Scope& initialScope, const Hierarchi
+@@ -1384,12 +5284,21 @@ void Compilation::noteUpwardReference(const Scope& initialScope, const Hierarchi
      }
  }
  
@@ -8394,7 +8453,7 @@ index ed7528f2c..708373ba0 100644
      bool valid = true;
      SmallSet<const InstanceSymbol*, 2> visited;
      InstanceCacheKey key(symbol, valid, visited);
-@@ -1409,7 +5282,7 @@ const Expression* Compilation::getDefaultDisable(const Scope& scope) const {
+@@ -1409,7 +5318,7 @@ const Expression* Compilation::getDefaultDisable(const Scope& scope) const {
  
          curr = curr->asSymbol().getParentScope();
          if (!curr || curr->asSymbol().kind == SymbolKind::CompilationUnit)
@@ -8403,7 +8462,7 @@ index ed7528f2c..708373ba0 100644
      }
  }
  
-@@ -1458,27 +5331,282 @@ const SyntaxNode* Compilation::getExternDefinition(std::string_view name,
+@@ -1458,27 +5367,282 @@ const SyntaxNode* Compilation::getExternDefinition(std::string_view name,
      return nullptr;
  }
  
@@ -8695,7 +8754,7 @@ index ed7528f2c..708373ba0 100644
  }
  
  const NameSyntax& Compilation::parseName(std::string_view name) {
-@@ -1510,7 +5638,66 @@ CompilationUnitSymbol& Compilation::createScriptScope() {
+@@ -1510,7 +5674,66 @@ CompilationUnitSymbol& Compilation::createScriptScope() {
      return *unit;
  }
  
@@ -8763,7 +8822,7 @@ index ed7528f2c..708373ba0 100644
      SLANG_ASSERT(!isFrozen());
  
      // Make sure our root is created. It's possible that this results in a fatal
-@@ -1520,11 +5707,15 @@ void Compilation::elaborate() {
+@@ -1520,11 +5743,15 @@ void Compilation::elaborate() {
      if (sawFatalError)
          return;
  
@@ -8780,7 +8839,7 @@ index ed7528f2c..708373ba0 100644
  
      if (!elabVisitor.finishedEarly() && !elabVisitor.instanceDepthExceeded)
          elabVisitor.finalize();
-@@ -1560,10 +5751,12 @@ void Compilation::elaborate() {
+@@ -1560,10 +5787,12 @@ void Compilation::elaborate() {
      // Double check any bind directives for correctness. These were already
      // resolved prior to full elaboration but their diagnostics were not
      // issued so we need to check again.
@@ -8797,7 +8856,7 @@ index ed7528f2c..708373ba0 100644
      }
  
      // Report any lingering name conflicts.
-@@ -1680,14 +5873,471 @@ const Diagnostics& Compilation::getParseDiagnostics() {
+@@ -1680,14 +5909,471 @@ const Diagnostics& Compilation::getParseDiagnostics() {
      return *cachedParseDiagnostics;
  }
  
@@ -9272,7 +9331,7 @@ index ed7528f2c..708373ba0 100644
      return *cachedSemanticDiagnostics;
  }
  
-@@ -1794,17 +6444,53 @@ const ImplicitTypeSyntax& Compilation::createEmptyTypeSyntax(SourceLocation loc)
+@@ -1794,17 +6480,53 @@ const ImplicitTypeSyntax& Compilation::createEmptyTypeSyntax(SourceLocation loc)
                                          Token(*this, TokenKind::Placeholder, {}, {}, loc));
  }
  
@@ -9329,7 +9388,7 @@ index ed7528f2c..708373ba0 100644
  }
  
  const Type& Compilation::getType(SyntaxKind typeKind) const {
-@@ -2022,7 +6708,19 @@ void Compilation::checkDPIMethods(std::span<const SubroutineSymbol* const> dpiIm
+@@ -2022,7 +6744,19 @@ void Compilation::checkDPIMethods(std::span<const SubroutineSymbol* const> dpiIm
              continue;
          }
  

@@ -39,8 +39,10 @@ public:
                    std::vector<std::string> modules, std::vector<std::string> instances,
                    std::shared_ptr<SourceStorageRegistry> sourceRegistry = {});
     void install(slang::ast::Compilation& compilation,
-                 std::shared_ptr<const void> sourceLibraries = {});
+                 std::shared_ptr<const void> sourceLibraries = {}, bool independentInitial = false);
     Stats status() const;
+    bool wantsInitialModel() const;
+    void trackInitialSources(const std::shared_ptr<slang::SourceManager>& sources);
 
 private:
     struct Group {
@@ -73,7 +75,7 @@ private:
                  std::string_view path = {});
     bool selected(const slang::ast::InstanceBodySymbol& body) const;
     void lookup(slang::ast::Compilation&, slang::ast::InstanceBodySymbol&);
-    void publish(std::shared_ptr<slang::ast::Compilation>, std::shared_ptr<const void>);
+    void publish(std::shared_ptr<slang::ast::Compilation>, std::shared_ptr<const void>, bool);
     std::optional<Group> prepareGroup(std::shared_ptr<slang::ast::Compilation>,
                                       std::string_view admittedRoot = {});
     bool retain(Group, bool compact, size_t protectedGroups = 0);
@@ -87,5 +89,6 @@ private:
 struct ScopeBodyImport {
     std::weak_ptr<ScopeBodyCache> cache;
     std::shared_ptr<const void> sourceLibraries;
+    bool independentInitial = false;
 };
 } // namespace server

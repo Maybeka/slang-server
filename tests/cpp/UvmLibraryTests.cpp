@@ -10792,3 +10792,90 @@ endmodule
               diagnosticMessages(driver->sm,native->getSemanticDiagnostics()));
     }
 }
+
+TEST_CASE("Initial top-level forests retain semantics without the editing wrapper",
+          "[scope-semantic][scope-direct-initial-owner]") {
+    LibraryWorkspace files;
+    files.write(files.root / "fixed.sv", R"(
+module leaf #(parameter int N=1)(input logic [N-1:0] a, output logic [N-1:0] y);
+ assign y=a+1;
+endmodule
+module top;
+ logic clk;
+ sequence s(bit b); b; endsequence
+ assert property(@(posedge clk) s(clk));
+ for(genvar i=1;i<=8;i++) begin:g
+   logic [i-1:0] a,y;
+   leaf #(.N(i)) u(.*);
+ end
+endmodule
+)");
+    files.write(files.root / "consumer.sv",
+                "module consumer; function int value(int x); return x+1; endfunction endmodule\n");
+    files.write(files.root / "design.f", "fixed.sv\nconsumer.sv\n");
+    Config config;
+    config.experimentalScopeSemanticCache=true;
+    config.semanticCacheUnlimited=true;
+    config.frozenSources=Config::FrozenSourcesConfig{
+        .instances=std::vector<std::string>{"top"}};
+    config.flagsByFile=std::vector<Config::FlagSource>{
+        {(files.root/"server.json").string(),"--single-unit --threads 1 --top top --top consumer"}};
+    Indexer indexer;
+    ClientHarness client;
+    auto driver=server::ServerDriver::createFromFileLists(
+        indexer,client,config,{"design.f"},files.root.string(),nullptr,true);
+    REQUIRE(driver);
+    driver->comp->prepareDiagnostics({});
+    auto cache=driver->options.get<server::ScopeBodyImport>()->cache.lock();
+    REQUIRE(cache);
+    CHECK(cache->status().ownerBuilds==0);
+    CHECK(cache->status().owners==1);
+    CHECK(cache->status().retainedRoots.size()==8);
+    std::weak_ptr<const void> editingSources=driver->driver.getSourceOwner();
+    std::weak_ptr<const ast::Compilation> editingModel;
+    {
+        const std::vector<std::string_view> names{"top"};
+        auto context=driver->comp->createActiveDesignContext(names);
+        auto model=context.retainCompilation();
+        CHECK(model->getSourceManager()!=&driver->sm);
+        editingModel=model;
+    }
+    driver.reset();
+    CHECK(editingModel.expired());
+    CHECK(editingSources.expired());
+    CHECK(cache->status().owners==1);
+    CHECK(cache->status().retainedRoots.size()==8);
+}
+
+TEST_CASE("Diagnostic representatives agree with complete occurrence tracking",
+          "[scope-semantic][scope-direct-diagnostic-representative]") {
+    SourceManager sources;
+    auto tree=syntax::SyntaxTree::fromText(R"(
+module leaf #(parameter int N=1)(input logic [N-1:0] a, output logic [N-1:0] y);
+ localparam int OFFSET=1;
+ assign y=a+OFFSET;
+endmodule
+module top;
+ leaf #(.N(8)) z(.a('0),.y());
+ leaf #(.N(2)) a(.a('0),.y());
+ leaf #(.N(4)) m(.a('0),.y());
+ leaf #(.N(2)) repeated(.a('0),.y());
+endmodule
+)",sources);
+    std::vector<std::string> expected;
+    for(bool complete:{false,true}) {
+        ast::Compilation compilation;
+        if(complete) compilation.enableInstanceBodyReferenceTracking(true);
+        compilation.addSyntaxTree(tree);
+        DiagnosticEngine formatter(sources);
+        std::vector<std::string> messages;
+        for(const auto& diagnostic:compilation.getSemanticDiagnostics()) {
+            auto message=formatter.formatMessage(diagnostic);
+            if(message.find("arithmetic between operands")!=std::string::npos)
+                messages.push_back(std::move(message));
+        }
+        REQUIRE_FALSE(messages.empty());
+        if(complete) CHECK(messages==expected);
+        else expected=std::move(messages);
+    }
+}

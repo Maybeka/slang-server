@@ -78,7 +78,8 @@ ServerCompilationAnalysis::ServerCompilationAnalysis(
     const std::unordered_map<std::string, std::shared_ptr<SlangDoc>>& documents, Bag& options,
     SourceManager& sourceManager, const lsp::RequestContext& ctx, bool allowDisposableRoot,
     std::shared_ptr<const void> sourceOwner) :
-    compilation(options),
+    m_compilationOwner(std::make_shared<slang::ast::Compilation>(options)),
+    compilation(*m_compilationOwner),
     m_analysisOptions(options.getOrDefault<slang::analysis::AnalysisOptions>()),
     m_parallelOptions(options.getOrDefault<ParallelDiagnosticOptions>()) {
     if (compilation.hasFlag(ast::CompilationFlags::TrackSubroutineBodyDependencies) ||
@@ -100,11 +101,50 @@ ServerCompilationAnalysis::ServerCompilationAnalysis(
         trees.push_back(doc->getSyntaxTree(ctx));
     }
     phases.mark("model-syntax-discovery");
+    // Establish isolation before binding, never by retaining the mutable source
+    // namespace after elaboration. Only the initial selected top-level forest
+    // is a candidate; contextual / compact routes keep their existing owner.
+    auto* modelSources = &sourceManager;
+    auto modelOptions = options;
+    struct InitialSourceOwner {
+        std::shared_ptr<SourceManager> sources;
+        std::shared_ptr<TrustedUvmLibrary> library;
+    };
+    if (auto bodySetting = options.get<ScopeBodyImport>()) {
+        auto cache = bodySetting->cache.lock();
+        auto librarySetting = options.get<TrustedUvmImport>();
+        if (cache && cache->wantsInitialModel() && librarySetting && librarySetting->enabled &&
+            librarySetting->library) {
+            std::vector<BufferID> required;
+            for (const auto& tree : trees)
+                for (auto id : tree->getSourceBufferIds())
+                    required.push_back(id);
+            auto isolated = sourceManager.forkRetainedNamespace(required);
+            cache->trackInitialSources(isolated);
+            auto lease = std::make_shared<InitialSourceOwner>(isolated, librarySetting->library);
+            auto import = *librarySetting;
+            import.sourceOwner = lease;
+            modelOptions.set(std::move(import));
+            auto bodies = *bodySetting;
+            bodies.sourceLibraries = lease;
+            bodies.independentInitial = true;
+            modelOptions.set(std::move(bodies));
+            for (auto& tree : trees) {
+                auto parseOptions = tree->options();
+                parseOptions.set(*modelOptions.get<TrustedUvmImport>());
+                tree = syntax::SyntaxTree::sharedPrefixView(tree, *isolated, &parseOptions);
+            }
+            modelSources = isolated.get();
+            sourceOwner = lease;
+            compilation.enableInstanceBodyReferenceTracking(/* complete */ true);
+            m_independentInitialBodyModel = true;
+        }
+    }
     if (modelOwnerTraceEnabled())
         traceModelOwner("full-syntax-discovered", &compilation, nullptr,
                         compilation.getTotalBytesAllocated());
     ctx.checkpoint("before full-model library import");
-    const bool trusted = importTrustedUvm(compilation, sourceManager, options, trees,
+    const bool trusted = importTrustedUvm(compilation, *modelSources, modelOptions, trees,
                                          &m_libraryImportStatus);
     // Native models need the same namespace lifetime guarantee as imported views.
     // Keep only the SourceLifetime (sources + library identities), never the driver.
@@ -133,7 +173,7 @@ ServerCompilationAnalysis::ServerCompilationAnalysis(
         traceModelOwner("full-syntax-installed", &compilation, nullptr,
                         compilation.getTotalBytesAllocated());
     // Retain buffer data to prevent deallocation while this compilation exists
-    m_retainedBuffers = sourceManager.retainBuffers(bufferIds);
+    m_retainedBuffers = modelSources->retainBuffers(bufferIds);
 
     // reset and rebuild indexed info
     ctx.checkpoint("before full-model root binding");
@@ -211,8 +251,8 @@ slang::analysis::AnalysisManager& ServerCompilationAnalysis::getAnalysisManager(
         ctx.throwIfCancelled("before full-design semantics");
         (void)compilation.getSemanticDiagnostics();
         ctx.throwIfCancelled("after full-design semantics");
-        if (auto self = weak_from_this().lock())
-            compilation.offerInstanceBodies(std::shared_ptr<ast::Compilation>(self, &compilation));
+        if (!m_independentInitialBodyModel)
+            compilation.offerInstanceBodies(m_compilationOwner);
         ctx.throwIfCancelled("before full-design dataflow");
         // Analyze a private candidate. Cancellation must neither cache a partial
         // manager nor leave the shared compilation frozen for foreground queries.
@@ -311,6 +351,10 @@ slang::analysis::AnalysisManager& ServerCompilationAnalysis::getAnalysisManager(
                             compilation.getTotalBytesAllocated(),
                             analysisMemoryBytes(), weak_from_this().use_count());
     }
+    // Publish only after required dataflow completes. An initial retained graph
+    // must not escape while its editing analysis is still populating it.
+    if (m_independentInitialBodyModel)
+        compilation.offerInstanceBodies(m_compilationOwner);
     return *m_driverAnalysis;
 }
 

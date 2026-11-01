@@ -362,7 +362,7 @@ ScopeBodyCache::ScopeBodyCache(std::shared_ptr<TrustedUvmLibrary> library, size_
 }
 
 void ScopeBodyCache::install(Compilation& compilation,
-                             std::shared_ptr<const void> sourceLibraries) {
+                             std::shared_ptr<const void> sourceLibraries, bool independentInitial) {
     if (compilation.hasFlag(CompilationFlags::PackageAnalysis))
         return;
     auto weak = weak_from_this();
@@ -371,10 +371,20 @@ void ScopeBodyCache::install(Compilation& compilation,
             if (auto cache = weak.lock())
                 cache->lookup(current, body);
         },
-        [weak, sourceLibraries = std::move(sourceLibraries)](std::shared_ptr<Compilation> current) {
+        [weak, sourceLibraries = std::move(sourceLibraries), independentInitial](std::shared_ptr<Compilation> current) {
             if (auto cache = weak.lock())
-                cache->publish(std::move(current), sourceLibraries);
+                cache->publish(std::move(current), sourceLibraries, independentInitial);
         });
+}
+
+bool ScopeBodyCache::wantsInitialModel() const {
+    return groups.empty() && modules.empty() && instances.size() == 1 &&
+           instances.front().find('.') == std::string::npos;
+}
+
+void ScopeBodyCache::trackInitialSources(const std::shared_ptr<SourceManager>& sources) {
+    if (sourceRegistry)
+        sourceRegistry->track(sources);
 }
 
 bool ScopeBodyCache::selected(const InstanceBodySymbol& body) const {
@@ -607,7 +617,7 @@ bool ScopeBodyCache::capacityAdvice(const Compilation& current, const InstanceBo
 }
 
 void ScopeBodyCache::publish(std::shared_ptr<Compilation> current,
-                             std::shared_ptr<const void> sourceLibraries) {
+                             std::shared_ptr<const void> sourceLibraries, bool independentInitial) {
     if (current->hasFatalErrors())
         return;
     UvmPhaseTrace publicationTrace;
@@ -737,7 +747,9 @@ void ScopeBodyCache::publish(std::shared_ptr<Compilation> current,
             ++counters.declines;
             return false;
         }
-        auto group = prepareGroup(bind(std::nullopt));
+        const bool direct = independentInitial && groups.empty() &&
+                            !current->hasImportedInstanceBodies();
+        auto group = prepareGroup(direct ? current : bind(std::nullopt));
         if (group) {
             Bodies originals;
             current->getRoot().visit(originals);

@@ -43,6 +43,11 @@ struct ParallelDiagnosticStats {
 /// save when compilation is set). This includes the compilation itself, references to used buffers,
 /// instance indexer, etc.
 class ServerCompilationAnalysis : public std::enable_shared_from_this<ServerCompilationAnalysis> {
+    // Keep the semantic graph independently owned. A retained graph must not
+    // pin this editing wrapper's indexes, analysis managers and buffer handles.
+    std::shared_ptr<slang::ast::Compilation> m_compilationOwner;
+    bool m_independentInitialBodyModel = false;
+
 public:
     ServerCompilationAnalysis(
         const std::unordered_map<std::string, std::shared_ptr<SlangDoc>>& documents, Bag& options,
@@ -56,7 +61,7 @@ public:
     ParallelDiagnosticStats parallelDiagnosticStats() const { return m_parallelStats; }
     const TrustedImportStatus& libraryImportStatus() const { return m_libraryImportStatus; }
 
-    slang::ast::Compilation compilation;
+    slang::ast::Compilation& compilation;
 
     /// Index of buffer -> definitions and definition -> instances given a compilation. Used for
     /// navigating a compilation via the sidebar

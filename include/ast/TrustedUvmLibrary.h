@@ -126,7 +126,7 @@ inline bool importTrustedUvm(
         compilation.importCompilationUnitDeclarations(setting->library->compilation, sources);
     if (auto bodies = options.get<ScopeBodyImport>())
         if (auto cache = bodies->cache.lock())
-            cache->install(compilation, bodies->sourceLibraries);
+            cache->install(compilation, bodies->sourceLibraries, bodies->independentInitial);
     ++setting->library->consumers;
     if (result)
         *result = {"imported", setting->library->generation, {}, {}};
