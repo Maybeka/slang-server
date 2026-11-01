@@ -548,3 +548,86 @@ reproducible blocker was found; this is a review of the supported boundary, not
 proof for all future SystemVerilog constructs. Local release evidence resides in
 `untracked/scope-release-2026-10-21`, with final UVM paired data under
 `untracked/scope-semantic-2026-10-21/release-final-uvm-paired20.json`.
+
+
+## 2026-11-02: large-SoC startup, stage 1
+
+Validated implementation and measurements are recorded in
+[the versioned dataset](../../validation/macos-soc-startup-stage1-2026-11-02.json).
+The experiment remains disabled by default. Real-project tests use unlimited
+semantic caches, with no numeric `maxMiB` / `semanticMaxMiB` overrides; source-history
+retirement thresholds remain unchanged. The top_earlgrey background scenario
+contains no UVM and retains exactly the same 161 safe RTL roots throughout edits,
+error/repair, structural fallback, reopening and manual rebuilding.
+
+Scope-locality answers are memoized, invalidating answers when the closed-class
+set grows. Native local/cross-reference records are grouped by scope when their
+monotonic maps grow; current usage bits are read rather than copied into a stale
+index. Elaboration-control records have an incremental scope index extended on
+every dependency-closure pass. Binding occurs after releasing index iterators,
+and local records are audited in native order. Index allocations are included in
+owner accounting. None of the dependency, boundary or diagnostic checks is removed.
+
+The owner planner recognizes structurally fragmented selections before creating
+many wrappers. At eight certified frontier roots it may try an independent full
+forest first; this is a route heuristic, not a root limit or a cache quota.
+Context-dependent refusals, particularly type provenance, keep the compact
+closure route. A CVA6 coverage regression discovered during development was fixed
+and covered by a dedicated test; its entire DUT remains reusable. Full-owner
+structural refusals retain bounded exact-context negative advice, avoiding fresh
+owner attempts after borrowed descendants mask the original failure. Advice stores
+strings, never an editing graph. Independent SourceManager/Compilation ownership
+and Native subtree matching remain mandatory.
+
+The same-host three-process results below use medians. Startup runs from process
+launch through the first hover response. First edit means body-1; continuous edits
+aggregate body-1 through body-6 across the three processes. Diagnostic time ends at
+the matching edited-document-version notification, not global diagnostic completion.
+Peak memory is the median of each main server process's lifetime maximum physical
+footprint, not peak RSS or a memory ceiling. OS and project parse caches can be warm.
+
+| Metric | Frozen before → current | Frozen + local updates before → current |
+|---|---:|---:|
+| Startup (s) | 48.00 → 15.62 | 47.12 → 15.77 |
+| First-edit query (ms) | 408.52 → 300.46 | 15.12 → 11.11 |
+| First-edit diagnostic (ms) | 2726.46 → 693.89 | 2400.17 → 423.78 |
+| Continuous query (ms) | 238.37 → 235.76 | 1.06 → 1.02 |
+| Continuous diagnostic (ms) | 623.55 → 616.99 | 1.50 → 1.42 |
+| Lifetime peak physical footprint (MiB) | 5899 → 4539 | 4163 → 3073 |
+
+Native startup is 2.45 → 2.42s. Owner builds fall from 28 at startup / 37 after the first edit to one, with no first-edit increase.
+
+The other scene data retains tradeoffs: CVA6 original-file combined startup is
+2.18 → 3.07s while its continuous diagnostic is 13.59 → 13.45ms. Its UVM fixture
+path changed after cleanup, so that cold-start difference is not attributed solely
+to this optimization. SerDes continuous diagnostic is 1.48 → 1.53ms; its local
+update benefit remains. No outliers are removed.
+
+A separate single-process release trace observes owner binding at
+1.49s, certificates at 6.31s and total publication at
+9.54s. These timers nest and are not additive to the
+three-process series. Instrumented work counters retain 171 full-owner candidate
+certificates / 161 accepted roots. Their locality calls decrease from 258,002,501 to
+90,226,784, and parent-scope steps from 2,176,948,773 to 110,471,844.
+Counter-build elapsed times were collected alongside other jobs and do not qualify
+latency. Independent certification still has material cost; this stage does not
+make freezing free or implement direct retention of the original analysis.
+
+Validation passed: 1068/1068 CTest; 115 scope cases / 33764 assertions; full server
+ASan 1054 cases / 205260 assertions (leak detection disabled); 16-project public
+API and original-file lifecycle parity against Native; real UBUS/CVA6/SoC ASan;
+installed default/custom cold/custom warm UVM profiles, whole-CVA6-DUT reuse,
+default-off behavior, 157-file installation integrity and offline SDK/dependency
+restoration. Five serial scenarios × three processes × three arms × 15 states
+provide 675 current Native-oracle matches. The dataset includes startup segments,
+first/continuous edits, error/repair, structural fallback, reopening, full manual
+rebuild through response readiness and per-state memory. Original-file SoC
+package reuse is explicitly distinct from freezing the edited RTL.
+
+Legacy test configurations referenced a removed installation. They now use the
+retained repository UVM source; 155 source files were checked byte-for-byte against
+the previously qualified installation. SoC has no UVM, so its before/after comparison
+is unaffected. Cold UVM-path differences in other scenarios are not attributed
+solely to the optimization. Temporary instrumented builds, obsolete candidates and
+ended logs are removed; compact data, code-version receipts and still-used caches
+are retained. The supported language/dependency boundary is unchanged.

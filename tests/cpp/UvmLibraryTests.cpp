@@ -10642,3 +10642,153 @@ TEST_CASE("Namespace witnesses reuse exact live inputs and release retired sourc
         CHECK(library->namespaceWitnesses.size() <= 8);
     }
 }
+
+
+TEST_CASE("Fragmented frozen hierarchies plan one forest and preserve exact refusal contexts",
+          "[scope-semantic][scope-forest-startup]") {
+    LibraryWorkspace files;
+    files.write(files.root / "fixed.sv", R"(
+module leaf #(parameter int N=0)(input int a, output int y);
+  int unused_value;
+  wire [31:0] internal_value;
+  if (N % 2) begin:g
+    int value;
+    assign value=a+N;
+    assign internal_value=value;
+  end else begin:g
+    int value;
+    assign value=a-N;
+    assign internal_value=value;
+  end
+  assign y=internal_value;
+endmodule
+module stable #(parameter bit ASSERT_FORMALS=1)(input logic clk, input int a,
+                                                output wire [31:0] y[12]);
+  if (ASSERT_FORMALS) begin:unsupported
+    sequence s(bit b); b; endsequence
+    assert property(@(posedge clk) s(a[0]));
+  end
+  for (genvar i=0;i<12;i++) begin:children
+    leaf #(.N(i)) u(.a(a),.y(y[i]));
+  end
+endmodule
+)");
+    auto source = [](bool formals, int edit) {
+        return fmt::format("module top; logic clk; int a; wire [31:0] y[12]; "
+                           "stable #(.ASSERT_FORMALS({})) dut(.*); localparam int EDIT={}; "
+                           "endmodule\n", formals ? 1 : 0, edit);
+    };
+    files.write(files.root / "consumer.sv", source(true, 0));
+    files.write(files.root / "design.f", "fixed.sv\nconsumer.sv\n");
+    Config config;
+    config.experimentalScopeSemanticCache = true;
+    config.semanticCacheUnlimited = true;
+    config.frozenSources = Config::FrozenSourcesConfig{
+        .instances = std::vector<std::string>{"top.dut"}};
+    config.flagsByFile = std::vector<Config::FlagSource>{
+        {(files.root / "server.json").string(), "--single-unit --threads 1 --top top"}};
+    Indexer indexer;
+    ClientHarness client;
+    auto driver = server::ServerDriver::createFromFileLists(
+        indexer, client, config, {"design.f"}, files.root.string(), nullptr, true);
+    REQUIRE(driver);
+    auto cache = driver->options.get<server::ScopeBodyImport>()->cache.lock();
+    REQUIRE(cache);
+    CHECK(cache->status().ownerBuilds == 1);
+    CHECK(cache->status().compactPublications == 0);
+    CHECK(cache->status().retainedRoots.size() == 12);
+    REQUIRE(cache->status().admissionRecords > 0);
+    auto make = [&](bool formals, int edit, bool native) {
+        auto result = std::make_shared<ast::Compilation>(driver->options);
+        REQUIRE(server::importTrustedUvm(*result, driver->sm, driver->options));
+        if (native)
+            result->setInstanceBodyReuseHooks({}, {});
+        result->addSyntaxTree(syntax::SyntaxTree::fromText(
+            source(formals, edit), driver->sm, "forest-consumer.sv", "", driver->options));
+        (void)result->getSemanticDiagnostics();
+        return result;
+    };
+    for (int edit=0;edit<4;++edit) {
+        auto current=make(true,edit,false), native=make(true,edit,true);
+        CHECK(current->getImportedInstanceBodyPaths().size() == 12);
+        CHECK(diagnosticMessages(driver->sm,current->getSemanticDiagnostics()) ==
+              diagnosticMessages(driver->sm,native->getSemanticDiagnostics()));
+        analysis::AnalysisOptions opts{.flags=analysis::AnalysisFlags::CheckUnused |
+                                              analysis::AnalysisFlags::CheckShadow};
+        analysis::AnalysisManager actual(opts), expected(opts);
+        current->freeze(); actual.analyze(*current); current->unfreeze();
+        native->freeze(); expected.analyze(*native); native->unfreeze();
+        CHECK(diagnosticMessages(driver->sm,actual.getDiagnostics()) ==
+              diagnosticMessages(driver->sm,expected.getDiagnostics()));
+        std::weak_ptr<ast::Compilation> old=current;
+        current->offerInstanceBodies(current);
+        CHECK(cache->status().ownerBuilds == 1);
+        current.reset();
+        CHECK(old.expired());
+    }
+    // A different parameter context can close the parent and must still promote.
+    auto changed=make(false,4,false);
+    changed->offerInstanceBodies(changed);
+    CHECK(cache->status().ownerBuilds > 1);
+    changed.reset();
+    auto reused=make(false,5,false), native=make(false,5,true);
+    CHECK(reused->getImportedInstanceBodyPaths() == std::vector<std::string>{"top.dut"});
+    CHECK(diagnosticMessages(driver->sm,reused->getSemanticDiagnostics()) ==
+          diagnosticMessages(driver->sm,native->getSemanticDiagnostics()));
+}
+
+TEST_CASE("A fragmented native type dependency keeps the compact parent closure route",
+          "[scope-semantic][scope-forest-type-closure]") {
+    LibraryWorkspace files;
+    files.write(files.root / "fixed.sv", R"(
+module leaf(input int a, output int y); assign y=a+1; endmodule
+module stable #(parameter type T=logic)(input T a, output T y);
+  for(genvar i=0;i<12;i++) begin:g
+    wire [31:0] v;
+    leaf u(.a(int'(a)),.y(v));
+  end
+  assign y=a;
+endmodule
+)");
+    auto source=[](int width) {
+        return fmt::format("module top; typedef struct packed {{logic [{}:0] value;}} word_t; "
+                           "word_t a,y; stable #(.T(word_t)) dut(.*); endmodule\n",width-1);
+    };
+    files.write(files.root / "consumer.sv",source(8));
+    files.write(files.root / "design.f","fixed.sv\nconsumer.sv\n");
+    Config config;
+    config.experimentalScopeSemanticCache=true;
+    config.semanticCacheUnlimited=true;
+    config.frozenSources=Config::FrozenSourcesConfig{
+        .instances=std::vector<std::string>{"top.dut"}};
+    config.flagsByFile=std::vector<Config::FlagSource>{
+        {(files.root / "server.json").string(),"--single-unit --threads 1 --top top"}};
+    Indexer indexer;
+    ClientHarness client;
+    auto driver=server::ServerDriver::createFromFileLists(
+        indexer,client,config,{"design.f"},files.root.string(),nullptr,true);
+    REQUIRE(driver);
+    auto cache=driver->options.get<server::ScopeBodyImport>()->cache.lock();
+    REQUIRE(cache);
+    CHECK(cache->status().retainedRoots==std::vector<std::string>{"top.dut"});
+    CHECK(cache->status().compactPublications==1);
+    auto make=[&](int width,bool native) {
+        auto result=std::make_shared<ast::Compilation>(driver->options);
+        REQUIRE(server::importTrustedUvm(*result,driver->sm,driver->options));
+        if(native) result->setInstanceBodyReuseHooks({},{});
+        result->addSyntaxTree(syntax::SyntaxTree::fromText(
+            source(width),driver->sm,(files.root / "consumer.sv").string(),"",driver->options));
+        (void)result->getSemanticDiagnostics();
+        return result;
+    };
+    for(int width:{8,16,8}) {
+        auto current=make(width,false),native=make(width,true);
+        current->offerInstanceBodies(current);
+        auto reused=make(width,false);
+        // Each freshly parsed nominal typedef is a new consumer identity.
+        // Keep its boundary native while reusing the twelve independent leaves.
+        CHECK(reused->getImportedInstanceBodyPaths().size()==12);
+        CHECK(diagnosticMessages(driver->sm,reused->getSemanticDiagnostics())==
+              diagnosticMessages(driver->sm,native->getSemanticDiagnostics()));
+    }
+}

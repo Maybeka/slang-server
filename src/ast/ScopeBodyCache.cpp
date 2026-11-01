@@ -4,6 +4,7 @@
 #include "ast/ClosedTypeContext.h"
 #include "ast/TrustedUvmLibrary.h"
 #include "util/SourceStorageRegistry.h"
+#include "util/UvmPhaseTrace.h"
 #include <algorithm>
 #include <cstdlib>
 #include <fmt/format.h>
@@ -18,6 +19,7 @@
 #include "slang/diagnostics/DiagnosticEngine.h"
 #include "slang/syntax/SyntaxTree.h"
 #include "slang/util/String.h"
+#include "slang/util/ScopeGuard.h"
 
 namespace server {
 using namespace slang;
@@ -86,6 +88,14 @@ bool matchesNativeSubtree(const InstanceBodySymbol& native, const InstanceBodySy
     // A descendant-only signature check would incorrectly treat a nominal type
     // declared in the retained root as an external, mutable type dependency.
     return native.getCompilation().hasMatchingInstanceBodyParameters(retained, native);
+}
+// A parameter-only ancestor scaffold cannot remove these body-local obstacles.
+// Type provenance and other contextual failures can instead benefit from the
+// compact owner's reconstructed dependency closure, so must keep that route.
+bool scaffoldIndependentRefusal(std::string_view reason) {
+    return reason == "assertion-formal-ports" || reason == "upward-side-effect" ||
+           reason == "child-upward-side-effect" || reason == "unreviewed-ast-kind" ||
+           reason == "symbol-kind" || reason == "outside-hierarchy";
 }
 // Closed bodies need their path and resolved arguments, not mutable ancestor
 // declarations. Reconstruct only active generate branches and one concrete loop
@@ -600,12 +610,16 @@ void ScopeBodyCache::publish(std::shared_ptr<Compilation> current,
                              std::shared_ptr<const void> sourceLibraries) {
     if (current->hasFatalErrors())
         return;
+    UvmPhaseTrace publicationTrace;
+    auto publicationDone = ScopeGuard([&] { publicationTrace.mark("scope-owner-publication"); });
     auto& sources = *const_cast<SourceManager*>(current->getSourceManager());
     // A batch can publish multiple independent bodies. Share one namespace for
     // their generated wrappers, but never append later editor generations to it.
     std::shared_ptr<SourceManager> compactSources;
     std::shared_ptr<SourceManager> fullSources;
     auto bind = [&](const std::optional<BodyContext>& compact, bool inheritedBindTarget = false) {
+        UvmPhaseTrace bindTrace;
+        auto bindDone = ScopeGuard([&] { bindTrace.mark("scope-owner-bind"); });
         ++counters.ownerBuilds;
         auto result = std::make_shared<Compilation>(current->getOptions());
         result->enableInstanceBodyReferenceTracking(/* complete */ true);
@@ -737,8 +751,66 @@ void ScopeBodyCache::publish(std::shared_ptr<Compilation> current,
                 }
             }
         }
-        return group && retain(std::move(*group), false);
+        if (!group)
+            return false;
+        // Preserve failed exact-context admission knowledge before borrowed
+        // children can mask the original refusal in the next editing graph.
+        // This is negative advice only; it never authorizes body sharing.
+        std::vector<std::string> refusedContexts;
+        AdmissionTraversal refusals([&](const InstanceBodySymbol& body) {
+            if (!selected(body))
+                return true;
+            if (group->bodies.contains(body.getHierarchicalPath()))
+                return false;
+            std::string_view reason;
+            if (!group->owner->prepareInstanceBodyReuse(body, &reason)) {
+                // These refusals survive removal of the enclosing scaffold.
+                // Other name, type and diagnostic failures are retried. An
+                // outside hierarchical runtime reference cannot become local
+                // by replacing ancestors with a parameter-only scaffold.
+                if (scaffoldIndependentRefusal(reason)) {
+                    if (auto context = compactContext(*group->owner, body, *library))
+                        refusedContexts.push_back(std::move(context->source));
+                }
+            }
+            return true;
+        });
+        group->owner->getRoot().visit(refusals);
+        if (!retain(std::move(*group), false))
+            return false;
+        for (const auto& context : refusedContexts)
+            rememberRejection(context, 0);
+        return true;
     };
+    // A fragmented selection is cheaper to retain as one independent forest
+    // than as many wrappers that a later full-context fallback discards. Plan
+    // from native certificates before constructing any candidate owner. Small
+    // selections keep the compact route; failed full admission still falls back.
+    if (groups.empty() && !current->hasImportedInstanceBodies()) {
+        size_t frontierRoots = 0;
+        bool fragmented = false;
+        bool fullPlanSafe = true;
+        AdmissionTraversal plan([&](const InstanceBodySymbol& body) {
+            if (!fullPlanSafe || frontierRoots >= 8)
+                return false;
+            if (!selected(body))
+                return true;
+            std::string_view reason;
+            if (current->prepareInstanceBodyReuse(body, &reason)) {
+                ++frontierRoots;
+                return false;
+            }
+            if (!scaffoldIndependentRefusal(reason)) {
+                fullPlanSafe = false;
+                return false;
+            }
+            fragmented = true;
+            return true;
+        });
+        current->getRoot().visit(plan);
+        if (fullPlanSafe && fragmented && frontierRoots >= 8 && tryFull())
+            return;
+    }
     bool stopped = false, fullPublished = false;
     AdmissionTraversal candidates([&](const InstanceBodySymbol& candidate) {
         if (stopped)
@@ -871,6 +943,8 @@ void ScopeBodyCache::publish(std::shared_ptr<Compilation> current,
 
 std::optional<ScopeBodyCache::Group> ScopeBodyCache::prepareGroup(
     std::shared_ptr<Compilation> owner, std::string_view admittedRoot) {
+    UvmPhaseTrace certificateTrace;
+    auto certificateDone = ScopeGuard([&] { certificateTrace.mark("scope-owner-certificates"); });
     Bodies prepared;
     owner->getRoot().visit(prepared);
     std::unordered_map<std::string, const InstanceBodySymbol*> bodies;

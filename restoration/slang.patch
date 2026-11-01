@@ -430,7 +430,7 @@ index 133958b90..6208d7475 100644
  
  template<typename TVisitor>
 diff --git a/include/slang/ast/Compilation.h b/include/slang/ast/Compilation.h
-index b7ddc64e4..c3e18f8bb 100644
+index b7ddc64e4..e6cd174b5 100644
 --- a/include/slang/ast/Compilation.h
 +++ b/include/slang/ast/Compilation.h
 @@ -7,7 +7,9 @@
@@ -808,7 +808,7 @@ index b7ddc64e4..c3e18f8bb 100644
      /// Gets the default time scale to use when none is specified in the source code.
      std::optional<TimeScale> getDefaultTimeScale() const { return options.defaultTimeScale; }
  
-@@ -857,6 +1103,72 @@ private:
+@@ -857,6 +1103,82 @@ private:
      friend class Scope;
      friend struct DiagnosticVisitor;
  
@@ -833,12 +833,22 @@ index b7ddc64e4..c3e18f8bb 100644
 +    // the binding origin and declaration belong to a certified closed subtree.
 +    flat_hash_map<std::pair<const Scope*, const Symbol*>, std::pair<bool, bool>>
 +        bodyCrossReferences;
++    // Keys only: lazy binding can rehash the native maps or update usage bits.
++    // The maps grow monotonically, so cardinality invalidates this scope index.
++    struct BodyReferenceBucket {
++        std::vector<const Symbol*> local;
++        std::vector<const Symbol*> cross;
++    };
++    flat_hash_map<const Scope*, BodyReferenceBucket> bodyReferenceScopes;
++    size_t indexedBodyReferences = 0, indexedBodyCrossReferences = 0;
 +    struct BodyElaborationControl {
 +        const Scope* scope;
 +        const Expression* expression;
 +        bool typeOnly;
 +    };
 +    std::vector<BodyElaborationControl> bodyElaborationControls;
++    struct BodyReuseMetadataIndex;
++    std::unique_ptr<BodyReuseMetadataIndex> bodyReuseMetadataIndex;
 +    std::vector<std::pair<const Scope*, const DefinitionSymbol*>> bodyDefinitionSites;
 +    std::vector<std::pair<const Scope*, const HierarchicalReference*>> bodyHierarchicalEffects;
 +    bool bodyHasUnscopedHierarchicalEffects = false;
@@ -881,7 +891,7 @@ index b7ddc64e4..c3e18f8bb 100644
      // Collected information about a resolved bind directive.
      struct ResolvedBind {
          SmallVector<const Symbol*> instTargets;
-@@ -884,8 +1196,9 @@ private:
+@@ -884,8 +1206,9 @@ private:
  
      Diagnostic& addDiag(Diagnostic diag);
  
@@ -893,7 +903,7 @@ index b7ddc64e4..c3e18f8bb 100644
      void insertDefinition(Symbol& symbol, const Scope& scope);
      void parseParamOverrides(
          bool skipDefParams,
-@@ -895,7 +1208,10 @@ private:
+@@ -895,7 +1218,10 @@ private:
      void checkModportExports(
          std::span<const std::pair<const InterfacePortSymbol*, const ModportSymbol*>> modports);
      void checkElemTimeScale(std::optional<TimeScale> timeScale, SourceRange sourceRange);
@@ -905,7 +915,7 @@ index b7ddc64e4..c3e18f8bb 100644
      void resolveBindTargets(const syntax::BindDirectiveSyntax& syntax, const Scope& scope,
                              ResolvedBind& resolvedBind);
      void checkBindTargetParams(const syntax::BindDirectiveSyntax& syntax, const Scope& scope,
-@@ -935,7 +1251,25 @@ private:
+@@ -935,7 +1261,25 @@ private:
      // A map of syntax nodes that have been referenced in the AST.
      // The value indicates whether the node has been used as an lvalue vs non-lvalue,
      // for things like variables and nets.
@@ -932,7 +942,7 @@ index b7ddc64e4..c3e18f8bb 100644
  
      // The name map for all module, interface, program, and primitive definitions.
      // The key is a combination of definition name + the scope in which it was declared.
-@@ -996,6 +1330,10 @@ private:
+@@ -996,6 +1340,10 @@ private:
      std::unique_ptr<RootSymbol> root;
      SourceManager* sourceManager = nullptr;
      size_t numErrors = 0; // total number of errors inserted into the diagMap
@@ -943,7 +953,7 @@ index b7ddc64e4..c3e18f8bb 100644
      bool finalized = false;
      bool finalizing = false; // to prevent reentrant calls to getRoot()
      bool anyElemsWithTimescales = false;
-@@ -1010,6 +1348,7 @@ private:
+@@ -1010,6 +1358,7 @@ private:
      TypedBumpAllocator<AssertionInstanceDetails> assertionDetailsAllocator;
      TypedBumpAllocator<ConfigBlockSymbol> configBlockAllocator;
      TypedBumpAllocator<Scope::WildcardImportData> wildcardImportAllocator;
@@ -951,7 +961,7 @@ index b7ddc64e4..c3e18f8bb 100644
  
      // This is storage for a temporary diagnostic that is being constructed.
      // Typically this is done in-place within the diagMap, but for diagnostics
-@@ -1019,6 +1358,20 @@ private:
+@@ -1019,6 +1368,20 @@ private:
      // A map of instances that have been created by virtual interface type declarations.
      flat_hash_map<InstanceCacheKey, const InstanceSymbol*> virtualIfaceCache;
      std::vector<const InstanceSymbol*> virtualIfaceInstances;
@@ -972,7 +982,7 @@ index b7ddc64e4..c3e18f8bb 100644
  
      // A list of assignments via hierarchical reference.
      std::vector<const HierarchicalReference*> hierarchicalAssignments;
-@@ -1134,6 +1487,16 @@ private:
+@@ -1134,6 +1497,16 @@ private:
      // The default library.
      std::unique_ptr<SourceLibrary> defaultLibMem;
      const SourceLibrary* defaultLibPtr;
@@ -4056,7 +4066,7 @@ index cb4f631f8..e82f87013 100644
              // information to point the user towards the right ones.
              Diagnostic diag = *found;
 diff --git a/source/ast/Compilation.cpp b/source/ast/Compilation.cpp
-index ed7528f2c..bc281444e 100644
+index ed7528f2c..708373ba0 100644
 --- a/source/ast/Compilation.cpp
 +++ b/source/ast/Compilation.cpp
 @@ -9,22 +9,28 @@
@@ -4089,7 +4099,7 @@ index ed7528f2c..bc281444e 100644
  
  using namespace slang::parsing;
  
-@@ -39,10 +45,256 @@ const PackageSymbol& createStdPackage(Compilation&);
+@@ -39,10 +45,261 @@ const PackageSymbol& createStdPackage(Compilation&);
  
  namespace slang::ast {
  
@@ -4329,6 +4339,11 @@ index ed7528f2c..bc281444e 100644
 +    return {values.copy(storage), types.copy(storage)};
 +}
 +
++struct Compilation::BodyReuseMetadataIndex {
++    flat_hash_map<const Scope*, std::vector<size_t>> controls;
++    size_t indexedControls = 0;
++};
++
  Compilation::Compilation(const Bag& options, const SourceLibrary* defaultLib) :
      options(options.getOrDefault<CompilationOptions>()), tempDiag({}, {}), netAliasAllocator(*this),
      defaultLibPtr(defaultLib) {
@@ -4346,7 +4361,7 @@ index ed7528f2c..bc281444e 100644
      // Construct all built-in types.
      auto& bi = builtins::Builtins::Instance;
      bitType = &bi.bitType;
-@@ -148,11 +400,7 @@ Compilation::Compilation(const Bag& options, const SourceLibrary* defaultLib) :
+@@ -148,11 +405,7 @@ Compilation::Compilation(const Bag& options, const SourceLibrary* defaultLib) :
  
      // Set a default handler for printing types and symbol paths, for convenience.
      static std::once_flag onceFlag;
@@ -4359,7 +4374,7 @@ index ed7528f2c..bc281444e 100644
  
      // Reset systemId counters that may have been changed due to creation of types
      // in the std package.
-@@ -163,110 +411,3336 @@ Compilation::Compilation(const Bag& options, const SourceLibrary* defaultLib) :
+@@ -163,109 +416,3403 @@ Compilation::Compilation(const Bag& options, const SourceLibrary* defaultLib) :
  
  Compilation::~Compilation() = default;
  
@@ -4533,13 +4548,13 @@ index ed7528f2c..bc281444e 100644
 +                    break;
 +            }
 +        }
-+    }
+     }
 +    for (auto unit : owner->compilationUnits) {
 +        for (const auto& symbol : unit->members()) {
 +            if (auto declaration=owner->findCompilationUnitDeclaration(symbol,declarations))
 +                importedUnitDeclarations[declaration].push_back(&symbol);
 +        }
-     }
++    }
 +    retainImportedCompilation(std::move(owner));
 +}
  
@@ -5237,10 +5252,8 @@ index ed7528f2c..bc281444e 100644
 +bool Compilation::prepareInstanceBodyReuse(const InstanceBodySymbol& retained,
 +                                           std::string_view* refusalReason) {
 +    return prepareInstanceBodyReuseImpl(retained, false, refusalReason);
- }
- 
--std::vector<const Symbol*> Compilation::getDefinitions() const {
--    std::vector<const Symbol*> result;
++}
++
 +bool Compilation::prepareInstanceBodyReuseImpl(const InstanceBodySymbol& retained,
 +                                              bool virtualProof,
 +                                              std::string_view* refusalReason) {
@@ -5294,14 +5307,31 @@ index ed7528f2c..bc281444e 100644
 +        };
 +        flat_hash_set<const Scope*> closedClasses;
 +        flat_hash_set<const CovergroupType*> closedCovergroups;
++        // Parent links are stable, but closing another class can make an old
++        // negative result local. Invalidate both answers at that boundary.
++        size_t localityClassCount = 0;
++        flat_hash_map<const Scope*, bool> locality;
 +        auto isLocal = [&](const Symbol& symbol) {
++            if (localityClassCount != closedClasses.size()) {
++                locality.clear();
++                localityClassCount = closedClasses.size();
++            }
 +            const Scope* scope = symbol.kind == SymbolKind::InstanceBody
 +                                     ? &symbol.as<InstanceBodySymbol>()
 +                                 : symbol.kind == SymbolKind::ClassType ? &symbol.as<ClassType>()
 +                                                                        : symbol.getParentScope();
++            SmallVector<const Scope*, 16> path;
++            bool local = false;
 +            while (scope) {
-+                if (scope == &retained || closedClasses.contains(scope))
-+                    return true;
++                if (scope == &retained || closedClasses.contains(scope)) {
++                    local = true;
++                    break;
++                }
++                if (auto it = locality.find(scope); it != locality.end()) {
++                    local = it->second;
++                    break;
++                }
++                path.push_back(scope);
 +                const auto& container = scope->asSymbol();
 +                if (container.kind == SymbolKind::InstanceBody) {
 +                    auto instance = container.as<InstanceBodySymbol>().parentInstance;
@@ -5311,7 +5341,9 @@ index ed7528f2c..bc281444e 100644
 +                    scope = container.getParentScope();
 +                }
 +            }
-+            return false;
++            for (auto visited : path)
++                locality.emplace(visited, local);
++            return local;
 +        };
 +        // An inherited clocking declaration is a dependency even when the
 +        // cycle-delay node contains no pointer to that declaration.
@@ -6932,19 +6964,38 @@ index ed7528f2c..bc281444e 100644
 +                drainExpressions();
 +                progress = true;
 +            }
-+            // Closing types can make previously external class scopes local,
-+            // and visiting controls can bind more types or controls. Copy each
-+            // pair before auditing: lazy binding can grow the native vector.
-+            for (size_t i = 0; independent && i < bodyElaborationControls.size(); ++i) {
-+                const auto [scope, expression, typeOnly] = bodyElaborationControls[i];
-+                if (isLocal(scope->asSymbol()) &&
-+                    auditedControls.emplace(expression, typeOnly).second) {
-+                    const bool previous = std::exchange(typeOnlyControl, typeOnly);
-+                    expression->visit(audit);
-+                    drainExpressions();
-+                    typeOnlyControl = previous;
-+                    progress = true;
++            // Closing types can make previously external class scopes local.
++            // Index append-only control records by binding scope, extending the
++            // index on every fixed-point pass because lazy binding can add more.
++            if (!bodyReuseMetadataIndex)
++                bodyReuseMetadataIndex = std::make_unique<BodyReuseMetadataIndex>();
++            auto& controlIndex = *bodyReuseMetadataIndex;
++            while (controlIndex.indexedControls < bodyElaborationControls.size()) {
++                const auto i = controlIndex.indexedControls++;
++                controlIndex.controls[bodyElaborationControls[i].scope].push_back(i);
++            }
++            SmallVector<size_t> localControls;
++            for (const auto& [scope, indices] : controlIndex.controls) {
++                if (!isLocal(scope->asSymbol()))
++                    continue;
++                for (auto i : indices) {
++                    const auto& control = bodyElaborationControls[i];
++                    if (auditedControls.emplace(control.expression, control.typeOnly).second)
++                        localControls.push_back(i);
 +                }
++            }
++            // Preserve native order and release index iterators before binding.
++            // New records enter the next pass, never a stale pre-closure snapshot.
++            std::ranges::sort(localControls);
++            for (auto i : localControls) {
++                if (!independent)
++                    break;
++                const auto [scope, expression, typeOnly] = bodyElaborationControls[i];
++                const bool previous = std::exchange(typeOnlyControl, typeOnly);
++                expression->visit(audit);
++                drainExpressions();
++                typeOnlyControl = previous;
++                progress = true;
 +            }
 +            if (!progress)
 +                break;
@@ -6953,26 +7004,48 @@ index ed7528f2c..bc281444e 100644
 +            // Visiting later children can bind port expressions that refer to
 +            // declarations visited earlier. Snapshot their final local usage
 +            // only after the complete subtree and its dependencies are bound.
-+            for (const auto& [symbol, usage] : bodyReferenceStatus) {
-+                if (isLocal(*symbol)) {
++            // Partition once per native-map growth, rather than filter every
++            // reference in the whole design for every candidate root. Keep keys
++            // and read current usage: binding may update an existing entry too.
++            if (indexedBodyReferences != bodyReferenceStatus.size() ||
++                indexedBodyCrossReferences != bodyCrossReferences.size()) {
++                bodyReferenceScopes.clear();
++                for (const auto& [symbol, _] : bodyReferenceStatus) {
++                    const Scope* scope = symbol->kind == SymbolKind::InstanceBody
++                                             ? &symbol->as<InstanceBodySymbol>()
++                                         : symbol->kind == SymbolKind::ClassType
++                                             ? &symbol->as<ClassType>()
++                                             : symbol->getParentScope();
++                    if (scope)
++                        bodyReferenceScopes[scope].local.push_back(symbol);
++                }
++                for (const auto& [binding, _] : bodyCrossReferences)
++                    bodyReferenceScopes[binding.first].cross.push_back(binding.second);
++                indexedBodyReferences = bodyReferenceStatus.size();
++                indexedBodyCrossReferences = bodyCrossReferences.size();
++            }
++            for (const auto& [scope, bucket] : bodyReferenceScopes) {
++                if (!isLocal(scope->asSymbol()))
++                    continue;
++                for (auto symbol : bucket.local) {
++                    const auto usage = bodyReferenceStatus.at(symbol);
 +                    if (auto syntax = symbol->getSyntax()) {
 +                        auto& profile = certificate.references[syntax];
 +                        profile.first |= usage.first;
 +                        profile.second |= usage.second;
 +                    }
 +                }
-+            }
-+            for (const auto& [binding, usage] : bodyCrossReferences) {
-+                if (!isLocal(binding.first->asSymbol()))
-+                    continue;
-+                auto targetScope = binding.second->getParentScope();
-+                if (!isLocal(*binding.second) &&
-+                    (!targetScope || !isFixedCompilation(targetScope->getCompilation())))
-+                    continue;
-+                if (auto syntax = binding.second->getSyntax()) {
-+                    auto& profile = certificate.references[syntax];
-+                    profile.first |= usage.first;
-+                    profile.second |= usage.second;
++                for (auto target : bucket.cross) {
++                    auto targetScope = target->getParentScope();
++                    if (!isLocal(*target) &&
++                        (!targetScope || !isFixedCompilation(targetScope->getCompilation())))
++                        continue;
++                    const auto usage = bodyCrossReferences.at({scope, target});
++                    if (auto syntax = target->getSyntax()) {
++                        auto& profile = certificate.references[syntax];
++                        profile.first |= usage.first;
++                        profile.second |= usage.second;
++                    }
 +                }
 +            }
 +        }
@@ -7405,12 +7478,20 @@ index ed7528f2c..bc281444e 100644
 +        return map.bucket_count() * (sizeof(typename Map::value_type) + 16);
 +    };
 +    size_t result = mapBytes(bodyReferenceStatus) + mapBytes(bodyCrossReferences) +
++                    mapBytes(bodyReferenceScopes) +
 +                    mapBytes(bodyReuseCertificates) + mapBytes(importedBodyCanonicalInstances) +
 +                    mapBytes(importedBodyViews) + mapBytes(importedBodyEffects) +
 +                    mapBytes(replayedBodyDiagnostics) +
 +                    mapBytes(fixedBodyTypeOrigins) + mapBytes(importedBodyTypeIdentities) +
 +                    mapBytes(fixedBodyTypePresentations) + mapBytes(forcedImportedWildcardScopes) +
 +                    mapBytes(bodyVirtualIfaceProofs);
++    for (const auto& [_, bucket] : bodyReferenceScopes)
++        result += (bucket.local.capacity() + bucket.cross.capacity()) * sizeof(const Symbol*);
++    if (bodyReuseMetadataIndex) {
++        result += sizeof(BodyReuseMetadataIndex) + mapBytes(bodyReuseMetadataIndex->controls);
++        for (const auto& [_, indices] : bodyReuseMetadataIndex->controls)
++            result += indices.capacity() * sizeof(size_t);
++    }
 +    {
 +        std::lock_guard lock(bodyDependencyMutex);
 +        result += mapBytes(externalBodyDependencySyntax);
@@ -7762,16 +7843,15 @@ index ed7528f2c..bc281444e 100644
 +    if (bodyQueryContext)
 +        return bodyQueryContext->getCompilationUnits();
 +    return compilationUnits;
-+}
-+
-+std::vector<const Symbol*> Compilation::getDefinitions() const {
+ }
+ 
+ std::vector<const Symbol*> Compilation::getDefinitions() const {
 +    if (bodyQueryContext)
 +        return bodyQueryContext->getDefinitions();
-+    std::vector<const Symbol*> result;
+     std::vector<const Symbol*> result;
      for (auto& [key, val] : definitionMap) {
          for (auto sym : val.first) {
-             result.insert(std::ranges::upper_bound(result, sym->name, {},
-@@ -279,25 +3753,256 @@ std::vector<const Symbol*> Compilation::getDefinitions() const {
+@@ -279,25 +3826,256 @@ std::vector<const Symbol*> Compilation::getDefinitions() const {
  }
  
  std::vector<const PackageSymbol*> Compilation::getPackages() const {
@@ -8034,7 +8114,7 @@ index ed7528f2c..bc281444e 100644
      if (finalized)
          return *root;
  
-@@ -310,20 +4015,43 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
+@@ -310,20 +4088,43 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
              defaultLiblist.push_back(lib);
      }
  
@@ -8079,7 +8159,7 @@ index ed7528f2c..bc281444e 100644
      }
  
      SLANG_ASSERT(!finalizing);
-@@ -398,7 +4126,7 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
+@@ -398,7 +4199,7 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
              if (inserted) {
                  topDefs.push_back({result, sourceRange});
                  SLANG_ASSERT(def->kind == SymbolKind::Definition);
@@ -8088,7 +8168,7 @@ index ed7528f2c..bc281444e 100644
              }
              else {
                  auto& diag = root->addDiag(diag::MultipleTopDupName, sourceRange.start()
-@@ -465,8 +4193,7 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
+@@ -465,8 +4266,7 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
                          else {
                              // Otherwise, issue an error because the user asked us to instantiate
                              // this.
@@ -8098,7 +8178,7 @@ index ed7528f2c..bc281444e 100644
                                  << userProvidedName;
                          }
                          continue;
-@@ -510,7 +4237,7 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
+@@ -510,7 +4310,7 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
  
                  auto& def = defSym->as<DefinitionSymbol>();
                  if (globalInstantiations.find(def.name) == globalInstantiations.end() &&
@@ -8107,7 +8187,7 @@ index ed7528f2c..bc281444e 100644
                      unreferencedDefs.push_back(&def);
                  }
              }
-@@ -549,10 +4276,16 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
+@@ -549,10 +4349,16 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
              hierarchyOverrideNode = &sit->second;
          }
  
@@ -8124,7 +8204,7 @@ index ed7528f2c..bc281444e 100644
      }
  
      if (!hasFlag(CompilationFlags::LintMode | CompilationFlags::AllowTopLevelIfacePorts) &&
-@@ -562,7 +4295,7 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
+@@ -562,7 +4368,7 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
  
      // For unreferenced definitions, go through and instantiate them with all empty
      // parameter values so that we get at least some semantic checking of the contents.
@@ -8133,7 +8213,7 @@ index ed7528f2c..bc281444e 100644
          for (auto def : unreferencedDefs) {
              const HierarchyOverrideNode* hierarchyOverrideNode = nullptr;
              if (auto* syntax = def->getSyntax()) {
-@@ -571,10 +4304,13 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
+@@ -571,10 +4377,13 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
                      hierarchyOverrideNode = &it->second;
                  }
              }
@@ -8147,7 +8227,7 @@ index ed7528f2c..bc281444e 100644
      root->topInstances = topList.copy(*this);
      root->compilationUnits = compilationUnits;
      finalizing = false;
-@@ -595,6 +4331,8 @@ const CompilationUnitSymbol* Compilation::getCompilationUnit(
+@@ -595,6 +4404,8 @@ const CompilationUnitSymbol* Compilation::getCompilationUnit(
  
  Compilation::DefinitionLookupResult Compilation::tryGetDefinition(std::string_view lookupName,
                                                                    const Scope& scope) const {
@@ -8156,7 +8236,7 @@ index ed7528f2c..bc281444e 100644
      // Try to find a config block for this scope to help choose the right definition.
      const ResolvedConfig* resolvedConfig = nullptr;
      if (auto inst = scope.getContainingInstance(); inst && inst->parentInstance)
-@@ -734,6 +4472,10 @@ const DefinitionSymbol* Compilation::getDefinition(const Scope& scope,
+@@ -734,6 +4545,10 @@ const DefinitionSymbol* Compilation::getDefinition(const Scope& scope,
  
              lookupScope = lookupScope->asSymbol().getParentScope();
          } while (lookupScope);
@@ -8167,7 +8247,7 @@ index ed7528f2c..bc281444e 100644
      }
      return nullptr;
  }
-@@ -824,6 +4566,27 @@ void Compilation::createDefinition(const Scope& scope, LookupLocation location,
+@@ -824,6 +4639,27 @@ void Compilation::createDefinition(const Scope& scope, LookupLocation location,
                                     const ModuleDeclarationSyntax& syntax) {
      SLANG_ASSERT(!isFrozen());
  
@@ -8195,7 +8275,7 @@ index ed7528f2c..bc281444e 100644
      // We can only be missing metadata if the definition is created programmatically
      // (i.e. not via the parser) so we just fill in the parent's default net type
      // so that it's not a null pointer.
-@@ -893,7 +4656,7 @@ void Compilation::insertDefinition(Symbol& symbol, const Scope& scope) {
+@@ -893,7 +4729,7 @@ void Compilation::insertDefinition(Symbol& symbol, const Scope& scope) {
              for (auto v = vecIt; v != defList.end(); v++) {
                  auto vSym = *v;
                  auto vLib = vSym->getSourceLibrary();
@@ -8204,7 +8284,7 @@ index ed7528f2c..bc281444e 100644
                      // Duplicate in the same library.
                      if (hasFlag(CompilationFlags::AllowLibModuleRedefinition)) {
                          // Silently keep the first definition and discard all subsequent ones,
-@@ -971,12 +4734,31 @@ void Compilation::insertDefinition(Symbol& symbol, const Scope& scope) {
+@@ -971,12 +4807,31 @@ void Compilation::insertDefinition(Symbol& symbol, const Scope& scope) {
  }
  
  const PackageSymbol* Compilation::getPackage(std::string_view lookupName) const {
@@ -8237,7 +8317,7 @@ index ed7528f2c..bc281444e 100644
  const PackageSymbol& Compilation::createPackage(const Scope& scope,
                                                  const ModuleDeclarationSyntax& syntax) {
      SLANG_ASSERT(!isFrozen());
-@@ -1077,6 +4859,8 @@ void Compilation::addSystemMethod(SymbolKind typeKind,
+@@ -1077,6 +4932,8 @@ void Compilation::addSystemMethod(SymbolKind typeKind,
  }
  
  const SystemSubroutine* Compilation::getSystemSubroutine(std::string_view name) const {
@@ -8246,7 +8326,7 @@ index ed7528f2c..bc281444e 100644
      auto it = subroutineNameMap.find(name);
      if (it == subroutineNameMap.end())
          return nullptr;
-@@ -1085,12 +4869,15 @@ const SystemSubroutine* Compilation::getSystemSubroutine(std::string_view name)
+@@ -1085,12 +4942,15 @@ const SystemSubroutine* Compilation::getSystemSubroutine(std::string_view name)
  
  const SystemSubroutine* Compilation::getSystemSubroutine(
      parsing::KnownSystemName knownNameId) const {
@@ -8263,7 +8343,7 @@ index ed7528f2c..bc281444e 100644
      auto it = methodMap.find(std::make_tuple(name, typeKind));
      if (it == methodMap.end())
          return nullptr;
-@@ -1136,10 +4923,14 @@ std::span<const AttributeSymbol* const> Compilation::getAttributes(
+@@ -1136,10 +4996,14 @@ std::span<const AttributeSymbol* const> Compilation::getAttributes(
  
  std::span<const AttributeSymbol* const> Compilation::getAttributes(const void* ptr) const {
      auto it = attributeMap.find(ptr);
@@ -8282,7 +8362,7 @@ index ed7528f2c..bc281444e 100644
  }
  
  void Compilation::noteBindDirective(const BindDirectiveSyntax& syntax, const Scope& scope) {
-@@ -1254,7 +5045,7 @@ const Symbol* Compilation::getDefaultClocking(const Scope& scope) const {
+@@ -1254,7 +5118,7 @@ const Symbol* Compilation::getDefaultClocking(const Scope& scope) const {
              return getDefaultClocking(*parent);
      }
  
@@ -8291,7 +8371,7 @@ index ed7528f2c..bc281444e 100644
  }
  
  void Compilation::noteGlobalClocking(const Scope& scope, const Symbol& clocking,
-@@ -1384,12 +5175,21 @@ void Compilation::noteUpwardReference(const Scope& initialScope, const Hierarchi
+@@ -1384,12 +5248,21 @@ void Compilation::noteUpwardReference(const Scope& initialScope, const Hierarchi
      }
  }
  
@@ -8314,7 +8394,7 @@ index ed7528f2c..bc281444e 100644
      bool valid = true;
      SmallSet<const InstanceSymbol*, 2> visited;
      InstanceCacheKey key(symbol, valid, visited);
-@@ -1409,7 +5209,7 @@ const Expression* Compilation::getDefaultDisable(const Scope& scope) const {
+@@ -1409,7 +5282,7 @@ const Expression* Compilation::getDefaultDisable(const Scope& scope) const {
  
          curr = curr->asSymbol().getParentScope();
          if (!curr || curr->asSymbol().kind == SymbolKind::CompilationUnit)
@@ -8323,7 +8403,7 @@ index ed7528f2c..bc281444e 100644
      }
  }
  
-@@ -1458,27 +5258,282 @@ const SyntaxNode* Compilation::getExternDefinition(std::string_view name,
+@@ -1458,27 +5331,282 @@ const SyntaxNode* Compilation::getExternDefinition(std::string_view name,
      return nullptr;
  }
  
@@ -8615,7 +8695,7 @@ index ed7528f2c..bc281444e 100644
  }
  
  const NameSyntax& Compilation::parseName(std::string_view name) {
-@@ -1510,7 +5565,66 @@ CompilationUnitSymbol& Compilation::createScriptScope() {
+@@ -1510,7 +5638,66 @@ CompilationUnitSymbol& Compilation::createScriptScope() {
      return *unit;
  }
  
@@ -8683,7 +8763,7 @@ index ed7528f2c..bc281444e 100644
      SLANG_ASSERT(!isFrozen());
  
      // Make sure our root is created. It's possible that this results in a fatal
-@@ -1520,11 +5634,15 @@ void Compilation::elaborate() {
+@@ -1520,11 +5707,15 @@ void Compilation::elaborate() {
      if (sawFatalError)
          return;
  
@@ -8700,7 +8780,7 @@ index ed7528f2c..bc281444e 100644
  
      if (!elabVisitor.finishedEarly() && !elabVisitor.instanceDepthExceeded)
          elabVisitor.finalize();
-@@ -1560,10 +5678,12 @@ void Compilation::elaborate() {
+@@ -1560,10 +5751,12 @@ void Compilation::elaborate() {
      // Double check any bind directives for correctness. These were already
      // resolved prior to full elaboration but their diagnostics were not
      // issued so we need to check again.
@@ -8717,7 +8797,7 @@ index ed7528f2c..bc281444e 100644
      }
  
      // Report any lingering name conflicts.
-@@ -1680,14 +5800,471 @@ const Diagnostics& Compilation::getParseDiagnostics() {
+@@ -1680,14 +5873,471 @@ const Diagnostics& Compilation::getParseDiagnostics() {
      return *cachedParseDiagnostics;
  }
  
@@ -9192,7 +9272,7 @@ index ed7528f2c..bc281444e 100644
      return *cachedSemanticDiagnostics;
  }
  
-@@ -1794,17 +6371,53 @@ const ImplicitTypeSyntax& Compilation::createEmptyTypeSyntax(SourceLocation loc)
+@@ -1794,17 +6444,53 @@ const ImplicitTypeSyntax& Compilation::createEmptyTypeSyntax(SourceLocation loc)
                                          Token(*this, TokenKind::Placeholder, {}, {}, loc));
  }
  
@@ -9249,7 +9329,7 @@ index ed7528f2c..bc281444e 100644
  }
  
  const Type& Compilation::getType(SyntaxKind typeKind) const {
-@@ -2022,7 +6635,19 @@ void Compilation::checkDPIMethods(std::span<const SubroutineSymbol* const> dpiIm
+@@ -2022,7 +6708,19 @@ void Compilation::checkDPIMethods(std::span<const SubroutineSymbol* const> dpiIm
              continue;
          }
  
