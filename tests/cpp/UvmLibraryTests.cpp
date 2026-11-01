@@ -623,7 +623,8 @@ TEST_CASE("Stable RTL body reuse does not retain the retired editing source name
     auto cache = driver->options.get<server::ScopeBodyImport>()->cache.lock();
     REQUIRE(cache);
     REQUIRE(cache->status().publications > 0);
-    CHECK(cache->status().compactPublications == (fullContext ? 0 : 1));
+    CHECK(cache->status().compactPublications == 0);
+    CHECK(cache->status().ownerBuilds == 0);
     if (edited) {
         const auto uri = URI::fromFile(files.root / "consumer.sv");
         const std::string first = "module top #(parameter FORCE_FULL=0)(input int a, output int y); stable u(.*); endmodule\n"
@@ -4614,7 +4615,7 @@ endmodule
               DiagnosticEngine::reportAll(driver->sm, nativeAnalysis.getDiagnostics()));
         current->offerInstanceBodies(current);
     }
-    CHECK(cache->status().compactPublications > 0);
+    CHECK(cache->status().publications > 0);
 }
 
 TEST_CASE("Type argument defaults audit mutable dependencies and preserve native errors",
@@ -4803,8 +4804,9 @@ endmodule
               DiagnosticEngine::reportAll(driver->sm, nm.getDiagnostics()));
         current->offerInstanceBodies(current);
     }
-    CHECK(cache->status().publications == 4);
-    CHECK(cache->status().compactPublications == 4);
+    // One original model plus two distinct later parameter contexts.
+    CHECK(cache->status().publications == 3);
+    CHECK(cache->status().compactPublications == 2);
     CHECK(identities.size() >= 2);
 }
 
@@ -5254,7 +5256,8 @@ endmodule
     auto cache = driver->options.get<server::ScopeBodyImport>()->cache.lock();
     REQUIRE(cache);
     REQUIRE(cache->status().publications == 1);
-    CHECK(cache->status().compactPublications == (fullContext ? 0 : 1));
+    CHECK(cache->status().compactPublications == 0);
+    CHECK(cache->status().ownerBuilds == 0);
     auto bodyOf = [](auto& comp) -> const ast::InstanceBodySymbol& {
         auto tops = comp.getRoot().topInstances;
         auto it = std::ranges::find(tops, "top", [](auto* top) { return top->name; });
@@ -5832,7 +5835,8 @@ endmodule
     CHECK(cache->status().publications == (canPromote ? 2 : 1));
     const auto buildsAfterAttempt = cache->status().ownerBuilds;
     if (boundary == 1)
-        CHECK(cache->status().admissionRecords == 1);
+        // Original and later mixed boundaries keep distinct negative advice.
+        CHECK(cache->status().admissionRecords == 2);
     mixed.reset();
     CHECK(old.expired());
     CHECK(oldSyntax.expired());
@@ -7605,7 +7609,9 @@ endmodule
     std::weak_ptr<syntax::SyntaxTree> oldSyntax = first->getSyntaxTrees().front();
     first->offerInstanceBodies(first);
     REQUIRE(cache->status().publications == 1);
-    CHECK(cache->status().compactPublications == 1);
+    // A top-level selection now retains its original isolated model even
+    // for one safe child; contextual selections still use a compact owner.
+    CHECK(cache->status().compactPublications == (nested || moduleSelector ? 1 : 0));
     CHECK(cache->status().retainedRoots == std::vector<std::string>{selectedPath + ".u"});
     first.reset();
     CHECK(oldSyntax.expired());
@@ -10694,7 +10700,7 @@ endmodule
     REQUIRE(driver);
     auto cache = driver->options.get<server::ScopeBodyImport>()->cache.lock();
     REQUIRE(cache);
-    CHECK(cache->status().ownerBuilds == 1);
+    CHECK(cache->status().ownerBuilds == 0);
     CHECK(cache->status().compactPublications == 0);
     CHECK(cache->status().retainedRoots.size() == 12);
     REQUIRE(cache->status().admissionRecords > 0);
@@ -10722,14 +10728,14 @@ endmodule
               diagnosticMessages(driver->sm,expected.getDiagnostics()));
         std::weak_ptr<ast::Compilation> old=current;
         current->offerInstanceBodies(current);
-        CHECK(cache->status().ownerBuilds == 1);
+        CHECK(cache->status().ownerBuilds == 0);
         current.reset();
         CHECK(old.expired());
     }
     // A different parameter context can close the parent and must still promote.
     auto changed=make(false,4,false);
     changed->offerInstanceBodies(changed);
-    CHECK(cache->status().ownerBuilds > 1);
+    CHECK(cache->status().ownerBuilds > 0);
     changed.reset();
     auto reused=make(false,5,false), native=make(false,5,true);
     CHECK(reused->getImportedInstanceBodyPaths() == std::vector<std::string>{"top.dut"});
@@ -10795,8 +10801,10 @@ endmodule
 
 TEST_CASE("Initial top-level forests retain semantics without the editing wrapper",
           "[scope-semantic][scope-direct-initial-owner]") {
+    const int leaves = GENERATE(1, 8);
+    CAPTURE(leaves);
     LibraryWorkspace files;
-    files.write(files.root / "fixed.sv", R"(
+    std::string fixed = R"(
 module leaf #(parameter int N=1)(input logic [N-1:0] a, output logic [N-1:0] y);
  assign y=a+1;
 endmodule
@@ -10809,7 +10817,9 @@ module top;
    leaf #(.N(i)) u(.*);
  end
 endmodule
-)");
+)";
+    fixed.replace(fixed.find("i<=8"), 4, fmt::format("i<={}", leaves));
+    files.write(files.root / "fixed.sv", fixed);
     files.write(files.root / "consumer.sv",
                 "module consumer; function int value(int x); return x+1; endfunction endmodule\n");
     files.write(files.root / "design.f", "fixed.sv\nconsumer.sv\n");
@@ -10830,7 +10840,7 @@ endmodule
     REQUIRE(cache);
     CHECK(cache->status().ownerBuilds==0);
     CHECK(cache->status().owners==1);
-    CHECK(cache->status().retainedRoots.size()==8);
+    CHECK(cache->status().retainedRoots.size()==size_t(leaves));
     std::weak_ptr<const void> editingSources=driver->driver.getSourceOwner();
     std::weak_ptr<const ast::Compilation> editingModel;
     {
@@ -10844,7 +10854,7 @@ endmodule
     CHECK(editingModel.expired());
     CHECK(editingSources.expired());
     CHECK(cache->status().owners==1);
-    CHECK(cache->status().retainedRoots.size()==8);
+    CHECK(cache->status().retainedRoots.size()==size_t(leaves));
 }
 
 TEST_CASE("Diagnostic representatives agree with complete occurrence tracking",
@@ -10877,5 +10887,151 @@ endmodule
         REQUIRE_FALSE(messages.empty());
         if(complete) CHECK(messages==expected);
         else expected=std::move(messages);
+    }
+}
+
+TEST_CASE("Compact fallback releases the isolated initial source identity lease",
+          "[scope-semantic][scope-initial-compact-lifetime]") {
+    LibraryWorkspace files;
+    files.write(files.root / "fixed.sv",
+                "module stable #(parameter type T=logic)(input T a, output T y); "
+                "assign y=a; endmodule\n");
+    const std::string source = "module top; typedef struct packed {logic[3:0] value;} word_t; "
+                               "word_t a,y; stable #(.T(word_t)) dut(.*); endmodule\n";
+    files.write(files.root / "consumer.sv", source);
+    files.write(files.root / "design.f", "fixed.sv\nconsumer.sv\n");
+    Config config;
+    config.experimentalScopeSemanticCache = true;
+    config.semanticCacheUnlimited = true;
+    config.frozenSources = Config::FrozenSourcesConfig{
+        .instances = std::vector<std::string>{"top.dut"}};
+    config.flagsByFile = std::vector<Config::FlagSource>{
+        {(files.root / "server.json").string(), "--single-unit --threads 1 --top top"}};
+    Indexer indexer;
+    ClientHarness client;
+    auto driver = server::ServerDriver::createFromFileLists(
+        indexer, client, config, {"design.f"}, files.root.string(), nullptr, true);
+    REQUIRE(driver);
+    auto library = driver->options.get<server::TrustedUvmImport>()->library;
+    auto* bindingSources = &driver->sm;
+    auto sources = std::make_shared<SourceManager>();
+    sources->inheritImmutablePrefix(library->sources);
+    std::weak_ptr<SourceManager> retiredSources = sources;
+    auto cache = std::make_shared<server::ScopeBodyCache>(
+        library, std::numeric_limits<size_t>::max(), std::vector<std::string>{},
+        std::vector<std::string>{"top.dut"});
+    auto parseOptions = driver->options;
+    auto options = parseOptions;
+    auto compilationOptions = options.getOrDefault<ast::CompilationOptions>();
+    compilationOptions.topModules.clear();
+    compilationOptions.topModules.emplace("top");
+    options.set(compilationOptions);
+    parseOptions.set(compilationOptions);
+    auto initialIdentities = std::make_shared<
+        std::pair<std::shared_ptr<SourceManager>, std::shared_ptr<server::TrustedUvmLibrary>>>(
+            sources, library);
+    std::weak_ptr<const void> retired = initialIdentities;
+    options.set(server::ScopeBodyImport{cache, initialIdentities, true});
+    auto trusted = *options.get<server::TrustedUvmImport>();
+    trusted.sourceOwner = initialIdentities;
+    options.set(trusted);
+    auto original = std::make_shared<ast::Compilation>(options);
+    original->enableInstanceBodyReferenceTracking(true);
+    REQUIRE(server::importTrustedUvm(*original, *bindingSources, options));
+    auto buffer = bindingSources->readSource(files.root / "consumer.sv");
+    REQUIRE(buffer);
+    original->addSyntaxTree(syntax::SyntaxTree::fromBuffer(*buffer, *bindingSources, parseOptions));
+    (void)original->getSemanticDiagnostics();
+    options.set(server::ScopeBodyImport{cache});
+    initialIdentities.reset();
+    CHECK_FALSE(retired.expired());
+    original->offerInstanceBodies(original);
+    REQUIRE(cache->status().compactPublications == 1);
+    REQUIRE(cache->status().retainedRoots == std::vector<std::string>{"top.dut"});
+    original.reset();
+    sources.reset();
+    CHECK(retired.expired());
+    CHECK(retiredSources.expired());
+    driver.reset();
+    sources = std::make_shared<SourceManager>();
+    sources->inheritImmutablePrefix(library->sources);
+    auto nextIdentities = std::make_shared<
+        std::pair<std::shared_ptr<SourceManager>, std::shared_ptr<server::TrustedUvmLibrary>>>(
+            sources, library);
+    trusted.sourceOwner = nextIdentities;
+    options.set(trusted);
+    auto reused = std::make_shared<ast::Compilation>(options);
+    REQUIRE(server::importTrustedUvm(*reused, *sources, options));
+    auto nextBuffer = sources->readSource(files.root / "consumer.sv");
+    REQUIRE(nextBuffer);
+    reused->addSyntaxTree(syntax::SyntaxTree::fromBuffer(*nextBuffer, *sources, parseOptions));
+    const auto& diagnostics = reused->getSemanticDiagnostics();
+    CHECK_FALSE(std::ranges::any_of(diagnostics, [](const auto& d) { return d.isError(); }));
+    CHECK(reused->getImportedInstanceBodyPaths() == std::vector<std::string>{"top.dut"});
+    const auto& body = reused->getRoot().topInstances.front()->body.find("dut")
+                           ->as<ast::InstanceSymbol>().body;
+    CHECK(body.find("a")->as<ast::ValueSymbol>().getType().getBitWidth() == 4);
+}
+
+TEST_CASE("Retained reference profiles include keys and usage added after the first proof",
+          "[scope-semantic][scope-reference-index-growth]") {
+    SourceManager sources;
+    ast::CompilationOptions fixedOptions;
+    fixedOptions.flags |= ast::CompilationFlags::PackageAnalysis;
+    auto library = std::make_shared<ast::Compilation>(Bag(fixedOptions));
+    library->addSyntaxTree(syntax::SyntaxTree::fromText(R"(
+module child; int late; endmodule
+module stable(input int a, output int y);
+ int late, updated;
+ child c();
+ assign y=a+updated;
+endmodule
+)", sources));
+    (void)library->getSemanticDiagnostics();
+    auto original = std::make_shared<ast::Compilation>();
+    original->enableInstanceBodyReferenceTracking(true);
+    for (auto name : {"child", "stable"})
+        original->importDefinition(library, name, sources);
+    original->addSyntaxTree(syntax::SyntaxTree::fromText(
+        "module owner_top; stable a(1,); stable b(2,); endmodule", sources));
+    (void)original->getSemanticDiagnostics();
+    const auto& top = original->getRoot().topInstances.front()->body;
+    const auto& first = top.find("a")->as<ast::InstanceSymbol>().body;
+    const auto& second = top.find("b")->as<ast::InstanceSymbol>().body;
+    REQUIRE(original->prepareInstanceBodyReuse(first));
+    const auto* late = second.find("late");
+    const auto* updated = second.find("updated");
+    const auto* childLate = second.find("c")->as<ast::InstanceSymbol>().body.find("late");
+    REQUIRE(late);
+    REQUIRE(updated);
+    REQUIRE(childLate);
+    original->noteReference(*late, false, &second);
+    original->noteReference(*updated, true, &second);
+    original->noteReference(*childLate, false, &second);
+    REQUIRE(original->prepareInstanceBodyReuse(second));
+    auto current = std::make_shared<ast::Compilation>();
+    for (auto name : {"child", "stable"})
+        current->importDefinition(library, name, sources);
+    bool imported = false;
+    current->setInstanceBodyReuseHooks([&](ast::Compilation& target,
+                                          ast::InstanceBodySymbol& body) {
+        if (body.getDefinition().name == "stable") {
+            imported = target.tryImportInstanceBody(original, second, body);
+            REQUIRE(imported);
+        }
+    }, {});
+    current->addSyntaxTree(syntax::SyntaxTree::fromText(
+        "module owner_top; stable b(1,); endmodule", sources));
+    (void)current->getSemanticDiagnostics();
+    REQUIRE(imported);
+    const auto usage = current->getReferenceUsageExcludingBodies({});
+    REQUIRE(usage);
+    for (auto symbol : {late, updated, childLate}) {
+        REQUIRE(symbol->getSyntax());
+        const auto found = usage->find(symbol->getSyntax());
+        REQUIRE(found != usage->end());
+        CHECK(found->second.first);
+        if (symbol == updated)
+            CHECK(found->second.second);
     }
 }

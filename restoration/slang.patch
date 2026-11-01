@@ -4089,7 +4089,7 @@ index cb4f631f8..164f72153 100644
              // information to point the user towards the right ones.
              Diagnostic diag = *found;
 diff --git a/source/ast/Compilation.cpp b/source/ast/Compilation.cpp
-index ed7528f2c..8d37a569c 100644
+index ed7528f2c..5e2d769c3 100644
 --- a/source/ast/Compilation.cpp
 +++ b/source/ast/Compilation.cpp
 @@ -9,22 +9,28 @@
@@ -4122,7 +4122,7 @@ index ed7528f2c..8d37a569c 100644
  
  using namespace slang::parsing;
  
-@@ -39,10 +45,262 @@ const PackageSymbol& createStdPackage(Compilation&);
+@@ -39,10 +45,296 @@ const PackageSymbol& createStdPackage(Compilation&);
  
  namespace slang::ast {
  
@@ -4365,7 +4365,41 @@ index ed7528f2c..8d37a569c 100644
 +struct Compilation::BodyReuseMetadataIndex {
 +    flat_hash_map<const Scope*, std::vector<size_t>> controls;
 +    size_t indexedControls = 0;
++    flat_hash_map<const Scope*, std::vector<size_t>> definitions;
++    size_t indexedDefinitions = 0;
 +    flat_hash_map<const Scope*, std::vector<const Scope*>> referenceSubtrees;
++    bool referencesIndexed = false;
++
++    void appendReferenceScope(const Scope* bindingScope) {
++        for (auto scope = bindingScope; scope;) {
++            const auto& symbol = scope->asSymbol();
++            if (symbol.kind == SymbolKind::InstanceBody || symbol.kind == SymbolKind::ClassType)
++                referenceSubtrees[scope].push_back(bindingScope);
++            if (symbol.kind == SymbolKind::InstanceBody) {
++                const auto instance = symbol.as<InstanceBodySymbol>().parentInstance;
++                scope = instance ? instance->getParentScope() : nullptr;
++            }
++            else
++                scope = symbol.getParentScope();
++        }
++    }
++
++    // Structural ownership is immutable. Index once as lazy binding appends
++    // records, instead of scanning every scope for each retained subtree.
++    static void append(flat_hash_map<const Scope*, std::vector<size_t>>& index,
++                       const Scope* scope, size_t record) {
++        while (scope) {
++            const auto& symbol = scope->asSymbol();
++            if (symbol.kind == SymbolKind::InstanceBody || symbol.kind == SymbolKind::ClassType)
++                index[scope].push_back(record);
++            if (symbol.kind == SymbolKind::InstanceBody) {
++                const auto instance = symbol.as<InstanceBodySymbol>().parentInstance;
++                scope = instance ? instance->getParentScope() : nullptr;
++            }
++            else
++                scope = symbol.getParentScope();
++        }
++    }
 +};
 +
  Compilation::Compilation(const Bag& options, const SourceLibrary* defaultLib) :
@@ -4385,7 +4419,7 @@ index ed7528f2c..8d37a569c 100644
      // Construct all built-in types.
      auto& bi = builtins::Builtins::Instance;
      bitType = &bi.bitType;
-@@ -148,11 +406,7 @@ Compilation::Compilation(const Bag& options, const SourceLibrary* defaultLib) :
+@@ -148,11 +440,7 @@ Compilation::Compilation(const Bag& options, const SourceLibrary* defaultLib) :
  
      // Set a default handler for printing types and symbol paths, for convenience.
      static std::once_flag onceFlag;
@@ -4398,7 +4432,7 @@ index ed7528f2c..8d37a569c 100644
  
      // Reset systemId counters that may have been changed due to creation of types
      // in the std package.
-@@ -163,109 +417,3438 @@ Compilation::Compilation(const Bag& options, const SourceLibrary* defaultLib) :
+@@ -163,141 +451,3719 @@ Compilation::Compilation(const Bag& options, const SourceLibrary* defaultLib) :
  
  Compilation::~Compilation() = default;
  
@@ -4513,6 +4547,9 @@ index ed7528f2c..8d37a569c 100644
 -        auto& entry = libraryNameMap[lib->name];
 -        SLANG_ASSERT(entry == nullptr || entry == lib);
 -        entry = lib;
+-    }
+-    else {
+-        lib = defaultLibPtr;
 +const MemberSyntax* Compilation::findCompilationUnitDeclaration(
 +    const Symbol& symbol, std::span<const MemberSyntax* const> declarations) const {
 +    auto actual=&symbol;
@@ -4534,11 +4571,35 @@ index ed7528f2c..8d37a569c 100644
 +        if (found) return nullptr;
 +        found=member;
      }
--    else {
--        lib = defaultLibPtr;
 +    return found;
 +}
-+
+ 
+-    const SyntaxNode& node = tree->root();
+-    const SyntaxNode* topNode = &node;
+-    while (topNode->parent)
+-        topNode = topNode->parent;
+-
+-    auto unit = emplace<CompilationUnitSymbol>(*this, *lib);
+-    unit->setSyntax(*topNode);
+-    root->addMember(*unit);
+-    compilationUnits.push_back(unit);
+-
+-    for (auto& [n, meta] : tree->getMetadata().nodeMeta) {
+-        SyntaxMetadata result;
+-        result.tree = tree.get();
+-        result.defaultNetType = &getNetType(meta.defaultNetType);
+-        result.timeScale = meta.timeScale;
+-
+-        switch (meta.unconnectedDrive) {
+-            case TokenKind::Pull0Keyword:
+-                result.unconnectedDrive = UnconnectedDrive::Pull0;
+-                break;
+-            case TokenKind::Pull1Keyword:
+-                result.unconnectedDrive = UnconnectedDrive::Pull1;
+-                break;
+-            default:
+-                result.unconnectedDrive = UnconnectedDrive::None;
+-                break;
 +void Compilation::importCompilationUnitDeclarations(std::shared_ptr<Compilation> owner,
 +                                                    SourceManager& sources) {
 +    if (finalized || !owner || owner.get() == this || !owner->isElaborated() ||
@@ -4571,21 +4632,44 @@ index ed7528f2c..8d37a569c 100644
 +                default:
 +                    break;
 +            }
-+        }
+         }
+-
+-        result.cellDefine = meta.cellDefine;
+-
+-        syntaxMetadata[n] = result;
      }
+-
+-    for (auto& inst : tree->getMetadata().globalInstances)
+-        globalInstantiations.emplace(inst->type.valueText());
+-
+-    if (node.kind == SyntaxKind::CompilationUnit) {
+-        for (auto member : node.as<CompilationUnitSyntax>().members)
+-            unit->addMembers(*member);
+-    }
+-    else if (node.kind == SyntaxKind::LibraryMap) {
+-        for (auto member : node.as<LibraryMapSyntax>().members)
+-            unit->addMembers(*member);
+-    }
+-    else {
+-        unit->addMembers(node);
 +    for (auto unit : owner->compilationUnits) {
 +        for (const auto& symbol : unit->members()) {
 +            if (auto declaration=owner->findCompilationUnitDeclaration(symbol,declarations))
 +                importedUnitDeclarations[declaration].push_back(&symbol);
 +        }
-+    }
+     }
+-
+-    syntaxTrees.emplace_back(std::move(tree));
+-    cachedParseDiagnostics.reset();
 +    retainImportedCompilation(std::move(owner));
-+}
+ }
  
--    const SyntaxNode& node = tree->root();
--    const SyntaxNode* topNode = &node;
--    while (topNode->parent)
--        topNode = topNode->parent;
+-HierarchyOverrideNode& Compilation::getOrAddTopLevelHierarchyOverride(
+-    const SyntaxNode& definitionSyntax) {
+-    SLANG_ASSERT(!isFrozen());
+-
+-    if (finalized)
+-        SLANG_THROW(std::logic_error("The compilation has already been finalized"));
 +bool Compilation::isFixedInstanceBodyTypeArgument(const Type& type,
 +                                                  const InstanceBodySymbol& rootBody) const {
 +    auto fixed = [&](const Type& candidate) {
@@ -4642,10 +4726,7 @@ index ed7528f2c..8d37a569c 100644
 +    return check(check, type);
 +}
  
--    auto unit = emplace<CompilationUnitSymbol>(*this, *lib);
--    unit->setSyntax(*topNode);
--    root->addMember(*unit);
--    compilationUnits.push_back(unit);
+-    return hierarchyOverrides.childNodes[definitionSyntax];
 +std::string Compilation::instanceBodyTypeOrigin(const Type& type) const {
 +    if (auto found = fixedBodyTypeOrigins.find(&type); found != fixedBodyTypeOrigins.end())
 +        return found->second;
@@ -4666,29 +4747,18 @@ index ed7528f2c..8d37a569c 100644
 +                       sourceManager->getColumnNumber(expanded),
 +                       type.getParentScope()->asSymbol().getHierarchicalPath(), type.name,
 +                       type.getSyntax() ? type.getSyntax()->toString() : std::string());
-+}
+ }
  
--    for (auto& [n, meta] : tree->getMetadata().nodeMeta) {
--        SyntaxMetadata result;
--        result.tree = tree.get();
--        result.defaultNetType = &getNetType(meta.defaultNetType);
--        result.timeScale = meta.timeScale;
+-std::span<const std::shared_ptr<SyntaxTree>> Compilation::getSyntaxTrees() const {
+-    return syntaxTrees;
 +const Compilation::InstanceBodyTypePresentation* Compilation::getInstanceBodyTypePresentation(
 +    const Type& type) const {
 +    auto found = fixedBodyTypePresentations.find(&type);
 +    return found == fixedBodyTypePresentations.end() ? nullptr : &found->second;
-+}
+ }
  
--        switch (meta.unconnectedDrive) {
--            case TokenKind::Pull0Keyword:
--                result.unconnectedDrive = UnconnectedDrive::Pull0;
--                break;
--            case TokenKind::Pull1Keyword:
--                result.unconnectedDrive = UnconnectedDrive::Pull1;
--                break;
--            default:
--                result.unconnectedDrive = UnconnectedDrive::None;
--                break;
+-std::span<const CompilationUnitSymbol* const> Compilation::getCompilationUnits() const {
+-    return compilationUnits;
 +bool Compilation::isInstanceBodyBindContextCompatible(const InstanceBodySymbol* subtree) const {
 +    // Most projects have no mutable bind affecting fixed definitions. Establish
 +    // and reuse that cheap global result before walking any retained graph.
@@ -4776,7 +4846,7 @@ index ed7528f2c..8d37a569c 100644
 +                node.target->kind == SyntaxKind::IdentifierName &&
 +                !definitions.contains(
 +                    node.target->template as<IdentifierNameSyntax>().identifier.valueText());
-         }
++        }
 +        else
 +            self.visitDefault(node);
 +    });
@@ -4786,11 +4856,15 @@ index ed7528f2c..8d37a569c 100644
 +    if (!subtree)
 +        bodyBindContextCompatible = compatible;
 +    return compatible;
-+}
+ }
  
--        result.cellDefine = meta.cellDefine;
--
--        syntaxMetadata[n] = result;
+-std::vector<const Symbol*> Compilation::getDefinitions() const {
+-    std::vector<const Symbol*> result;
+-    for (auto& [key, val] : definitionMap) {
+-        for (auto sym : val.first) {
+-            result.insert(std::ranges::upper_bound(result, sym->name, {},
+-                                                   [](auto item) { return item->name; }),
+-                          sym);
 +bool Compilation::recordInstanceBodyTypeDependency(const Type& replacement, const Type& source) {
 +    if (!instanceBodyCacheContext || !isElaborated() || hasFatalErrors())
 +        return false;
@@ -4958,19 +5032,12 @@ index ed7528f2c..8d37a569c 100644
 +            };
 +            if (!project(project, *root, *copy))
 +                return false;
-+        }
+         }
 +        batch.locations.push_back(original->location);
 +        batch.targets.emplace_back(nullptr, sourceCopies.size());
 +        sourceCopies.emplace_back(const_cast<Symbol*>(target), SourceLocation{},
 +                                  syntax ? syntaxCopies.at(syntax) : nullptr);
      }
--
--    for (auto& inst : tree->getMetadata().globalInstances)
--        globalInstantiations.emplace(inst->type.valueText());
--
--    if (node.kind == SyntaxKind::CompilationUnit) {
--        for (auto member : node.as<CompilationUnitSyntax>().members)
--            unit->addMembers(*member);
 +    for (const auto& [manager, batch] : batches) {
 +        auto locations = manager->projectImmutableOriginalLocations(batch.locations);
 +        if (!locations)
@@ -4982,19 +5049,14 @@ index ed7528f2c..8d37a569c 100644
 +            else
 +                std::get<1>(sourceCopies[symbolIndex]) = (*locations)[i];
 +        }
-     }
--    else if (node.kind == SyntaxKind::LibraryMap) {
--        for (auto member : node.as<LibraryMapSyntax>().members)
--            unit->addMembers(*member);
++    }
 +    for (auto [token, location] : tokenCopies)
 +        *token = token->withLocation(*this, location);
 +    for (auto [target, location, syntax] : sourceCopies) {
 +        target->location = location;
 +        if (syntax)
 +            target->setSyntax(*syntax);
-     }
--    else {
--        unit->addMembers(node);
++    }
 +    for (auto& [type, origin] : staged)
 +        fixedBodyTypeOrigins.insert_or_assign(type, std::move(origin));
 +    for (auto& [type, display] : presentations)
@@ -5009,28 +5071,21 @@ index ed7528f2c..8d37a569c 100644
 +            target.as<PackedStructType>().systemId = original->as<PackedStructType>().systemId;
 +        else if (type->kind == SymbolKind::PackedUnionType)
 +            target.as<PackedUnionType>().systemId = original->as<PackedUnionType>().systemId;
-     }
--
--    syntaxTrees.emplace_back(std::move(tree));
--    cachedParseDiagnostics.reset();
++    }
 +    return true;
- }
++}
  
--HierarchyOverrideNode& Compilation::getOrAddTopLevelHierarchyOverride(
--    const SyntaxNode& definitionSyntax) {
--    SLANG_ASSERT(!isFrozen());
--
--    if (finalized)
--        SLANG_THROW(std::logic_error("The compilation has already been finalized"));
--
--    return hierarchyOverrides.childNodes[definitionSyntax];
+-    return result;
 +const Type* Compilation::getInstanceBodyTypeIdentity(const Type& type) const {
 +    auto found = importedBodyTypeIdentities.find(&type);
 +    return found == importedBodyTypeIdentities.end() ? &type : found->second;
  }
  
--std::span<const std::shared_ptr<SyntaxTree>> Compilation::getSyntaxTrees() const {
--    return syntaxTrees;
+-std::vector<const PackageSymbol*> Compilation::getPackages() const {
+-    std::vector<const PackageSymbol*> result;
+-    for (auto& [name, pkg] : packageMap) {
+-        result.insert(
+-            std::ranges::upper_bound(result, name, {}, [](auto item) { return item->name; }), pkg);
 +bool Compilation::tryImportInstanceBody(std::shared_ptr<Compilation> owner,
 +                                        const InstanceBodySymbol& retained,
 +                                        InstanceBodySymbol& target) {
@@ -5058,8 +5113,14 @@ index ed7528f2c..8d37a569c 100644
 +                       &retained.getDefinition() == &target.getDefinition(),
 +                       owner->importedBodyFrames.size());
 +        return false;
-+    }
-+
+     }
+-    return result;
+-}
+ 
+-const SourceLibrary* Compilation::getSourceLibrary(std::string_view name) const {
+-    if (auto it = libraryNameMap.find(name); it != libraryNameMap.end())
+-        return it->second;
+-    return nullptr;
 +    if (getDefaultDisable(target) && !defaultDisableMap.contains(&target))
 +        return false;
 +    if (!owner->prepareInstanceBodyReuse(retained))
@@ -5269,10 +5330,8 @@ index ed7528f2c..8d37a569c 100644
 +    for (auto definition : certificate.instantiationSites)
 +        noteDefinitionInstantiated(*definition);
 +    return true;
- }
- 
--std::span<const CompilationUnitSymbol* const> Compilation::getCompilationUnits() const {
--    return compilationUnits;
++}
++
 +bool Compilation::prepareInstanceBodyReuse(const InstanceBodySymbol& retained,
 +                                           std::string_view* refusalReason) {
 +    return prepareInstanceBodyReuseImpl(retained, false, refusalReason);
@@ -6996,18 +7055,24 @@ index ed7528f2c..8d37a569c 100644
 +            auto& controlIndex = *bodyReuseMetadataIndex;
 +            while (controlIndex.indexedControls < bodyElaborationControls.size()) {
 +                const auto i = controlIndex.indexedControls++;
-+                controlIndex.controls[bodyElaborationControls[i].scope].push_back(i);
++                BodyReuseMetadataIndex::append(controlIndex.controls,
++                                               bodyElaborationControls[i].scope, i);
 +            }
 +            SmallVector<size_t> localControls;
-+            for (const auto& [scope, indices] : controlIndex.controls) {
-+                if (!isLocal(scope->asSymbol()))
-+                    continue;
-+                for (auto i : indices) {
++            auto includeControls = [&](const Scope* scope) {
++                const auto found = controlIndex.controls.find(scope);
++                if (found == controlIndex.controls.end())
++                    return;
++                for (auto i : found->second) {
 +                    const auto& control = bodyElaborationControls[i];
-+                    if (auditedControls.emplace(control.expression, control.typeOnly).second)
++                    if (isLocal(control.scope->asSymbol()) &&
++                        auditedControls.emplace(control.expression, control.typeOnly).second)
 +                        localControls.push_back(i);
 +                }
-+            }
++            };
++            includeControls(&retained);
++            for (const auto cls : closedClasses)
++                includeControls(cls);
 +            // Preserve native order and release index iterators before binding.
 +            // New records enter the next pass, never a stale pre-closure snapshot.
 +            std::ranges::sort(localControls);
@@ -7028,12 +7093,10 @@ index ed7528f2c..8d37a569c 100644
 +            // Visiting later children can bind port expressions that refer to
 +            // declarations visited earlier. Snapshot their final local usage
 +            // only after the complete subtree and its dependencies are bound.
-+            // Partition once per native-map growth, rather than filter every
-+            // reference in the whole design for every candidate root. Keep keys
-+            // and read current usage: binding may update an existing entry too.
-+            if (indexedBodyReferences != bodyReferenceStatus.size() ||
-+                indexedBodyCrossReferences != bodyCrossReferences.size()) {
-+                bodyReferenceScopes.clear();
++            // Partition once. noteReference appends new keys / scopes as lazy
++            // binding grows the maps. Keep keys and read live usage bits, so
++            // changing an existing read / write never needs an index rebuild.
++            if (!bodyReuseMetadataIndex || !bodyReuseMetadataIndex->referencesIndexed) {
 +                for (const auto& [symbol, _] : bodyReferenceStatus) {
 +                    const Scope* scope = symbol->kind == SymbolKind::InstanceBody
 +                                             ? &symbol->as<InstanceBodySymbol>()
@@ -7047,27 +7110,16 @@ index ed7528f2c..8d37a569c 100644
 +                    bodyReferenceScopes[binding.first].cross.push_back(binding.second);
 +                if (!bodyReuseMetadataIndex)
 +                    bodyReuseMetadataIndex = std::make_unique<BodyReuseMetadataIndex>();
-+                auto& subtrees = bodyReuseMetadataIndex->referenceSubtrees;
-+                subtrees.clear();
 +                // Index structural ownership once. Root proofs then visit only
 +                // their own buckets, including independently closed classes.
-+                for (const auto& [bindingScope, _] : bodyReferenceScopes) {
-+                    for (auto scope = bindingScope; scope;) {
-+                        const auto& symbol = scope->asSymbol();
-+                        if (symbol.kind == SymbolKind::InstanceBody ||
-+                            symbol.kind == SymbolKind::ClassType)
-+                            subtrees[scope].push_back(bindingScope);
-+                        if (symbol.kind == SymbolKind::InstanceBody) {
-+                            auto instance = symbol.as<InstanceBodySymbol>().parentInstance;
-+                            scope = instance ? instance->getParentScope() : nullptr;
-+                        }
-+                        else
-+                            scope = symbol.getParentScope();
-+                    }
-+                }
++                for (const auto& [bindingScope, _] : bodyReferenceScopes)
++                    bodyReuseMetadataIndex->appendReferenceScope(bindingScope);
++                bodyReuseMetadataIndex->referencesIndexed = true;
 +                indexedBodyReferences = bodyReferenceStatus.size();
 +                indexedBodyCrossReferences = bodyCrossReferences.size();
 +            }
++            SLANG_ASSERT(indexedBodyReferences == bodyReferenceStatus.size() &&
++                         indexedBodyCrossReferences == bodyCrossReferences.size());
 +            flat_hash_set<const Scope*> localReferenceScopes;
 +            auto includeReferenceScopes = [&](const Scope* root) {
 +                if (!bodyReuseMetadataIndex)
@@ -7105,9 +7157,31 @@ index ed7528f2c..8d37a569c 100644
 +                }
 +            }
 +        }
-+        for (const auto& [scope, definition] : bodyDefinitionSites)
++        if (!bodyReuseMetadataIndex)
++            bodyReuseMetadataIndex = std::make_unique<BodyReuseMetadataIndex>();
++        auto& definitions = *bodyReuseMetadataIndex;
++        while (definitions.indexedDefinitions < bodyDefinitionSites.size()) {
++            const auto i = definitions.indexedDefinitions++;
++            BodyReuseMetadataIndex::append(definitions.definitions, bodyDefinitionSites[i].first, i);
++        }
++        SmallVector<size_t> localDefinitions;
++        auto includeDefinitions = [&](const Scope* scope) {
++            const auto found = definitions.definitions.find(scope);
++            if (found != definitions.definitions.end())
++                localDefinitions.insert(localDefinitions.end(), found->second.begin(),
++                                        found->second.end());
++        };
++        includeDefinitions(&retained);
++        for (const auto cls : closedClasses)
++            includeDefinitions(cls);
++        std::ranges::sort(localDefinitions);
++        const auto duplicates = std::ranges::unique(localDefinitions);
++        localDefinitions.erase(duplicates.begin(), duplicates.end());
++        for (const auto i : localDefinitions) {
++            const auto& [scope, definition] = bodyDefinitionSites[i];
 +            if (isLocal(scope->asSymbol()))
 +                certificate.instantiationSites.push_back(definition);
++        }
 +        for (const auto& [origin, reference] : bodyHierarchicalEffects) {
 +            if (!isLocal(origin->asSymbol()) || origin->isUninstantiated())
 +                continue;
@@ -7545,10 +7619,13 @@ index ed7528f2c..8d37a569c 100644
 +        result += (bucket.local.capacity() + bucket.cross.capacity()) * sizeof(const Symbol*);
 +    if (bodyReuseMetadataIndex) {
 +        result += sizeof(BodyReuseMetadataIndex) + mapBytes(bodyReuseMetadataIndex->controls) +
++                  mapBytes(bodyReuseMetadataIndex->definitions) +
 +                  mapBytes(bodyReuseMetadataIndex->referenceSubtrees);
 +        for (const auto& [_, scopes] : bodyReuseMetadataIndex->referenceSubtrees)
 +            result += scopes.capacity() * sizeof(const Scope*);
 +        for (const auto& [_, indices] : bodyReuseMetadataIndex->controls)
++            result += indices.capacity() * sizeof(size_t);
++        for (const auto& [_, indices] : bodyReuseMetadataIndex->definitions)
 +            result += indices.capacity() * sizeof(size_t);
 +    }
 +    {
@@ -7902,26 +7979,31 @@ index ed7528f2c..8d37a569c 100644
 +    if (bodyQueryContext)
 +        return bodyQueryContext->getCompilationUnits();
 +    return compilationUnits;
- }
- 
- std::vector<const Symbol*> Compilation::getDefinitions() const {
++}
++
++std::vector<const Symbol*> Compilation::getDefinitions() const {
 +    if (bodyQueryContext)
 +        return bodyQueryContext->getDefinitions();
-     std::vector<const Symbol*> result;
-     for (auto& [key, val] : definitionMap) {
-         for (auto sym : val.first) {
-@@ -279,25 +3862,256 @@ std::vector<const Symbol*> Compilation::getDefinitions() const {
- }
- 
- std::vector<const PackageSymbol*> Compilation::getPackages() const {
++    std::vector<const Symbol*> result;
++    for (auto& [key, val] : definitionMap) {
++        for (auto sym : val.first) {
++            result.insert(std::ranges::upper_bound(result, sym->name, {},
++                                                   [](auto item) { return item->name; }),
++                          sym);
++        }
++    }
++
++    return result;
++}
++
++std::vector<const PackageSymbol*> Compilation::getPackages() const {
 +    if (bodyQueryContext)
 +        return bodyQueryContext->getPackages();
-     std::vector<const PackageSymbol*> result;
-     for (auto& [name, pkg] : packageMap) {
-         result.insert(
-             std::ranges::upper_bound(result, name, {}, [](auto item) { return item->name; }), pkg);
-     }
--    return result;
++    std::vector<const PackageSymbol*> result;
++    for (auto& [name, pkg] : packageMap) {
++        result.insert(
++            std::ranges::upper_bound(result, name, {}, [](auto item) { return item->name; }), pkg);
++    }
 +    return result;
 +}
 +
@@ -8091,12 +8173,8 @@ index ed7528f2c..8d37a569c 100644
 +    stdPkg = bodyQueryContext->stdPkg;
 +    packageMap[stdPkg->name] = stdPkg;
 +    finalized = true;
- }
- 
--const SourceLibrary* Compilation::getSourceLibrary(std::string_view name) const {
--    if (auto it = libraryNameMap.find(name); it != libraryNameMap.end())
--        return it->second;
--    return nullptr;
++}
++
 +Diagnostics Compilation::getBodyQueryDiagnostics(const std::function<void()>& checkpoint) {
 +    if (!bodyQueryContext)
 +        SLANG_THROW(std::logic_error("detached body context required"));
@@ -8143,24 +8221,26 @@ index ed7528f2c..8d37a569c 100644
 +    if (!hierarchicalAssignments.empty() || !virtualIfaceInstances.empty())
 +        SLANG_THROW(std::logic_error("detached body requires design-dependent finalization"));
 +    return diagMap.coalesce(sourceManager, this);
- }
- 
- const RootSymbol& Compilation::getRoot() {
++}
++
++const RootSymbol& Compilation::getRoot() {
 +    // Keep finalized lookups on the ordinary path free of callback temporaries.
 +    if (bodyQueryContext)
 +        return bodyQueryContext->getRoot();
 +    if (finalized)
 +        return *root;
-     return getRoot(/* skipDefParamsAndBinds */ false);
++    return getRoot(/* skipDefParamsAndBinds */ false);
  }
  
--const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
+-const RootSymbol& Compilation::getRoot() {
+-    return getRoot(/* skipDefParamsAndBinds */ false);
 +const RootSymbol& Compilation::getDisposableRoot(const std::function<void()>& checkpoint) {
 +    if (bodyQueryContext || isFrozen())
 +        SLANG_THROW(std::logic_error("borrowed or frozen roots are not disposable"));
 +    return getRoot(false, checkpoint);
-+}
-+
+ }
+ 
+-const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
 +const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds,
 +                                       const std::function<void()>& checkpoint) {
 +    auto check = [&] {
@@ -8173,7 +8253,7 @@ index ed7528f2c..8d37a569c 100644
      if (finalized)
          return *root;
  
-@@ -310,20 +4124,43 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
+@@ -310,20 +4176,43 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
              defaultLiblist.push_back(lib);
      }
  
@@ -8218,7 +8298,7 @@ index ed7528f2c..8d37a569c 100644
      }
  
      SLANG_ASSERT(!finalizing);
-@@ -398,7 +4235,7 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
+@@ -398,7 +4287,7 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
              if (inserted) {
                  topDefs.push_back({result, sourceRange});
                  SLANG_ASSERT(def->kind == SymbolKind::Definition);
@@ -8227,7 +8307,7 @@ index ed7528f2c..8d37a569c 100644
              }
              else {
                  auto& diag = root->addDiag(diag::MultipleTopDupName, sourceRange.start()
-@@ -465,8 +4302,7 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
+@@ -465,8 +4354,7 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
                          else {
                              // Otherwise, issue an error because the user asked us to instantiate
                              // this.
@@ -8237,7 +8317,7 @@ index ed7528f2c..8d37a569c 100644
                                  << userProvidedName;
                          }
                          continue;
-@@ -510,7 +4346,7 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
+@@ -510,7 +4398,7 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
  
                  auto& def = defSym->as<DefinitionSymbol>();
                  if (globalInstantiations.find(def.name) == globalInstantiations.end() &&
@@ -8246,7 +8326,7 @@ index ed7528f2c..8d37a569c 100644
                      unreferencedDefs.push_back(&def);
                  }
              }
-@@ -549,10 +4385,16 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
+@@ -549,10 +4437,16 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
              hierarchyOverrideNode = &sit->second;
          }
  
@@ -8263,7 +8343,7 @@ index ed7528f2c..8d37a569c 100644
      }
  
      if (!hasFlag(CompilationFlags::LintMode | CompilationFlags::AllowTopLevelIfacePorts) &&
-@@ -562,7 +4404,7 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
+@@ -562,7 +4456,7 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
  
      // For unreferenced definitions, go through and instantiate them with all empty
      // parameter values so that we get at least some semantic checking of the contents.
@@ -8272,7 +8352,7 @@ index ed7528f2c..8d37a569c 100644
          for (auto def : unreferencedDefs) {
              const HierarchyOverrideNode* hierarchyOverrideNode = nullptr;
              if (auto* syntax = def->getSyntax()) {
-@@ -571,10 +4413,13 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
+@@ -571,10 +4465,13 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
                      hierarchyOverrideNode = &it->second;
                  }
              }
@@ -8286,7 +8366,7 @@ index ed7528f2c..8d37a569c 100644
      root->topInstances = topList.copy(*this);
      root->compilationUnits = compilationUnits;
      finalizing = false;
-@@ -595,6 +4440,8 @@ const CompilationUnitSymbol* Compilation::getCompilationUnit(
+@@ -595,6 +4492,8 @@ const CompilationUnitSymbol* Compilation::getCompilationUnit(
  
  Compilation::DefinitionLookupResult Compilation::tryGetDefinition(std::string_view lookupName,
                                                                    const Scope& scope) const {
@@ -8295,7 +8375,7 @@ index ed7528f2c..8d37a569c 100644
      // Try to find a config block for this scope to help choose the right definition.
      const ResolvedConfig* resolvedConfig = nullptr;
      if (auto inst = scope.getContainingInstance(); inst && inst->parentInstance)
-@@ -734,6 +4581,10 @@ const DefinitionSymbol* Compilation::getDefinition(const Scope& scope,
+@@ -734,6 +4633,10 @@ const DefinitionSymbol* Compilation::getDefinition(const Scope& scope,
  
              lookupScope = lookupScope->asSymbol().getParentScope();
          } while (lookupScope);
@@ -8306,7 +8386,7 @@ index ed7528f2c..8d37a569c 100644
      }
      return nullptr;
  }
-@@ -824,6 +4675,27 @@ void Compilation::createDefinition(const Scope& scope, LookupLocation location,
+@@ -824,6 +4727,27 @@ void Compilation::createDefinition(const Scope& scope, LookupLocation location,
                                     const ModuleDeclarationSyntax& syntax) {
      SLANG_ASSERT(!isFrozen());
  
@@ -8334,7 +8414,7 @@ index ed7528f2c..8d37a569c 100644
      // We can only be missing metadata if the definition is created programmatically
      // (i.e. not via the parser) so we just fill in the parent's default net type
      // so that it's not a null pointer.
-@@ -893,7 +4765,7 @@ void Compilation::insertDefinition(Symbol& symbol, const Scope& scope) {
+@@ -893,7 +4817,7 @@ void Compilation::insertDefinition(Symbol& symbol, const Scope& scope) {
              for (auto v = vecIt; v != defList.end(); v++) {
                  auto vSym = *v;
                  auto vLib = vSym->getSourceLibrary();
@@ -8343,7 +8423,7 @@ index ed7528f2c..8d37a569c 100644
                      // Duplicate in the same library.
                      if (hasFlag(CompilationFlags::AllowLibModuleRedefinition)) {
                          // Silently keep the first definition and discard all subsequent ones,
-@@ -971,12 +4843,31 @@ void Compilation::insertDefinition(Symbol& symbol, const Scope& scope) {
+@@ -971,12 +4895,31 @@ void Compilation::insertDefinition(Symbol& symbol, const Scope& scope) {
  }
  
  const PackageSymbol* Compilation::getPackage(std::string_view lookupName) const {
@@ -8376,7 +8456,7 @@ index ed7528f2c..8d37a569c 100644
  const PackageSymbol& Compilation::createPackage(const Scope& scope,
                                                  const ModuleDeclarationSyntax& syntax) {
      SLANG_ASSERT(!isFrozen());
-@@ -1077,6 +4968,8 @@ void Compilation::addSystemMethod(SymbolKind typeKind,
+@@ -1077,6 +5020,8 @@ void Compilation::addSystemMethod(SymbolKind typeKind,
  }
  
  const SystemSubroutine* Compilation::getSystemSubroutine(std::string_view name) const {
@@ -8385,7 +8465,7 @@ index ed7528f2c..8d37a569c 100644
      auto it = subroutineNameMap.find(name);
      if (it == subroutineNameMap.end())
          return nullptr;
-@@ -1085,12 +4978,15 @@ const SystemSubroutine* Compilation::getSystemSubroutine(std::string_view name)
+@@ -1085,12 +5030,15 @@ const SystemSubroutine* Compilation::getSystemSubroutine(std::string_view name)
  
  const SystemSubroutine* Compilation::getSystemSubroutine(
      parsing::KnownSystemName knownNameId) const {
@@ -8402,7 +8482,7 @@ index ed7528f2c..8d37a569c 100644
      auto it = methodMap.find(std::make_tuple(name, typeKind));
      if (it == methodMap.end())
          return nullptr;
-@@ -1136,10 +5032,14 @@ std::span<const AttributeSymbol* const> Compilation::getAttributes(
+@@ -1136,10 +5084,14 @@ std::span<const AttributeSymbol* const> Compilation::getAttributes(
  
  std::span<const AttributeSymbol* const> Compilation::getAttributes(const void* ptr) const {
      auto it = attributeMap.find(ptr);
@@ -8421,7 +8501,7 @@ index ed7528f2c..8d37a569c 100644
  }
  
  void Compilation::noteBindDirective(const BindDirectiveSyntax& syntax, const Scope& scope) {
-@@ -1254,7 +5154,7 @@ const Symbol* Compilation::getDefaultClocking(const Scope& scope) const {
+@@ -1254,7 +5206,7 @@ const Symbol* Compilation::getDefaultClocking(const Scope& scope) const {
              return getDefaultClocking(*parent);
      }
  
@@ -8430,7 +8510,7 @@ index ed7528f2c..8d37a569c 100644
  }
  
  void Compilation::noteGlobalClocking(const Scope& scope, const Symbol& clocking,
-@@ -1384,12 +5284,21 @@ void Compilation::noteUpwardReference(const Scope& initialScope, const Hierarchi
+@@ -1384,12 +5336,21 @@ void Compilation::noteUpwardReference(const Scope& initialScope, const Hierarchi
      }
  }
  
@@ -8453,7 +8533,7 @@ index ed7528f2c..8d37a569c 100644
      bool valid = true;
      SmallSet<const InstanceSymbol*, 2> visited;
      InstanceCacheKey key(symbol, valid, visited);
-@@ -1409,7 +5318,7 @@ const Expression* Compilation::getDefaultDisable(const Scope& scope) const {
+@@ -1409,7 +5370,7 @@ const Expression* Compilation::getDefaultDisable(const Scope& scope) const {
  
          curr = curr->asSymbol().getParentScope();
          if (!curr || curr->asSymbol().kind == SymbolKind::CompilationUnit)
@@ -8462,7 +8542,7 @@ index ed7528f2c..8d37a569c 100644
      }
  }
  
-@@ -1458,27 +5367,282 @@ const SyntaxNode* Compilation::getExternDefinition(std::string_view name,
+@@ -1458,27 +5419,304 @@ const SyntaxNode* Compilation::getExternDefinition(std::string_view name,
      return nullptr;
  }
  
@@ -8610,15 +8690,37 @@ index ed7528f2c..8d37a569c 100644
 +                auto targetBody = declarationScope ? declarationScope->getContainingInstance()
 +                                                   : nullptr;
 +                if (origin->getContainingInstance() != targetBody) {
-+                    auto& usage = bodyCrossReferences[{origin, &symbol}];
-+                    usage.first |= !isLValue;
-+                    usage.second |= isLValue;
++                    auto [entry, inserted] = bodyCrossReferences.try_emplace(
++                        std::pair{origin, &symbol});
++                    entry->second.first |= !isLValue;
++                    entry->second.second |= isLValue;
++                    if (inserted && bodyReuseMetadataIndex &&
++                        bodyReuseMetadataIndex->referencesIndexed) {
++                        auto [bucket, newScope] = bodyReferenceScopes.try_emplace(origin);
++                        bucket->second.cross.push_back(&symbol);
++                        if (newScope)
++                            bodyReuseMetadataIndex->appendReferenceScope(origin);
++                        indexedBodyCrossReferences = bodyCrossReferences.size();
++                    }
 +                    return;
 +                }
 +            }
-+            auto& usage = bodyReferenceStatus[&symbol];
-+            usage.first |= !isLValue;
-+            usage.second |= isLValue;
++            auto [entry, inserted] = bodyReferenceStatus.try_emplace(&symbol);
++            entry->second.first |= !isLValue;
++            entry->second.second |= isLValue;
++            if (inserted && bodyReuseMetadataIndex && bodyReuseMetadataIndex->referencesIndexed) {
++                const Scope* scope = symbol.kind == SymbolKind::InstanceBody
++                                         ? &symbol.as<InstanceBodySymbol>()
++                                     : symbol.kind == SymbolKind::ClassType
++                                         ? &symbol.as<ClassType>() : symbol.getParentScope();
++                if (scope) {
++                    auto [bucket, newScope] = bodyReferenceScopes.try_emplace(scope);
++                    bucket->second.local.push_back(&symbol);
++                    if (newScope)
++                        bodyReuseMetadataIndex->appendReferenceScope(scope);
++                }
++                indexedBodyReferences = bodyReferenceStatus.size();
++            }
 +        }
 +    }
 +}
@@ -8754,7 +8856,7 @@ index ed7528f2c..8d37a569c 100644
  }
  
  const NameSyntax& Compilation::parseName(std::string_view name) {
-@@ -1510,7 +5674,66 @@ CompilationUnitSymbol& Compilation::createScriptScope() {
+@@ -1510,7 +5748,66 @@ CompilationUnitSymbol& Compilation::createScriptScope() {
      return *unit;
  }
  
@@ -8822,7 +8924,7 @@ index ed7528f2c..8d37a569c 100644
      SLANG_ASSERT(!isFrozen());
  
      // Make sure our root is created. It's possible that this results in a fatal
-@@ -1520,11 +5743,15 @@ void Compilation::elaborate() {
+@@ -1520,11 +5817,15 @@ void Compilation::elaborate() {
      if (sawFatalError)
          return;
  
@@ -8839,7 +8941,7 @@ index ed7528f2c..8d37a569c 100644
  
      if (!elabVisitor.finishedEarly() && !elabVisitor.instanceDepthExceeded)
          elabVisitor.finalize();
-@@ -1560,10 +5787,12 @@ void Compilation::elaborate() {
+@@ -1560,10 +5861,12 @@ void Compilation::elaborate() {
      // Double check any bind directives for correctness. These were already
      // resolved prior to full elaboration but their diagnostics were not
      // issued so we need to check again.
@@ -8856,7 +8958,7 @@ index ed7528f2c..8d37a569c 100644
      }
  
      // Report any lingering name conflicts.
-@@ -1680,14 +5909,471 @@ const Diagnostics& Compilation::getParseDiagnostics() {
+@@ -1680,14 +5983,503 @@ const Diagnostics& Compilation::getParseDiagnostics() {
      return *cachedParseDiagnostics;
  }
  
@@ -9264,7 +9366,9 @@ index ed7528f2c..8d37a569c 100644
 +        checkpoint();
 +    return result;
 +}
-+
+ 
+-    // Elaborate the design.
+-    elaborate();
 +const Diagnostics& Compilation::getDisposableSemanticDiagnostics(
 +    const std::function<void()>& checkpoint) {
 +    if (checkpoint)
@@ -9272,19 +9376,49 @@ index ed7528f2c..8d37a569c 100644
 +    if (cachedSemanticDiagnostics)
 +        return *cachedSemanticDiagnostics;
  
--    // Elaborate the design.
--    elaborate();
+-    cachedSemanticDiagnostics.emplace(diagMap.coalesce(sourceManager));
 +    // Only this outer pass receives the disposable candidate checkpoint.
 +    elaborate(checkpoint);
 +    if (checkpoint)
 +        checkpoint();
- 
--    cachedSemanticDiagnostics.emplace(diagMap.coalesce(sourceManager));
++
++    // Complete tracking binds even canonical occurrences for certification.
++    // Keep those raw records, while presenting only the occurrences Native
++    // would visit. Canonical identity belongs to this consumer, not shared ASTs.
++    auto nativeDiagnostics = [&] {
++        ASTDiagMap result;
++        diagMap.visitRaw([&](const Diagnostic& diagnostic) {
++            bool skipped = false;
++            for (auto symbol = diagnostic.symbol; symbol;) {
++                if (const auto body = symbol->as_if<InstanceBodySymbol>()) {
++                    const auto& current = getCurrentInstanceBody(*body);
++                    const auto instance = current.parentInstance;
++                    if (instance && getCanonicalInstanceBody(*instance)) {
++                        skipped = true;
++                        break;
++                    }
++                    const auto scope = instance ? instance->getParentScope() : nullptr;
++                    symbol = scope ? &scope->asSymbol() : nullptr;
++                }
++                else {
++                    const auto scope = symbol->getParentScope();
++                    symbol = scope ? &scope->asSymbol() : nullptr;
++                }
++            }
++            if (!skipped) {
++                bool inserted;
++                result.add(diagnostic, inserted);
++            }
++        });
++        return result;
++    };
 +    if (importedCompilations.empty()) {
-+        cachedSemanticDiagnostics.emplace(diagMap.coalesce(sourceManager, this));
++        cachedSemanticDiagnostics.emplace(completeBodyReferenceTracking
++            ? nativeDiagnostics().coalesce(sourceManager, this)
++            : diagMap.coalesce(sourceManager, this));
 +    }
 +    else {
-+        auto combined = diagMap;
++        auto combined = completeBodyReferenceTracking ? nativeDiagnostics() : diagMap;
 +        // The first consumer can still contain compilation-unit imports from
 +        // the fixed prefix. Those imports bind locally as well as in the owner;
 +        // resumed consumers contain only the suffix and need the owner's warning.
@@ -9331,7 +9465,7 @@ index ed7528f2c..8d37a569c 100644
      return *cachedSemanticDiagnostics;
  }
  
-@@ -1794,17 +6480,53 @@ const ImplicitTypeSyntax& Compilation::createEmptyTypeSyntax(SourceLocation loc)
+@@ -1794,17 +6586,53 @@ const ImplicitTypeSyntax& Compilation::createEmptyTypeSyntax(SourceLocation loc)
                                          Token(*this, TokenKind::Placeholder, {}, {}, loc));
  }
  
@@ -9388,7 +9522,7 @@ index ed7528f2c..8d37a569c 100644
  }
  
  const Type& Compilation::getType(SyntaxKind typeKind) const {
-@@ -2022,7 +6744,19 @@ void Compilation::checkDPIMethods(std::span<const SubroutineSymbol* const> dpiIm
+@@ -2022,7 +6850,19 @@ void Compilation::checkDPIMethods(std::span<const SubroutineSymbol* const> dpiIm
              continue;
          }
  
@@ -9636,7 +9770,7 @@ index 20da49191..fbd15a914 100644
                  return;
  
 diff --git a/source/ast/ElabVisitors.h b/source/ast/ElabVisitors.h
-index 2f346fa60..3fda419ed 100644
+index 2f346fa60..c9ce088e3 100644
 --- a/source/ast/ElabVisitors.h
 +++ b/source/ast/ElabVisitors.h
 @@ -7,8 +7,11 @@
@@ -9854,7 +9988,7 @@ index 2f346fa60..3fda419ed 100644
 +                        SLANG_ASSERT(body.parentInstance);
 +                        const auto& inst = *body.parentInstance;
 +                        if (compilation.getCanonicalInstanceBody(inst) != nullptr) {
-+                            if (compilation.isImportedInstanceBody(inst.body))
++                            if (compilation.completeBodyReferenceTracking || compilation.isImportedInstanceBody(inst.body))
 +                                compilation.importedBodyCanonicalInstances.erase(&inst);
 +                            else
 +                                inst.setCanonicalBody(nullptr);
@@ -9975,21 +10109,22 @@ index 2f346fa60..3fda419ed 100644
      }
  
      static bool isWithinInterface(const InstanceSymbol& symbol) {
-@@ -543,7 +718,7 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
-     }
- 
-     bool tryApplyFromCache(const InstanceSymbol& symbol) {
--        if (disableCache)
-+        if (disableCache || compilation.completeBodyReferenceTracking)
+@@ -546,6 +721,9 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
+         if (disableCache)
              return false;
  
++        // Complete reference tracking still records Native canonical identity
++        // for diagnostics and dataflow, but never skips binding an occurrence.
++
          // We can use a cached version of this instance's body if we have already
-@@ -597,7 +772,14 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
+         // visited an identical body elsewhere, with some caveats explained below.
+         SLANG_ASSERT(symbol.getCanonicalBody() == nullptr);
+@@ -597,7 +775,14 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
          // Assuming we find an appropriately cached instance, we will store a pointer to it
          // in other instances to facilitate downstream consumers in not needing to recreate
          // this duplication detection logic again.
 -        symbol.setCanonicalBody(entry.canonicalBody);
-+        if (compilation.isImportedInstanceBody(symbol.body)) {
++        if (compilation.completeBodyReferenceTracking || compilation.isImportedInstanceBody(symbol.body)) {
 +            if (entry.canonicalBody == &symbol.body)
 +                return false;
 +            compilation.importedBodyCanonicalInstances[&symbol] = entry.canonicalBody;
@@ -10000,7 +10135,17 @@ index 2f346fa60..3fda419ed 100644
  
          // If this is an interface or an instance instantiated within an interface
          // we want to return false so that we continue visiting the body. This is
-@@ -625,6 +807,8 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
+@@ -605,7 +790,8 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
+         // all types resolved before we freeze the compilation and move on to the
+         // multithreaded analysis phase.
+         auto defKind = symbol.getDefinition().definitionKind;
+-        if (compilation.hasFlag(CompilationFlags::DisableInstanceCaching) ||
++        if (compilation.completeBodyReferenceTracking ||
++            compilation.hasFlag(CompilationFlags::DisableInstanceCaching) ||
+             defKind == DefinitionKind::Interface ||
+             (defKind == DefinitionKind::Program && isWithinInterface(symbol))) {
+             return false;
+@@ -625,6 +811,8 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
      Compilation& compilation;
      const size_t& numErrors;
      uint32_t errorLimit;
@@ -10009,7 +10154,7 @@ index 2f346fa60..3fda419ed 100644
      bool visitInstances = true;
      bool disableCache = false;
      bool hierarchyProblem = false;
-@@ -633,7 +817,12 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
+@@ -633,7 +821,12 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
      flat_hash_map<InstanceCacheKey, InstanceCacheEntry> instanceCache;
      flat_hash_set<const InstanceBodySymbol*> activeInstanceBodies;
      flat_hash_set<const DefinitionSymbol*> usedIfacePorts;

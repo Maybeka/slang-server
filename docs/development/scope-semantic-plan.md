@@ -699,3 +699,71 @@ of milliseconds. The original-file SoC scenario uses package reuse and does not 
 its edited RTL. Baseline/current UVM fixtures use identical canonical source paths.
 Compact evidence and code versions are preserved; ended logs and obsolete probe
 binaries are removed while active reusable caches remain.
+
+### Single-analysis retention and incremental certification (2026-11-02)
+
+The next stage retains the exact isolated initial Compilation for eligible module
+and instance selections. Direct publication neither constructs a second semantic
+owner nor compares a subtree with itself. A complete fixed physical prefix is
+proved before attempting declaration projections; its syntax and declaration
+Compilation are kept. Unsuccessful proofs keep the existing subset/Native routes.
+
+Certification now indexes elaboration controls and definition sites by structural
+ancestors. Reference buckets are constructed once and extended as lazy binding
+adds keys, instead of repartitioning the entire design for every small map growth.
+Usage bits remain live; locality and dependency checks remain required. A regression
+covers new local/cross-scope references and updates to existing read/write usage.
+
+Complete occurrence binding keeps Native canonical analysis identity in a
+Compilation-local sidecar without mutating canonical fields on shared semantic
+objects. Raw diagnostic occurrences remain available to certificates; presentation
+uses Native canonical occurrences. Interface-only templates and formal type
+parameter contexts retain the established path. Compact reconstruction releases
+its unused isolated source-namespace lease, with a destruction/reuse regression.
+Thus this stage broadens direct retention without claiming that every selected
+hierarchy can avoid compact type-context reconstruction. CVA6 whole-DUT reuse
+remains available through that route.
+
+Experiments remain off by default. Real-project semantic cache budgets are unlimited
+in these tests; source-history limits are unchanged. The versioned evidence below
+records process startup through first hover, edited-document diagnostic notification,
+and process lifetime peak physical footprint separately. These are distinct from
+OS cold boot, whole-workspace diagnostic completion and RSS.
+
+[Versioned measurements](../../validation/macos-single-analysis-freeze-2026-11-02.json) compare main `0d1e108` with this stage. Three processes per arm, 15 lifecycle states per process, seven scenarios (945 current public states) match Native. Medians, combined mode:
+
+| Scenario | Startup s, before → after | Continuous query ms | Continuous edited diagnostic ms | Lifetime peak physical MiB |
+|---|---:|---:|---:|---:|
+| opentitan-soc-large / background | 12.65 → 5.39 | 1.08 → 1.09 | 1.48 → 1.50 | 2836.32 → 2671.83 |
+| opentitan-soc-large / real-edit | 2.14 → 2.17 | 16.81 → 19.42 | 32.09 → 36.65 | 1576.41 → 1576.72 |
+| cva6-uvm / background | 2.97 → 3.14 | 6.30 → 7.05 | 11.44 → 12.79 | 995.77 → 1056.69 |
+| cva6-uvm / real-edit | 2.86 → 3.50 | 6.53 → 7.43 | 11.83 → 13.47 | 858.97 → 970.20 |
+| serdes-pcs-verification / background | 0.08 → 0.08 | 0.71 → 0.85 | 1.28 → 1.53 | 49.36 → 49.44 |
+| opentitan-aes-uvm / background | 2.38 → 2.49 | 2.26 → 3.78 | 3.46 → 5.71 | 559.83 → 697.63 |
+| ethernet-udp-medium / background | 0.09 → 0.06 | 0.46 → 0.43 | 0.67 → 0.61 | 26.77 → 26.66 |
+
+The principal gain is SoC frozen-background startup, reduced by about 57%, with
+161 retained roots and zero additional owner builds through the tested lifecycle.
+A separate mechanism trace measures certificates at 1027.209ms and enclosing
+publication at 1028.173ms; these nested timers are not additive. First-edit
+latency is retained in the evidence and is not represented by continuous medians.
+SoC original-file editing leaves its edited RTL Native and freezes packages.
+
+This is not a universal memory improvement: CVA6 peak physical footprint increases
+about 6% / 13% in the two scenarios; AES+UVM increases about 25%. CVA6 original-file
+startup also increases from 2.86s to 3.50s in this cohort. These regressions remain
+visible, while continuous diagnostic timings stay below 50ms. They are limitations
+of this experimental stage, not reasons to enable it by default. Formal type
+contexts can require a compact owner. Manual provider rebuilds may yield partial
+CVA6 roots as in the prior version, rather than preserving a stale whole-DUT model.
+
+Validation: 1072/1072 CTest; 119 scope cases / 33844 assertions; full server ASan
+1058 cases / 205340 assertions with leak detection disabled; UBUS/CVA6 real-edit
+and SoC public ASan scenarios; 16-project public and real-edit lifecycle parity;
+installed default/custom cold/custom warm UVM profiles; installed source/archive
+integrity, default-off smoke and fresh offline restoration of all 709 SDK files.
+Reproduction uses the version-pinned serial-performance harness with three repeats
+per Native/frozen/combined arm, seven named scenarios and 15 states per process.
+Evidence records hashes, configuration, per-state query/diagnostic times, fallback
+and rebuild counters, and physical memory separately. Ended raw logs and superseded
+probe programs/installations are discarded; useful reusable caches are retained.

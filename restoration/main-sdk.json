@@ -1,7 +1,7 @@
 {
   "format": 1,
   "base_commit": "151a801ceaf6faf23d79a42d210ff67e50eb4660",
-  "patch_sha256": "c889b1380dc5a7cfaa79900e7af923646f6247be6bd872bd2202fdf230258088",
+  "patch_sha256": "08a8bf4e72c86fc5360ef9c0c743f353caadc79e19d8f16e751ef92dfd1b0c17",
   "files": {
     ".clang-format": "02261c0a49db9cbd73538c715993625b77502e67db0969dee7190a7db1c9b201",
     ".clang-tidy": "cf8e7e68fa781775843f067e2523216b4e2b6b196bfba2563eb4c0cd003f95e1",
@@ -292,10 +292,10 @@
     "source/ast/ASTSerializer.cpp": "2077d42785c300e2f6970337c8ae8c5c20df9b6019e3d8c7f97a4d9c85c94b7f",
     "source/ast/Bitstream.cpp": "b4e58f7cfe87d043f71d8ab1d05cd15dac8ca3349019e3825d1c4158eb9fc25e",
     "source/ast/CMakeLists.txt": "49d4a2542bfeccf6a01fa258d78a613f38a88a5d05b25aba8456b5c8cdb6c87e",
-    "source/ast/Compilation.cpp": "a1f0dbcaf3cefd119f89be4368c8429d86f106a8f42b784d2f0804bd91b13a85",
+    "source/ast/Compilation.cpp": "68f9fbe9537a88f6d50f57bac44bc5d874cc994c0f62a2017d942e3c068ddb27",
     "source/ast/Constraints.cpp": "7e09ac15f6915c8b861beeaf0c5478b82ed4ed3648a4b0dea15f896e8e6469e2",
     "source/ast/DefParamResolver.cpp": "c8179e2960e792ad5fb5704c51c34d61c8a6bdf745a1b2c8b276da0726199fb9",
-    "source/ast/ElabVisitors.h": "d56f8a268b8b3d164d73d944fa2f8810edc6173794ad8b7d29d6c3e6b6b0df7a",
+    "source/ast/ElabVisitors.h": "7cee177ad68fde993ca2f063c2fd757d5380595ae00c153c044443cea15e19c5",
     "source/ast/EvalContext.cpp": "60ff200b03a879a5caba1e5fb598f4ebfe6d62b363bd24c3008c092a98208f8e",
     "source/ast/Expression.cpp": "6641158bc9641b23edfd51e9553490d8c7085531cbaef6830ddfec0b0eab82e1",
     "source/ast/FmtHelpers.cpp": "82b91e72071a6a2d73b3064bcb46f8956b4a24e313de01a491235d9d8e07fcf8",

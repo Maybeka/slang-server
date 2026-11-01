@@ -13,6 +13,9 @@
 #include <rfl/to_generic.hpp>
 
 #include "slang/ast/symbols/MemberSymbols.h"
+#include "slang/ast/symbols/ParameterSymbols.h"
+#include "slang/ast/ASTContext.h"
+#include "slang/ast/Lookup.h"
 #include "slang/parsing/Preprocessor.h"
 #include "slang/parsing/ParserMetadata.h"
 #include "slang/syntax/AllSyntax.h"
@@ -1441,6 +1444,7 @@ bool ServerDriver::prepareScopeLibrary() {
         m_config.experimentalMethodScopeOverlay.value())
         return decline("scope semantics cannot combine with certified syntax or method overlays", "incompatible-experiment");
     auto modules = config.modules.value();
+    bool contextualInitial = false;
     if (!config.instances.value().empty()) {
         // Resolve concrete hierarchy once. Keep only value selectors, never this
         // temporary probe's AST or the older per-request witness / JSON cache.
@@ -1456,6 +1460,17 @@ bool ServerDriver::prepareScopeLibrary() {
                     return decline(
                         "fixed RTL selection does not resolve to a canonical module subtree: " +
                         item.instance, "unresolved-hierarchy-selection");
+                // A formal type boundary can require a reconstructed nominal
+                // context after definition import. Keep that established route
+                // instead of retaining a complete unused initial model.
+                ast::LookupResult lookup;
+                ast::ASTContext context(planning.getRoot(), ast::LookupLocation::max);
+                ast::Lookup::name(planning.parseName(item.instance), context,
+                                 ast::LookupFlags::AllowUnnamedGenerate, lookup);
+                if (auto instance = lookup.found ? lookup.found->as_if<ast::InstanceSymbol>() : nullptr)
+                    contextualInitial |= std::ranges::any_of(
+                        instance->getDefinition().parameters,
+                        [](const auto& parameter) { return parameter.isTypeParam && !parameter.isLocalParam; });
                 item.reason = "fixed definition closure planned; eligible integral subtrees use "
                               "independent owners";
             }
@@ -1479,6 +1494,61 @@ bool ServerDriver::prepareScopeLibrary() {
     auto compilationOptions = options.getOrDefault<ast::CompilationOptions>();
     compilationOptions.flags |= ast::CompilationFlags::PackageAnalysis;
     compilationOptions.topModules.clear();
+    std::shared_ptr<syntax::SyntaxTree> completePrefixTree;
+    std::shared_ptr<ast::Compilation> completePrefixCompilation;
+    auto supportedPrefixMember = [](const auto* member) {
+        using K = syntax::SyntaxKind;
+        switch (member->kind) {
+            case K::ModuleDeclaration: case K::InterfaceDeclaration:
+            case K::ProgramDeclaration: case K::PackageDeclaration:
+            case K::PackageImportDeclaration: case K::DPIImport:
+            case K::ClassDeclaration: case K::TypedefDeclaration:
+            case K::ForwardTypedefDeclaration: case K::FunctionDeclaration:
+            case K::TaskDeclaration: case K::DataDeclaration:
+            case K::ParameterDeclarationStatement: case K::EmptyMember:
+                return true;
+            default: return false;
+        }
+    };
+    const bool rtlOnly = config.packages.value().empty() && !modules.empty() && m_uvmEntryPath.empty();
+    // A complete fixed physical prefix needs no declaration projection. Prove
+    // this route first and keep that exact syntax / declaration compilation.
+    // On refusal the isolated-subset routes below retain their existing scope.
+    const bool wholeTop = config.modules.value().empty() && config.instances.value().size() == 1 &&
+                          config.instances.value().front().find('.') == std::string::npos;
+    if (rtlOnly && wholeTop && driver.syntaxTrees.size() == 1 && plans.units.size() == 1 &&
+        plans.units.front().frozenRootCount && !driver.syntaxTrees.front()->isLibraryUnit &&
+        !driver.syntaxTrees.front()->getSourceLibrary()) {
+        try {
+            std::vector<SourceBuffer> fixed;
+            const auto& plan = plans.units.front();
+            for (size_t n = 0; n < plan.frozenRootCount; ++n) {
+                auto buffer = sm.readSource(plan.roots[n]);
+                if (!buffer)
+                    break;
+                fixed.push_back(*buffer);
+            }
+            if (fixed.size() == plan.frozenRootCount) {
+                auto candidate = syntax::SyntaxTree::fromBuffersWithCheckpoint(fixed, sm, options);
+                if (candidate->isPrefixResumeSafe().value_or(false) &&
+                    std::ranges::all_of(candidate->root().as<syntax::CompilationUnitSyntax>().members,
+                                        supportedPrefixMember) &&
+                    std::ranges::none_of(candidate->diagnostics(), [](const auto& d) { return d.isError(); })) {
+                    auto proof = std::make_shared<ast::Compilation>(compilationOptions);
+                    proof->retainSourceOwner(m_driverOwner->getSourceOwner());
+                    proof->addSyntaxTree(candidate);
+                    if (std::ranges::none_of(proof->getSemanticDiagnostics(),
+                                            [](const auto& d) { return d.isError(); })) {
+                        completePrefixTree = std::move(candidate);
+                        completePrefixCompilation = std::move(proof);
+                    }
+                }
+            }
+        }
+        catch (const std::exception&) {
+            // An invalid prefix must still get the existing subset / Native path.
+        }
+    }
     std::optional<PackageClosure> closure;
     auto attemptIsolatedSubset = [&]() {
         auto packageSeeds = config.packages.value();
@@ -1508,13 +1578,12 @@ bool ServerDriver::prepareScopeLibrary() {
         report->attempt("closed-unit-subset", bool(subset), failure);
         return subset;
     };
-    const bool rtlOnly = config.packages.value().empty() && !modules.empty() && m_uvmEntryPath.empty();
-    if (rtlOnly && driver.syntaxTrees.size() == 1) {
+    if (!completePrefixTree && rtlOnly && driver.syntaxTrees.size() == 1) {
         closure = rtlDeclarationClosure(driver.syntaxTrees.front(), modules, compilationOptions,
                                         m_driverOwner->getSourceOwner());
         report->attempt("rtl-closed", bool(closure), closure ? "" : "closed-proof-unavailable");
     }
-    if (rtlOnly && !closure) {
+    if (!completePrefixTree && rtlOnly && !closure) {
         std::string_view failure;
         closure = rtlSubsetClosure(driver.syntaxTrees, modules, compilationOptions,
                                    m_driverOwner->getSourceOwner(), failure);
@@ -1534,7 +1603,7 @@ bool ServerDriver::prepareScopeLibrary() {
                 includedSelection |= bool(sm.getIncludedFrom(location.buffer()));
             }
         }
-    if (!closure && (includedSelection ||
+    if (!completePrefixTree && !closure && (includedSelection ||
         (!rtlOnly && (driver.syntaxTrees.size() > 1 || plans.units.size() != 1))))
         closure = attemptIsolatedSubset();
     if (!closure && driver.options.singleUnit.value_or(false) && driver.syntaxTrees.size() > 1)
@@ -1559,8 +1628,6 @@ bool ServerDriver::prepareScopeLibrary() {
                     return decline("fixed scope source-library contexts require native analysis", "source-library-context");
         }
     std::vector<SourceBuffer> roots;
-    std::shared_ptr<syntax::SyntaxTree> completePrefixTree;
-    std::shared_ptr<ast::Compilation> completePrefixCompilation;
     if (!closure)
         for (size_t i = 0; i < plan.frozenRootCount; ++i) {
             auto buffer = sm.readSource(plan.roots[i]);
@@ -1609,20 +1676,6 @@ bool ServerDriver::prepareScopeLibrary() {
                     auto proof = std::make_shared<ast::Compilation>(compilationOptions);
                     proof->retainSourceOwner(m_driverOwner->getSourceOwner());
                     proof->addSyntaxTree(candidate);
-                    auto supportedPrefixMember = [](const auto* member) {
-                        using K = syntax::SyntaxKind;
-                        switch (member->kind) {
-                            case K::ModuleDeclaration: case K::InterfaceDeclaration:
-                            case K::ProgramDeclaration: case K::PackageDeclaration:
-                            case K::PackageImportDeclaration: case K::DPIImport:
-                            case K::ClassDeclaration: case K::TypedefDeclaration:
-                            case K::ForwardTypedefDeclaration: case K::FunctionDeclaration:
-                            case K::TaskDeclaration: case K::DataDeclaration:
-                            case K::ParameterDeclarationStatement: case K::EmptyMember:
-                                return true;
-                            default: return false;
-                        }
-                    };
                     completePrefix = candidate->isPrefixResumeSafe().value_or(false) &&
                         std::ranges::all_of(candidate->root().as<syntax::CompilationUnitSyntax>().members,
                                             supportedPrefixMember) &&
@@ -1952,9 +2005,22 @@ bool ServerDriver::prepareScopeLibrary() {
     library->sources = sm.captureImmutablePrefix(fixedBuffers);
     std::shared_ptr<ScopeBodyCache> scopeBodies;
     if (!config.modules.value().empty() || !config.instances.value().empty()) {
+        // A module selector covers arbitrary caller type identities. Explicit
+        // instance selectors above can use their actual argument provenance.
+        for (const auto& name : config.modules.value()) {
+            const auto found = library->compilation->tryGetDefinition(
+                name, library->compilation->getRoot());
+            if (found.definition)
+                contextualInitial |= std::ranges::any_of(
+                    found.definition->as<ast::DefinitionSymbol>().parameters,
+                    [](const auto& parameter) { return parameter.isTypeParam; });
+        }
         scopeBodies = std::make_shared<ScopeBodyCache>(
             library, semanticBudget, config.modules.value(),
-            config.instances.value(), m_sourceRegistry);
+            config.instances.value(), m_sourceRegistry, contextualInitial);
+        if (std::getenv("SLANG_SCOPE_BODY_TRACE"))
+            fmt::print(stderr, "scope-body initial-plan\tcontextual={} direct={}\n",
+                       contextualInitial, scopeBodies->wantsInitialModel());
         if (scopeBodies->status().baseBytes > semanticBudget)
             return decline("fixed scope owner and bounded report exceed frozenSources.maxMiB", "budget");
     }

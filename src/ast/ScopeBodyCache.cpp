@@ -352,9 +352,10 @@ size_t charge(const Compilation& compilation) {
 
 ScopeBodyCache::ScopeBodyCache(std::shared_ptr<TrustedUvmLibrary> library, size_t budget,
                                std::vector<std::string> modules, std::vector<std::string> instances,
-                               std::shared_ptr<SourceStorageRegistry> sourceRegistry) :
+                               std::shared_ptr<SourceStorageRegistry> sourceRegistry,
+                               bool contextualInitial) :
     library(std::move(library)), sourceRegistry(std::move(sourceRegistry)),
-    modules(std::move(modules)), instances(std::move(instances)) {
+    modules(std::move(modules)), instances(std::move(instances)), contextualInitial(contextualInitial) {
     counters.budgetUnlimited = budget == std::numeric_limits<size_t>::max();
     counters.budgetBytes = budget;
     counters.refusalReportBytes = sizeof(refusalReport);
@@ -378,8 +379,19 @@ void ScopeBodyCache::install(Compilation& compilation,
 }
 
 bool ScopeBodyCache::wantsInitialModel() const {
-    return groups.empty() && modules.empty() && instances.size() == 1 &&
-           instances.front().find('.') == std::string::npos;
+    if (!groups.empty() || contextualInitial)
+        return false;
+    if (!instances.empty())
+        return true;
+    // An interface-only template selection can be used solely by virtual
+    // interfaces in editable classes, with no RTL instance forest to retain.
+    // Keep that shared class warmup on its ordinary source namespace.
+    return std::ranges::any_of(modules, [&](const std::string& name) {
+        const auto definition = library->compilation->tryGetDefinition(
+            name, library->compilation->getRoot());
+        return definition.definition &&
+               definition.definition->as<DefinitionSymbol>().definitionKind == DefinitionKind::Module;
+    });
 }
 
 void ScopeBodyCache::trackInitialSources(const std::shared_ptr<SourceManager>& sources) {
@@ -660,8 +672,13 @@ void ScopeBodyCache::publish(std::shared_ptr<Compilation> current,
             ownerSources = fullSources.get();
         }
         // Keep library identities independently of the mutable driver's manager.
+        // A reconstructed compact model imports only the fixed library. The
+        // isolated initial namespace is no longer its source or identity owner;
+        // keeping that lease would pin an otherwise retired source manager.
+        auto identities = compact && independentInitial
+                              ? std::static_pointer_cast<const void>(library) : sourceLibraries;
         auto lease = std::make_shared<BodySourceOwner>(compact ? compactSources : fullSources,
-                                                       sourceLibraries);
+                                                       std::move(identities));
         result->retainSourceOwner(lease);
         for (const auto& name : library->packages)
             result->importPackage(library->compilation, name, *ownerSources);
@@ -750,7 +767,9 @@ void ScopeBodyCache::publish(std::shared_ptr<Compilation> current,
         const bool direct = independentInitial && groups.empty() &&
                             !current->hasImportedInstanceBodies();
         auto group = prepareGroup(direct ? current : bind(std::nullopt));
-        if (group) {
+        // Exact object identity already proves the native boundary. Comparing
+        // every descendant against itself would repeat a full hierarchy walk.
+        if (group && !direct) {
             Bodies originals;
             current->getRoot().visit(originals);
             for (const auto& [path, body] : group->bodies) {
@@ -794,6 +813,14 @@ void ScopeBodyCache::publish(std::shared_ptr<Compilation> current,
             rememberRejection(context, 0);
         return true;
     };
+    // The isolated initial model already owns its semantics. Admission can
+    // retain it directly, without a second planning walk to decide whether
+    // constructing another full owner would be worthwhile.
+    const bool wholeTop = modules.empty() && instances.size() == 1 &&
+                          instances.front().find('.') == std::string::npos;
+    if (independentInitial && wholeTop && groups.empty() &&
+        !current->hasImportedInstanceBodies() && tryFull())
+        return;
     // A fragmented selection is cheaper to retain as one independent forest
     // than as many wrappers that a later full-context fallback discards. Plan
     // from native certificates before constructing any candidate owner. Small
@@ -820,7 +847,7 @@ void ScopeBodyCache::publish(std::shared_ptr<Compilation> current,
             return true;
         });
         current->getRoot().visit(plan);
-        if (fullPlanSafe && fragmented && frontierRoots >= 8 && tryFull())
+        if (fullPlanSafe && ((independentInitial && frontierRoots > 0) || (fragmented && frontierRoots >= 8)) && tryFull())
             return;
     }
     bool stopped = false, fullPublished = false;

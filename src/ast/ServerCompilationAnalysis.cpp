@@ -102,8 +102,8 @@ ServerCompilationAnalysis::ServerCompilationAnalysis(
     }
     phases.mark("model-syntax-discovery");
     // Establish isolation before binding, never by retaining the mutable source
-    // namespace after elaboration. Only the initial selected top-level forest
-    // is a candidate; contextual / compact routes keep their existing owner.
+    // namespace after elaboration. Initial selected scopes can retain this
+    // model directly; contextual dependencies still keep the compact route.
     auto* modelSources = &sourceManager;
     auto modelOptions = options;
     struct InitialSourceOwner {

@@ -37,7 +37,8 @@ public:
     };
     ScopeBodyCache(std::shared_ptr<TrustedUvmLibrary> library, size_t budget,
                    std::vector<std::string> modules, std::vector<std::string> instances,
-                   std::shared_ptr<SourceStorageRegistry> sourceRegistry = {});
+                   std::shared_ptr<SourceStorageRegistry> sourceRegistry = {},
+                   bool contextualInitial = false);
     void install(slang::ast::Compilation& compilation,
                  std::shared_ptr<const void> sourceLibraries = {}, bool independentInitial = false);
     Stats status() const;
@@ -57,6 +58,7 @@ private:
     std::shared_ptr<TrustedUvmLibrary> library;
     std::shared_ptr<SourceStorageRegistry> sourceRegistry;
     std::vector<std::string> modules, instances;
+    bool contextualInitial = false;
     std::list<Group> groups;
     std::vector<Pin> pins;
     // Admission advice only: no compiler, type, syntax or consumer ownership.
