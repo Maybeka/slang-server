@@ -1,9 +1,11 @@
 # Experimental frozen package and module sources
 
-The experiment retains syntax and preprocessing state for selected stable package
-and module inputs, including explicit-filelist full-design mode. It is disabled
-by default. It does not serialize a
-compiler database or retain semantic symbols across compilations.
+`experimentalFrozenSources` retains syntax and preprocessing state for selected
+stable package and module inputs, including explicit-filelist full-design mode.
+That syntax experiment does not retain semantic symbols across compilations.
+The separate [semantic experiment](#fixed-dependency-semantic-experiment-under-development),
+`experimentalScopeSemanticCache`, retains certified package/definition semantics
+and eligible elaborated instance subtrees. Both experiments are disabled by default.
 
 ```json
 {
@@ -56,24 +58,60 @@ prefix through the last selected declaration. Earlier roots remain dependencies,
 even if their packages were not selected. A root containing both library and
 user declarations remains one root: editing any part invalidates that group.
 Selecting a declaration in the last root may therefore offer no edit-time benefit.
-For the semantic experiment this fixed-dependency contract also covers earlier
-root files whose declarations were not explicitly selected. An editor change in
-one of those files requires `slang.rebuildScopeLibrary`; it is not an ordinary
-consumer edit. Keep mutable files outside the fixed prefix when configuring an
-editable consumer workload.
+The semantic experiment first distinguishes physical provider ownership from its
+include/input context. A closed declaration provider fixes its actual declaration,
+used macro and type-dependency files, including included headers. A common
+includer alone does not fix a different included consumer file. The current native
+parse still validates declaration order, include/provider identity and parser
+context before importing semantics. Changed used providers require
+`slang.rebuildScopeLibrary`.
 
-For pure RTL without compilation-unit declarations, the semantic experiment can
-instead retain selected module definitions and their global child-definition
-closure across separated physical roots. Intervening unselected roots remain
-mutable; source order is preserved. A child definition is fixed even when it was
-not separately named in the configuration. Mixed physical files, ambiguous or
-missing child definitions, scoped types and interface-port dependencies keep the
-existing complete-provider route. Contiguous groups retain the prefix fast path.
+An ordered-prefix optimization is used only when it does not enlarge that fixed
+physical footprint. Status reports the chosen route. When that route is used,
+its earlier inputs are fixed dependencies too; mutable consumers must remain
+outside that prefix. Moving stable library/RTL inputs before mutable consumers
+can enable preprocessing resumption, but declaration semantics can reuse without
+resuming a prefix.
+
+The semantic experiment can retain a closed subset of selected definitions and
+supported compilation-unit types, imports, classes and subroutines. Dependencies
+close across separated fixed roots while preserving native declaration order and
+compilation-unit boundaries. Unavailable, ambiguous, source-library or unsupported
+dependencies exclude the affected declaration and its dependent parents;
+independent safe descendants remain candidates. Entirely fixed physical files may
+contain both reused declarations and ordinary-analysis remainders. This does not
+permit editing a sibling inside a fixed file: the whole file is still fixed.
+
+An error elsewhere in a native unit does not alone exclude an intact declaration.
+Selected syntax must have no errors, missing tokens or recovery trivia. A semantic
+error with a unique declaration owner excludes that declaration; ambiguous errors
+exclude the affected physical root. Dependency rejection propagates before a
+fresh closed provider is checked. Unattributed errors keep ordinary analysis
+rather than guessing. The complete current native analysis still reports its
+original errors; invalid bodies are not frozen.
+Selected files remain fixed in full even when only some of their declarations
+are reused. In particular, a macro used by the selected RTL can fix its wrapper
+file without also fixing every other file that wrapper includes. Native remainders
+inside that fixed wrapper keep current query routing; editing the wrapper itself
+still requires rebuilding. Compilation-unit type/subroutine context follows the
+original include/input unit without merging that context into the fixed file set.
+Shared macro text can remain fixed across independent compilation units. This
+never merges their declaration ownership or nominal type identities; unproved
+shared declaration contexts keep ordinary analysis.
+
 Projected providers use the current native parse to check expanded declaration
 syntax, locations and per-declaration preprocessing state before importing their
 semantics. A changed macro or directive context suspends the import; editing a
 fixed provider or its retained include still requires manual rebuilding. No
 filesystem freshness proof is added to the fixed-dependency contract.
+
+An unchanged parser-state directive from a different physical input can move when
+that editable input gains lines. Its text, source paths and effective declaration
+metadata must still agree; only its byte offset may differ. This applies to
+`resetall`, `default_nettype`, `timescale`, `unconnected_drive`,
+`nounconnected_drive`, `celldefine` and `endcelldefine` trivia. Macro, conditional,
+line-map and recovery witnesses retain strict location checks. Fixed declaration
+tokens themselves must keep their original locations.
 
 In full-design mode, a selection covering the entire input unit uses native
 parsing when it needs rebuilding: there is no remaining suffix to resume.
@@ -395,8 +433,10 @@ including interfaces reached through another retained library. Their checks use
 the current design hierarchy without modifying the shared type owner. The
 independent subtree owner still checks only its certified root; it does not serve
 as a complete design diagnostic result.
-Inherited multi-unit preprocessing, unsupported unit declarations, ambiguous
-selectors, errors and budget overflow decline retention. A module/interface owner
+Prefix reuse declines inherited multi-unit preprocessing; a positively proved
+native declaration projection can still retain a closed subset. Unsupported unit
+contexts, ambiguous selectors, errors within retained declarations and budget
+overflow use ordinary analysis. A module/interface owner
 also uses native binding for an analysis containing compilation-unit functions,
 tasks, types, variables, classes or imports outside its fixed provider files: those
 names can be visible to native code but absent from the retained definition's
@@ -436,6 +476,13 @@ explicit rebuild instruction until that rebuild completes. Charges do not measur
 RSS. The CVA6 and UVM acceptance results, including preparation and memory costs,
 are recorded in the [implementation and acceptance plan](../development/scope-semantic-plan.md).
 Passing those workloads does not extend the supported language boundary.
+
+Repeated queries validate a fixed source view against the same provider tree
+used to construct it. Namespace compatibility results, including rejections, are
+reused only while the provider and every ordered configured syntax tree retain
+their identities. An edit, replaced compilation unit or rebuilt provider requires
+a fresh proof. These keys are weak references and do not keep retired source
+generations alive; fixed-source editor checks still run for each lookup.
 
 The fixed-scope experiment also automatically reuses eligible closed instance
 subtrees at the same concrete path, including value-parameter variants, nested
@@ -579,10 +626,14 @@ file-output and formatting calls, argument-free time queries, and supported
 sampling calls can retain their bound graph without executing or caching a result.
 Inherited outside clocking / disable contexts and unsupported sampling arguments
 keep native analysis. Other unproven calls also keep native analysis.
-An unseeded parameterless `$urandom()` can share its bound runtime call graph.
-No random result is evaluated or cached: native constant evaluation still reports
-an error and prevents retaining invalid constant contexts. Seeded random calls
-and other unproven runtime functions continue to use native analysis.
+Runtime builtins with a final fixed-signature input binder and a final
+non-constant evaluator can share their bound call graph. This covers the native
+`$urandom` / `$urandom_range` binding family and fixed-signature runtime file
+operations such as `$fseek`; method receivers, output signatures and `with`
+contexts require separate proofs. Every argument and the result type still passes
+the ownership / nominal-type audit. Runtime random values, file state and other
+simulation state are never evaluated or cached. Native constant-context errors
+remain errors, and a nested argument from mutable outside state rejects reuse.
 Fixed-size streaming concatenations retain their bound slice-size expression for
 the same dependency audit, rather than trusting only its folded numeric width.
 Operands and `with` selections are also audited. A slice width from an editable
@@ -617,6 +668,11 @@ the whole old consumer. Upward references and dependencies outside the retained
 subtree still require native analysis.
 Certified body uses are folded into the current reference map once on import;
 each later declaration-use query does not scan every cached subtree.
+Certification preserves Native's recorded read / write direction, including
+constant operands; dependency checks do not manufacture extra reads. Certified
+generic classes with a compilation-unit parent also use the current consumer's
+reference profile, so removing an outside caller cannot inherit an old owner's
+"used" flags.
 Package declaration usage is captured once at the first export by moving the
 existing profile. Later owner-side hover / completion lookups use a separate
 overlay and cannot suppress unused-package warnings in subsequent consumers.
@@ -624,8 +680,17 @@ overlay and cannot suppress unused-package warnings in subsequent consumers.
 Internal semantic warnings retain raw per-occurrence records, including disabled
 warnings, and are coalesced using the current consumer's instance counts. Current
 diagnostic policy remains responsible for severity and suppression. Warnings with
-locations, ranges or notes outside the fixed subtree conservatively prevent that
-body from being retained. Outside root connections are diagnosed afresh.
+locations, ranges or notes outside the certified declarations and closed class
+dependencies conservatively prevent that body from being retained. Outside root
+connections are diagnosed afresh.
+
+Closed downward hierarchy writes and calls retain their binding origins. Only
+visited instance bodies schedule those effects in the current Native finalization
+pass. That pass can invalidate a canonical skip and revisit a retained descendant;
+previously skipped raw diagnostics remain available, while already replayed
+occurrences are not added again. Certified class diagnostics are emitted at Native's
+existing class-specialization visits, preserving its representative ordering across
+different parameters rather than depending on root import order.
 
 For investigation, `SLANG_SCOPE_BODY_TRACE=1` emits admission reasons and actual
 retained / reused hierarchy paths to stderr. It is disabled unless requested and
@@ -641,10 +706,214 @@ children can also prevent replacing a body. Broader coverage and formal
 large-project performance / memory acceptance remain under
 development. All new experiments remain disabled by default.
 
+Body certification has an explicit inventory gate for expression, statement,
+timing, pattern, assertion, constraint and coverage-selector kinds. New native
+kinds absent from that inventory decline with `unreviewed-ast-kind`. Listing a
+kind is only the outer boundary: its type, ownership, hidden dependencies and
+context must still pass the existing semantic checks. Invalid nodes are excluded.
+
+Sequence delay and repetition bounds retain their original bound expressions for
+dependency certification even after native analysis folds them to integer ranges.
+This covers inline assertions as well as named sequences / properties, including
+unbounded upper ranges. Local parameters and fixed-package bounds can reuse;
+bounds from mutable providers require native analysis. Recording is enabled only
+with body-reference tracking and does not memoize runtime assertion values.
+
+The type operator `type(expression)` also retains its original source binding for
+certification. A resolved builtin type alone does not prove independence: changing
+a mutable operand's type can change assignment-pattern type-key matching without
+changing the retained result type. Local and fixed-provider type sources can
+reuse; mutable outside sources decline. Type-only dependencies do not require a
+runtime-value usage proof for a fixed provider. Structured assignment patterns
+explicitly certify their type-setter and field-setter metadata in addition to
+native expression children. Controls and newly closed types are audited together
+until no further dependencies appear, including controls discovered by lazy binding.
+
+Local pattern bindings use the same type and ownership certification as other
+local variables. Structure / tagged pattern field metadata must close over a
+certified aggregate type; this does not admit otherwise unsupported union types.
+Loop certification explicitly visits declared `for` variables and `foreach`
+dimension variables, including unused variables and skipped dimensions. Iterator
+symbols also certify their retained array type, not just their index / element
+value type. These metadata checks supplement the native expression-child walk.
+
 `slang.scopeLibraryStatus` includes `bodies.retainedRoots`, the deduplicated paths
 currently held by independent owners. A root hit can cover its entire subtree;
 the hit count is not the number of descendant instances skipped. Root retention
 by itself does not guarantee every subsequent parameterization can import it.
+
+Real-workload acceptance tests must set `semanticCacheUnlimited: true`
+and omit numeric semantic cache budgets. Large designs are expected workloads;
+a quota-triggered fallback does not establish the implementation's supported
+scale. Test explicitly configured protective limits separately. This bypasses fixed-scope and dedicated
+UVM semantic retention limits, including registries created when a driver is
+promoted or rebuilt. It does not enable either semantic experiment. Scope and UVM
+status expose `budgetUnlimited`; `bodies.budgetBytes` is zero when that flag is
+true, meaning no finite quota rather than a disabled cache. Charged bytes remain
+available as an accounting metric. Measure actual process RSS and physical
+footprint separately; quota-truncated results do not describe full workload
+capability. The semantic experiments and this setting remain disabled by default.
+
+An RTL subset can include harmless module / interface / program siblings from
+the already fixed physical roots. The root set comes from the eligible requested
+definition graph before adding siblings. Sibling dependencies can close within
+those roots, including other siblings; they cannot expand the set to unrelated
+mutable providers. Additional macro-origin roots decline with
+`outside-fixed-root-context`, and out-of-set module dependencies decline with
+`outside-fixed-root-dependency`. Explicitly selected providers and dependencies
+already belonging to the requested graph retain the usual fixed-input contract.
+This does not enable routine editing of any part of a fixed provider file.
+
+The RTL subset route can preserve safe declarations beside unsafe declarations
+in the same fixed file. Unprepared declarations remain in the current native
+compilation, including their diagnostics and current parameterizations. The
+`nativeRemainderFiles` status lists fixed files containing such unprepared members.
+Queries in these files use the complete current compilation instead of the
+private projected provider view. Every part of these files remains fixed until
+manual rebuild; this does not enable the unsupported fixed/editable mixed-file
+use case. A semantic error uniquely attributable to one declaration excludes
+that declaration and its dependents (`semantic-error-declaration`). Ambiguous
+macro expansions or global error locations retain conservative physical-root
+refusal (`semantic-error-root`), or decline preparation when no safe attribution
+exists. A partial provider is replaced by the whole-prefix fast path only after the complete prefix passes parsing and semantic preparation; the successful prepared prefix is reused directly.
+Changes in an outside preprocessing context can also fail
+the strict declaration witness: matching tokens alone are insufficient when
+leading directive trivia differs. Native analysis then reports current values;
+manual rebuild establishes a new reusable generation.
+
+`slang.scopeLibraryStatus.lastModelLibraryImport` reports the last committed full
+model's namespace import independently of preparation and body reuse. Its
+`status` is `no-model`, `not-configured`, `disabled`, `declined` or `imported`,
+and `generation` identifies the library considered by that model. A failed
+current-input namespace / preprocessing witness reports `namespace-witness` in
+`failureCategory`; an import option without a library reports `library-unavailable`.
+For `namespace-witness`, `witnessFailure` distinguishes `provider-path-conflict`,
+`mutable-unit-binding`, `unclosed-global-name`, `duplicate-projected-definition`,
+`missing-provider-declaration`, `provider-metadata`, `parser-context`,
+`projected-syntax` and `missing-current-definition`. These are value-only
+categories; no retained pointer into rejected or obsolete editor state is exposed.
+This is a pre-body-hook outcome: `imported` does not imply any instance body was
+reused. Check `lastModelSharedRoots` for actual body imports.
+
+`lastModelCurrent` indicates whether that committed result covers the current
+inputs. Editing, cancelling replacement analysis or retiring the model leaves
+its value-only result visible with `lastModelCurrent: false`. An interrupted
+candidate never publishes its import outcome; private source queries and
+analyses of the same library generation cannot overwrite it. The aggregate
+`namespaceDeclines` remains a lifetime counter and can increase during these
+private or cancelled attempts.
+
+`slang.scopeLibraryStatus.preparation` describes declaration preparation separately
+from body certification. `status` is `not-requested`, `declined` or `prepared`;
+`route` identifies `rtl-closed`, `rtl-subset`, `ordered-prefix`,
+`package-projection`, or `native` after an overall decline. `failureCategory`
+classifies overall selection, preprocessing, native-error, context or budget
+failure; the existing top-level `reason` preserves the detailed explanation.
+
+`attempts` records preparation routes considered, with `not-applicable`,
+`candidate`, `superseded`, `discarded` or `used` outcomes. Only the final published
+route is `used`. A failed subset attempt does not imply rejected declarations if
+the later prefix route retains them. When no provider is published, tentative
+exclusions are discarded and the overall failure / attempt outcomes explain the
+native path.
+
+For the chosen provider, `candidateDeclarations` counts the chosen declaration
+graph. `preparedDeclarations` counts public packages and definitions plus
+`preparedUnitTypes` and `preparedUnitSubroutines`; enum export names do not count
+as additional declarations. `excludedDeclarations` counts rejected graph
+declarations once each. It is
+not a count of instances, source lines or reused bodies. `refusals` groups each
+excluded declaration by its first cause, including unavailable / ambiguous
+dependencies, dependency propagation, opaque unit names, source-library / unit
+contexts, syntax errors, shared compilation-unit roots and semantic errors.
+Unavailable means unavailable to this provider graph; the ordinary native loader
+may still resolve the dependency. A semantic-error-root category describes the
+whole excluded physical root, not a claim every sibling caused the error.
+
+If an ordered prefix fails because of unrelated named `$unit` declarations,
+preparation can try `closed-unit-subset`. Omitted unit declarations remain native,
+including their errors. Retained declarations must close their named dependencies;
+references to omitted bindings (including deferred generic bodies) refuse reuse.
+Direct package members shadow imported / unit names, but explicit `$unit::` access
+remains outside this projection. Package dependencies cannot absorb a file shared
+with an editable consumer. Native syntax and preprocessing context are preserved;
+disabled preprocessor text is permitted, while actual parser recovery refuses the
+affected declaration. Macro definition roots remain dependencies; another file
+using the same macro does not thereby become a fixed declaration owner. Named
+port types and package-qualified references can close over known providers;
+actual interface connections and external unit bindings retain their separate
+context checks. Native binding distinguishes class / type-parameter qualifiers
+from package dependencies. This route may retain safe children when a parent cannot
+be prepared. Check actual imported roots before interpreting preparation success
+as a performance result.
+
+The report retains at most 32 categories, eight declaration-name samples, eight
+binding-name samples (at most two per category), and eight route attempts;
+`sampleBindings` identifies representative names causing a refusal. These samples
+are separate from complete declaration counts. Names are shortened at a UTF-8
+boundary to 160 bytes. Declaration counts
+remain complete through `uncategorizedDeclarations`; truncation flags identify
+omitted detail. These are report-size limits and do not limit semantic cache
+capacity or freezing coverage. `preparationReportBytes` accounts retained report
+storage, included in a published provider's semantic charge. Reports contain only
+copied values and no AST owners. Ordinary edits share the immutable generation's
+report; manual rebuild creates a fresh one.
+
+Selective providers can retain CU classes, typedefs (including enum exports),
+and simple free functions / tasks from a selected stable design's physical entry
+files, including their headers. Pure CU type-only dependency files can also be
+retained. Subroutines in unrelated input files, CU variables / parameters, legal
+forward-declaration pairs, and extern class-method implementations remain outside
+this selective route. They use the complete-prefix route when valid or stay
+native. CU providers currently require one configured compilation unit; other
+independent units can retain providers that do not need imported CU declarations.
+Native binding determines exported names and ownership, and ambiguous ownership
+refuses reuse. Exact declaration syntax, physical entry roots, and unit membership
+are rechecked before import. Complete native inputs restore declarations at their
+original positions instead of making types visible before declaration.
+
+Module-instance syntax is not proof that a dependency is active for every
+parameterization. The selective route preserves such references and defers actual
+child binding to the existing body certificate. All active descendant definitions
+must still be fixed and independently supported. An unresolved active child stays
+native with its diagnostics, while an inactive branch can permit parent reuse.
+`deferredModuleNames` counts syntax-only names eligible for this namespace rule;
+these are not counts of cached bodies or missing implementations. A name used in
+another lookup, including a deferred generic body or a repeated macro argument,
+does not receive this exception.
+
+The `coverage` object separates configured `requestedPackages`,
+`requestedModules` and `requestedInstances` from `preparedDeclarations`,
+`retainedRoots` and `lastModelImportedRoots`. Prepared declarations count top-level
+packages and module/interface/program definitions, not source bytes or elaborated
+instances. Retained roots are available cache entries; imported roots are entries
+actually used by the last committed full model. A pending edit does not force a
+model rebuild just to answer this status request. `lastModelSharedRoots` lists
+those imported paths and `instanceBodiesShared` derives from that list, rather
+than a lifetime hit counter.
+
+`bodies.refusals` reports compiler certification and cache admission categories
+without requiring debug tracing. Its `attempts` values are lifetime candidate
+attempts within this library generation, including cached failures and repeated
+edits; they are not distinct rejected instances or a coverage percentage. The
+report keeps at most 32 categories and eight representative root paths overall,
+with paths limited to 255 bytes without splitting UTF-8 characters.
+`refusalSamplesTruncated` indicates omitted or shortened samples, and
+`uncategorizedRefusals` counts attempts beyond the category limit. The fixed report
+storage appears as `refusalReportBytes` and is charged in `baseBytes` and the
+scope's total `chargedBytes`. Internal budget checks do not construct report
+copies. Rebuilding the library starts a fresh report; any new analysis can then
+record new refusals.
+
+For example, `assertion-formal-ports` means that the selected root contains an
+assertion declaration whose formal binding is outside the current certificate;
+`user-nettype-resolution` keeps an internal custom net's resolution dependency in
+ordinary analysis, including nettypes imported from a fixed package. Builtin net
+types still use the normal closed-type proof. `budget-source-floor` and
+`budget-owner` describe admission limits, not syntax restrictions. A retained
+parent's safe descendants can still be attempted when the parent fails. Provider
+preparation failures are separately explained by the top-level `reason`; a body
+report does not claim to enumerate declaration-closure exclusions.
 
 ### Experimental diagnostic delta publishing
 
@@ -660,3 +929,108 @@ it does not skip current semantic analysis or suppress warnings.
 
 See the [Mac CVA6 whole-DUT evaluation](../development/cva6-dut-reuse-evaluation.md)
 for measured latency, memory costs and complete acceptance boundaries.
+
+
+Hierarchy lookup can fold an instance / generate-array selector into its final
+symbol path. The selector's original bound expression participates in the same
+elaboration-control dependency proof as generate conditions, streaming slice
+sizes, assertion bounds and `type(expr)` operands. This applies to both value
+references and control targets such as `disable`. A local root parameter or fixed
+provider constant can select a reusable local target; a mutable outside constant
+cannot make that target safe merely because the resulting target belongs to the
+retained subtree. Root parameter variants retain separate matching signatures.
+
+### Finite semantic contract and conformance evidence
+
+The reusable subset is defined by semantic ownership and dependency closure,
+independently of project names. A recognized AST kind is only the entry gate;
+it does not authorize reuse without its type, context, hidden metadata, usage,
+diagnostic and current-boundary checks. The machine-readable inventory in
+`validation/data/freeze-language-contract-2026-10-30.json` links 219 native kinds
+to explicit rules and family-level Native oracle tests. It also inventories 99
+native system binder classes, including inherited contracts. These counts are
+inventory coordinates, not counts of always reusable language features or a
+claim of exhaustive dynamic coverage.
+
+| Family | Conditions for reuse | Ordinary-analysis boundary |
+| --- | --- | --- |
+| Stable declarations | Fixed module-like/package providers, preserved ordinary compilation-unit and preprocessing context, closed declaration graph | Unmodeled source-library/unit/config context, unavailable or ambiguous dependency, changed namespace witness |
+| Hierarchy and ports | Fixed descendants with current consumer connections/overrides; independent matching owners and nominal identities | Ref/variable-inout or direct interface/modport aliases, unclosed upward/bind/config effects |
+| Values and types | Closed scalar, packed/aggregate/container and class types; owned deep parameter keys; closed interface prototypes | A type accepted as a runtime value is not automatically a valid parameter key; unclosed nominal, alias or caller-dependent type graphs refuse |
+| Expressions and control flow | Normal child traversal plus explicit pattern/iterator/loop metadata and folded-control checks | A local result or selected target does not hide mutable operands that were folded away |
+| Calls | Explicit argument-only system binder contract or dedicated context proof; owned outputs and closed signatures/bodies/providers | Unproven binders, receivers, extra context or external destinations; runtime IO/random values are never cached results |
+| Assertions and timing | Closed clocks/disables, zero-formal named assertions, complete expanded expressions and folded bounds | Assertion formals/recursive contexts, inherited external clocks/disables, clocking items/aliases |
+| Constraints and coverage | Closed scope-randomize operands, distributions/weights/filters/options and local type graphs | Unproven class randomization, constraint restrictions or external operands |
+| Opaque body contexts | The affected parent stays native while independently certified children may reuse | Specify/timing-check state, user primitives/resolution, procedural checker and randsequence graphs require further context proofs |
+
+The finite-boundary conformance test uses an ordinary positive and six explicit
+negative contexts: randsequence, procedural checker, specify, ref port, clocking
+items and assertion formals. It verifies actual parent/child imports and Native
+semantic/dataflow parity through baseline, structural edit, user error and repair.
+Other linked tests cover type/parameter/nominal identity, call outputs, folding,
+net resolution, incoming usage removal and independent owner lifetime. A family
+oracle does not establish every kind/context combination; the inventory retains
+that distinction. Final frozen-code query, formal latency/RSS and sanitizer
+qualification remain separate gates.
+
+
+Attributes are metadata on declarations, statements, expressions and port
+connections, rather than normal expression children. Their original bound
+expressions remain available after constant evaluation. Certification collects
+attributes whose binding scopes belong to the retained region, including scopes
+closed later through class/interface proofs, and applies the ordinary dependency
+audit to those expressions. Local/fixed attribute values can reuse; mutable
+outside dependencies refuse the affected parent while safe children can reuse.
+Attributes on the caller's root instance and its connections are evaluated in the
+current caller. Changing or removing those attributes does not invalidate an
+otherwise independent body, and must not retain old caller reference flags.
+
+Statement traversal also covers the declarations attached to each block scope;
+a variable initializer must be audited even when the variable is never read.
+The current source-field review covers all 31 noninvalid statement kinds,
+nine timing-control kinds and five pattern kinds. Ordinary visitors are
+supplemented by explicit checks for loop/pattern symbols and block-event/disable
+targets. Randsequence and procedural checker graphs remain explicit exclusions.
+The statement dependency fixture compares local, fixed-package and mutable-package
+operands through value changes, user errors and repair. It checks actual parent
+and child reuse and semantic/dataflow diagnostics against ordinary analysis.
+Source-field review does not imply exhaustive dynamic coverage of every context.
+
+Coverage selectors also need an ownership check for the symbol selected by
+`binsof`: that target is metadata, rather than a normal expression child.
+Local targets and targets owned by an imported fixed package may reuse. A target
+from a mutable package keeps the affected parent native, even when the name is
+package-qualified and produces no upward-reference side effect. Independently
+certified children can still reuse. The regression compares target type widths
+as well as diagnostic results after the external declaration changes.
+
+Class certification closes every declared implemented or extended interface
+class, in addition to the ordinary base class and generic arguments. An owned
+local interface's pure virtual methods are signature contracts; their types and
+defaults still need the normal dependency checks. Mutable interface providers
+keep the affected parent native. Constructor arguments written in an `extends`
+clause are also audited explicitly, because they are stored on the class rather
+than in the constructor's statement body.
+
+Lexical completion in a fixed module's source file preserves that file's
+physical include-root view. Unrelated compilation-unit declarations and bound
+instances declared in other roots do not expand its lexical suggestions.
+Hierarchical member access and the hierarchy view still use the selected full
+instance. Retained members mapped to the current instance count as local members;
+their different arena addresses must not add a spurious module description.
+
+Query comparisons need the same source index in both configurations. In
+particular, an isolated test workspace with an external build file must also
+index the original source directories so ordinary package lookup has its
+providers. The current 16-project lexical query matrix uses identical explicit
+index roots and checks hover, definition, completion, completion resolution,
+references and diagnostic maps across initial analysis, structural edit, error
+and repair. It separately verifies actual imported-body membership and preserved
+reuse. This is correctness evidence, not a latency or memory result.
+
+Namespace authentication can reuse a proof for the exact ordered immutable syntax
+trees, source manager and live source-owner identity that produced it. These weak
+records do not retain retired editing namespaces; changing a tree or rebuilding
+the semantic library requires a new proof. Physical-buffer path and kind matching
+is local to a syntax comparison. Macro expansion locations, token offsets,
+spelling, trivia and effective parser context retain their existing checks.

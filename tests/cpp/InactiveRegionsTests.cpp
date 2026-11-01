@@ -4,11 +4,63 @@
 #include "util/Converters.h"
 #include "utils/ServerHarness.h"
 #include <catch2/catch_test_macros.hpp>
+#include <thread>
 
 #include "slang/syntax/SyntaxTree.h"
 #include "slang/text/SourceManager.h"
 
 using server::toRange;
+
+TEST_CASE("Syntax indexing deep expressions preserves token and trivia order on a worker",
+          "[syntax-indexer-deep-worker]") {
+    using namespace slang;
+    constexpr size_t operators = 4096;
+    std::string source = "`define VALUE 7\nmodule deep; localparam int X = 1";
+    for (size_t i = 0; i < operators; ++i)
+        source += "+1";
+    source += ";\n`ifndef OMIT\nint after = `VALUE;\n`else\nint disabled;\n`endif\nendmodule\n";
+    SourceManager sm;
+    auto tree = syntax::SyntaxTree::fromText(source, sm);
+    REQUIRE(tree->diagnostics().empty());
+    size_t plus = 0, ones = 0, expansions = 0, hints = 0;
+    bool ordered = true, parents = true, expansionText = false;
+    std::vector<std::string> disabled;
+    std::exception_ptr failure;
+    std::thread worker([&] {
+        try {
+            server::SyntaxIndexer indexer(*tree);
+            size_t previous = 0;
+            for (auto token : indexer.collected) {
+                ordered &= token->location().offset() >= previous;
+                previous = token->location().offset();
+                parents &= indexer.getTokenParent(token) != nullptr;
+                plus += token->rawText() == "+";
+                ones += token->rawText() == "1";
+            }
+            expansions = indexer.macroExpansions.size();
+            hints = indexer.collectedHints.size();
+            for (const auto& [_, expansion] : indexer.macroExpansions)
+                expansionText |= expansion.getText().find('7') != std::string::npos;
+            for (auto range : indexer.disabledRegions)
+                disabled.emplace_back(sm.getSourceText(range));
+        }
+        catch (...) {
+            failure = std::current_exception();
+        }
+    });
+    worker.join();
+    if (failure)
+        std::rethrow_exception(failure);
+    CHECK(plus == operators);
+    CHECK(ones == operators + 1);
+    CHECK(ordered);
+    CHECK(parents);
+    CHECK(expansions == 1);
+    CHECK(expansionText);
+    CHECK(hints >= 1);
+    REQUIRE(disabled.size() == 1);
+    CHECK(disabled.front().find("int disabled;") != std::string::npos);
+}
 
 struct RegionInfo {
     lsp::Range range;

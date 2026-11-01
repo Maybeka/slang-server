@@ -1,11 +1,14 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 #include "ast/ScopeBodyCache.h"
+#include "ast/TrustedImportStatus.h"
 #include <atomic>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <set>
 #include <string>
+#include <string_view>
 #include <unordered_set>
 #include <vector>
 
@@ -17,7 +20,21 @@ namespace server {
 /// One explicitly trusted generation. The source lease owns location storage and
 /// library identities, independently of driver loaders and mutable consumer trees.
 struct TrustedUvmLibrary {
+    // Exact immutable syntax / source-lifetime identities, not file freshness
+    // certificates. Weak keys never keep an editing namespace or tree alive.
+    struct NamespaceWitness {
+        std::weak_ptr<const void> sourceOwner;
+        const slang::SourceManager* sources;
+        std::vector<std::weak_ptr<slang::syntax::SyntaxTree>> trees;
+        bool compatible;
+        std::string_view refusal;
+    };
+    mutable std::mutex namespaceWitnessMutex;
+    mutable std::vector<NamespaceWitness> namespaceWitnesses;
+    mutable std::atomic<uint64_t> namespaceWitnessBuilds = 0;
+    mutable std::atomic<uint64_t> namespaceWitnessHits = 0;
     std::shared_ptr<const void> sourceOwner;
+    std::shared_ptr<const struct ScopePreparationReport> preparationReport;
     std::shared_ptr<slang::ast::Compilation> compilation;
     std::shared_ptr<const slang::SourceManager::ImmutablePrefix> sources;
     std::vector<std::string> packages = {"uvm_pkg"};
@@ -26,6 +43,9 @@ struct TrustedUvmLibrary {
     // A projected RTL owner borrows declarations across mutable source roots.
     // Recheck their expanded syntax and parser context in the current native unit.
     bool projectedDefinitions = false;
+    // Syntax-only instance names may remain dormant for this parameter frame.
+    // Every active descendant still needs the ordinary body certificate.
+    std::vector<std::string_view> deferredDefinitionNames;
     std::vector<std::string_view> unitLookupNames;
     std::vector<std::string_view> safeUnitWildcardImports;
     std::vector<std::string_view> unitDpiCNames;
@@ -37,6 +57,9 @@ struct TrustedUvmLibrary {
     std::filesystem::path parseCachePath;
     std::string preparseKey;
     std::unordered_set<std::string> files;
+    // Text is fixed in these files, but unimported declarations bind natively.
+    // URI-only private provider views are incomplete for queries in such files.
+    std::unordered_set<std::string> nativeRemainderFiles;
     std::atomic<uint64_t> consumers = 0;
     std::atomic<uint64_t> namespaceDeclines = 0;
 };
@@ -54,16 +77,43 @@ struct TrustedUvmImport {
 /// cannot resolve later mutable $unit declarations through their provider scope.
 bool trustedLibraryNamespaceMatches(
     const TrustedUvmLibrary& library, const slang::SourceManager& sources,
-    std::span<const std::shared_ptr<slang::syntax::SyntaxTree>> trees);
+    std::span<const std::shared_ptr<slang::syntax::SyntaxTree>> trees,
+    std::string_view* refusal = nullptr);
+
+/// Reuse a namespace relation only for the exact ordered trees and live source
+/// lifetime that proved it. No cache is used without an owning source lease.
+bool cachedTrustedLibraryNamespaceMatches(
+    const TrustedUvmImport& setting, const slang::SourceManager& sources,
+    std::span<const std::shared_ptr<slang::syntax::SyntaxTree>> trees,
+    std::string_view* refusal = nullptr);
 
 inline bool importTrustedUvm(
     slang::ast::Compilation& compilation, slang::SourceManager& sources, const slang::Bag& options,
-    std::span<const std::shared_ptr<slang::syntax::SyntaxTree>> trees = {}) {
+    std::span<const std::shared_ptr<slang::syntax::SyntaxTree>> trees = {},
+    TrustedImportStatus* result = nullptr) {
+    if (result)
+        *result = {"not-configured", 0, {}, {}};
     auto setting = options.get<TrustedUvmImport>();
-    if (!setting || !setting->library || !setting->enabled)
+    if (!setting)
         return false;
-    if (!trustedLibraryNamespaceMatches(*setting->library, sources, trees)) {
+    if (result)
+        *result = {"declined", setting->library ? setting->library->generation : 0,
+                   "library-unavailable", {}};
+    if (!setting->library)
+        return false;
+    if (!setting->enabled) {
+        if (result)
+            *result = {"disabled", setting->library->generation, {}, {}};
+        return false;
+    }
+    std::string_view witnessFailure;
+    if (!cachedTrustedLibraryNamespaceMatches(*setting, sources, trees,
+                                              result ? &witnessFailure : nullptr)) {
         ++setting->library->namespaceDeclines;
+        if (result) {
+            result->failureCategory = "namespace-witness";
+            result->witnessFailure = witnessFailure;
+        }
         return false;
     }
     if (auto owner = setting->sourceOwner.lock())
@@ -78,6 +128,8 @@ inline bool importTrustedUvm(
         if (auto cache = bodies->cache.lock())
             cache->install(compilation, bodies->sourceLibraries);
     ++setting->library->consumers;
+    if (result)
+        *result = {"imported", setting->library->generation, {}, {}};
     return true;
 }
 } // namespace server

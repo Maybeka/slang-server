@@ -490,8 +490,9 @@ std::shared_ptr<const BodyDiagnosticBaseline> BodyDiagnosticCache::completeCaptu
                 "local diagnostics require ordinary class methods or input-only automatic "
                 "package/module subroutines");
         require(fn->getCompilation().hasFlag(
-                    ast::CompilationFlags::TrackSubroutineBodyDependencies) &&
-                    !fn->bodyHasExternalDependents.load(std::memory_order_relaxed),
+                    ast::CompilationFlags::TrackSubroutineBodyDependencies),
+                "method dependency tracking unavailable");
+        require(!fn->bodyHasExternalDependents.load(std::memory_order_relaxed),
                 "method has external elaboration dependencies");
         baseline->originals.push_back(fn);
     }

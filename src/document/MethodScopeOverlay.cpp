@@ -1330,8 +1330,9 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
         ctx.checkpoint("method source witness read");
         auto bytes = readWitness(path);
         auto [it, inserted] = disk.try_emplace(path, bytes);
-        if (!inserted && it->second != bytes)
+        if (!inserted && it->second != bytes) {
             throw InputsChanged("input changed during certification");
+        }
         return it->second;
     };
     forSourceFiles([&](const auto& file) {
@@ -1342,13 +1343,15 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
         need(!file.generated, "generated input");
         const auto& bytes = witness(file.fullPath);
         if (URI::fromFile(file.fullPath) != uri) {
-            if (!bytes)
+            if (!bytes) {
                 throw InputsChanged("missing source witness");
+            }
             auto source = *bytes;
             if (source.empty() || source.back() != '\0')
                 source.push_back('\0');
-            if (source != file.bytes)
+            if (source != file.bytes) {
                 throw InputsChanged("source changed before certification");
+            }
         }
     });
     ctx.checkpoint("method certificate sources ready");
@@ -1359,8 +1362,9 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
             continue;
         need(lookup.fileId || lookup.errorValue == int(std::errc::no_such_file_or_directory),
              "unsupported lookup failure");
-        if (bool(witness(lookup.path)) != bool(lookup.fileId))
+        if (bool(witness(lookup.path)) != bool(lookup.fileId)) {
             throw InputsChanged("lookup changed");
+        }
     }
     // No borrowed source storage survives construction of the physical witnesses.
     sourceWitness.reset();
@@ -1450,12 +1454,14 @@ bool MethodScopeOverlay::validContext(const Config& config, const lsp::RequestCo
     UvmPhaseTrace phases;
     if (generalBody)
         for (auto original : bodyBlocked)
-            if (original->bodyHasExternalDependents.load(std::memory_order_relaxed))
+            if (original->bodyHasExternalDependents.load(std::memory_order_relaxed)) {
                 return false;
+            }
     if (generalBody)
         for (auto syntax : bodyBlockedSyntax)
-            if (bodyOwner->getCompilation()->bodySyntaxHasExternalDependents(*syntax))
+            if (bodyOwner->getCompilation()->bodySyntaxHasExternalDependents(*syntax)) {
                 return false;
+            }
     if (bodyQueries && (frozen.revision != driver->completions.getCompletionEpoch() ||
                         immutableUvm.lock() != driver->m_trustedUvm ||
                         immutableScopes.lock() != driver->m_trustedScopes)) {
@@ -1475,17 +1481,33 @@ bool MethodScopeOverlay::validContext(const Config& config, const lsp::RequestCo
         if (document->getVersion()) {
             ++count;
             auto it = documents.find(openUri);
-            if (it == documents.end())
+            if (it == documents.end()) {
                 return false;
+            }
             const auto& w = it->second;
-            if (document.get() != w.document || document->getBuffer().getId() != w.buffer ||
+            const auto current = document->getBuffer();
+            bool sameBuffer = current.getId() == w.buffer;
+            if (!sameBuffer) {
+                // Native replay can assign another sort-key / include alias to
+                // the exact same FileData. That does not change this document's
+                // input generation. Equal text in a fresh allocation is not enough.
+                const auto previous = BufferID(w.buffer, "method source witness");
+                if (driver->sm.isLatestData(previous) && driver->sm.isLatestData(current) &&
+                    driver->sm.getFullPath(previous) == driver->sm.getFullPath(current)) {
+                    const auto before = driver->sm.getSourceText(previous);
+                    const auto after = driver->sm.getSourceText(current);
+                    sameBuffer = before.data() == after.data() && before.size() == after.size();
+                }
+            }
+            if (document.get() != w.document || !sameBuffer ||
                 *document->getVersion() != w.version || plain(*document) != w.text ||
-                !driver->sm.isLatestData(document->getBuffer())) {
+                !driver->sm.isLatestData(current)) {
                 return false;
             }
         }
-    if (count != documents.size())
+    if (count != documents.size()) {
         return false;
+    }
     phases.mark("body-validate-context");
     return true;
 }
@@ -1514,14 +1536,16 @@ bool MethodScopeOverlay::readProofInputs(std::span<const FileProofInput> inputs,
                     continue;
                 if (input.expected && !input.captured) {
                     if (!readCertificateFile(*input.path, true, ctx, input.expected,
-                                             &directories).matches)
+                                             &directories).matches) {
                         return false;
+                    }
                 }
                 else {
                     auto bytes = readCertificateFile(*input.path, true, ctx, nullptr,
                                                       &directories).contents;
-                    if (input.expected && bytes != *input.expected)
+                    if (input.expected && bytes != *input.expected) {
                         return false;
+                    }
                     if (input.captured)
                         *input.captured = std::move(bytes);
                 }
@@ -1539,13 +1563,15 @@ bool MethodScopeOverlay::readProofInputs(std::span<const FileProofInput> inputs,
     for (const auto& input : inputs) {
         ctx.checkpoint(checkpoint);
         if (input.expected && !input.captured) {
-            if (!readCertificateFile(*input.path, true, ctx, input.expected, &directories).matches)
+            if (!readCertificateFile(*input.path, true, ctx, input.expected, &directories).matches) {
                 return false;
+            }
             continue;
         }
         auto bytes = readCertificateFile(*input.path, true, ctx, nullptr, &directories).contents;
-        if (input.expected && bytes != *input.expected)
+        if (input.expected && bytes != *input.expected) {
             return false;
+        }
         if (input.captured)
             *input.captured = std::move(bytes);
     }

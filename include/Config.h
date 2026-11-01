@@ -202,6 +202,11 @@ struct Config {
         bool>
         experimentalScopeSemanticCache = false;
 
+    rfl::Description<"Disable charged retention budgets for enabled fixed-scope and UVM semantic "
+                     "caches. Does not enable either experiment. Use for unconstrained workload "
+                     "evaluation; actual process memory must be measured separately.", bool>
+        semanticCacheUnlimited = false;
+
     rfl::Description<"Experimental diagnostic delta publication. Default off. Repeated results "
                      "are compared before serialization; changed document versions, errors, "
                      "repairs and URI retirements are still published.",

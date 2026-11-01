@@ -4,6 +4,7 @@
 #include "completions/CompletionContext.h"
 #include "completions/CompletionDispatch.h"
 #include "completions/InstanceCompletions.h"
+#include "completions/MemberCompletions.h"
 #include "completions/SystemTaskCompletions.h"
 #include "lsp/LspTypes.h"
 #include "util/Logging.h"
@@ -19,10 +20,59 @@
 #include <vector>
 
 #include "slang/ast/Compilation.h"
+#include "slang/ast/symbols/CompilationUnitSymbols.h"
+#include "slang/ast/symbols/InstanceSymbols.h"
+#include "slang/syntax/SyntaxTree.h"
 
 using namespace server;
 
 using namespace slang;
+
+TEST_CASE("Instance completions retain category and provider name before elaboration",
+          "[completion-instance-placeholder]") {
+    const bool definitionAvailable=GENERATE(false,true);
+    CAPTURE(definitionAvailable);
+    ServerHarness server;
+    auto doc=server.openFile("placeholder_completion.sv",
+        std::string(definitionAvailable ? "module child(input logic clk); endmodule\n" : "")+
+        "module top; logic clk; child core(.clk(clk)); initial $display(clk); endmodule\n");
+    auto items=doc.after("$display(cl").getCompletions();
+    auto core=std::ranges::find(items,"core",[](const auto& item) { return item.m_item.label; });
+    REQUIRE(core!=items.end());
+    CHECK(core->m_item.kind==lsp::CompletionItemKind::Class);
+    REQUIRE(core->m_item.labelDetails);
+    CHECK(core->m_item.labelDetails->detail==" child");
+}
+
+TEST_CASE("Anonymous completion type details do not expose allocation identities",
+          "[completion-anonymous-type-identity]") {
+    std::optional<std::string> expected;
+    for(bool perturb:{false,true}) {
+        ast::Compilation compilation;
+        compilation.addSyntaxTree(syntax::SyntaxTree::fromText(
+            std::string(perturb ? "typedef struct packed {int other;} unused_t;\n" : "")+
+            "module top(input struct packed {logic [3:0] data;} value); endmodule\n"));
+        const auto& roots=compilation.getRoot().topInstances;
+        REQUIRE(roots.size()==1);
+        const auto& body=roots.front()->body;
+        REQUIRE(body.getPortList().size()==1);
+        struct NativeScopeCompletion : completions::MemberCompletionQuery {
+            using MemberCompletionQuery::addCompletions;
+        };
+        std::vector<lsp::CompletionItem> items;
+        NativeScopeCompletion::addCompletions(items,&body,CompletionContextKind::Expression,
+            &body,"file:///anonymous_completion.sv",true,false,false);
+        auto item=std::ranges::find(items,"value",&lsp::CompletionItem::label);
+        REQUIRE(item!=items.end());
+        REQUIRE(item->labelDetails);
+        const auto& detail=item->labelDetails->detail;
+        REQUIRE(detail);
+        CHECK(detail->find("s$")==std::string::npos);
+        CHECK(detail->find("data")!=std::string::npos);
+        if(expected) CHECK(detail==expected);
+        else expected=detail;
+    }
+}
 
 namespace {
 
@@ -2366,4 +2416,30 @@ endmodule
         CHECK(documentation.value.find(std::string("parameter type ") + name + "=") !=
               std::string::npos);
     }
+}
+
+
+TEST_CASE("Direct completion handles resolve without scanning unrelated design symbols",
+          "[completion-resolve-bounded-work]") {
+    ServerHarness server;
+    const std::string direction=GENERATE(std::string("input wire"),std::string("output logic"),
+                                         std::string("inout wire"));
+    CAPTURE(direction);
+    std::string source="module a_noise;\n";
+    for (int i=0;i<2048;++i) source+="int unused_"+std::to_string(i)+";\n";
+    source+="endmodule\nmodule z_target("+direction+" target); initial $display(target); endmodule\n";
+    auto doc=server.openFile("resolve_bounded_work.sv",source);
+    auto items=doc.after("$display(ta").getCompletions();
+    auto target=std::ranges::find(items,"target",[](const auto& item){return item.m_item.label;});
+    REQUIRE(target!=items.end());
+    REQUIRE(target->m_item.data);
+    size_t visited=0;
+    lsp::RequestContext ctx("completionItem/resolve",lsp::ID_t{9911});
+    ctx.setCheckpointObserverForTesting([&](std::string_view point) {
+        if (point=="while locating completion symbol") ++visited;
+    });
+    auto resolved=server.getCompletionItemResolve(target->m_item,ctx);
+    CHECK(resolved.documentation.has_value());
+    CHECK(resolved.label=="target");
+    CHECK(visited<32);
 }

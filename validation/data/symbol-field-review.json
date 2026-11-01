@@ -1,0 +1,321 @@
+{
+  "scope": "43 explicitly admitted symbol kinds, all other native symbol entries mapped to deliberate direct-member refusal/invalid input. Value-type admission is a separate recursive contract; not a blanket syntax list.",
+  "sdkPatchSha256": "22854ca63518f681c8233121c9a0342e7d414ae4610fd94964f5f8280b04e176",
+  "sources": {
+    "include/slang/ast/Symbol.h": "dc7cb0e7832cc4f398988f5c998b2852ef9a3d30e9388fd54b862be6dcb11a4a",
+    "include/slang/ast/Scope.h": "ca98709462827059f25cfe478f604e62e48415fadf78126d5b7432dd134577ac",
+    "include/slang/ast/types/DeclaredType.h": "49da6361f23f2833ae7e993b915eaeb9cf9e39632466952b7561cbeefa96b7b7",
+    "include/slang/ast/ASTVisitor.h": "934d79035c649c0af5d703347e95428e22f5cd0ffbe02efbeccd159eda5f9ada",
+    "include/slang/ast/symbols/InstanceSymbols.h": "c80ebb5d6a270c35af2cde7f5b983ef0a929ed60b2979498542b68994d54f587",
+    "include/slang/ast/symbols/BlockSymbols.h": "7b6946444ff22a78ff52c9eb5b4bb377e6da66ae138b9831b58acd86325fd5ae",
+    "include/slang/ast/symbols/VariableSymbols.h": "f97860201bac04ca084bc458f9e401c967dc31dd3b52c5043630ca6b819a5454",
+    "include/slang/ast/symbols/ParameterSymbols.h": "6e8695a313605d64bb3ef2e7907dfffd83d9060ccd29a8a276590408b4356d1c",
+    "include/slang/ast/symbols/MemberSymbols.h": "c37bbb25b3ea80891abd668157151ce279c745b3d75bd16cbece1fb71629b52a",
+    "include/slang/ast/symbols/ClassSymbols.h": "8a90ba8a536ada04115a364fcd4ef5a592c7d0b0e236df16504ac283cd759db4",
+    "include/slang/ast/symbols/SubroutineSymbols.h": "81e69476012f65489158450457b6d1e0b3e51330ff627d133cfad91cc7f422b8",
+    "include/slang/ast/symbols/PortSymbols.h": "18af8eaa43c48f92aad779d282729fe4202c2b04284709c959fbf5f8b8577cad",
+    "include/slang/ast/symbols/CoverSymbols.h": "226bf261ec2a01542a4ad26317b36dcfb6f03a2361ffc525e9132c4edbc9c218",
+    "include/slang/ast/types/AllTypes.h": "1796290a9863716a505e76d75a0fc11c27ad2bb52902e51d67e44a465af0edfb",
+    "source/ast/Compilation.cpp": "3c33cf3538422f17ef441b57a0a96670e5ea301a11005d0807d68d28907a3468",
+    "source/ast/Symbol.cpp": "41b451e846b027245ad3e7b89d4bba868411f4ab6a33cfac8425ef1bb6b62421",
+    "source/ast/Scope.cpp": "20a8e82f9ec076d00149ed7af17089727017eb65def910a4e8fbdd02945f787b",
+    "source/ast/Statement.cpp": "1968a877f7f9251dd5a74d1213f72f29479be5ff75c9787626c398cd212fed3f",
+    "source/ast/Lookup.cpp": "c6df929b9cdbb0c1b469698a365279a8ff89c96b5f524bc84d652a2dae89bbd9",
+    "source/ast/ElabVisitors.h": "d56f8a268b8b3d164d73d944fa2f8810edc6173794ad8b7d29d6c3e6b6b0df7a",
+    "source/ast/symbols/ClassSymbols.cpp": "06813647768685b09f3bec400763b09325da44c1a915b4944561b09fbb709a81",
+    "source/ast/symbols/SubroutineSymbols.cpp": "0e9c5937d9de8b10f9e7697d07567f17438099746bba398d1baaa61f7ae917aa",
+    "source/ast/symbols/InstanceSymbols.cpp": "56a50643ef9ff394f82bb899d1ca593b1a804cfa80ebb8b943b640145fe0a832",
+    "source/ast/symbols/BlockSymbols.cpp": "22d4f78237ab732d1d3aaaab5b26511415a277af461fc695d065785f856824d3",
+    "source/ast/symbols/VariableSymbols.cpp": "474465ae3fe986ef3569fe82d157a71d1af6a491233ceff1f8fb48bf55ae2289",
+    "source/ast/symbols/CoverSymbols.cpp": "1966bd24c5e5e5ed08fa211fd5895830d27e8222e20b100e49d1842c7dc28c17"
+  },
+  "commonFields": {
+    "Symbol": "Parent/sibling/name/index/source pointers retain independent compilation owner and source namespace; current instance boundary uses explicit frame mapping.",
+    "Scope": "Native member/name/wildcard maps and lazy derived caches stay within their arena. Source/namespace identity and all eligible member/type/control graphs must close. No historical editing-compilation owner chain permitted.",
+    "DeclaredType": "Resolved type alone insufficient; original type/dimension/default expressions use declarationNames, ordinary initializers and recorded folded controls.",
+    "OutOfBand": "Attribute/common reference/hierarchy effects and diagnostic replay use dedicated qualified rules; normal AST child traversal is not their proof."
+  },
+  "groups": [
+    {
+      "id": "owned-empty-and-alias-members",
+      "kinds": [
+        "EmptyMember",
+        "TransparentMember"
+      ],
+      "retainedFields": "Empty payload or wrapped symbol.",
+      "proof": "Transparent wrapper requires local/fixed owner. Enum wrappers close type; inherited class methods/prototypes/properties/aliases close the complete base class graph. Wrapper does not own a fresh body.",
+      "testTags": [
+        "[scope-local-types-calls]",
+        "[scope-type-closure]",
+        "[scope-class-interface-closure]"
+      ]
+    },
+    {
+      "id": "nominal-aggregate-members",
+      "kinds": [
+        "EnumType",
+        "EnumValue",
+        "PackedStructType",
+        "PackedUnionType",
+        "UnpackedStructType",
+        "Field"
+      ],
+      "retainedFields": "Enum base/values; aggregate fields/types, bit offsets/indexes, scalar rand flags.",
+      "proof": "fixedBitVector/isFixedBodyValueType queue local nominal scopes and recursively close fields. Field declared type/dimensions/initializer audited. Offsets/width derive from same checked declaration, not independent bindings. Unsupported unpacked union runtime types refuse.",
+      "testTags": [
+        "[scope-body-package-types]",
+        "[scope-body-type-dependencies]",
+        "[scope-assignment-type-keys]"
+      ]
+    },
+    {
+      "id": "class-hidden-metadata",
+      "kinds": [
+        "ClassType"
+      ],
+      "retainedFields": "genericClass/provider, genericParameters, thisVar, baseClass, declared/flattened interfaces, base constructor call, forward declarations, cached width/cycle/semantic state.",
+      "proof": "Require local/fixed provider and independent owner, close generic arguments/base and every declared interface edge. Queue declaration/members; class extends-clause constructor expression explicitly added to expression queue. Pure local interface methods admitted as owned signature contracts; ordinary abstract pure methods keep existing restriction. Forward/synthetic/derived caches remain owner-local Native metadata, not independent cross-generation values.",
+      "testTags": [
+        "[scope-class-interface-closure]",
+        "[scope-class-base-call-closure]",
+        "[scope-type-closure]",
+        "[scope-type-closure-owners]"
+      ]
+    },
+    {
+      "id": "coverage-symbol-graphs",
+      "kinds": [
+        "CovergroupType",
+        "CovergroupBody",
+        "Coverpoint",
+        "CoverCross",
+        "CoverCrossBody",
+        "CoverageBin"
+      ],
+      "retainedFields": "Group base/arguments/body/event; options, cross targets/generated queue type, bins/transition sets.",
+      "proof": "Body attached as member; local/fixed group/base graph closes. Explicit body-option audit supplements native coverpoint/cross/bin children; selector target ownership proof covered in verification-field-review.json. Native same-scope cross resolution and synthesized coverpoints do not accept arbitrary external target pointers.",
+      "testTags": [
+        "[scope-body-coverage]",
+        "[scope-coverage-target-closure]"
+      ]
+    },
+    {
+      "id": "type-alias-target",
+      "kinds": [
+        "TypeAlias"
+      ],
+      "retainedFields": "DeclaredType target, source type/dimension syntax and canonical nominal target.",
+      "proof": "Owner must be local/fixed/explicit recorded nominal origin as allowed by the recursive gate. declarationNames audits source names even after dimensions/type operators fold; pending type/control fixed point closes newly discovered declarations.",
+      "testTags": [
+        "[scope-local-type-dependencies]",
+        "[scope-body-type-queries]",
+        "[scope-assignment-type-keys]"
+      ]
+    },
+    {
+      "id": "parameter-and-type-argument-keys",
+      "kinds": [
+        "Parameter",
+        "TypeParameter"
+      ],
+      "retainedFields": "Value/type/default syntax, public-vs-local flags, override state.",
+      "proof": "Stricter deep-owned integral/string/fixed-array keys, closed dimensions/nominal types and default names; compare parameters and current overrides before attaching retained body. Unsupported runtime container values are not parameter keys. Localparam reuse requires certified same fixed syntax.",
+      "testTags": [
+        "[scope-body-parameters]",
+        "[scope-body-array-parameters]",
+        "[scope-body-string-parameters]",
+        "[scope-body-type-parameters]"
+      ]
+    },
+    {
+      "id": "port-current-boundary",
+      "kinds": [
+        "Port"
+      ],
+      "retainedFields": "Direction/netness/declared type/internal expression and net ranges.",
+      "proof": "Only supported input/output and builtin-net inout. Ref and variable-inout aliases refuse. Root actual connections and override bindings remain current consumer; internal expression/type/net metadata closes separately. Retained frame mapped to current instance, not stale caller ports.",
+      "testTags": [
+        "[scope-boundary]",
+        "[scope-body-inout-boundary]",
+        "[scope-internal-nettype]"
+      ]
+    },
+    {
+      "id": "instance-frames-and-arrays",
+      "kinds": [
+        "Instance",
+        "InstanceBody",
+        "InstanceArray"
+      ],
+      "retainedFields": "Definition/body/parameters/port connections, hierarchy/config/bind context; array elements/ranges.",
+      "proof": "Imported definition identity and eligible root context required; child definition/config/bind compatibility checked. Scope members/instance body/connection/parameter expressions visited; internal array elements attached as owned members. Ranges derive from fixed definition/closed elaboration controls. Borrowed mixed children require fresh independent owner. Current frame/diagnostic/reference effects replay separately.",
+      "testTags": [
+        "[scope-subtree]",
+        "[scope-body-bind-effects]",
+        "[scope-full-owner-profiles]",
+        "[scope-dpi-export-frame]"
+      ]
+    },
+    {
+      "id": "package-import-scope-metadata",
+      "kinds": [
+        "ExplicitImport",
+        "WildcardImport"
+      ],
+      "retainedFields": "Package identity, imported symbol and wildcard sideband state.",
+      "proof": "Package must be an immutable imported provider; unresolved/mutable package import refuses. Namespace/preprocessing/source identity proof is separate and cannot be replaced with leaf type compatibility.",
+      "testTags": [
+        "[scope-body-imports]",
+        "[scope-source-import-context]",
+        "[scope-generic-imports]"
+      ]
+    },
+    {
+      "id": "generate-control-metadata",
+      "kinds": [
+        "Genvar",
+        "GenerateBlock",
+        "GenerateBlockArray"
+      ],
+      "retainedFields": "Branch condition/case labels or loop index, loop init/stop/step/variable and generated entries.",
+      "proof": "Native notes original elaboration controls; explicit loop metadata walk and common control fixed point check dependencies even when folded. Dormant blocks are not executed; changing root parameters rechecks signature. Scope members own generated entries; array selector expressions recorded by Lookup.",
+      "testTags": [
+        "[scope-body-constant-closure]",
+        "[scope-folded-lookup-indices]",
+        "[scope-dormant-discovery]"
+      ]
+    },
+    {
+      "id": "procedural-and-statement-scopes",
+      "kinds": [
+        "ProceduralBlock",
+        "StatementBlock"
+      ],
+      "retainedFields": "Body/blocks, parent/index/name, default lifetime/block kind.",
+      "proof": "Native visits procedural bodies and recursively attached scope members. Declarations/initializers remain checked even unused; Statement field review separately reconciles explicit control targets and temporary metadata.",
+      "testTags": [
+        "[scope-statement-field-closure]",
+        "[scope-pattern-loop-metadata]"
+      ]
+    },
+    {
+      "id": "net-and-variable-storage",
+      "kinds": [
+        "Net",
+        "Variable",
+        "ClassProperty"
+      ],
+      "retainedFields": "Declared type/initializer, lifetime/flags; net type/delay/strength, class visibility/randMode.",
+      "proof": "Recursive value type and declaration-name proof; Native visits initializer and net delay. Builtin net type only, user resolution refuses. Strength/lifetime/visibility flags are scalar owned metadata. Runtime contents are never memoized. Class/provider usage flags preserve current consumer profile.",
+      "testTags": [
+        "[scope-internal-nettype]",
+        "[scope-body-inout-boundary]",
+        "[scope-full-owner-profiles]"
+      ]
+    },
+    {
+      "id": "subroutine-prototype-and-formals",
+      "kinds": [
+        "Subroutine",
+        "MethodPrototype",
+        "FormalArgument"
+      ],
+      "retainedFields": "Return/argument types/defaults/directions, receiver/this/return variable, body/scopes, flags/overrides/prototype/extern implementation.",
+      "proof": "closedFunction and explicit prototype check require local/fixed class/provider, closed signature and actual body. Native visits formal defaults and scope locals; call actuals/output lvalues checked separately. Prototype resolves implementation, complete class base/interfaces close override identity. Unsupported interface extern/modport/DPI context follows dedicated foreign-call path or refuses.",
+      "testTags": [
+        "[scope-body-argument-contract]",
+        "[scope-body-foreign-calls]",
+        "[scope-class-interface-closure]",
+        "[scope-class-base-call-closure]"
+      ]
+    },
+    {
+      "id": "temporary-symbols",
+      "kinds": [
+        "Iterator",
+        "PatternVar",
+        "LocalAssertionVar"
+      ],
+      "retainedFields": "Value type/source/lifetime; iterator arrayType, temporary linked-list links.",
+      "proof": "Owned binding required. Explicit pattern/loop visits include unused variables; iterator arrayType closes separately from index value type. nextTemp is binder lookup storage; all semantic uses/graphs still audited. Assertion variables require local integral context.",
+      "testTags": [
+        "[scope-pattern-loop-metadata]",
+        "[scope-body-named-assertions]"
+      ]
+    },
+    {
+      "id": "continuous-assignment",
+      "kinds": [
+        "ContinuousAssign"
+      ],
+      "retainedFields": "Assignment/delay and lexical drive strengths.",
+      "proof": "Native visitor includes assignment and optional delay; common expression/lvalue/effect/type proof applies. Strength fields are scalar source metadata.",
+      "testTags": [
+        "[scope-body-inout-boundary]",
+        "[scope-full-owner-profiles]"
+      ]
+    },
+    {
+      "id": "builtin-primitive-instances",
+      "kinds": [
+        "PrimitiveInstance"
+      ],
+      "retainedFields": "Primitive provider, port expressions, optional gate delay.",
+      "proof": "User primitive provider explicitly refused; builtin primitive semantics immutable, normal arguments checked and delay explicitly visited because outside ordinary visitor.",
+      "testTags": [
+        "[scope-body-inout-boundary]",
+        "[scope-body-closed-dependencies]"
+      ]
+    },
+    {
+      "id": "named-assertion-and-clocking-symbols",
+      "kinds": [
+        "Sequence",
+        "Property",
+        "ClockingBlock"
+      ],
+      "retainedFields": "Ports/default expanded assertion/local variables and declaration names; clocking default/event/items.",
+      "proof": "Zero-formal named assertions only, declaration dependencies plus expanded bodies/folded controls checked. Global clocking or clocking items refuse; simple event visited. Current inherited clocking/disable context checked at root.",
+      "testTags": [
+        "[scope-body-named-assertions]",
+        "[scope-finite-boundaries]"
+      ]
+    }
+  ],
+  "typeValueContracts": {
+    "packedAndAlias": "Close nominal enum/aggregate fields/base, source names, aliases and recorded mapped origins; enqueue local nominal scopes.",
+    "runtimeContainers": "Fixed unpacked arrays/queues/dynamic arrays recurse element; associative arrays recurse element/index. Range/max-size syntax dependencies audited at owning declaration. Runtime contents are not cached.",
+    "classAndCovergroup": "Fixed provider retains identity; owned local specializations close generic keys/base/interfaces/member graph. Hidden extends constructor arguments are explicitly audited.",
+    "virtualInterfaces": "Complete tracking, imported definition and independently certified local/private prototype required; receiver/modport/parameter metadata cannot rely on nominal type alone.",
+    "parameterKeys": "Integral/string and deep-owned fixed arrays with closed dimensions/nominal identity; dynamic containers and unsupported shapes refuse.",
+    "otherRuntimeKinds": "Builtin floating/event supported through explicit gate. Unsupported canonical runtime types refuse; wrappers used as controls need separate dedicated proof."
+  },
+  "testsMeaning": "Linked family oracles plus new class metadata tests. Not exhaustive per-kind/context dynamic coverage; source review does not qualify public query/lifetime/performance behavior.",
+  "originalReviewStatus": "finite symbol gate and retained type-edge source reconciliation complete; full runtime/public-query/performance/lifetime qualification remains pending",
+  "status": "Source-field reconciliation retained; all recorded source definitions unchanged at final candidate. Family-level current qualification complete; not exhaustive per-kind dynamic coverage.",
+  "currentQualification": {
+    "binarySha256": "a007bfe4777bb2008e3a7af6d24ffbfba403005339fb713b51932e0af4f058fb",
+    "validation": "../macos-generic-freezing-2026-11-01.json",
+    "ctestPassed": 1066,
+    "scopeCases": 113,
+    "scopeAssertions": 33693,
+    "asanServerCases": 1052,
+    "asanServerAssertions": 205189,
+    "publicProjects": 16,
+    "performanceScenarios": 32,
+    "versionMatchedPerformanceStates": 4320,
+    "longEditRecheck": 8192,
+    "exhaustivePerKindDynamicCoverage": false
+  },
+  "currentSourceReconciliation": {
+    "checkedSourceFiles": 26,
+    "allReviewedDefinitionsUnchanged": true,
+    "originalReviewSha256": "7a31f3dfb56b0984de7108ad915f9adf20ff2bf98dc17e5c257e03311c9c041c",
+    "currentSdkPatchSha256": "c09a0c56ede92b8ae7693c90d96c2c4644a52d721a4b5804e7fa9e10fc87fedb"
+  },
+  "historicalRemainingAtReview": [
+    "Frozen-code public query matrix across real projects and boundary edits",
+    "Formal latency/RSS/retirement",
+    "Rebuilt ASan/offline/default-off/manual-rebuild/install/release"
+  ]
+}

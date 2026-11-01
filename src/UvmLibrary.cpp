@@ -426,7 +426,8 @@ bool ServerDriver::prepareTrustedUvmLibrary() {
     const size_t charged = compilation->getTotalBytesAllocated() +
                            prefix->getRetainedSyntaxBytes() + prefix->getRetainedSourceBytes() +
                            sm.getSourceLocationTableBytes() + sm.getMemoryUsage();
-    if (!maxMiB || maxMiB > 1024 || charged > size_t(maxMiB) * 1024 * 1024) {
+    if (!m_config.semanticCacheUnlimited.value() &&
+        (!maxMiB || maxMiB > 1024 || charged > size_t(maxMiB) * 1024 * 1024)) {
         m_trustedUvmReason = "UVM semantic owner exceeds semanticMaxMiB; using native analysis";
         return false;
     }
@@ -469,7 +470,6 @@ std::optional<ServerDriver::PackageIncludeContext> ServerDriver::trustedLibraryS
     // editor modification is nevertheless visible and must not receive stale
     // matching-version consumer diagnostics. Rebuilding preserves these overlays.
     if (m_trustedScopes) {
-        const auto& fixedTree = m_trustedScopes->compilation->getSyntaxTrees().front();
         for (const auto& openUri : m_openDocs) {
             auto document = docs.find(openUri);
             if (document == docs.end())
@@ -478,17 +478,23 @@ std::optional<ServerDriver::PackageIncludeContext> ServerDriver::trustedLibraryS
             const auto& path = sm.getFullPath(current);
             if (!isTrustedScopeSource(path))
                 continue;
-            for (auto fixed : fixedTree->getSourceBufferIds())
-                if (sm.getFullPath(fixed) == path &&
-                    sm.getSourceText(current) != sm.getSourceText(fixed))
+            for (const auto& fixedTree : m_trustedScopes->compilation->getSyntaxTrees())
+              for (auto fixed : fixedTree->getSourceBufferIds()) {
+                const auto& fixedSources = fixedTree->sourceManager();
+                if (fixedSources.getFullPath(fixed) == path &&
+                    sm.getSourceText(current) != fixedSources.getSourceText(fixed))
                     throw lsp::RequestFailed("Fixed scope source was edited; run "
                                              "slang.rebuildScopeLibrary to rebuild its "
                                              "semantic generation: " +
                                              path.string());
+              }
         }
     }
     if (!isTrustedUvmSource(uri.getPath()) && !isTrustedScopeSource(uri.getPath()))
         return std::nullopt;
+    if (m_trustedScopes && m_trustedScopes->nativeRemainderFiles.contains(
+            std::filesystem::path(uri.getPath()).lexically_normal().generic_string()))
+        return std::nullopt; // Private projected trees omit native remainder scopes.
     // Even an unchanged provider query must observe namespace conflicts in the
     // current configured unit. Returning its private owner would otherwise bypass
     // native ambiguity checks and expose a stale package binding in exploration.
@@ -530,6 +536,7 @@ rfl::Generic ServerDriver::trustedUvmStatus() const {
         bool projectCacheHit;
         std::string projectCachePath;
         double syntaxParseMs, archiveWriteMs, archiveLoadMs;
+        bool budgetUnlimited;
         std::string reason;
     };
     return rfl::to_generic(Status{
@@ -540,6 +547,7 @@ rfl::Generic ServerDriver::trustedUvmStatus() const {
         library ? library->files.size() : 0, bool(library), m_shippedUvmProfile.has_value(),
         m_shippedUvmProfile.value_or(""), m_uvmProjectCacheHit, m_uvmParseCachePath.string(),
         m_uvmParseMs, m_uvmArchiveWriteMs, m_uvmArchiveLoadMs,
+        m_config.semanticCacheUnlimited.value(),
         sharedScope ? "UVM shares the fixed scope semantic owner; charges cover its full closure"
                     : m_trustedUvmReason});
 }

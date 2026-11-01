@@ -90,7 +90,7 @@ private:
     int tokenIndexBefore(slang::SourceLocation loc) const;
     /// Whether this token kind is considered as some sort of identifier
     bool isIdToken(const slang::parsing::TokenKind kind) const;
-    /// Recursively visit syntax nodes, called in constructor.
+    /// Visit syntax nodes in source order without recursive child descent.
     /// Also collects the disabled regions from the conditional `DirectiveSyntax` nodes.
     void visit(const slang::syntax::SyntaxNode& root);
     /// Process trivia on a token, extracting disabled regions from conditional directives.

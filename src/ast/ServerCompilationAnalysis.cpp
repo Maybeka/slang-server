@@ -104,7 +104,8 @@ ServerCompilationAnalysis::ServerCompilationAnalysis(
         traceModelOwner("full-syntax-discovered", &compilation, nullptr,
                         compilation.getTotalBytesAllocated());
     ctx.checkpoint("before full-model library import");
-    const bool trusted = importTrustedUvm(compilation, sourceManager, options, trees);
+    const bool trusted = importTrustedUvm(compilation, sourceManager, options, trees,
+                                         &m_libraryImportStatus);
     // Native models need the same namespace lifetime guarantee as imported views.
     // Keep only the SourceLifetime (sources + library identities), never the driver.
     if (sourceOwner && !compilation.getSourceOwnerLease())

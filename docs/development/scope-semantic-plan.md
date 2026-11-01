@@ -5,6 +5,62 @@ Dependencies are trusted fixed until manual rebuild. All new experiments default
 off. Existing UVM distribution remains one shipped default preparse artifact and
 project-local one-time artifacts for other configurations.
 
+## Current evaluation policy (2026-11-01)
+
+The finite conditional contract maps all 111 noninvalid outer AST kinds and 43
+admitted symbol kinds to explicit dependency rules. This is a source inventory
+and family-level oracle matrix, not exhaustive dynamic coverage of every slang
+kind in every context. Unknown or unproved contexts keep ordinary analysis.
+See [the contract ledger](../../validation/data/freeze-language-contract-2026-10-30.json).
+
+All real-project scope / UVM semantic evaluations use
+`semanticCacheUnlimited: true` and omit numeric semantic budgets. A large project's
+retained graph must not be truncated to meet an evaluation cap. Record actual RSS
+and physical footprint independently of internal byte accounting. Explicit
+protective-budget tests are separate from workload acceptance.
+
+The complete checkpoint38 evaluation covered all 16 projects in both background
+and original-file editing scenarios: three Native / freeze / combined arms, three
+independent processes per arm, and fifteen editor lifecycle states. All 4,320
+state oracles matched ordinary analysis, with unlimited semantic caches. Twelve
+selected project roots import in full; four use safe partial hierarchies, including
+161 maximal OpenTitan SoC roots and 41 OpenOFDM roots. Actual original-file
+selections differ from background selections (the large SoC real-edit recipe is
+package-only); report those selections with the timing data.
+
+Checkpoint38 also passed four 1,024-edit memory workloads and an 8,192-edit PCS
+verification workload. Automatic source-history retirement occurred at edit
+4,458 while retaining the semantic generation and Native query / diagnostic
+parity. These are bounded-workload observations, not a hard process-memory cap.
+
+Checkpoint39 passed 1,065 CTest entries, all 16 seven-stage public-query oracles,
+all 16 fifteen-state original-file editing oracles in three arms, full server ASan
+(1,051 cases / 205,126 assertions), real-project ASan, and installed default/custom
+UVM profiles. It removed an unnecessary whole-compilation scan from completion
+resolve: the large SoC resolve observation fell from about 420 ms to about 0.5 ms.
+The subsequent representative editor measurement lane was interrupted; its
+unfinished cases are not passes.
+
+Current qualification adds exact-input weak namespace witnesses and local buffer
+path / kind witnesses. These avoid repeated proofs without retaining old editing
+generations or weakening expanded syntax, macro, offset or parser-context checks.
+The first fixed-source query after a consumer edit can still construct a current
+instance view; time it separately from repeated unchanged queries. In the targeted
+OpenOFDM lifecycle observation, first-query hover fell from about 488 ms to about
+124 ms, while unchanged repeated hover remained below 1 ms. This is one process
+per arm, not a tail estimate or an independent repeated performance result.
+Current-source qualification is complete: 1,066 CTest entries, 113 scope cases /
+33,693 assertions, full server ASan (1,052 cases / 205,189 assertions), all sixteen
+public and original-file editing cohorts, installed profiles and offline integrity.
+All 32 scenarios completed three independent Native/freeze/combined processes and
+4,320 matching editor-state oracles. The current 8,192-edit PCS recheck again retired
+source/index history at edit 4,458 without changing semantic generation or results.
+See [the final Mac validation](../../validation/macos-generic-freezing-2026-11-01.md)
+for all first/warm/fallback/memory observations and important negative results.
+Experiments remain off by default. Large SoC background startup costs about 47–48 s
+and memory can increase; WiFi original-file edits have a small overhead. These
+costs are not hidden by the large continuous-edit wins in other scenarios.
+
 ## Supported file boundary
 
 **Fixed providers and editable consumers must be separate physical files.** Scope
@@ -21,7 +77,8 @@ Check actual packages, definitions and preparation reason with
 `slang.scopeLibraryStatus`; do not assume only the selector's text was frozen.
 Independent updates inside mixed fixed/editable files are outside this feature's
 scope and are not an acceptance blocker. Consumers needing routine edits must be
-outside the fixed file/input group.
+outside the fixed physical files. Separate files can share an include context;
+that context alone does not make an editable sibling fixed.
 
 ## Implementation order and behavior
 
@@ -70,7 +127,7 @@ owner reuse has its own broader class / generic behavior and separate audits.
 | Inputs and identity | Fixed physical provider files; scalar integral parameters; fixed-origin integral / packed nominal types and local aliases | Editable-file siblings are outside the contract; foreign aliases, member-dependent defaults and overridable array values need more support |
 | Local aggregates | Fixed-size arrays with admitted elements; typed localparam tables with exact ranges and deep values | Scalar runtime strings and their fixed-origin aliases are admitted; string parameters / arrays, dynamic arrays, queues and real / object signatures remain outside admission |
 | Hierarchy | Closed ordinary, generated and array descendants; downward references entirely inside the retained root | Upward / outside dependencies and interface or ref boundaries require native analysis or further certification; mixed parents can only promote through an independently certified fresh compact owner |
-| Calls | Fixed builtin queries; input-only local / immutable-package functions including void returns; checked severity / simulation control tasks; unseeded parameterless runtime `$urandom()` call graphs; local-destination `$sformat` and audited `$fopen` / `$fwrite` / `$fclose` bound calls | Seeded random calls, time queries, other file / formatting operations, general output/ref arguments, tasks, DPI and object methods have further effects to audit |
+| Calls | Fixed builtin queries; closed local / immutable-package functions; checked severity / simulation tasks; argument-only builtin contracts, including final fixed-signature input-only runtime functions/tasks with final non-constant evaluation; local-destination formatting and audited memory/file operations | Runtime values are never cached. Methods, output/ref signatures, iterator/randomize `with` state and other hidden context require their own proof; unknown binders stay native |
 | Elaboration controls | Loop initialization / condition / step, flattened conditional controls / case labels and bound streaming slice expressions | New binding constructs must retain original dependencies before constant folding; resolved values alone are insufficient |
 | Current caller effects | Current ports, incoming direct/hierarchical reads/writes, native driver/load analysis and raw diagnostic occurrences | Ref arguments, arbitrary-symbol debug arguments and external function caller removal have compact/full-context regression coverage; generic/import origins have separate acceptance below; unadmitted implicit method effects stay native |
 | Lifecycle | Manual rebuild with editor overlays, budget fallback, retained owner variants and pinned-owner charges | Top-level mutable package / definition collisions have native fallback and repair coverage; generic ownership and extended variant/retirement memory have separate acceptance below, including the high footprint observation |
@@ -86,8 +143,9 @@ reporting remains useful follow-up work.
 The real CVA6 Verilator workload now retains its entire selected root with a
 256 MiB budget, including the mock tracer's audited local string and format/file
 calls. At an explicitly configured 64 MiB budget it retains six eligible child owners instead.
-Local nominal types, fixed arrays / constant tables, streams, unseeded random calls
-and fixed-package void configuration checks have category-level regressions.
+Local nominal types, fixed arrays / constant tables, streams, runtime random
+binding, constant-context errors, outside-argument rejection and fixed-package
+void configuration checks have category-level regressions.
 Other configurations and unadmitted effects still need independent acceptance;
 removing a guard because a single trace reaches it is insufficient.
 Types forwarded from outside a selected root still need ancestor elaboration-input

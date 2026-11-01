@@ -486,6 +486,14 @@ private:
     flat_hash_set<URI> m_buildSourceUris;
     bool m_designUsesConfiguredUnits = false;
     std::vector<std::shared_ptr<SlangDoc>> m_configuredUnits;
+    // Namespace compatibility is a pure relation between immutable provider and
+    // configured syntax trees. Weak keys avoid retaining retired generations.
+    struct TrustedNamespaceWitness {
+        std::weak_ptr<struct TrustedUvmLibrary> library;
+        std::vector<TreeIdentity> units;
+        bool compatible;
+    };
+    mutable std::optional<TrustedNamespaceWitness> m_trustedNamespaceWitness;
     bool m_nativeInputsFailed = false;
     bool m_configurationInputsFailed = false;
     std::filesystem::path m_uvmEntryPath;
@@ -515,6 +523,7 @@ private:
     std::vector<std::filesystem::path> m_scopeRoots;
     size_t m_scopeRootCount = 0;
     std::string m_scopeReason;
+    std::shared_ptr<const struct ScopePreparationReport> m_scopePreparationReport;
     std::vector<FrozenInstanceCache::Selection> m_scopeInstanceSelections;
     uint64_t m_scopeResumes = 0;
     bool prepareScopeLibrary();

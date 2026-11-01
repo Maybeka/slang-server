@@ -1,0 +1,327 @@
+{
+  "meaning": "Source reconciliation, not exhaustive per-kind dynamic coverage or unconditional syntax support. All Invalid/unknown kinds refused.",
+  "noninvalidKindsReviewed": {
+    "statements": 31,
+    "timingControls": 9,
+    "patterns": 5
+  },
+  "sdkPatchSha256": "22854ca63518f681c8233121c9a0342e7d414ae4610fd94964f5f8280b04e176",
+  "sources": {
+    "include/slang/ast/Statement.h": "ae358b714e27f8d0a31294593acd794341c56f13d73af2b217ed6dddfe2563ef",
+    "include/slang/ast/TimingControl.h": "8172c69e29a4d83958920793285f1f8154b957f8ef0f6876bb6882e0fd1d0e82",
+    "include/slang/ast/Patterns.h": "286f58a8d4aa637e7d848c9d7226913d9a3fe49fcf0409bf87630a94df169f06",
+    "include/slang/ast/ASTVisitor.h": "934d79035c649c0af5d703347e95428e22f5cd0ffbe02efbeccd159eda5f9ada",
+    "include/slang/ast/statements/LoopStatements.h": "957769e671ba01a29163a93854bcd27390bc37d57a220466ed6fbbb1c4bc3f33",
+    "include/slang/ast/statements/ConditionalStatements.h": "8700d025edbc4da164d9238fb07f8b79ca029a1823c0f3880cc8153e93995986",
+    "include/slang/ast/statements/MiscStatements.h": "48fee981c4aa28eccc29b3d0a873795c67821e8b612b2338fdb1fd28cd3baebe",
+    "include/slang/ast/symbols/BlockSymbols.h": "7b6946444ff22a78ff52c9eb5b4bb377e6da66ae138b9831b58acd86325fd5ae",
+    "source/ast/Statement.cpp": "1968a877f7f9251dd5a74d1213f72f29479be5ff75c9787626c398cd212fed3f",
+    "source/ast/TimingControl.cpp": "a3679d87ada88ee13ee8a5c7f2373c0046b96f95f7c5ff1c8472e52251d5439e",
+    "source/ast/Patterns.cpp": "bf87a159e4d2c5b964e1922ea55bde694ad54693fde89b63a374daa5ebb52f6a",
+    "source/ast/symbols/BlockSymbols.cpp": "22d4f78237ab732d1d3aaaab5b26511415a277af461fc695d065785f856824d3",
+    "source/ast/Compilation.cpp": "3c33cf3538422f17ef441b57a0a96670e5ea301a11005d0807d68d28907a3468",
+    "source/ast/Lookup.cpp": "c6df929b9cdbb0c1b469698a365279a8ff89c96b5f524bc84d652a2dae89bbd9"
+  },
+  "groups": [
+    {
+      "id": "empty-and-context-jumps",
+      "family": "statements",
+      "kinds": [
+        "Empty",
+        "Continue",
+        "Break",
+        "DisableFork",
+        "WaitFork"
+      ],
+      "normalChildren": "No retained expression or destination pointers.",
+      "additionalProof": "Jump/fork nesting legality remains Native binding/semantic validation. Source statement identity and owner are retained; no execution result is cached.",
+      "testTags": [
+        "[scope-local-types-calls]",
+        "[scope-finite-boundaries]"
+      ]
+    },
+    {
+      "id": "statement-list-and-block-scopes",
+      "family": "statements",
+      "kinds": [
+        "List",
+        "Block",
+        "VariableDeclaration"
+      ],
+      "normalChildren": "List and Block visit statement bodies. VariableDeclaration holds a VariableSymbol reference without visitExprs.",
+      "additionalProof": "Statement::createAndAddBlockItems adds declaration/block symbols to Scope.members. BlockSymbols::fromSyntax recursively attaches nested scopes. ASTVisitor descends Scope.members and declared initializers. bindScopeInitializers constructs declaration statements from those same owned members. BlockSymbol is therefore not an unproven free-standing pointer. Named control targets require separate identity/path audit.",
+      "testTags": [
+        "[scope-statement-field-closure]",
+        "[scope-pattern-loop-metadata]"
+      ]
+    },
+    {
+      "id": "expression-and-return-statements",
+      "family": "statements",
+      "kinds": [
+        "ExpressionStatement",
+        "Return",
+        "ProceduralAssign",
+        "ProceduralDeassign"
+      ],
+      "normalChildren": "Visit expression/optional return value/assignment/lvalue.",
+      "additionalProof": "isForce/isRelease are owned scalar syntax flags. Lvalue bindings, argument effects and types use common expression audit, not runtime execution.",
+      "testTags": [
+        "[scope-body-argument-contract]",
+        "[scope-body-closed-dependencies]"
+      ]
+    },
+    {
+      "id": "local-disable-target",
+      "family": "statements",
+      "kinds": [
+        "Disable"
+      ],
+      "normalChildren": "Native node has no visitExprs for target.",
+      "additionalProof": "Explicit certificate checks ArbitrarySymbol target, local symbol, non-upward/non-interface complete path; does not treat block/task targets as ordinary runtime values. Folded selectors separately recorded by Lookup.",
+      "testTags": [
+        "[scope-body-argument-contract]",
+        "[scope-folded-lookup-indices]",
+        "[scope-body-closed-dependencies]"
+      ]
+    },
+    {
+      "id": "condition-and-case-payloads",
+      "family": "statements",
+      "kinds": [
+        "Conditional",
+        "Case",
+        "PatternCase"
+      ],
+      "normalChildren": "All conditions, optional patterns, all case items/filters and every body/default visited.",
+      "additionalProof": "unique/priority/matching enums are owned scalar flags. Unevaluated branches still audited. Pattern symbol/field metadata handled explicitly.",
+      "testTags": [
+        "[scope-statement-field-closure]",
+        "[scope-pattern-loop-metadata]"
+      ]
+    },
+    {
+      "id": "for-and-foreach-metadata",
+      "family": "statements",
+      "kinds": [
+        "ForLoop",
+        "ForeachLoop"
+      ],
+      "normalChildren": "For visits explicit initializers/stop/steps/body; foreach visits array/body.",
+      "additionalProof": "Certificate explicitly visits For.loopVars and all nonnull Foreach.loopDims.loopVar, including unused/skipped dimensions. Iterator.arrayType uses recursive type proof. Folded static ranges derive from the checked array type.",
+      "testTags": [
+        "[scope-pattern-loop-metadata]",
+        "[scope-body-fixed-arrays]"
+      ]
+    },
+    {
+      "id": "ordinary-loop-graphs",
+      "family": "statements",
+      "kinds": [
+        "RepeatLoop",
+        "WhileLoop",
+        "DoWhileLoop",
+        "ForeverLoop"
+      ],
+      "normalChildren": "Visit count/condition if present and body.",
+      "additionalProof": "No extra target pointer; Native structural validity and common expression/type proof apply.",
+      "testTags": [
+        "[scope-local-types-calls]",
+        "[scope-pattern-loop-metadata]"
+      ]
+    },
+    {
+      "id": "timed-and-wait-graphs",
+      "family": "statements",
+      "kinds": [
+        "Timed",
+        "Wait",
+        "WaitOrder",
+        "EventTrigger"
+      ],
+      "normalChildren": "Visit timing and controlled body, wait condition/body, all ordered events/actions, trigger target and optional timing.",
+      "additionalProof": "Trigger nonblocking flag is owned scalar. Timing graph includes iff/repeat/delays; target symbol ownership and read/write effects use common proofs.",
+      "testTags": [
+        "[scope-statement-field-closure]",
+        "[scope-body-closed-dependencies]",
+        "[scope-full-owner-profiles]"
+      ]
+    },
+    {
+      "id": "assertion-statements",
+      "family": "statements",
+      "kinds": [
+        "ImmediateAssertion",
+        "ConcurrentAssertion"
+      ],
+      "normalChildren": "Visit condition/property graph and both optional action branches.",
+      "additionalProof": "Owned assertionKind/deferred/final flags; hidden assertion declaration/local/clock/folded-control metadata require assertion-family proof. This review does not complete AssertionExpr field review.",
+      "testTags": [
+        "[scope-body-named-assertions]",
+        "[scope-finite-boundaries]"
+      ]
+    },
+    {
+      "id": "randcase-items",
+      "family": "statements",
+      "kinds": [
+        "RandCase"
+      ],
+      "normalChildren": "Visit every item weight and body.",
+      "additionalProof": "Random choice is runtime behavior, not cached. Dependencies in every weight close even when never selected.",
+      "testTags": [
+        "[scope-statement-field-closure]",
+        "[scope-body-randomize]"
+      ]
+    },
+    {
+      "id": "opaque-statement-boundary",
+      "family": "statements",
+      "kinds": [
+        "RandSequence",
+        "ProceduralChecker"
+      ],
+      "normalChildren": "Opaque firstProduction/productions and checker instance arrays lack ordinary child traversal.",
+      "additionalProof": "Explicit refusal before body certification. Safe child instances may still reuse; no unsupported graph is silently admitted.",
+      "testTags": [
+        "[scope-finite-boundaries]"
+      ]
+    },
+    {
+      "id": "timing-delays",
+      "family": "timingControls",
+      "kinds": [
+        "Delay",
+        "Delay3",
+        "CycleDelay"
+      ],
+      "normalChildren": "Visit delay/count expression and all optional delay3 values.",
+      "additionalProof": "All min/typ/max branches remain checked through expression graph; time/options witness preserved. No delay result used to skip original dependencies.",
+      "testTags": [
+        "[scope-statement-field-closure]",
+        "[scope-mtm-branches]",
+        "[scope-body-inout-boundary]"
+      ]
+    },
+    {
+      "id": "timing-events",
+      "family": "timingControls",
+      "kinds": [
+        "SignalEvent",
+        "EventList",
+        "RepeatedEvent"
+      ],
+      "normalChildren": "Visit trigger expr and iff, every child event, repeat count and child event.",
+      "additionalProof": "Edge is scalar. Current clocking/default-disable context must close separately; changes to mutable iff/count cause parent Native with safe child reuse.",
+      "testTags": [
+        "[scope-statement-field-closure]",
+        "[scope-body-named-assertions]"
+      ]
+    },
+    {
+      "id": "timing-scalar-controls",
+      "family": "timingControls",
+      "kinds": [
+        "ImplicitEvent",
+        "OneStepDelay"
+      ],
+      "normalChildren": "No hidden child graph.",
+      "additionalProof": "Implicit sensitivities are derived by Native from the same audited body; literal 1step and timescale/options immutable under namespace/parser witness.",
+      "testTags": [
+        "[scope-body-inout-boundary]",
+        "[scope-body-closed-dependencies]"
+      ]
+    },
+    {
+      "id": "block-event-targets",
+      "family": "timingControls",
+      "kinds": [
+        "BlockEventList"
+      ],
+      "normalChildren": "Events have target Expression pointers outside visitExprs.",
+      "additionalProof": "Explicit certificate walks each nonnull target and proves local full path as for Disable; isBegin is owned scalar. Coverage declaration/event context must also close.",
+      "testTags": [
+        "[scope-body-coverage]",
+        "[scope-body-closed-dependencies]"
+      ]
+    },
+    {
+      "id": "wildcard-and-constant-patterns",
+      "family": "patterns",
+      "kinds": [
+        "Wildcard",
+        "Constant"
+      ],
+      "normalChildren": "Wildcard has no children; Constant visits bound expression.",
+      "additionalProof": "Source owner preserved; expected types originate in audited controlling expression. Constant dependencies remain checked.",
+      "testTags": [
+        "[scope-statement-field-closure]",
+        "[scope-pattern-loop-metadata]"
+      ]
+    },
+    {
+      "id": "pattern-symbol-and-field-metadata",
+      "family": "patterns",
+      "kinds": [
+        "Variable",
+        "Tagged",
+        "Structure"
+      ],
+      "normalChildren": "Variable has no ordinary children; Tagged visits optional subpattern, Structure every field subpattern.",
+      "additionalProof": "Explicit certificate visits local PatternVar symbols; auditPatternField checks tagged member and every struct field identity/type/parent nominal graph. PatternVar type and ownership checked even if unused.",
+      "testTags": [
+        "[scope-pattern-loop-metadata]"
+      ]
+    }
+  ],
+  "commonMetadata": "Source/syntax retained by owned compiler; statement attributes audited by common side-table fixed point. Existing finite symbol/type/call/ownership/context rules remain required.",
+  "newDynamicFixture": {
+    "tag": "[scope-statement-field-closure]",
+    "configurations": 21,
+    "origins": [
+      "local",
+      "fixed package",
+      "mutable package"
+    ],
+    "states": [
+      "initial",
+      "mutable7to8",
+      "user semantic error",
+      "repair"
+    ],
+    "checks": [
+      "parent actual import only local/fixed",
+      "safe child actual import in all origins",
+      "Native semantic and flow diagnostic parity",
+      "current mutable value binding graph is never reused"
+    ]
+  },
+  "originalReviewStatus": "source-field review complete for current statement/timing/pattern declarations; final all-family/runtime/lifetime qualification incomplete",
+  "status": "Source-field reconciliation retained; all recorded source definitions unchanged at final candidate. Family-level current qualification complete; not exhaustive per-kind dynamic coverage.",
+  "currentQualification": {
+    "binarySha256": "a007bfe4777bb2008e3a7af6d24ffbfba403005339fb713b51932e0af4f058fb",
+    "validation": "../macos-generic-freezing-2026-11-01.json",
+    "ctestPassed": 1066,
+    "scopeCases": 113,
+    "scopeAssertions": 33693,
+    "asanServerCases": 1052,
+    "asanServerAssertions": 205189,
+    "publicProjects": 16,
+    "performanceScenarios": 32,
+    "versionMatchedPerformanceStates": 4320,
+    "longEditRecheck": 8192,
+    "exhaustivePerKindDynamicCoverage": false
+  },
+  "currentSourceReconciliation": {
+    "checkedSourceFiles": 14,
+    "allReviewedDefinitionsUnchanged": true,
+    "originalReviewSha256": "4daf6b18c4c472cb517b32dbacf9a5c4a9611ef0279257d58f2072bb884a9f74",
+    "currentSdkPatchSha256": "c09a0c56ede92b8ae7693c90d96c2c4644a52d721a4b5804e7fa9e10fc87fedb"
+  },
+  "historicalRemainingAtReview": [
+    "Symbol/type/scope source review recorded separately in symbol-field-review.json",
+    "Assertion/constraint/coverage source review is recorded separately in verification-field-review.json",
+    "Frozen-code public query matrix",
+    "Formal latency/RSS/retirement/ASan/release"
+  ]
+}

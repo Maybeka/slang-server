@@ -734,10 +734,12 @@ void ServerCompilation::refreshImpl(const lsp::RequestContext& ctx, bool complet
     if (m_frozenInstances)
         frozenSelections = m_frozenInstances->prepareSelections(analysis->compilation, ctx);
     auto sharedRoots = analysis->compilation.getImportedInstanceBodyPaths();
+    auto libraryImport = analysis->libraryImportStatus();
     ctx.checkpoint("before full-model publication");
     m_moduleToDoc.swap(modules);
     m_analysis.swap(analysis);
     m_lastModelSharedRoots.swap(sharedRoots);
+    std::swap(m_lastModelLibraryImport, libraryImport);
     m_releasedSymbolPaths.clear();
     m_activeInstancesByModule.swap(activeInstances);
     m_activeGenerateScopesByArray.swap(activeGenerate);

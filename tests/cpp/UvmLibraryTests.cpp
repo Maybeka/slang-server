@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 #include "ServerDriver.h"
 #include "ast/ScopeBodyCache.h"
+#include "ast/ScopePreparationReport.h"
+#include "ast/InstanceIndexer.h"
 #include "ast/ServerCompilationAnalysis.h"
 #include "ast/TrustedUvmLibrary.h"
 #include "completions/CompletionContext.h"
@@ -17,6 +19,9 @@
 #include "slang/analysis/AnalysisQueries.h"
 #include "slang/analysis/ValueDriver.h"
 #include "slang/ast/Compilation.h"
+#include "slang/ast/ASTVisitor.h"
+#include "slang/ast/symbols/AttributeSymbol.h"
+#include "slang/ast/symbols/CoverSymbols.h"
 #include "slang/ast/EvalContext.h"
 #include "slang/util/String.h"
 #include "slang/ast/symbols/ClassSymbols.h"
@@ -29,12 +34,24 @@
 #include "slang/diagnostics/TextDiagnosticClient.h"
 #include "slang/parsing/Preprocessor.h"
 #include "slang/syntax/AllSyntax.h"
+#include "slang/syntax/SyntaxPrinter.h"
 #include "slang/util/OS.h"
 #include "slang/util/ScopeGuard.h"
 
 namespace {
 namespace fs = std::filesystem;
 using namespace slang;
+std::vector<std::string> diagnosticMessages(const SourceManager& sources,
+                                            const Diagnostics& diagnostics) {
+    std::vector<std::string> rendered;
+    for (const auto& diagnostic : diagnostics) {
+        Diagnostics one;
+        one.push_back(diagnostic);
+        rendered.push_back(DiagnosticEngine::reportAll(sources, one));
+    }
+    std::ranges::sort(rendered);
+    return rendered;
+}
 struct LibraryWorkspace {
     fs::path oldCwd = fs::current_path();
     inline static unsigned next = 0;
@@ -576,6 +593,8 @@ TEST_CASE("Cancelled RTL consumers release models and evicted source generations
 
 TEST_CASE("Stable RTL body reuse does not retain the retired editing source namespace",
           "[scope-semantic][scope-stable-source-lifetime]") {
+    // Multiple tops now use compact proofs too. A real CLI override keeps
+    // the full-context route covered independently of the top count.
     const bool fullContext = GENERATE(false, true);
     const bool edited = GENERATE(false, true);
     CAPTURE(fullContext);
@@ -588,13 +607,13 @@ TEST_CASE("Stable RTL body reuse does not retain the retired editing source name
         Config::FrozenSourcesConfig{.instances = std::vector<std::string>{"top.u"}, .maxMiB = 64};
     config.flagsByFile = std::vector<Config::FlagSource>{
         {(files.root / "server.json").string(),
-         std::string("--single-unit --threads 1 --top top") + (fullContext ? " --top other" : "")}};
+         std::string("--single-unit --threads 1 --top top") + (fullContext ? " --top other -GFORCE_FULL=0" : "")}};
     files.write(files.root / "fixed.sv",
                 "module stable #(parameter int N=1)(input int a, output int y); "
                 "assign y=a+N; endmodule\n");
     files.write(files.root / "consumer.sv",
-                "module top(input int a, output int y); stable u(.*); endmodule\n"
-                "module other; endmodule\n");
+                "module top #(parameter FORCE_FULL=0)(input int a, output int y); stable u(.*); endmodule\n"
+                "module other #(parameter FORCE_FULL=0); endmodule\n");
     files.write(files.root / "design.f", "fixed.sv\nconsumer.sv\n");
     Indexer indexer;
     ClientHarness client;
@@ -607,14 +626,14 @@ TEST_CASE("Stable RTL body reuse does not retain the retired editing source name
     CHECK(cache->status().compactPublications == (fullContext ? 0 : 1));
     if (edited) {
         const auto uri = URI::fromFile(files.root / "consumer.sv");
-        const std::string first = "module top(input int a, output int y); stable u(.*); endmodule\n"
-                                  "module other; endmodule\n";
+        const std::string first = "module top #(parameter FORCE_FULL=0)(input int a, output int y); stable u(.*); endmodule\n"
+                                  "module other #(parameter FORCE_FULL=0); endmodule\n";
         driver->openDocument(uri, first, 1, true);
         driver->onDocDidChange(
             {.textDocument = {.version = 2, .uri = uri},
              .contentChanges = {lsp::TextDocumentContentChangeWholeDocument{
-                 .text = "module top(input int a, output int y); stable #(.N(2)) u(.*); "
-                         "endmodule\nmodule other; endmodule\n"}}});
+                 .text = "module top #(parameter FORCE_FULL=0)(input int a, output int y); stable #(.N(2)) u(.*); "
+                         "endmodule\nmodule other #(parameter FORCE_FULL=0); endmodule\n"}}});
         driver->comp->prepareDiagnostics({});
         REQUIRE(cache->status().publications == 2);
     }
@@ -2201,6 +2220,20 @@ endmodule
         auto sharedValue = instance.body.find("internal_value");
         REQUIRE(sharedValue);
         CHECK(current->getAttributes(*sharedValue).size() == 1);
+        struct CompletionProbe : server::completions::MemberCompletionQuery {
+            using MemberCompletionQuery::addCompletions;
+        };
+        for(bool fromOutside:{false,true}) {
+            std::vector<lsp::CompletionItem> items;
+            CompletionProbe::addCompletions(items,&instance.body,
+                server::CompletionContextKind::Expression,
+                fromOutside ? instance.getParentScope() : &instance.body,
+                "file:///consumer-edit.sv");
+            auto item=std::ranges::find(items,"internal_value",&lsp::CompletionItem::label);
+            REQUIRE(item!=items.end());
+            REQUIRE(item->labelDetails);
+            CHECK(item->labelDetails->description.has_value()==fromOutside);
+        }
         analysis::AnalysisManager analysis(
             {.flags = analysis::AnalysisFlags::CheckUnused | analysis::AnalysisFlags::CheckShadow});
         current->freeze();
@@ -2746,6 +2779,10 @@ endmodule
         REQUIRE(instances.size() == 1);
         auto current = instances.front();
         auto analysis = driver->getDocument(fixedUri)->getAnalysis();
+        // Repeated queries of the same immutable provider must validate against
+        // the selected provider tree, just as analysis construction does.
+        CHECK(driver->getDocument(fixedUri)->getAnalysis() == analysis);
+        CHECK(driver->getDocument(fixedUri)->getAnalysisAndInputs({}).second == analysis);
         const auto& projected = analysis->getShallowCompilation()->getSourceInstances();
         REQUIRE(projected.size() == 1);
         CHECK(projected.front() == current);
@@ -2901,7 +2938,7 @@ endmodule
 
 TEST_CASE("Type-query certification still refuses runtime values dynamic shapes and public defaults",
           "[scope-semantic][scope-body-type-queries]") {
-    const auto mode = GENERATE("runtime", "dynamic", "dimension", "public-default");
+    const auto mode = GENERATE("runtime", "dynamic", "dimension", "public-default", "public-local-type");
     CAPTURE(mode);
     LibraryWorkspace files;
     Config config;
@@ -2918,9 +2955,12 @@ TEST_CASE("Type-query certification still refuses runtime values dynamic shapes 
         fixed += "int dynamic_data[]; localparam int N=$size(dynamic_data);";
     else if (kind == "dimension")
         fixed += "logic[3:0] fixed_data[2]; localparam int N=$size(fixed_data,dim);";
-    else
+    else if (kind == "public-default")
         fixed = "module stable #(parameter int N=$bits(q)) "
                 "(input logic[3:0] a, input int dim, output wire[31:0] y); logic[3:0] q;";
+    else
+        fixed = "module stable #(parameter int N=$bits(word_t)) "
+                "(input logic[3:0] a, input int dim, output wire[31:0] y); typedef logic [3:0] word_t;";
     fixed += "assign y=32'(N); endmodule\n";
     files.write(files.root / "fixed.sv", fixed);
     const std::string source = "module top; wire[31:0] y; stable u(4'b1,1,y); endmodule\n";
@@ -2957,10 +2997,11 @@ TEST_CASE("Runtime randomize and plusargs retain local binding and audit mutable
           "[scope-semantic][scope-body-randomize]") {
     const auto mode = GENERATE("plain", "inline", "outside", "class", "constant",
                                "plusargs", "outside-plusargs", "distribution",
-                               "distribution-external-weight", "distribution-external-item");
+                               "distribution-external-weight", "distribution-external-item",
+                               "distribution-default", "distribution-default-external");
     const std::string kind = mode;
     const bool reusable = kind == "plain" || kind == "inline" || kind == "plusargs" ||
-                          kind == "distribution";
+                          kind == "distribution" || kind == "distribution-default";
     CAPTURE(mode);
     LibraryWorkspace files;
     Config config;
@@ -2968,7 +3009,8 @@ TEST_CASE("Runtime randomize and plusargs retain local binding and audit mutable
     config.frozenSources = Config::FrozenSourcesConfig{
         .instances = std::vector<std::string>{"top.u"}, .maxMiB = 64};
     config.flagsByFile = std::vector<Config::FlagSource>{
-        {(files.root / "server.json").string(), "--single-unit --threads 1 --top top"}};
+        {(files.root / "server.json").string(), std::string("--single-unit --threads 1 --top top")+
+            (kind.starts_with("distribution-default") ? " --std 1800-2023" : "")}};
     std::string fixed = "module stable #(parameter int W=4)(output wire[W-1:0] y); ";
     if (kind == "class") {
         fixed += "class C; rand bit[3:0] data; endclass C item=new; "
@@ -2995,6 +3037,9 @@ TEST_CASE("Runtime randomize and plusargs retain local binding and audit mutable
             fixed += " with {data dist {[1:(1<<W)-1] :/ mutable_limits::LIMIT, 0 := 1};}";
         else if (kind == "distribution-external-item")
             fixed += " with {data dist {mutable_limits::target := W, 0 := 1};}";
+        else if (kind == "distribution-default" || kind == "distribution-default-external")
+            fixed += std::string(" with {data dist {0 := 1, default :/ ")+
+                     (kind=="distribution-default" ? "W" : "mutable_limits::LIMIT")+"};}";
         fixed += ") $error(\"randomize failed\"); return data; endfunction assign y=choose();";
     }
     fixed += " endmodule\n";
@@ -3012,6 +3057,7 @@ TEST_CASE("Runtime randomize and plusargs retain local binding and audit mutable
         indexer, client, config, {"design.f"}, files.root.string(), nullptr, true);
     REQUIRE(driver);
     auto setting = driver->options.get<server::ScopeBodyImport>();
+    INFO(rfl::json::write(driver->scopeLibraryStatus()));
     REQUIRE(setting);
     auto cache = setting->cache.lock();
     REQUIRE(cache);
@@ -3042,26 +3088,49 @@ TEST_CASE("Runtime randomize and plusargs retain local binding and audit mutable
 
 TEST_CASE("Named assertion declarations close expanded bodies and folded repetition dependencies",
           "[scope-semantic][scope-body-named-assertions]") {
+    const bool full = GENERATE(false, true);
     const auto mode = GENERATE("sequence", "property", "unused-external", "delay-external",
                                "formal", "local-variable", "local-variable-external", "default-clock", "disable-external",
                                "clocking-vars", "unbounded-delay", "unbounded-repetition",
-                               "unbounded-external");
+                               "unbounded-external", "inline-local", "inline-fixed", "inline-delay-external",
+                               "inline-range-external", "inline-unbounded-external",
+                               "inline-repetition-external", "inline-repetition-range-external");
     const std::string kind = mode;
     const bool reusable = kind == "sequence" || kind == "property" || kind == "default-clock" ||
                           kind == "local-variable" || kind == "unbounded-delay" ||
-                          kind == "unbounded-repetition";
-    CAPTURE(mode);
+                          kind == "unbounded-repetition" || kind == "inline-local" || kind == "inline-fixed";
+    CAPTURE(mode, full);
     LibraryWorkspace files;
     Config config;
     config.experimentalScopeSemanticCache = true;
+    config.semanticCacheUnlimited = true;
     config.frozenSources = Config::FrozenSourcesConfig{
-        .instances = std::vector<std::string>{"top.u"}, .maxMiB = 64};
+        .packages = kind == "inline-fixed" ? std::vector<std::string>{"fixed_limits"}
+                                            : std::vector<std::string>{},
+        .instances = std::vector<std::string>{"top.u"}};
     config.flagsByFile = std::vector<Config::FlagSource>{
-        {(files.root / "server.json").string(), "--single-unit --threads 1 --top top"}};
-    std::string fixed = "module stable #(parameter int W=2)"
+        {(files.root / "server.json").string(), std::string("--single-unit --threads 1 --top top") + (full ? " -G Q=2" : "")}};
+    std::string fixed = (kind == "inline-fixed"
+                             ? "package fixed_limits; localparam int DELAY=2; endpackage\n" : "") +
+                        std::string("module stable #(parameter int W=2)"
                         "(input logic clk, input logic rst_ni, input logic[W-1:0] a, "
-                        "output wire[W-1:0] y); ";
-    if (kind == "unused-external")
+                        "output wire[W-1:0] y); ");
+    if (kind == "inline-local")
+        fixed += "assert property(@(posedge clk) a[0] ##W a[0] [*1:W]); ";
+    else if (kind == "inline-fixed")
+        fixed += "assert property(@(posedge clk) a[0] ##[fixed_limits::DELAY:$] "
+                 "a[0] [*1:fixed_limits::DELAY]); ";
+    else if (kind == "inline-delay-external")
+        fixed += "assert property(@(posedge clk) a[0] ##mutable_limits::DELAY a[0]); ";
+    else if (kind == "inline-range-external")
+        fixed += "assert property(@(posedge clk) a[0] ##[0:mutable_limits::DELAY] a[0]); ";
+    else if (kind == "inline-unbounded-external")
+        fixed += "assert property(@(posedge clk) a[0] ##[mutable_limits::DELAY:$] a[0]); ";
+    else if (kind == "inline-repetition-external")
+        fixed += "assert property(@(posedge clk) a[0] [*mutable_limits::DELAY]); ";
+    else if (kind == "inline-repetition-range-external")
+        fixed += "assert property(@(posedge clk) a[0] [*1:mutable_limits::DELAY]); ";
+    else if (kind == "unused-external")
         fixed += "sequence unused_s; mutable_limits::flag; endsequence ";
     else if (kind == "delay-external")
         fixed += "sequence s; a[0] ##mutable_limits::DELAY a[0]; endsequence "
@@ -3100,13 +3169,13 @@ TEST_CASE("Named assertion declarations close expanded bodies and folded repetit
     }
     fixed += "assign y=a; endmodule\n";
     files.write(files.root / "fixed.sv", fixed);
-    auto source = [](int width) {
+    auto source = [](int width, int delay) {
         return fmt::format("package mutable_limits; parameter int DELAY={}; bit flag; endpackage\n"
-                           "module top; logic clk; logic[{}:0] a; wire[{}:0] y; "
+                           "module top #(parameter Q=1); logic clk; logic[{}:0] a; wire[{}:0] y; "
                            "stable #(.W({})) u(clk,1'b1,a,y); endmodule\n",
-                           width, width - 1, width - 1, width);
+                           delay, width - 1, width - 1, width);
     };
-    files.write(files.root / "consumer.sv", source(2));
+    files.write(files.root / "consumer.sv", source(2,2));
     files.write(files.root / "design.f", "fixed.sv\nconsumer.sv\n");
     Indexer indexer;
     ClientHarness client;
@@ -3118,14 +3187,15 @@ TEST_CASE("Named assertion declarations close expanded bodies and folded repetit
     auto cache = setting->cache.lock();
     REQUIRE(cache);
     int previous = 0;
-    for (int width : {2, 2, 4, 4}) {
+    for (const auto [width, delay] :
+         std::vector<std::pair<int,int>>{{2,2},{2,3},{4,4},{4,5}}) {
         auto make = [&](bool native) {
             auto compilation = std::make_shared<ast::Compilation>(driver->options);
             REQUIRE(server::importTrustedUvm(*compilation, driver->sm, driver->options));
             if (native)
                 compilation->setInstanceBodyReuseHooks({}, {});
             compilation->addSyntaxTree(syntax::SyntaxTree::fromText(
-                source(width), driver->sm, "assertion-consumer.sv", "", driver->options));
+                source(width,delay), driver->sm, "assertion-consumer.sv", "", driver->options));
             return compilation;
         };
         auto current = make(false), native = make(true);
@@ -3154,6 +3224,7 @@ TEST_CASE("Named assertion declarations close expanded bodies and folded repetit
         CHECK((cache->status().publications > 0) == reusable);
         previous = width;
     }
+    if (full) CHECK(cache->status().compactPublications == 0);
 }
 
 TEST_CASE("Frozen macro invocation diagnostics retain header expansion notes and outside guards",
@@ -3701,7 +3772,7 @@ endmodule
 
 TEST_CASE("Local packed nominal types and pure system calls retain current semantics",
           "[scope-semantic][scope-local-types-calls]") {
-    const bool impure = GENERATE(false, true);
+    const bool unsupportedContext = GENERATE(false, true);
     LibraryWorkspace files;
     Config config;
     config.experimentalScopeSemanticCache = true;
@@ -3725,8 +3796,8 @@ module stable #(parameter int W=2)(input logic [W-1:0] a, output wire [W-1:0] y)
   assign q.packet.tag=$onehot(a)|$onehot0(a)|$isunknown(a)|(a inside {[0:W-1]});
   assign y=(state==ACTIVE) ? q.packet.data + bits_t'(count) : bits_t'(shape);
 )");
-    if (impure)
-        fixed += "int seed=1; wire [31:0] random_value=$urandom(seed);\n";
+    if (unsupportedContext)
+        fixed += "initial $printtimescale;\n";
     fixed += "endmodule\n";
     files.write(files.root / "fixed.sv", fixed);
     auto source = [](int width, bool invalid) {
@@ -3791,12 +3862,12 @@ endmodule
                                             ->as<ast::ValueSymbol>()
                                             .getType();
         CHECK(type.isMatching(siblingType) == nativeType.isMatching(nativeSiblingType));
-        if (!impure && edit >= 2) {
+        if (!unsupportedContext && edit >= 2) {
             REQUIRE(current->isImportedInstanceBody(body));
             auto [it, inserted] = identities.emplace(widths[edit], q);
             CHECK(it->second == q);
         }
-        if (impure)
+        if (unsupportedContext)
             CHECK_FALSE(current->isImportedInstanceBody(body));
         analysis::AnalysisOptions options{.flags = analysis::AnalysisFlags::CheckUnused |
                                                    analysis::AnalysisFlags::CheckShadow};
@@ -3814,7 +3885,7 @@ endmodule
         if (!invalid)
             current->offerInstanceBodies(current);
     }
-    CHECK((cache->status().hits > 0) == !impure);
+    CHECK((cache->status().hits > 0) == !unsupportedContext);
 }
 
 TEST_CASE("Local type dimensions cannot capture mutable package constants",
@@ -4986,7 +5057,17 @@ TEST_CASE("Closed body extensions reject mutable function and array dependencies
                     "endfunction always_comb y=f(a,$root.top.mutable_result);"),
         std::string("function automatic void f(input int x); y=x+consumer_pkg::N; "
                     "endfunction always_comb f(a);"),
-        std::string("always_comb y=$urandom(a);"),
+        std::string("always_comb y=$urandom($root.top.mutable_result);"),
+        std::string("always_comb y=$urandom_range($root.top.mutable_result,0);"),
+        std::string("initial $readmemh(\"unused.hex\",$root.top.mutable_mem); always_comb y=a;"),
+        std::string("initial $writememh($root.top.mutable_name,local_mem); always_comb y=a;"),
+        std::string("always_comb y=$rtoi($sqrt($root.top.mutable_real));"),
+        std::string("initial disable $root.top.mutable_work; always_comb y=a;"),
+        std::string("int words[]; initial words='{consumer_pkg::N{1}}; always_comb y=a+words.size();"),
+        std::string("for(genvar i=0;i<2;i++) begin:g initial begin:work #1; end end "
+                    "initial disable g[consumer_pkg::N%2].work; always_comb y=a;"),
+        std::string("for(genvar i=0;i<2;i++) begin:g localparam int V=i; end "
+                    "always_comb y=a+g[consumer_pkg::N%2].V;"),
         std::string("initial $sformat($root.top.mutable_name,\"%0d\",a); assign y=a;"),
         std::string("int fd; initial fd=$fopen($root.top.mutable_name,\"w\"); assign y=a;"),
         std::string("localparam string NAME=consumer_pkg::NAME; initial $info(NAME); assign y=a;"),
@@ -5001,7 +5082,7 @@ TEST_CASE("Closed body extensions reject mutable function and array dependencies
                     "default: begin:h wire q=a[1]; end endcase always_comb y=a;"),
         std::string("for(genvar i=0;i<consumer_pkg::N;i++) begin:g wire q=a[0]; end "
                     "always_comb y=a;"),
-        std::string("int seed=1; initial $info(\"random %0d\",$urandom(seed)); always_comb y=a;"),
+        std::string("initial $info(\"random %0d\",$urandom($root.top.mutable_result)); always_comb y=a;"),
         std::string("logic words[consumer_pkg::N]; always_comb begin words[0]=a[0]; "
                     "y=32'(words[0]); end"));
     INFO(implementation);
@@ -5013,13 +5094,14 @@ TEST_CASE("Closed body extensions reject mutable function and array dependencies
     config.flagsByFile = std::vector<Config::FlagSource>{
         {(files.root / "server.json").string(), "--single-unit --threads 1 --top top"}};
     files.write(files.root / "fixed.sv",
-                "module stable(input int a, output int y); " + implementation + " endmodule\n");
+                "module stable(input int a, output int y); logic [7:0] local_mem[4]; " + implementation + " endmodule\n");
     auto source = [](int n) {
         return fmt::format("package consumer_pkg; parameter int N={}; "
                            "parameter string NAME=$sformatf(\"%0d\",N); "
                            "function automatic int f(input int a); return a+N; endfunction "
                            "endpackage module top; string mutable_name=\"consumer\"; int a,y,mutable_result; "
-                           "stable u(.*); endmodule\n",
+                           "logic [7:0] mutable_mem[4]; real mutable_real; "
+                           "initial begin: mutable_work #1; end stable u(.*); endmodule\n",
                            n);
     };
     files.write(files.root / "consumer.sv", source(4));
@@ -5070,6 +5152,7 @@ TEST_CASE("Closed body extensions reject mutable function and array dependencies
 TEST_CASE("Runtime random call reuse preserves native constant-context errors",
           "[scope-semantic][scope-body-runtime-constant-errors]") {
     const auto implementation = GENERATE(
+        std::string("localparam int R=$urandom_range(7,0); assign y=R;"),
         std::string("localparam int R=$urandom(); assign y=R;"),
         std::string("function automatic int f(); return $urandom(); endfunction "
                     "localparam int R=f(); assign y=R;"),
@@ -5130,6 +5213,8 @@ TEST_CASE("Runtime random call reuse preserves native constant-context errors",
 
 TEST_CASE("Mutable caller ref and symbol arguments do not survive in retained body usage profiles",
           "[scope-semantic][scope-body-caller-ref-origin]") {
+    // Multiple tops now use compact proofs too. A real CLI override keeps
+    // the full-context route covered independently of the top count.
     const bool fullContext = GENERATE(false, true);
     INFO(fullContext);
     const bool constantCaller = GENERATE(false, true);
@@ -5141,7 +5226,7 @@ TEST_CASE("Mutable caller ref and symbol arguments do not survive in retained bo
         Config::FrozenSourcesConfig{.instances = std::vector<std::string>{"top.u"}, .maxMiB = 64};
     config.flagsByFile = std::vector<Config::FlagSource>{
         {(files.root / "server.json").string(),
-         std::string("--single-unit --threads 1 --top top") + (fullContext ? " --top other" : "") +
+         std::string("--single-unit --threads 1 --top top") + (fullContext ? " --top other -GFORCE_FULL=0" : "") +
              (constantCaller ? " --allow-hierarchical-const" : "")}};
     files.write(files.root / "fixed.sv", R"(
 module stable(output wire [31:0] y);
@@ -5151,13 +5236,13 @@ module stable(output wire [31:0] y);
 endmodule
 )");
     auto source = [&](bool write) {
-        return std::string("module top; wire [31:0] y; stable u(.*); "
+        return std::string("module top #(parameter FORCE_FULL=0); wire [31:0] y; stable u(.*); "
                            "task automatic drive(ref logic [31:0] v); v=32'h123; endtask ") +
                (constantCaller && write ? "localparam logic [31:0] MAGIC=u.query(); " : "") +
                (write ? "initial begin logic [31:0] r; drive(u.q); $dumpvars(0,u.spare); "
                         "r=u.query(); end "
                       : "") +
-               "endmodule module other; endmodule\n";
+               "endmodule module other #(parameter FORCE_FULL=0); endmodule\n";
     };
     files.write(files.root / "consumer.sv", source(true));
     files.write(files.root / "design.f", "fixed.sv\nconsumer.sv\n");
@@ -5272,12 +5357,29 @@ TEST_CASE("Mutable roots introducing a fixed package name preserve native declar
     native->openDocument(uri, original, 0, true);
     for (int version = 0; version < 3; ++version) {
         if (version) {
+            const auto previousImport=cached->comp->lastModelLibraryImport();
+            const auto previousRoots=cached->comp->lastModelSharedRoots();
             lsp::DidChangeTextDocumentParams change{
                 .textDocument = {.version = version, .uri = uri},
                 .contentChanges = {lsp::TextDocumentContentChangeWholeDocument{
                     .text = version == 1 ? collision : original}}};
             cached->onDocDidChange(change);
             native->onDocDidChange(change);
+            // Import refusal / recovery is private until the new model commits.
+            // Cancel after import and root binding, at the publication boundary.
+            lsp::RequestContext cancel("test/model-library-status",lsp::ID_t{11});
+            bool reached=false;
+            cancel.setCheckpointObserverForTesting([&](std::string_view where) {
+                if (where=="before full-model publication") { reached=true;cancel.cancel(); }
+            });
+            CHECK_THROWS_AS(cached->comp->refresh(cancel),lsp::RequestCancelled);
+            REQUIRE(reached);
+            CHECK(cached->comp->lastModelLibraryImport().status==previousImport.status);
+            CHECK(cached->comp->lastModelLibraryImport().generation==previousImport.generation);
+            CHECK(cached->comp->lastModelLibraryImport().failureCategory==previousImport.failureCategory);
+            CHECK(cached->comp->lastModelLibraryImport().witnessFailure==previousImport.witnessFailure);
+            CHECK(cached->comp->lastModelSharedRoots()==previousRoots);
+            CHECK_FALSE(cached->comp->hasCurrentModel());
         }
         const auto& actual = cached->comp->getInstancesOfModule("top").front()->body;
         const auto& expected = native->comp->getInstancesOfModule("top").front()->body;
@@ -5292,6 +5394,15 @@ TEST_CASE("Mutable roots introducing a fixed package name preserve native declar
         CHECK((actual.getCompilation().getPackage("stable") ==
                library->compilation->getPackage("stable")) == (version != 1));
         CHECK(value(actual) == value(expected));
+        const auto modelImport=cached->comp->lastModelLibraryImport();
+        CHECK(cached->comp->hasCurrentModel());
+        CHECK(modelImport.status==(version==1 ? "declined" : "imported"));
+        CHECK(modelImport.generation==library->generation);
+        CHECK(modelImport.failureCategory==(version==1 ? "namespace-witness" : ""));
+        CHECK(modelImport.witnessFailure==(version==1 ? "provider-path-conflict" : ""));
+        CHECK(native->comp->lastModelLibraryImport().status=="not-configured");
+        const auto publicStatus=rfl::json::write(cached->scopeLibraryStatus());
+        CHECK(publicStatus.find("\"lastModelLibraryImport\":{\"status\":\""+modelImport.status+"\"")!=std::string::npos);
         CHECK(DiagnosticEngine::reportAll(cached->sm,
                                           actual.getCompilation().getSemanticDiagnostics()) ==
               DiagnosticEngine::reportAll(native->sm,
@@ -5314,6 +5425,16 @@ TEST_CASE("Mutable roots introducing a fixed package name preserve native declar
               DiagnosticEngine::reportAll(native->sm, sourceExpected->getSemanticDiagnostics()));
         CHECK(cached->options.get<server::TrustedUvmImport>()->library == library);
         CHECK((library->namespaceDeclines.load() > 0) == (version > 0));
+        // A private analysis of the same generation cannot replace the last
+        // full-model outcome, even when it takes a different import route.
+        auto privateOptions=cached->options;
+        auto imports=*privateOptions.get<server::TrustedUvmImport>();
+        imports.enabled=false;privateOptions.set(imports);
+        server::ServerCompilationAnalysis privateAnalysis({},privateOptions,cached->sm);
+        CHECK(privateAnalysis.libraryImportStatus().status=="disabled");
+        CHECK(cached->comp->lastModelLibraryImport().status==modelImport.status);
+        CHECK(cached->comp->lastModelLibraryImport().failureCategory==modelImport.failureCategory);
+        CHECK(cached->comp->lastModelLibraryImport().witnessFailure==modelImport.witnessFailure);
     }
 }
 
@@ -5366,6 +5487,10 @@ TEST_CASE("Mutable duplicate module declarations suspend and restore frozen body
                 lsp::TextDocumentContentChangeWholeDocument{.text = source(duplicate)}}};
         cached->onDocDidChange(change);
         native->onDocDidChange(change);
+        // Both a cached acceptance and a cached rejection must be replaced when
+        // the mutable unit changes, without retaining that unit's old tree.
+        CHECK(cached->hasCompatibleTrustedNamespace() == !duplicate);
+        CHECK(cached->hasCompatibleTrustedNamespace() == !duplicate);
         const auto beforeHits = cache->status().hits;
         const auto& actual = cached->comp->getInstancesOfModule("top").front()->body;
         const auto& expected = native->comp->getInstancesOfModule("top").front()->body;
@@ -5659,7 +5784,7 @@ endmodule
     if (boundary == 1)
         fixed.insert(
             fixed.rfind("endmodule"),
-            "if(!EXTERNAL) begin:g int seed=1; initial $display(\"%0d\",$urandom(seed)); end\n");
+            "if(!EXTERNAL) begin:g initial $printtimescale; end\n");
     if (boundary == 2)
         fixed.replace(fixed.find("else assign y=local_y;"),
                       std::string("else assign y=local_y;").size(),
@@ -6273,14 +6398,7 @@ TEST_CASE("Independent bodies retain inherited bind flags beside mutable errors"
                                                             files.root.string(), nullptr, true);
     REQUIRE(driver);
     auto cacheSetting = driver->options.get<server::ScopeBodyImport>();
-    if (insideBind) {
-        // The selected dependency closure includes the bound monitor's mutable
-        // provider file and declines the library before body admission.
-        CHECK_FALSE(cacheSetting);
-        CHECK_FALSE(driver->options.get<server::TrustedUvmImport>());
-        REQUIRE(driver->comp->getInstancesOfModule("stable").front()->body.find("observer"));
-        return;
-    }
+    INFO(rfl::json::write(driver->scopeLibraryStatus()));
     REQUIRE(cacheSetting);
     auto cache = cacheSetting->cache.lock();
     REQUIRE(cache);
@@ -7204,4 +7322,3323 @@ module stable #(parameter int WIDTH=4);
     // prevents this consumer from borrowing it. Only imports above prove reuse.
     CHECK((std::ranges::find(roots, "top.u") != roots.end()) ==
           (reusable || mode == "provider-store" || mode == "consumer-before"));
+}
+
+TEST_CASE("Argument dependency contracts reuse numeric and memory binders without executing IO",
+          "[scope-semantic][scope-body-argument-contract]") {
+    const auto implementation = GENERATE(
+        std::string("int seed=1; always_comb y=int'($urandom(seed));"),
+        std::string("always_comb y=int'($urandom_range(7,0));"),
+        std::string("int words[]; initial words='{3{1}}; always_comb y=a+words.size();"),
+        std::string("int fd; initial fd=$fseek(0,0,0); always_comb y=a+fd;"),
+        std::string("initial begin: work_block if(a) disable work_block; y=a; end"),
+        std::string("always_comb y=$rtoi($sqrt($itor(a)));"),
+        std::string("always_comb y=$rtoi($ln($exp($itor(a))));"),
+        std::string("always_comb y=$rtoi($pow($itor(a),2.0));"),
+        std::string("always_comb y=$rtoi($bitstoreal($realtobits($itor(a))));"),
+        std::string("always_comb y=$rtoi($bitstoshortreal($shortrealtobits(shortreal'(a))));"),
+        std::string("localparam int N=$rtoi($sqrt(16.0)); always_comb y=a+N;"),
+        std::string("logic [7:0] mem[0:3]; initial begin "
+                    "$readmemh(\"scope-reuse-never-execute.hex\",mem); "
+                    "$readmemb(\"scope-reuse-never-execute.bin\",mem,0,3); "
+                    "$writememh(\"scope-reuse-never-execute.hex\",mem); "
+                    "$writememb(\"scope-reuse-never-execute.bin\",mem); "
+                    "$sreadmemh(mem,0,3,\"AA BB CC DD\"); "
+                    "$sreadmemb(mem,0,3,\"00000001\"); end always_comb y=int'(mem[a[1:0]]);"));
+    INFO(implementation);
+    LibraryWorkspace files;
+    Config config;
+    config.experimentalScopeSemanticCache = true;
+    config.frozenSources =
+        Config::FrozenSourcesConfig{.instances = std::vector<std::string>{"top.u"}, .maxMiB = 64};
+    config.flagsByFile = std::vector<Config::FlagSource>{
+        {(files.root / "server.json").string(), "--single-unit --threads 1 --top top"}};
+    files.write(files.root / "fixed.sv",
+                "module stable(input int a, output int y); " + implementation + " endmodule\n");
+    auto source = [](int edit) {
+        return fmt::format("module top; int a,y; localparam int EDIT={}; stable u(.*); endmodule\n",
+                           edit);
+    };
+    files.write(files.root / "consumer.sv", source(0));
+    files.write(files.root / "design.f", "fixed.sv\nconsumer.sv\n");
+    Indexer indexer;
+    ClientHarness client;
+    auto driver = server::ServerDriver::createFromFileLists(indexer, client, config, {"design.f"},
+                                                            files.root.string(), nullptr, true);
+    REQUIRE(driver);
+    auto cache = driver->options.get<server::ScopeBodyImport>()->cache.lock();
+    REQUIRE(cache);
+    for (int edit : {0, 1, 0}) {
+        auto make = [&](bool native) {
+            auto compilation = std::make_shared<ast::Compilation>(driver->options);
+            REQUIRE(server::importTrustedUvm(*compilation, driver->sm, driver->options));
+            if (native)
+                compilation->setInstanceBodyReuseHooks({}, {});
+            compilation->addSyntaxTree(syntax::SyntaxTree::fromText(
+                source(edit), driver->sm, "argument-user.sv", "", driver->options));
+            const auto& diagnostics = compilation->getSemanticDiagnostics();
+            INFO(DiagnosticEngine::reportAll(driver->sm, diagnostics));
+            REQUIRE_FALSE(std::ranges::any_of(diagnostics, [](const auto& d) { return d.isError(); }));
+            return compilation;
+        };
+        auto current = make(false), native = make(true);
+        auto& body = current->getRoot().topInstances.front()->body.find("u")
+                         ->as<ast::InstanceSymbol>().body;
+        CHECK(current->isImportedInstanceBody(body) == (edit != 0 || cache->status().publications > 0));
+        CHECK(DiagnosticEngine::reportAll(driver->sm, current->getSemanticDiagnostics()) ==
+              DiagnosticEngine::reportAll(driver->sm, native->getSemanticDiagnostics()));
+        analysis::AnalysisOptions opts{.flags = analysis::AnalysisFlags::CheckUnused |
+                                                analysis::AnalysisFlags::CheckShadow};
+        analysis::AnalysisManager am(opts), nm(opts);
+        current->freeze(); am.analyze(*current); current->unfreeze();
+        native->freeze(); nm.analyze(*native); native->unfreeze();
+        CHECK(DiagnosticEngine::reportAll(driver->sm, am.getDiagnostics()) ==
+              DiagnosticEngine::reportAll(driver->sm, nm.getDiagnostics()));
+        current->offerInstanceBodies(current);
+        REQUIRE(cache->status().publications > 0);
+    }
+    CHECK(cache->status().hits >= 2);
+    CHECK_FALSE(std::filesystem::exists(files.root / "scope-reuse-never-execute.hex"));
+    CHECK_FALSE(std::filesystem::exists(files.root / "scope-reuse-never-execute.bin"));
+}
+
+TEST_CASE("Folded hierarchy selectors close value and control dependencies",
+          "[scope-semantic][scope-folded-lookup-indices]") {
+    const std::string origin=GENERATE("local","fixed","mutable");
+    CAPTURE(origin);
+    LibraryWorkspace files;
+    const auto index=origin=="local" ? "IDX" : origin=="fixed" ? "fixed_index::I" : "consumer_pkg::I";
+    files.write(files.root/"fixed.sv",
+        std::string(origin=="fixed" ? "package fixed_index; localparam int I=1; endpackage\n" : "")+
+        "module stable #(parameter int IDX=1)(input int a, output int y); "
+        "for(genvar i=0;i<2;i++) begin:g localparam int V=10+i; "
+        "initial begin:work #1; end end " +
+        "wire signed [31:0] SELECTED=g["+index+"].V; "
+        "initial disable g["+index+"].work; assign y=a+SELECTED; endmodule\n");
+    auto user=[](int i) {
+        return fmt::format("package consumer_pkg; parameter int I={}; endpackage\n"
+                           "module top; int a,y; stable #(.IDX({})) u(.*); endmodule\n",i,i);
+    };
+    files.write(files.root/"consumer.sv",user(1));
+    files.write(files.root/"design.f","fixed.sv\nconsumer.sv\n");
+    struct Result {int value;std::vector<std::string> semantic,flow;};
+    std::vector<Result> expected;
+    for (bool enabled:{false,true}) {
+        Config config;
+        config.experimentalScopeSemanticCache=enabled;
+        config.semanticCacheUnlimited=true;
+        config.frozenSources=Config::FrozenSourcesConfig{
+            .packages=origin=="fixed" ? std::vector<std::string>{"fixed_index"} : std::vector<std::string>{},
+            .instances=std::vector<std::string>{"top.u"}};
+        config.flagsByFile=std::vector<Config::FlagSource>{
+            {(files.root/"server.json").string(),"--single-unit --threads 1 --timescale 1ns/1ps --top top"}};
+        Indexer indexer;ClientHarness client;
+        auto driver=server::ServerDriver::createFromFileLists(indexer,client,config,{"design.f"},
+                                                               files.root.string(),nullptr,true);
+        REQUIRE(driver);
+        if(enabled) REQUIRE(driver->options.get<server::TrustedUvmImport>());
+        const auto uri=URI::fromFile(files.root/"consumer.sv");
+        driver->openDocument(uri,user(1),0,true);
+        for (int edit=0;edit<4;++edit) {
+            const int i=1-edit%2;
+            driver->onDocDidChange({.textDocument={.version=edit+1,.uri=uri},
+                .contentChanges={lsp::TextDocumentContentChangeWholeDocument{.text=user(i)}}});
+            driver->comp->prepareDiagnostics({});
+            const auto& roots=driver->comp->getInstancesOfModule("top");
+            REQUIRE(roots.size()==1);
+            const auto& body=roots.front()->body.find("u")->as<ast::InstanceSymbol>().body;
+            auto& compilation=body.getCompilation();
+            const auto& diagnostics=compilation.getSemanticDiagnostics();
+            INFO(DiagnosticEngine::reportAll(driver->sm,diagnostics));
+            REQUIRE_FALSE(std::ranges::any_of(diagnostics,[](const auto& d) { return d.isError(); }));
+            const auto initializer=body.find("SELECTED")->as<ast::NetSymbol>().getInitializer();
+            REQUIRE(initializer);
+            const auto target=initializer->getSymbolReference();
+            REQUIRE(target);
+            REQUIRE(target->kind==ast::SymbolKind::Parameter);
+            const int value=target->as<ast::ParameterSymbol>().getValue().integer().as<int>().value();
+            CHECK(value==10+(origin=="fixed" ? 1 : i));
+            Result result{value,diagnosticMessages(driver->sm,compilation.getSemanticDiagnostics()),{}};
+            analysis::AnalysisOptions opts{.flags=analysis::AnalysisFlags::CheckUnused |
+                                                  analysis::AnalysisFlags::CheckShadow};
+            analysis::AnalysisManager manager(opts);
+            compilation.freeze();manager.analyze(compilation);compilation.unfreeze();
+            result.flow=diagnosticMessages(driver->sm,manager.getDiagnostics());
+            if(enabled) {
+                CHECK(result.value==expected.at(edit).value);
+                CHECK(result.semantic==expected.at(edit).semantic);
+                CHECK(result.flow==expected.at(edit).flow);
+                // Each new root parameterization first produces a certified
+                // owner during diagnostics; repeats must actually reuse it.
+                if(edit>=2 || origin=="mutable")
+                    CHECK(compilation.isImportedInstanceBody(body)==(origin!="mutable"));
+            }
+            else expected.push_back(std::move(result));
+        }
+    }
+}
+
+TEST_CASE("Retained net inout boundaries bind current connections and preserve analysis",
+          "[scope-semantic][scope-body-inout-boundary]") {
+    const auto port = GENERATE(std::string("inout tri [3:0] io"),
+                               std::string("inout wire [3:0] io"));
+    INFO(port);
+    const auto implementation = GENERATE(
+        std::string("assign io=enable ? 4'b1010 : 4'bzzzz;"),
+        std::string("bufif1 #(1,2,3) b[3:0](io,4'b1010,enable);"));
+    INFO(implementation);
+    LibraryWorkspace files;
+    Config config;
+    config.experimentalScopeSemanticCache = true;
+    config.frozenSources =
+        Config::FrozenSourcesConfig{.instances = std::vector<std::string>{"top.u"}, .maxMiB = 64};
+    config.flagsByFile = std::vector<Config::FlagSource>{
+        {(files.root / "server.json").string(), "--single-unit --threads 1 --top top"}};
+    files.write(files.root / "fixed.sv", "module stable(" + port +
+                ", input logic enable, output wire [3:0] seen); "
+                + implementation + " assign seen=io; endmodule\n");
+    auto source = [](int edit) {
+        return fmt::format("module top; tri [3:0] first,second; wire [3:0] seen; "
+                           "stable u(.io({}),.enable(1'b{}),.seen(seen)); endmodule\n",
+                           edit ? "second" : "first", edit);
+    };
+    files.write(files.root / "consumer.sv", source(0));
+    files.write(files.root / "design.f", "fixed.sv\nconsumer.sv\n");
+    Indexer indexer;
+    ClientHarness client;
+    auto driver = server::ServerDriver::createFromFileLists(indexer, client, config, {"design.f"},
+                                                            files.root.string(), nullptr, true);
+    REQUIRE(driver);
+    auto cache = driver->options.get<server::ScopeBodyImport>()->cache.lock();
+    REQUIRE(cache);
+    for (int edit : {0, 1, 0}) {
+        auto make = [&](bool native) {
+            auto compilation = std::make_shared<ast::Compilation>(driver->options);
+            REQUIRE(server::importTrustedUvm(*compilation, driver->sm, driver->options));
+            if (native)
+                compilation->setInstanceBodyReuseHooks({}, {});
+            compilation->addSyntaxTree(syntax::SyntaxTree::fromText(
+                source(edit), driver->sm, "inout-user.sv", "", driver->options));
+            auto& diagnostics = compilation->getSemanticDiagnostics();
+            INFO(DiagnosticEngine::reportAll(driver->sm, diagnostics));
+            REQUIRE_FALSE(std::ranges::any_of(diagnostics, [](const auto& d) { return d.isError(); }));
+            return compilation;
+        };
+        auto current = make(false), native = make(true);
+        const auto& instance = current->getRoot().topInstances.front()->body.find("u")
+                                   ->as<ast::InstanceSymbol>();
+        CHECK(current->isImportedInstanceBody(instance.body) == (cache->status().publications > 0));
+        CHECK(instance.getPortConnections().front()->getExpression()->getSymbolReference()->name ==
+              (edit ? "second" : "first"));
+        CHECK(DiagnosticEngine::reportAll(driver->sm, current->getSemanticDiagnostics()) ==
+              DiagnosticEngine::reportAll(driver->sm, native->getSemanticDiagnostics()));
+        analysis::AnalysisOptions opts{.flags = analysis::AnalysisFlags::CheckUnused |
+                                                analysis::AnalysisFlags::CheckShadow};
+        analysis::AnalysisManager am(opts), nm(opts);
+        current->freeze(); am.analyze(*current); current->unfreeze();
+        native->freeze(); nm.analyze(*native); native->unfreeze();
+        CHECK(DiagnosticEngine::reportAll(driver->sm, am.getDiagnostics()) ==
+              DiagnosticEngine::reportAll(driver->sm, nm.getDiagnostics()));
+        current->offerInstanceBodies(current);
+        REQUIRE(cache->status().publications > 0);
+    }
+    CHECK(cache->status().hits >= 2);
+}
+
+TEST_CASE("Rejected fixed tops retain compact child owners beside unrelated mutable tops",
+          "[scope-semantic][scope-body-fixed-parent-fallback]") {
+    const bool multipleTops = GENERATE(false, true);
+    const bool nested = GENERATE(false, true);
+    const bool moduleSelector = GENERATE(false, true);
+    CAPTURE(multipleTops, nested, moduleSelector);
+    const std::string selectedPath = nested ? "top.box" : "dut";
+    LibraryWorkspace files;
+    Config config;
+    config.experimentalScopeSemanticCache = true;
+    config.frozenSources =
+        moduleSelector
+            ? Config::FrozenSourcesConfig{.modules = std::vector<std::string>{"dut"}, .maxMiB = 64}
+            : Config::FrozenSourcesConfig{.instances = std::vector<std::string>{selectedPath}, .maxMiB = 64};
+    config.flagsByFile = std::vector<Config::FlagSource>{
+        {(files.root / "server.json").string(),
+         std::string("--single-unit --threads 1 --top ") + (nested ? "top" : "dut") +
+             (multipleTops ? " --top consumer" : "")}};
+    files.write(files.root / "fixed.sv", R"(
+module stable(input logic a, output wire y);
+  assign y=a;
+endmodule
+module dut;
+  logic a;
+  wire y;
+  stable u(a,y);
+  initial $printtimescale;
+endmodule
+)");
+    auto source = [&](int edit) {
+        return fmt::format("module consumer; localparam int EDIT={}; endmodule\n", edit) +
+               (nested ? "module top; dut box(); endmodule\n" : "");
+    };
+    files.write(files.root / "consumer.sv", source(0));
+    files.write(files.root / "design.f", "fixed.sv\nconsumer.sv\n");
+    Indexer indexer;
+    ClientHarness client;
+    auto driver = server::ServerDriver::createFromFileLists(indexer, client, config, {"design.f"},
+                                                            files.root.string(), nullptr, true);
+    REQUIRE(driver);
+    auto setting = driver->options.get<server::ScopeBodyImport>();
+    REQUIRE(setting);
+    auto cache = setting->cache.lock();
+    REQUIRE(cache);
+    auto make = [&](int edit, bool native) {
+        auto compilation = std::make_shared<ast::Compilation>(driver->options);
+        REQUIRE(server::importTrustedUvm(*compilation, driver->sm, driver->options));
+        if (native)
+            compilation->setInstanceBodyReuseHooks({}, {});
+        compilation->addSyntaxTree(syntax::SyntaxTree::fromText(
+            source(edit), driver->sm, "multitop-user.sv", "", driver->options));
+        auto& diagnostics = compilation->getSemanticDiagnostics();
+        INFO(DiagnosticEngine::reportAll(driver->sm, diagnostics));
+        REQUIRE_FALSE(std::ranges::any_of(diagnostics, [](const auto& d) { return d.isError(); }));
+        return compilation;
+    };
+    auto first = make(0, false);
+    std::weak_ptr<syntax::SyntaxTree> oldSyntax = first->getSyntaxTrees().front();
+    first->offerInstanceBodies(first);
+    REQUIRE(cache->status().publications == 1);
+    CHECK(cache->status().compactPublications == 1);
+    CHECK(cache->status().retainedRoots == std::vector<std::string>{selectedPath + ".u"});
+    first.reset();
+    CHECK(oldSyntax.expired());
+    for (int edit : {1, 2, 0}) {
+        auto current = make(edit, false), native = make(edit, true);
+        const ast::InstanceSymbol* dut = nullptr;
+        for (auto instance : current->getRoot().topInstances)
+            if (instance->name == (nested ? "top" : "dut"))
+                dut = instance;
+        REQUIRE(dut);
+        if (nested)
+            dut = &dut->body.find("box")->as<ast::InstanceSymbol>();
+        CHECK_FALSE(current->isImportedInstanceBody(dut->body));
+        CHECK(current->isImportedInstanceBody(dut->body.find("u")->as<ast::InstanceSymbol>().body));
+        CHECK(DiagnosticEngine::reportAll(driver->sm, current->getSemanticDiagnostics()) ==
+              DiagnosticEngine::reportAll(driver->sm, native->getSemanticDiagnostics()));
+        analysis::AnalysisOptions opts{.flags = analysis::AnalysisFlags::CheckUnused |
+                                                analysis::AnalysisFlags::CheckShadow};
+        analysis::AnalysisManager am(opts), nm(opts);
+        current->freeze(); am.analyze(*current); current->unfreeze();
+        native->freeze(); nm.analyze(*native); native->unfreeze();
+        CHECK(DiagnosticEngine::reportAll(driver->sm, am.getDiagnostics()) ==
+              DiagnosticEngine::reportAll(driver->sm, nm.getDiagnostics()));
+        current->offerInstanceBodies(current);
+    }
+    CHECK(cache->status().hits >= 3);
+    CHECK(cache->status().owners == 1);
+}
+
+TEST_CASE("Attribute metadata closes declaration statement expression and connection values",
+          "[scope-semantic][scope-attribute-dependencies]") {
+    const std::string attachment=GENERATE("symbol","statement","expression","connection",
+                                                "root-instance","root-connection","class-property");
+    const std::string origin=GENERATE("local","fixed","mutable");
+    CAPTURE(attachment,origin);
+    const bool callerAttribute=attachment=="root-instance" || attachment=="root-connection";
+    LibraryWorkspace files;
+    const std::string dependency=origin=="local" ? "W" : origin=="fixed" ? "fixed_limits::N" : "consumer_pkg::N";
+    const std::string attribute="(* stamp="+dependency+" *) ";
+    files.write(files.root/"fixed.sv",
+        std::string(origin=="fixed" ? "package fixed_limits; localparam int N=9; endpackage\n" : "")+
+        "module leaf(input int a,output int y); assign y=a+1; endmodule\n"
+        "module stable #(parameter int W=7)(input int a,output int y); "+
+        (attachment=="symbol" ? attribute : "")+"wire signed [31:0] q; leaf child("+
+        (attachment=="connection" ? attribute : "")+"a,q); "+
+        (attachment=="class-property" ? "class C; "+attribute+"int field; endclass C item=new; " : "")+
+        (attachment=="class-property" ? "assign y=q+item.field; " : attachment=="statement" ? "always_comb begin "+attribute+"y=q; end " :
+         "assign y=q + "+(attachment=="expression" ? attribute : "")+"0; ")+
+        "endmodule\n");
+    auto user=[&](int n,bool keepAttribute=true) {
+        const std::string callerDependency=origin=="local" ? "LOCAL" : dependency;
+        const std::string callerStamp="(* stamp="+callerDependency+" *) ";
+        return fmt::format("package consumer_pkg; parameter int N={}; endpackage\n"
+                           "module top; localparam int LOCAL=7; int a,y; ",n)+
+            (attachment=="root-instance" && keepAttribute ? callerStamp : "")+
+            "stable dut("+(attachment=="root-connection" && keepAttribute ? callerStamp+"a,y" : ".*")+
+            "); endmodule\n";
+    };
+    files.write(files.root/"consumer.sv",user(7));
+    files.write(files.root/"design.f","fixed.sv\nconsumer.sv\n");
+    struct Result {std::vector<int> attributes;std::vector<std::string> semantic,flow;};
+    std::vector<Result> expected;
+    for(bool enabled:{false,true}) {
+        Config config;
+        config.experimentalScopeSemanticCache=enabled;
+        config.semanticCacheUnlimited=true;
+        config.frozenSources=Config::FrozenSourcesConfig{
+            .packages=origin=="fixed" ? std::vector<std::string>{"fixed_limits"} : std::vector<std::string>{},
+            .instances=std::vector<std::string>{"top.dut"}};
+        config.flagsByFile=std::vector<Config::FlagSource>{
+            {(files.root/"server.json").string(),"--single-unit --threads 1 --top top"}};
+        Indexer indexer;ClientHarness client;
+        auto driver=server::ServerDriver::createFromFileLists(indexer,client,config,{"design.f"},
+                                                               files.root.string(),nullptr,true);
+        REQUIRE(driver);
+        if(enabled)REQUIRE(driver->options.get<server::TrustedUvmImport>());
+        const auto uri=URI::fromFile(files.root/"consumer.sv");
+        driver->openDocument(uri,user(7),0,true);
+        for(int edit=0;edit<4;++edit) {
+            const int n=edit==1 ? 8 : 7;
+            driver->onDocDidChange({.textDocument={.version=edit+1,.uri=uri},
+                .contentChanges={lsp::TextDocumentContentChangeWholeDocument{.text=user(n,edit!=3)}}});
+            driver->comp->prepareDiagnostics({});
+            const auto& tops=driver->comp->getInstancesOfModule("top");
+            REQUIRE(tops.size()==1);
+            const auto& instance=tops.front()->body.find("dut")->as<ast::InstanceSymbol>();
+            const auto& body=instance.body;
+            auto& compilation=body.getCompilation();
+            const auto& diagnostics=compilation.getSemanticDiagnostics();
+            INFO(DiagnosticEngine::reportAll(driver->sm,diagnostics));
+            REQUIRE_FALSE(std::ranges::any_of(diagnostics,[](const auto& d){return d.isError();}));
+            Result result{{},diagnosticMessages(driver->sm,diagnostics),{}};
+            auto collect=[&](const auto& node) {
+                for(const auto attr:compilation.getAttributes(node))
+                    if(attr->name=="stamp") {
+                        REQUIRE(attr->getValue().isInteger());
+                        result.attributes.push_back(attr->getValue().integer().template as<int>().value());
+                    }
+            };
+            auto visitor=ast::makeVisitor([&](auto& self,const auto& node) {
+                using T=std::remove_cvref_t<decltype(node)>;
+                if constexpr(std::derived_from<T,ast::Symbol> || std::derived_from<T,ast::Statement> ||
+                             std::derived_from<T,ast::Expression>)collect(node);
+                if constexpr(std::same_as<T,ast::InstanceSymbol>)
+                    for(const auto connection:node.getPortConnections())collect(*connection);
+                self.visitDefault(node);
+            });
+            body.visit(visitor);
+            collect(instance);
+            for(const auto connection:instance.getPortConnections())collect(*connection);
+            if(callerAttribute && edit==3)CHECK(result.attributes.empty());
+            else {
+                REQUIRE(result.attributes.size()==1);
+                CHECK(result.attributes.front()==(origin=="local" ? 7 : origin=="fixed" ? 9 : n));
+            }
+            CHECK(compilation.isImportedInstanceBody(body)==(enabled && (origin!="mutable" || callerAttribute)));
+            CHECK(compilation.isImportedInstanceBody(body.find("child")->as<ast::InstanceSymbol>().body)==enabled);
+            analysis::AnalysisOptions opts{.flags=analysis::AnalysisFlags::CheckUnused |
+                                                  analysis::AnalysisFlags::CheckShadow};
+            analysis::AnalysisManager manager(opts);
+            compilation.freeze();manager.analyze(compilation);compilation.unfreeze();
+            result.flow=diagnosticMessages(driver->sm,manager.getDiagnostics());
+            if(enabled) {
+                CHECK(result.attributes==expected.at(edit).attributes);
+                CHECK(result.semantic==expected.at(edit).semantic);
+                CHECK(result.flow==expected.at(edit).flow);
+            }
+            else expected.push_back(std::move(result));
+        }
+    }
+}
+
+TEST_CASE("Min typ max certification includes selected and unevaluated branches",
+          "[scope-semantic][scope-mtm-branches]") {
+    const std::string timing=GENERATE("min","typ","max");
+    const std::string origin=GENERATE("local","fixed","mutable");
+    const int dependencySlot=GENERATE_REF(Catch::Generators::values<int>(
+        origin=="local" ? std::initializer_list<int>{0} : std::initializer_list<int>{0,1,2}));
+    CAPTURE(timing,origin,dependencySlot);
+    LibraryWorkspace files;
+    std::vector<std::string> terms={"W","W+1","W+2"};
+    if(origin!="local")terms[dependencySlot]=origin=="fixed" ? "fixed_limits::N" : "consumer_pkg::N";
+    files.write(files.root/"fixed.sv",
+        std::string(origin=="fixed" ? "package fixed_limits; localparam int N=9; endpackage\n" : "")+
+        "module stable #(parameter int W=4)(input int a,output int y); localparam int K=("+
+        terms[0]+":"+terms[1]+":"+terms[2]+"); assign y=a+K; endmodule\n");
+    auto user=[](int n) {
+        return fmt::format("package consumer_pkg; parameter int N={}; endpackage\n"
+                           "module top; int a,y; stable dut(.*); endmodule\n",n);
+    };
+    files.write(files.root/"consumer.sv",user(7));
+    files.write(files.root/"design.f","fixed.sv\nconsumer.sv\n");
+    struct Result {int value;std::vector<std::string> semantic,flow;};
+    std::vector<Result> expected;
+    for(bool enabled:{false,true}) {
+        Config config;
+        config.experimentalScopeSemanticCache=enabled;
+        config.semanticCacheUnlimited=true;
+        config.frozenSources=Config::FrozenSourcesConfig{
+            .packages=origin=="fixed" ? std::vector<std::string>{"fixed_limits"} : std::vector<std::string>{},
+            .instances=std::vector<std::string>{"top.dut"}};
+        config.flagsByFile=std::vector<Config::FlagSource>{
+            {(files.root/"server.json").string(),"--single-unit --threads 1 --top top --timing "+timing}};
+        Indexer indexer;ClientHarness client;
+        auto driver=server::ServerDriver::createFromFileLists(indexer,client,config,{"design.f"},
+                                                               files.root.string(),nullptr,true);
+        REQUIRE(driver);
+        if(enabled)REQUIRE(driver->options.get<server::TrustedUvmImport>());
+        const auto uri=URI::fromFile(files.root/"consumer.sv");
+        driver->openDocument(uri,user(7),0,true);
+        for(int edit=0;edit<3;++edit) {
+            const int n=edit==1 ? 8 : 7;
+            driver->onDocDidChange({.textDocument={.version=edit+1,.uri=uri},
+                .contentChanges={lsp::TextDocumentContentChangeWholeDocument{.text=user(n)}}});
+            driver->comp->prepareDiagnostics({});
+            const auto& tops=driver->comp->getInstancesOfModule("top");
+            REQUIRE(tops.size()==1);
+            const auto& body=tops.front()->body.find("dut")->as<ast::InstanceSymbol>().body;
+            auto& compilation=body.getCompilation();
+            const auto& diagnostics=compilation.getSemanticDiagnostics();
+            INFO(DiagnosticEngine::reportAll(driver->sm,diagnostics));
+            REQUIRE_FALSE(std::ranges::any_of(diagnostics,[](const auto& d){return d.isError();}));
+            const int value=body.find("K")->as<ast::ParameterSymbol>().getValue().integer().as<int>().value();
+            const int selected=timing=="min" ? 0 : timing=="typ" ? 1 : 2;
+            CHECK(value==(origin!="local" && selected==dependencySlot ? (origin=="fixed" ? 9 : n) : 4+selected));
+            CHECK(compilation.isImportedInstanceBody(body)==(enabled && origin!="mutable"));
+            Result result{value,diagnosticMessages(driver->sm,diagnostics),{}};
+            analysis::AnalysisOptions opts{.flags=analysis::AnalysisFlags::CheckUnused |
+                                                  analysis::AnalysisFlags::CheckShadow};
+            analysis::AnalysisManager manager(opts);
+            compilation.freeze();manager.analyze(compilation);compilation.unfreeze();
+            result.flow=diagnosticMessages(driver->sm,manager.getDiagnostics());
+            if(enabled) {
+                CHECK(result.value==expected.at(edit).value);
+                CHECK(result.semantic==expected.at(edit).semantic);
+                CHECK(result.flow==expected.at(edit).flow);
+            }
+            else expected.push_back(std::move(result));
+        }
+    }
+}
+
+TEST_CASE("Finite context boundaries preserve reusable children and current diagnostics",
+          "[scope-semantic][scope-finite-boundaries]") {
+    const std::string boundary=GENERATE("ordinary","randsequence","checker","specify",
+                                        "ref-port","clocking-items","assertion-formals");
+    CAPTURE(boundary);
+    LibraryWorkspace files;
+    std::string extra;
+    if(boundary=="randsequence")
+        extra="initial randsequence(main) main : { }; endsequence ";
+    else if(boundary=="checker")
+        extra="checker local_check(logic b); endchecker initial local_check probe(a[0]); ";
+    else if(boundary=="specify")
+        extra="specify specparam T=1; endspecify ";
+    else if(boundary=="clocking-items")
+        extra="default clocking cb @(posedge clk); input a; endclocking ";
+    else if(boundary=="assertion-formals")
+        extra="sequence s(bit b); b; endsequence assert property(@(posedge clk) s(a[0])); ";
+    files.write(files.root/"fixed.sv",
+        "module leaf(input int a,output int y); assign y=a+1; endmodule\n"
+        "module stable(input logic clk,"+std::string(boundary=="ref-port" ? "ref" : "input")+
+        " int a,output int y); leaf good(.a(a),.y(y)); "+extra+"endmodule\n");
+    auto user=[](int edit) {
+        return std::string("module top; logic clk; int a,y; stable dut(.*); ")+
+            (edit==1 ? "localparam int ADDED=1; " : edit==2 ? "initial missing_user=1; " : "")+
+            "endmodule\n";
+    };
+    files.write(files.root/"consumer.sv",user(0));
+    files.write(files.root/"design.f","fixed.sv\nconsumer.sv\n");
+    struct Result {std::vector<std::string> semantic,flow;};
+    std::vector<Result> expected;
+    for(bool enabled:{false,true}) {
+        Config config;
+        config.experimentalScopeSemanticCache=enabled;
+        config.semanticCacheUnlimited=true;
+        config.frozenSources=Config::FrozenSourcesConfig{.instances=std::vector<std::string>{"top.dut"}};
+        config.flagsByFile=std::vector<Config::FlagSource>{
+            {(files.root/"server.json").string(),"--single-unit --threads 1 --timescale 1ns/1ps --top top"}};
+        Indexer indexer;ClientHarness client;
+        auto driver=server::ServerDriver::createFromFileLists(indexer,client,config,{"design.f"},
+                                                               files.root.string(),nullptr,true);
+        REQUIRE(driver);
+        if(enabled) REQUIRE(driver->options.get<server::TrustedUvmImport>());
+        const auto uri=URI::fromFile(files.root/"consumer.sv");
+        driver->openDocument(uri,user(0),0,true);
+        for(int edit=0;edit<4;++edit) {
+            driver->onDocDidChange({.textDocument={.version=edit+1,.uri=uri},
+                .contentChanges={lsp::TextDocumentContentChangeWholeDocument{.text=user(edit)}}});
+            driver->comp->prepareDiagnostics({});
+            const auto& roots=driver->comp->getInstancesOfModule("top");
+            REQUIRE(roots.size()==1);
+            const auto& parent=roots.front()->body.find("dut")->as<ast::InstanceSymbol>().body;
+            const auto& leaf=parent.find("good")->as<ast::InstanceSymbol>().body;
+            auto& compilation=parent.getCompilation();
+            const auto& diagnostics=compilation.getSemanticDiagnostics();
+            INFO(DiagnosticEngine::reportAll(driver->sm,diagnostics));
+            CHECK(std::ranges::any_of(diagnostics,[](const auto& d) { return d.isError(); })==(edit==2));
+            CHECK(compilation.isImportedInstanceBody(parent)==(enabled && boundary=="ordinary"));
+            CHECK(compilation.isImportedInstanceBody(leaf)==enabled);
+            Result result{diagnosticMessages(driver->sm,diagnostics),{}};
+            analysis::AnalysisOptions opts{.flags=analysis::AnalysisFlags::CheckUnused |
+                                                  analysis::AnalysisFlags::CheckShadow};
+            analysis::AnalysisManager manager(opts);
+            compilation.freeze();manager.analyze(compilation);compilation.unfreeze();
+            result.flow=diagnosticMessages(driver->sm,manager.getDiagnostics());
+            if(enabled) {
+                CHECK(result.semantic==expected.at(edit).semantic);
+                CHECK(result.flow==expected.at(edit).flow);
+                CHECK(driver->comp->hasCurrentModel());
+                CHECK(driver->comp->lastModelLibraryImport().status=="imported");
+            }
+            else expected.push_back(std::move(result));
+        }
+    }
+}
+
+TEST_CASE("Constant dependencies use the same closed semantic rule before and after folding",
+          "[scope-semantic][scope-body-constant-closure]") {
+    const auto declaration = GENERATE(
+        std::string("typedef struct packed { logic [7:0] hi; } limits_t; "
+                    "localparam limits_t CFG='{hi:8'd4}; localparam int N=CFG.hi;"),
+        std::string("typedef struct packed { int lo; int hi; } limits_t; "
+                    "localparam limits_t CFG='{lo:1,hi:4}; localparam int N=CFG.hi;"),
+        std::string("typedef struct packed { int lo; int hi; } limits_t; "
+                    "localparam limits_t CFG[2]='{'{lo:1,hi:4},'{lo:2,hi:8}}; "
+                    "localparam int N=CFG[1].hi;"),
+        std::string("typedef enum int {Begin=1, End=4} limits_t; localparam int N=End;"),
+        std::string("function automatic int extent(input int x); return x+3; endfunction "
+                    "localparam int N=extent(1);"),
+        std::string("typedef logic [3:0] word_t; localparam int N=$bits(word_t);"),
+        std::string("typedef enum int {Begin=1, End=4} limits_t; "
+                    "function automatic int extent(input int x); return x+int'(Begin); "
+                    "endfunction localparam int N=extent(int'(End));"));
+    INFO(declaration);
+    LibraryWorkspace files;
+    Config config;
+    config.experimentalScopeSemanticCache = true;
+    config.frozenSources =
+        Config::FrozenSourcesConfig{.instances = std::vector<std::string>{"top.u"}, .maxMiB = 64};
+    config.flagsByFile = std::vector<Config::FlagSource>{
+        {(files.root / "server.json").string(), "--single-unit --threads 1 --top top"}};
+    files.write(files.root / "fixed.sv", "module stable(input int a, output int y); " + declaration +
+                " assign y=a+N; endmodule\n");
+    auto source = [](int edit) {
+        return fmt::format("module top; int a,y; localparam int EDIT={}; stable u(.*); endmodule\n", edit);
+    };
+    files.write(files.root / "consumer.sv", source(0));
+    files.write(files.root / "design.f", "fixed.sv\nconsumer.sv\n");
+    Indexer indexer;
+    ClientHarness client;
+    auto driver = server::ServerDriver::createFromFileLists(indexer, client, config, {"design.f"},
+                                                            files.root.string(), nullptr, true);
+    REQUIRE(driver);
+    auto setting = driver->options.get<server::ScopeBodyImport>();
+    REQUIRE(setting);
+    auto cache = setting->cache.lock();
+    REQUIRE(cache);
+    for (int edit : {0, 1, 0}) {
+        auto make = [&](bool native) {
+            auto compilation = std::make_shared<ast::Compilation>(driver->options);
+            REQUIRE(server::importTrustedUvm(*compilation, driver->sm, driver->options));
+            if (native)
+                compilation->setInstanceBodyReuseHooks({}, {});
+            compilation->addSyntaxTree(syntax::SyntaxTree::fromText(
+                source(edit), driver->sm, "constant-user.sv", "", driver->options));
+            const auto& diagnostics = compilation->getSemanticDiagnostics();
+            INFO(DiagnosticEngine::reportAll(driver->sm, diagnostics));
+            REQUIRE_FALSE(std::ranges::any_of(diagnostics, [](const auto& d) { return d.isError(); }));
+            return compilation;
+        };
+        auto current = make(false), native = make(true);
+        auto& body = current->getRoot().topInstances.front()->body.find("u")
+                         ->as<ast::InstanceSymbol>().body;
+        CHECK(current->isImportedInstanceBody(body) == (cache->status().publications > 0));
+        CHECK(DiagnosticEngine::reportAll(driver->sm, current->getSemanticDiagnostics()) ==
+              DiagnosticEngine::reportAll(driver->sm, native->getSemanticDiagnostics()));
+        analysis::AnalysisOptions opts{.flags = analysis::AnalysisFlags::CheckUnused |
+                                                analysis::AnalysisFlags::CheckShadow};
+        analysis::AnalysisManager am(opts), nm(opts);
+        current->freeze(); am.analyze(*current); current->unfreeze();
+        native->freeze(); nm.analyze(*native); native->unfreeze();
+        CHECK(DiagnosticEngine::reportAll(driver->sm, am.getDiagnostics()) ==
+              DiagnosticEngine::reportAll(driver->sm, nm.getDiagnostics()));
+        current->offerInstanceBodies(current);
+        REQUIRE(cache->status().publications > 0);
+    }
+    CHECK(cache->status().hits >= 2);
+}
+
+TEST_CASE("Mutable module binds invalidate their effect closure while safe siblings reuse",
+          "[scope-semantic][scope-body-bind-effects]") {
+    LibraryWorkspace files;
+    Config config;
+    config.experimentalScopeSemanticCache = true;
+    config.frozenSources = Config::FrozenSourcesConfig{
+        .modules = std::vector<std::string>{"fixed_parent"}, .maxMiB = 64};
+    config.flagsByFile = std::vector<Config::FlagSource>{
+        {(files.root / "server.json").string(), "--single-unit --threads 1 --top top"}};
+    files.write(files.root / "fixed.sv", R"(
+module clean(input int a, output int y); assign y=a+1; endmodule
+module affected(input int a, output int y); assign y=a+2; endmodule
+module fixed_parent(input int a, output int y,z);
+  clean safe_i(a,y);
+  affected changed_i(a,z);
+endmodule
+)");
+    auto source = [](int edit) {
+        return fmt::format(
+            "module observer #(parameter int N={}); {} endmodule\n"
+            "bind {} observer #(.N({})) observation();\n"
+            "module top; int a,y,z; fixed_parent dut(a,y,z); endmodule\n",
+            edit+1, edit == 3 ? "initial missing_bind_symbol=1;" : "",
+            edit == 2 ? "clean" : "affected", edit+2);
+    };
+    files.write(files.root / "consumer.sv", source(0));
+    files.write(files.root / "design.f", "fixed.sv\nconsumer.sv\n");
+    Indexer indexer;
+    ClientHarness client;
+    auto driver = server::ServerDriver::createFromFileLists(indexer, client, config, {"design.f"},
+                                                            files.root.string(), nullptr, true);
+    REQUIRE(driver);
+    auto fixed = driver->options.get<server::TrustedUvmImport>();
+    REQUIRE(fixed);
+    auto cache = std::make_shared<server::ScopeBodyCache>(
+        fixed->library, 64 * 1024 * 1024, std::vector<std::string>{},
+        std::vector<std::string>{"top.dut"});
+    auto make = [&](int edit, bool native) {
+        auto options = driver->options;
+        options.set(server::ScopeBodyImport{cache});
+        auto compilation = std::make_shared<ast::Compilation>(options);
+        compilation->addSyntaxTree(syntax::SyntaxTree::fromText(
+            source(edit), driver->sm, "bind-effect-user.sv", "", options));
+        // A query before imports must not leave a stale positive result once
+        // those definitions become fixed bind targets.
+        CHECK(compilation->isInstanceBodyBindContextCompatible());
+        REQUIRE(server::importTrustedUvm(*compilation, driver->sm, options));
+        CHECK_FALSE(compilation->isInstanceBodyBindContextCompatible());
+        if (native)
+            compilation->setInstanceBodyReuseHooks({}, {});
+        const auto& diagnostics = compilation->getSemanticDiagnostics();
+        INFO(DiagnosticEngine::reportAll(driver->sm, diagnostics));
+        CHECK(std::ranges::any_of(diagnostics, [](const auto& d) { return d.isError(); }) ==
+              (edit == 3));
+        return compilation;
+    };
+    bool published = false;
+    for (int edit : {0, 1, 2, 3, 0}) {
+        INFO(edit);
+        auto current = make(edit, false), native = make(edit, true);
+        const auto& dut = current->getRoot().topInstances.front()->body.find("dut")
+                              ->as<ast::InstanceSymbol>().body;
+        const auto& safe = dut.find("safe_i")->as<ast::InstanceSymbol>().body;
+        const auto& changed = dut.find("changed_i")->as<ast::InstanceSymbol>().body;
+        CHECK_FALSE(current->isImportedInstanceBody(dut));
+        CHECK(current->isImportedInstanceBody(safe) == (published && edit != 2));
+        CHECK((safe.find("observation") != nullptr) == (edit == 2));
+        CHECK((changed.find("observation") != nullptr) == (edit != 2));
+        const auto& monitor = (edit == 2 ? safe : changed).find("observation")
+                                  ->as<ast::InstanceSymbol>().body;
+        CHECK(monitor.find("N")->as<ast::ParameterSymbol>().getValue().integer().as<int>() == edit+2);
+        CHECK(DiagnosticEngine::reportAll(driver->sm, current->getSemanticDiagnostics()) ==
+              DiagnosticEngine::reportAll(driver->sm, native->getSemanticDiagnostics()));
+        analysis::AnalysisOptions opts{.flags = analysis::AnalysisFlags::CheckUnused |
+                                                analysis::AnalysisFlags::CheckShadow};
+        analysis::AnalysisManager am(opts), nm(opts);
+        current->freeze(); am.analyze(*current); current->unfreeze();
+        native->freeze(); nm.analyze(*native); native->unfreeze();
+        CHECK(DiagnosticEngine::reportAll(driver->sm, am.getDiagnostics()) ==
+              DiagnosticEngine::reportAll(driver->sm, nm.getDiagnostics()));
+        current->offerInstanceBodies(current);
+        CHECK(cache->status().publications > 0);
+        published = true;
+    }
+    CHECK(cache->status().hits >= 3);
+}
+
+TEST_CASE("Aggregate projection ownership follows the base rather than shared field declarations",
+          "[scope-semantic][scope-body-aggregate-provenance]") {
+    const auto mode = GENERATE("local", "array", "shared-variable", "outside");
+    const std::string kind = mode;
+    const bool reusable = kind != "outside";
+    INFO(kind);
+    LibraryWorkspace files;
+    Config config;
+    config.experimentalScopeSemanticCache = true;
+    config.frozenSources = Config::FrozenSourcesConfig{
+        .instances = std::vector<std::string>{"top.u"}, .maxMiB = 64};
+    config.flagsByFile = std::vector<Config::FlagSource>{
+        {(files.root / "server.json").string(), "--single-unit --threads 1 --top top"}};
+    std::string fixed = R"(
+package shared_types;
+  typedef struct { logic en; logic [7:0] count; } record_t;
+  record_t shared_record;
+endpackage
+module stable(input logic a, output int y);
+)";
+    if (kind == "array")
+        fixed += "shared_types::record_t state[2]; always_comb begin "
+                 "state[0].en=a; state[0].count=8'd3; state[1]=state[0]; "
+                 "y=int'(state[1].en)+state[1].count; end\n";
+    else if (kind == "shared-variable")
+        fixed += "always_comb begin shared_types::shared_record.en=a; "
+                 "shared_types::shared_record.count=8'd3; "
+                 "y=int'(shared_types::shared_record.en)+shared_types::shared_record.count; end\n";
+    else if (kind == "outside")
+        fixed += "always_comb y=int'($root.top.record.en)+$root.top.record.count;\n";
+    else
+        fixed += "shared_types::record_t state; always_comb begin state.en=a; "
+                 "state.count=8'd3; y=int'(state.en)+state.count; end\n";
+    fixed += "endmodule\n";
+    files.write(files.root / "fixed.sv", fixed);
+    auto source = [](int edit) {
+        return fmt::format("module top; logic a; int y; shared_types::record_t record; "
+                           "initial record.count=8'd{}; stable u(a,y); endmodule\n", edit);
+    };
+    files.write(files.root / "consumer.sv", source(0));
+    files.write(files.root / "design.f", "fixed.sv\nconsumer.sv\n");
+    Indexer indexer;
+    ClientHarness client;
+    auto driver = server::ServerDriver::createFromFileLists(indexer, client, config, {"design.f"},
+                                                            files.root.string(), nullptr, true);
+    REQUIRE(driver);
+    auto setting = driver->options.get<server::ScopeBodyImport>();
+    REQUIRE(setting);
+    auto cache = setting->cache.lock();
+    REQUIRE(cache);
+    bool published = cache->status().publications > 0;
+    for (int edit : {0, 1, 0}) {
+        auto make = [&](bool native) {
+            auto compilation = std::make_shared<ast::Compilation>(driver->options);
+            REQUIRE(server::importTrustedUvm(*compilation, driver->sm, driver->options));
+            if (native)
+                compilation->setInstanceBodyReuseHooks({}, {});
+            compilation->addSyntaxTree(syntax::SyntaxTree::fromText(
+                source(edit), driver->sm, "aggregate-user.sv", "", driver->options));
+            const auto& diagnostics = compilation->getSemanticDiagnostics();
+            INFO(DiagnosticEngine::reportAll(driver->sm, diagnostics));
+            REQUIRE_FALSE(std::ranges::any_of(diagnostics, [](const auto& d) { return d.isError(); }));
+            return compilation;
+        };
+        auto current = make(false), native = make(true);
+        const auto& body = current->getRoot().topInstances.front()->body.find("u")
+                               ->as<ast::InstanceSymbol>().body;
+        CHECK(current->isImportedInstanceBody(body) == (reusable && published));
+        CHECK(DiagnosticEngine::reportAll(driver->sm, current->getSemanticDiagnostics()) ==
+              DiagnosticEngine::reportAll(driver->sm, native->getSemanticDiagnostics()));
+        analysis::AnalysisOptions opts{.flags = analysis::AnalysisFlags::CheckUnused |
+                                                analysis::AnalysisFlags::CheckShadow};
+        analysis::AnalysisManager am(opts), nm(opts);
+        current->freeze(); am.analyze(*current); current->unfreeze();
+        native->freeze(); nm.analyze(*native); native->unfreeze();
+        CHECK(DiagnosticEngine::reportAll(driver->sm, am.getDiagnostics()) ==
+              DiagnosticEngine::reportAll(driver->sm, nm.getDiagnostics()));
+        current->offerInstanceBodies(current);
+        CHECK((cache->status().publications > 0) == reusable);
+        published = true;
+    }
+    CHECK((cache->status().hits >= 2) == reusable);
+}
+
+TEST_CASE("Declaration preparation reports bound storage and keep final route identity",
+          "[scope-semantic][scope-preparation-report-bounds]") {
+    server::ScopePreparationReport report;
+    const std::string unicode=std::string(159,'a')+"层级";
+    report.exclude("first",unicode,unicode);
+    REQUIRE(report.refusals.size()==1);
+    CHECK(report.refusals.front().sampleDeclarations.front()==std::string(159,'a'));
+    CHECK(report.refusals.front().sampleBindings.front()==std::string(159,'a'));
+    for (int i=0;i<100;++i) report.exclude("category-"+std::to_string(i),std::string(1000,'b'),
+                                         std::to_string(i)+std::string(1000,'b'));
+    CHECK(report.refusals.size()==32);
+    CHECK(report.samples==8);
+    CHECK(report.bindings==8);
+    CHECK(report.samplesTruncated);
+    size_t count=report.uncategorizedDeclarations;
+    for (const auto& item:report.refusals) count+=item.declarations;
+    CHECK(count==101);
+    const auto bytes=report.chargedBytes();
+    for (int i=0;i<10000;++i) report.exclude("overflow",std::string(1000,'c'));
+    CHECK(report.chargedBytes()==bytes);
+    CHECK(report.excludedDeclarations==10101);
+    for (int i=0;i<20;++i) report.attempt("route-"+std::to_string(i),true);
+    report.choose("final-route");
+    report.commit();
+    CHECK(report.attempts.size()==8);
+    CHECK(report.attemptsTruncated);
+    CHECK(std::ranges::count(report.attempts,"used",&server::ScopePreparationReport::Attempt::outcome)==1);
+    CHECK(report.route=="final-route");
+    CHECK(rfl::json::read<rfl::Generic>(rfl::json::write(report)));
+    report.decline("native-error");
+    CHECK(report.refusals.empty());
+    CHECK(report.excludedDeclarations==0);
+    CHECK(report.bindings==0);
+    CHECK(report.route=="native");
+    CHECK(std::ranges::none_of(report.attempts,[](const auto& a){return a.outcome=="used";}));
+}
+
+TEST_CASE("Successful prefix fallback discards tentative declaration refusals",
+          "[scope-semantic][scope-preparation-report-fallback]") {
+    LibraryWorkspace files;
+    files.write(files.root/"fixed.sv",
+        "package settings; parameter int W=4; endpackage\n"
+        "module stable(output logic[settings::W-1:0] y); assign y='0; endmodule\n");
+    files.write(files.root/"consumer.sv","module top; logic[3:0] y; stable u(.*); endmodule\n");
+    files.write(files.root/"design.f","fixed.sv\nconsumer.sv\n");
+    Config config;
+    config.experimentalScopeSemanticCache=true;
+    config.semanticCacheUnlimited=true;
+    config.frozenSources=Config::FrozenSourcesConfig{.instances=std::vector<std::string>{"top.u"}};
+    config.flagsByFile=std::vector<Config::FlagSource>{
+        {(files.root/"server.json").string(),"--single-unit --threads 1 --top top"}};
+    Indexer indexer;
+    ClientHarness client;
+    auto driver=server::ServerDriver::createFromFileLists(indexer,client,config,{"design.f"},
+                                                          files.root.string(),nullptr,true);
+    REQUIRE(driver);
+    auto imported=driver->options.get<server::TrustedUvmImport>();
+    REQUIRE(imported);
+    auto report=imported->library->preparationReport;
+    REQUIRE(report);
+    CHECK(report->status=="prepared");
+    CHECK(report->route=="ordered-prefix");
+    CHECK(report->excludedDeclarations==0);
+    CHECK(report->refusals.empty());
+    CHECK(report->candidateDeclarations==2);
+    CHECK(report->preparedDeclarations==2);
+    CHECK(std::ranges::any_of(report->attempts,[](const auto& a) {
+        return a.route=="rtl-subset" && a.outcome=="not-applicable" && a.category=="no-safe-declarations";
+    }));
+    CHECK(std::ranges::count(report->attempts,"used",&server::ScopePreparationReport::Attempt::outcome)==1);
+    CHECK(imported->library->semanticBytes>=report->chargedBytes());
+    const auto publicStatus=rfl::json::write(driver->scopeLibraryStatus());
+    CHECK(publicStatus.find("\"preparationReportBytes\":")!=std::string::npos);
+    CHECK(publicStatus.find("\"route\":\"ordered-prefix\"")!=std::string::npos);
+}
+
+TEST_CASE("Closed RTL sublibraries preserve native compilation units beside vendor cells",
+          "[scope-semantic][scope-declaration-subset]") {
+    const bool separateUnits = GENERATE(false, true);
+    const std::string siblingMode = GENERATE("none", "closed", "external");
+    const bool sameFileSibling = siblingMode != "none";
+    const bool nativeSibling = siblingMode == "external";
+    const bool brokenDut = GENERATE(false, true);
+    const bool vendorAvailable = GENERATE(false, true);
+    CAPTURE(separateUnits, siblingMode, brokenDut, vendorAvailable);
+    LibraryWorkspace files;
+    files.write(files.root / "leaf.sv",
+                "`timescale 1ns/1ps\nmodule leaf(input logic a, output wire y); assign y=a; endmodule\n");
+    files.write(files.root / "safe.sv",
+                "`timescale 10ns/1ps\nmodule safe(input logic a, output wire y); leaf l(.*); endmodule\n" +
+                std::string(siblingMode == "external"
+                    ? "module unused_sibling; outside_mutable external_user(); endmodule\n"
+                    : sameFileSibling ? "module unused_sibling; side_helper extra(); endmodule\n"
+                      "module side_helper; wire y; leaf nested(1\'b0,y); endmodule\n" : ""));
+    files.write(files.root / "vendor/vendor_cell.sv",
+                "module vendor_cell(input logic a, output wire y); assign y=~a; endmodule\n");
+    files.write(files.root / "dut.sv",
+                "module dut(input logic a, output wire y,z); safe good(.a(a),.y(y)); "
+                "vendor_cell outside(.a(a),.y(z)); " +
+                std::string(brokenDut ? "localparam int BAD=; " : "") + "endmodule\n");
+    const std::string original =
+        "module top; logic a; wire y,z; dut u(.*); localparam int EDIT=0; endmodule\n"
+        "module outside_mutable; localparam int VALUE=0; endmodule\n";
+    files.write(files.root / "consumer.sv", original);
+    files.write(files.root / "leaf.f", "leaf.sv\n");
+    files.write(files.root / "safe.f", "safe.sv\n");
+    files.write(files.root / "design.f",
+                std::string(vendorAvailable ? "-y vendor\n+libext+.sv\n" : "") +
+                    (separateUnits ? "-C leaf.f\n-C safe.f\n" : "leaf.sv\nsafe.sv\n") +
+                    "dut.sv\nconsumer.sv\n");
+    struct Harness : ServerHarness {
+        using server::SlangServer::m_driver;
+        using ServerHarness::ServerHarness;
+    };
+    std::vector<std::string> expected;
+    std::vector<std::vector<std::string>> expectedFlow;
+    for (bool enabled : {false, true}) {
+        Config config;
+        config.build = "design.f";
+        config.flags = separateUnits ? "--threads 1 --top top" : "--single-unit --threads 1 --top top";
+        config.experimentalScopeSemanticCache = enabled;
+        config.semanticCacheUnlimited = true;
+        config.frozenSources = Config::FrozenSourcesConfig{
+            .instances = std::vector<std::string>{"top.u"}};
+        files.write(files.root / ".slang/server.json", rfl::json::write(config));
+        Harness server(lsp::InitializeParams{
+            .capabilities = {},
+            .workspaceFolders = {{lsp::WorkspaceFolder{.uri = URI::fromFile(files.root),
+                                                       .name = "closed-sublibrary"}}}});
+        REQUIRE(server.m_driver->comp);
+        auto doc = server.openFile("consumer.sv");
+        std::shared_ptr<server::ScopeBodyCache> cache;
+        if (enabled) {
+            auto setting = server.m_driver->options.get<server::TrustedUvmImport>();
+            INFO(rfl::json::write(server.m_driver->scopeLibraryStatus()));
+            REQUIRE(setting);
+            CHECK(setting->library->projectedDefinitions);
+            const auto& defs = setting->library->definitions;
+            const auto report=setting->library->preparationReport;
+            REQUIRE(report);
+            CHECK(report->status=="prepared");
+            CHECK(report->route=="rtl-subset");
+            CHECK(report->preparedDeclarations==defs.size());
+            CHECK(report->candidateDeclarations==report->preparedDeclarations+report->excludedDeclarations);
+            CHECK(report->excludedDeclarations>=1);
+            CHECK(report->chargedBytes()<=setting->library->semanticBytes);
+            size_t excluded=report->uncategorizedDeclarations;
+            for (const auto& refusal:report->refusals) excluded+=refusal.declarations;
+            CHECK(excluded==report->excludedDeclarations);
+            CHECK(std::ranges::any_of(report->refusals,[&](const auto& refusal) {
+                return std::ranges::find(refusal.sampleDeclarations,"dut")!=refusal.sampleDeclarations.end();
+            }));
+            if (brokenDut) CHECK(std::ranges::any_of(report->refusals,[](const auto& refusal) {
+                return refusal.category=="syntax-error-root";
+            }));
+            CHECK(std::ranges::find(defs, "dut") == defs.end());
+            CHECK(std::ranges::find(defs, "vendor_cell") == defs.end());
+            CHECK(std::ranges::find(defs,"safe")!=defs.end());
+            CHECK((std::ranges::find(defs, "unused_sibling") != defs.end()) ==
+                  (sameFileSibling && !nativeSibling));
+            CHECK((std::ranges::find(defs,"side_helper")!=defs.end())==
+                  (sameFileSibling && !nativeSibling));
+            CHECK(std::ranges::find(defs,"outside_mutable")==defs.end());
+            CHECK_FALSE(setting->library->files.contains((files.root/"consumer.sv").generic_string()));
+            if (nativeSibling) CHECK(std::ranges::any_of(report->refusals,[](const auto& refusal) {
+                return refusal.category=="outside-fixed-root-dependency";
+            }));
+            REQUIRE(std::ranges::find(defs, "leaf") != defs.end());
+            CHECK(setting->library->compilation->getSyntaxTrees().size() ==
+                  size_t(separateUnits ? 2 : 1));
+            cache = server.m_driver->options.get<server::ScopeBodyImport>()->cache.lock();
+            REQUIRE(cache);
+        }
+        for (int edit = 1; edit <= 3; ++edit) {
+            auto text = original;
+            text.replace(text.find("EDIT=0"), 6, fmt::format("EDIT={}", edit));
+            text.replace(text.find("VALUE=0"),7,fmt::format("VALUE={}",edit));
+            if (edit == 2)
+                text.insert(text.find("endmodule"), "initial missing_user=1; ");
+            doc.replaceAll(text);
+            doc.publishChanges();
+            const auto& instances = server.m_driver->comp->getInstancesOfModule("dut");
+            REQUIRE(instances.size() == 1);
+            auto compilation = &instances.front()->body.getCompilation();
+            const auto diagnostics =
+                DiagnosticEngine::reportAll(server.m_driver->sm, compilation->getSemanticDiagnostics());
+            CHECK((diagnostics.find("missing_user") != std::string::npos) == (edit == 2));
+            INFO(diagnostics);
+            REQUIRE(compilation->getRoot().topInstances.size() == 1);
+            auto root = compilation->getRoot().topInstances.front();
+            REQUIRE(root->name == "top");
+            REQUIRE(root->body.find("u"));
+            REQUIRE(root->body.find("u")->kind == ast::SymbolKind::Instance);
+            auto& dut = root->body.find("u")->as<ast::InstanceSymbol>().body;
+            REQUIRE(dut.find("good"));
+            REQUIRE(dut.find("good")->kind == ast::SymbolKind::Instance);
+            const auto& safe = dut.find("good")->as<ast::InstanceSymbol>().body;
+            REQUIRE(safe.find("l"));
+            analysis::AnalysisOptions flowOptions{.flags=analysis::AnalysisFlags::CheckUnused};
+            analysis::AnalysisManager manager(flowOptions);
+            compilation->freeze();manager.analyze(*compilation);compilation->unfreeze();
+            const auto flow=diagnosticMessages(server.m_driver->sm,manager.getDiagnostics());
+            if (enabled) CHECK(flow==expectedFlow.at(edit-1));
+            else expectedFlow.push_back(flow);
+            CHECK_FALSE(compilation->isImportedInstanceBody(dut));
+            if (enabled) {
+                CHECK(compilation->isImportedInstanceBody(safe));
+                CHECK(diagnostics == expected.at(edit - 1));
+            }
+            else
+                expected.push_back(diagnostics);
+        }
+        if (enabled) {
+            CHECK(cache->status().hits >= 3);
+            CHECK(cache->status().retainedRoots == std::vector<std::string>{
+                "top.u.good"});
+        }
+    }
+}
+
+
+TEST_CASE("Partial fixed files keep native remainder values and query scopes",
+          "[scope-semantic][scope-native-remainder-queries]") {
+    const bool separateUnits=GENERATE(false,true);
+    CAPTURE(separateUnits);
+    LibraryWorkspace files;
+    files.write(files.root/"leaf.sv",
+        "module leaf(input int a, output int y); assign y=a+1; endmodule\n");
+    const std::string fixed=
+        "module stable(input int a, output int y); leaf child(.*); endmodule\n"
+        "module remainder #(parameter int W=4)(output logic[W-1:0] bits); "
+        "timeunit 1ps / 1ns; timeunit 10ns; "
+        "assign bits='0; missing_vendor external_cell(); endmodule\n";
+    files.write(files.root/"fixed.sv",fixed);
+    auto user=[](int width) {
+        return fmt::format("module top; int a,y; stable dut(.*); "
+                           "remainder #(.W({})) exposed(); endmodule\n",width);
+    };
+    files.write(files.root/"consumer.sv",user(4));
+    files.write(files.root/"leaf.f","leaf.sv\n");
+    files.write(files.root/"fixed.f","fixed.sv\n");
+    files.write(files.root/"design.f",separateUnits ? "-C leaf.f\n-C fixed.f\nconsumer.sv\n" :
+                                                     "leaf.sv\nfixed.sv\nconsumer.sv\n");
+    struct Harness:ServerHarness {
+        using server::SlangServer::m_driver;
+        using ServerHarness::ServerHarness;
+    };
+    std::vector<std::vector<std::string>> expectedDiagnostics;
+    std::vector<std::string> expectedQueries;
+    for (bool enabled:{false,true}) {
+        Config config;
+        config.build="design.f";
+        config.flags=std::string(separateUnits ? "" : "--single-unit ")+
+                     "--threads 1 --timescale 1ns/1ps --top top";
+        config.experimentalScopeSemanticCache=enabled;
+        config.semanticCacheUnlimited=true;
+        config.frozenSources=Config::FrozenSourcesConfig{.instances=std::vector<std::string>{"top.dut"}};
+        files.write(files.root/".slang/server.json",rfl::json::write(config));
+        Harness server(lsp::InitializeParams{.capabilities={},.workspaceFolders={{lsp::WorkspaceFolder{
+            .uri=URI::fromFile(files.root),.name="partial-fixed-file"}}}});
+        auto doc=server.openFile("consumer.sv");
+        auto provider=server.openFile("fixed.sv");
+        for (int edit=0;edit<3;++edit) {
+            CAPTURE(enabled,edit);
+            const int width=edit==1 ? 8 : 4;
+            doc.replaceAll(user(width));doc.publishChanges();
+            const auto& tops=server.m_driver->comp->getInstancesOfModule("top");
+            REQUIRE(tops.size()==1);
+            auto& comp=tops.front()->body.getCompilation();
+            const auto& stable=tops.front()->body.find("dut")->as<ast::InstanceSymbol>().body;
+            const auto& remainder=tops.front()->body.find("exposed")->as<ast::InstanceSymbol>().body;
+            CHECK(comp.isImportedInstanceBody(stable)==enabled);
+            CHECK_FALSE(comp.isImportedInstanceBody(remainder));
+            CHECK(remainder.find("W")->as<ast::ParameterSymbol>().getValue().integer().as<int32_t>()==width);
+            if (enabled) {
+                const auto library=server.m_driver->options.get<server::TrustedUvmImport>()->library;
+                CHECK(library->nativeRemainderFiles.contains((files.root/"fixed.sv").generic_string()));
+                CHECK_FALSE(server.m_driver->trustedLibrarySourceContext(URI::fromFile(files.root/"fixed.sv")));
+            }
+            const auto diagnostics=diagnosticMessages(server.m_driver->sm,comp.getSemanticDiagnostics());
+            CHECK(std::ranges::any_of(diagnostics,[](const auto& text) {
+                return text.find("missing_vendor")!=std::string::npos;
+            }));
+            auto stableHover=provider.getHoverAt(fixed.find("input int a")+10);
+            auto remainderHover=provider.getHoverAt(fixed.find("W-1:0"));
+            REQUIRE(stableHover); REQUIRE(remainderHover);
+            const auto definitions=provider.before("W-1:0").getDefinitions();
+            REQUIRE_FALSE(definitions.empty());
+            const auto queries=rfl::json::write(stableHover)+rfl::json::write(remainderHover)+
+                               rfl::json::write(definitions);
+            if (enabled) {
+                CHECK(diagnostics==expectedDiagnostics.at(edit));
+                CHECK(queries==expectedQueries.at(edit));
+            }
+            else { expectedDiagnostics.push_back(diagnostics);expectedQueries.push_back(queries); }
+        }
+        if (enabled) {
+            // Also cover a fixed provider in a later compilation unit: edits
+            // require rebuild even when its private query view is bypassed.
+            provider.append("// fixed input changed\n");
+            CHECK_THROWS_AS(provider.publishChanges(),lsp::RequestFailed);
+            CHECK_THROWS_AS(server.m_driver->trustedLibrarySourceContext(
+                URI::fromFile(files.root/"fixed.sv")),lsp::RequestFailed);
+        }
+    }
+}
+
+TEST_CASE("Stable sibling closure respects macro provider root boundaries",
+          "[scope-semantic][scope-sibling-macro-roots]") {
+    const bool fixedMacro = GENERATE(false,true);
+    CAPTURE(fixedMacro);
+    LibraryWorkspace files;
+    files.write(files.root/"controls.sv","`define SIDE_VALUE 1\n");
+    files.write(files.root/"leaf.sv",fixedMacro
+        ? "module leaf; localparam int L=`SIDE_VALUE; logic x; initial x=L[0]; endmodule\n"
+        : "module leaf; localparam int L=1; logic x; initial x=L[0]; endmodule\n");
+    files.write(files.root/"stable.sv",
+        "module stable; leaf child(); endmodule\n"
+        "module side; localparam int V=`SIDE_VALUE; endmodule\n");
+    files.write(files.root/"parent.sv",
+        "module parent; stable dut(); missing_vendor external_cell(); endmodule\n");
+    const std::string user="module top; parent p(); side exposure(); localparam EDIT=0; endmodule\n";
+    files.write(files.root/"consumer.sv",user);
+    files.write(files.root/"design.f","controls.sv\nleaf.sv\nstable.sv\nparent.sv\nconsumer.sv\n");
+    struct Harness:ServerHarness {
+        using server::SlangServer::m_driver;
+        using ServerHarness::ServerHarness;
+    };
+    std::vector<std::string> expected;
+    std::vector<std::vector<std::string>> expectedFlow;
+    for (bool enabled:{false,true}) {
+        files.write(files.root/"controls.sv","`define SIDE_VALUE 1\n");
+        Config config;
+        config.build="design.f";
+        config.flags="--single-unit --threads 1 --top top";
+        config.experimentalScopeSemanticCache=enabled;
+        config.semanticCacheUnlimited=true;
+        config.frozenSources=Config::FrozenSourcesConfig{.instances=std::vector<std::string>{"top.p"}};
+        files.write(files.root/".slang/server.json",rfl::json::write(config));
+        Harness server(lsp::InitializeParams{.capabilities={},.workspaceFolders={{lsp::WorkspaceFolder{
+            .uri=URI::fromFile(files.root),.name="stable-sibling-macro-roots"}}}});
+        auto control=server.openFile("controls.sv");
+        auto doc=server.openFile("consumer.sv");
+        if (enabled) {
+            const auto imported=server.m_driver->options.get<server::TrustedUvmImport>();
+            REQUIRE(imported);
+            const auto report=imported->library->preparationReport;
+            REQUIRE(report);
+            CHECK(imported->library->files.contains((files.root/"controls.sv").generic_string())==fixedMacro);
+            CHECK(imported->library->files.contains((files.root/"stable.sv").generic_string()));
+            CHECK(std::ranges::any_of(report->refusals,[](const auto& r) {
+                return r.category=="outside-fixed-root-context";
+            })==!fixedMacro);
+        }
+        for (int edit=1;edit<=3;++edit) {
+            if (!fixedMacro) {
+                control.replaceAll(fmt::format("`define SIDE_VALUE {}\n",edit+1));
+                control.publishChanges();
+            }
+            std::string text=user;
+            text.replace(text.find("EDIT=0"),6,fmt::format("EDIT={}",edit));
+            doc.replaceAll(text); doc.publishChanges();
+            const auto& tops=server.m_driver->comp->getInstancesOfModule("top");
+            REQUIRE(tops.size()==1);
+            auto& comp=tops.front()->body.getCompilation();
+            const auto root=comp.getRoot().topInstances.front();
+            const auto& parent=root->body.find("p")->as<ast::InstanceSymbol>().body;
+            const auto& stable=parent.find("dut")->as<ast::InstanceSymbol>().body;
+            const auto& leaf=stable.find("child")->as<ast::InstanceSymbol>().body;
+            CHECK(comp.isImportedInstanceBody(stable)==(enabled && fixedMacro));
+            if (enabled && !fixedMacro) {
+                const auto library=server.m_driver->options.get<server::TrustedUvmImport>()->library;
+                // A changed leading directive invalidates the existing strict
+                // declaration witness even when this module's tokens are equal.
+                // Verify the native path and its current values; never weaken
+                // the namespace / diagnostic / documentation witness to get a hit.
+                CHECK_FALSE(comp.isImportedInstanceBody(leaf));
+                CHECK(library->namespaceDeclines.load()>0);
+                const auto& import=server.m_driver->comp->lastModelLibraryImport();
+                CHECK(import.status=="declined");
+                CHECK(import.witnessFailure=="projected-syntax");
+                const auto original=library->compilation->tryGetDefinition("leaf",
+                    library->compilation->getRoot()).definition;
+                REQUIRE(original);
+                auto render=[](const syntax::SyntaxNode& node,bool trivia) {
+                    syntax::SyntaxPrinter printer;
+                    return printer.setIncludeDirectives(true).setIncludeTrivia(trivia).print(node).str();
+                };
+                CHECK(render(*original->getSyntax(),false)==render(*leaf.getDefinition().getSyntax(),false));
+                CHECK(render(*original->getSyntax(),true)!=render(*leaf.getDefinition().getSyntax(),true));
+            }
+            const auto& side=root->body.find("exposure")->as<ast::InstanceSymbol>().body;
+            CHECK(side.find("V")->as<ast::ParameterSymbol>().getValue().integer().as<int32_t>()==
+                  (fixedMacro ? 1 : edit+1));
+            analysis::AnalysisOptions flowOptions{.flags=analysis::AnalysisFlags::CheckUnused};
+            analysis::AnalysisManager manager(flowOptions);
+            comp.freeze();manager.analyze(comp);comp.unfreeze();
+            const auto flow=diagnosticMessages(server.m_driver->sm,manager.getDiagnostics());
+            if (enabled) CHECK(flow==expectedFlow.at(edit-1));
+            else expectedFlow.push_back(flow);
+            const auto diagnostics=DiagnosticEngine::reportAll(server.m_driver->sm,comp.getSemanticDiagnostics());
+            if (enabled) CHECK(diagnostics==expected.at(edit-1));
+            else expected.push_back(diagnostics);
+        }
+    }
+}
+
+TEST_CASE("Isolated native member views reject recovery and retain directive witnesses",
+          "[scope-semantic][scope-member-view-errors]") {
+    const bool errorBefore = GENERATE(false, true);
+    SourceManager sources;
+    const auto good = sources.assignText("intact.sv",
+        "`timescale 10ns/1ps\n`default_nettype none\nmodule intact; wire kept; endmodule\n");
+    const auto bad = sources.assignText("broken.sv",
+        "module broken; localparam int N=; endmodule\n");
+    std::vector<SourceBuffer> buffers = errorBefore ? std::vector{bad, good} : std::vector{good, bad};
+    auto owner = syntax::SyntaxTree::fromBuffers(buffers, sources);
+    REQUIRE(std::ranges::any_of(owner->diagnostics(), [](const auto& d) { return d.isError(); }));
+    const syntax::MemberSyntax *intact = nullptr, *broken = nullptr;
+    for (auto member : owner->root().as<syntax::CompilationUnitSyntax>().members) {
+        auto name = member->as<syntax::ModuleDeclarationSyntax>().header->name.valueText();
+        if (name == "intact") intact = member;
+        if (name == "broken") broken = member;
+    }
+    REQUIRE(intact);
+    REQUIRE(broken);
+    const syntax::MemberSyntax* selected[] = {intact};
+    CHECK_THROWS_AS(syntax::SyntaxTree::selectCompilationUnitMembers(owner, selected),
+                    std::invalid_argument);
+    auto view = syntax::SyntaxTree::selectCompilationUnitMembers(owner, selected, true);
+    REQUIRE(view->root().as<syntax::CompilationUnitSyntax>().members.front() == intact);
+    CHECK_FALSE(std::ranges::any_of(view->diagnostics(), [](const auto& d) { return d.isError(); }));
+    REQUIRE(view->getMetadata().nodeMeta.size() == 1);
+    const auto& original = owner->getMetadata().nodeMeta;
+    auto context = std::ranges::find_if(original, [&](const auto& entry) { return entry.first == intact; });
+    REQUIRE(context != original.end());
+    CHECK(view->getMetadata().nodeMeta.front().second.timeScale == context->second.timeScale);
+    CHECK(view->getMetadata().nodeMeta.front().second.defaultNetType == context->second.defaultNetType);
+    const syntax::MemberSyntax* rejected[] = {broken};
+    CHECK_THROWS_AS(syntax::SyntaxTree::selectCompilationUnitMembers(owner, rejected, true),
+                    std::invalid_argument);
+    const syntax::MemberSyntax* both[] = {intact, broken};
+    CHECK_THROWS_AS(syntax::SyntaxTree::selectCompilationUnitMembers(owner, both, true),
+                    std::invalid_argument);
+}
+
+TEST_CASE("Declaration semantic errors preserve independent siblings and reject dependent parents",
+          "[scope-semantic][scope-declaration-semantic-errors]") {
+    const bool mixedFile = GENERATE(false, true);
+    const bool separateUnits = GENERATE(false, true);
+    CAPTURE(mixedFile, separateUnits);
+    LibraryWorkspace files;
+    const std::string leaf = "module leaf(input int a, output int y); assign y=a+1; endmodule\n";
+    const std::string safe = "module closed(input int a, output int y); leaf l(.*); endmodule\n";
+    const std::string bad =
+        "module poisoned; timeunit 1ps / 1ns; timeunit 10ns; endmodule\n";
+    files.write(files.root / "leaf.sv", leaf);
+    files.write(files.root / "bad.sv", bad + (mixedFile ? safe : ""));
+    files.write(files.root / "closed.sv", mixedFile ? "" : safe);
+    files.write(files.root / "parent.sv",
+                "module parent(input int a, output int y); closed good(.*); poisoned bad(); endmodule\n");
+    const std::string user =
+        "module top; int a,y; parent u(.*); localparam int EDIT=0; endmodule\n";
+    files.write(files.root / "consumer.sv", user);
+    files.write(files.root / "fixed.f", "leaf.sv\nbad.sv\nclosed.sv\nparent.sv\n");
+    files.write(files.root / "design.f", separateUnits
+                    ? "-C fixed.f\nconsumer.sv\n"
+                    : "leaf.sv\nbad.sv\nclosed.sv\nparent.sv\nconsumer.sv\n");
+    // The failure must arise from declaration semantics, not parse recovery or
+    // a body certificate, so this fixture actually exercises provider peeling.
+    ast::CompilationOptions proofOptions;
+    proofOptions.flags |= ast::CompilationFlags::PackageAnalysis;
+    auto parsed = syntax::SyntaxTree::fromText(bad);
+    REQUIRE(parsed->diagnostics().empty());
+    ast::Compilation proof(proofOptions);
+    proof.addSyntaxTree(parsed);
+    REQUIRE(std::ranges::any_of(proof.getSemanticDiagnostics(),
+                                [](const auto& d) { return d.isError(); }));
+    struct Harness : ServerHarness {
+        using server::SlangServer::m_driver;
+        using server::SlangServer::processMessage;
+        using ServerHarness::ServerHarness;
+    };
+    std::vector<std::string> expected;
+    for (bool enabled : {false, true}) {
+        Config config;
+        config.build = "design.f";
+        config.flags = separateUnits ? "--threads 1 --timescale 1ns/1ps --top top"
+                                     : "--single-unit --threads 1 --timescale 1ns/1ps --top top";
+        config.experimentalScopeSemanticCache = enabled;
+        config.semanticCacheUnlimited = true;
+        config.frozenSources = Config::FrozenSourcesConfig{
+            .instances = std::vector<std::string>{"top.u"}};
+        files.write(files.root / ".slang/server.json", rfl::json::write(config));
+        Harness server(lsp::InitializeParams{
+            .capabilities = {},
+            .workspaceFolders = {{lsp::WorkspaceFolder{.uri = URI::fromFile(files.root),
+                                                       .name = "semantic-subset"}}}});
+        REQUIRE(server.m_driver->comp);
+        if (enabled) {
+            INFO(rfl::json::write(server.m_driver->scopeLibraryStatus()));
+            auto setting = server.m_driver->options.get<server::TrustedUvmImport>();
+            REQUIRE(setting);
+            const auto& defs = setting->library->definitions;
+            const auto report=setting->library->preparationReport;
+            REQUIRE(report);
+            CHECK(report->route=="rtl-subset");
+            CHECK(report->status=="prepared");
+            CHECK(report->candidateDeclarations==4);
+            CHECK(report->excludedDeclarations==size_t(2));
+            CHECK(report->preparedDeclarations==defs.size());
+            CHECK(std::ranges::any_of(report->refusals,[](const auto& refusal) {
+                return refusal.category=="semantic-error-declaration";
+            }));
+            CHECK(std::ranges::any_of(report->refusals,[](const auto& refusal) {
+                return refusal.category=="dependency-refused";
+            }));
+            CHECK(defs.size()==2);
+            CHECK(std::ranges::find(defs, "poisoned") == defs.end());
+            CHECK(std::ranges::find(defs, "parent") == defs.end());
+            CHECK(std::ranges::find(defs,"closed")!=defs.end());
+            CHECK(std::ranges::find(defs, "leaf") != defs.end());
+        }
+        auto doc = server.openFile("consumer.sv");
+        for (int edit = 1; edit <= 3; ++edit) {
+            auto text = user;
+            text.replace(text.find("EDIT=0"), 6, fmt::format("EDIT={}", edit));
+            if (edit == 2)
+                text.insert(text.find("endmodule"), "initial missing_user=1; ");
+            doc.replaceAll(text);
+            doc.publishChanges();
+            const auto& instances = server.m_driver->comp->getInstancesOfModule("parent");
+            REQUIRE(instances.size() == 1);
+            auto& body = instances.front()->body;
+            auto& compilation = body.getCompilation();
+            const auto diagnostics = DiagnosticEngine::reportAll(
+                server.m_driver->sm, compilation.getSemanticDiagnostics());
+            REQUIRE_FALSE(diagnostics.empty());
+            CHECK((diagnostics.find("missing_user") != std::string::npos) == (edit == 2));
+            REQUIRE(body.find("good"));
+            const auto& closed = body.find("good")->as<ast::InstanceSymbol>().body;
+            CHECK_FALSE(compilation.isImportedInstanceBody(body));
+            CHECK_FALSE(compilation.isImportedInstanceBody(
+                body.find("bad")->as<ast::InstanceSymbol>().body));
+            if (enabled) {
+                CHECK(compilation.isImportedInstanceBody(closed));
+                CHECK(diagnostics == expected.at(edit - 1));
+            }
+            else
+                expected.push_back(diagnostics);
+        }
+        if (enabled) {
+            const auto previous=server.m_driver->options.get<server::TrustedUvmImport>()
+                                    ->library->preparationReport;
+            files.write(files.root/"bad.sv",std::string("module poisoned; endmodule\n")+
+                                             (mixedFile ? safe : ""));
+            auto response=server.processMessage({.id=9001,.method="workspace/executeCommand",
+                .params=rfl::to_generic(lsp::ExecuteCommandParams{
+                    .command="slang.rebuildScopeLibrary",.arguments=std::vector<rfl::Generic>{}})});
+            if (auto error=std::get_if<lsp::RpcError>(&response)) INFO(error->message);
+            REQUIRE(std::holds_alternative<rfl::Generic>(response));
+            REQUIRE(rfl::from_generic<bool>(std::get<rfl::Generic>(response)).value());
+            const auto replacement=server.m_driver->options.get<server::TrustedUvmImport>();
+            REQUIRE(replacement);
+            const auto fresh=replacement->library->preparationReport;
+            REQUIRE(fresh);
+            CHECK(fresh!=previous);
+            CHECK(fresh->status=="prepared");
+            CHECK(fresh->refusals.empty());
+            CHECK(fresh->excludedDeclarations==0);
+            CHECK(fresh->preparedDeclarations==4);
+            CHECK(previous->excludedDeclarations==size_t(2));
+            std::string unsaved=user;
+            unsaved.replace(unsaved.find("EDIT=0"),6,"EDIT=3");
+            REQUIRE(server.m_driver->getDocument(URI::fromFile(files.root/"consumer.sv")));
+            CHECK(server.m_driver->getDocument(URI::fromFile(files.root/"consumer.sv"))->textMatches(unsaved));
+        }
+    }
+}
+
+
+TEST_CASE("Ambiguous macro declaration errors retain conservative root fallback",
+          "[scope-semantic][scope-macro-error-attribution]") {
+    LibraryWorkspace files;
+    files.write(files.root/"leaf.sv","module leaf; endmodule\n");
+    files.write(files.root/"fixed.sv",
+        "`define PAIR module poisoned; timeunit 1ps / 1ns; timeunit 10ns; endmodule "
+        "module closed; leaf child(); endmodule\n`PAIR\n");
+    files.write(files.root/"parent.sv",
+        "module parent; closed good(); poisoned bad(); endmodule\n");
+    const std::string user="module top; parent dut(); localparam int EDIT=0; endmodule\n";
+    files.write(files.root/"consumer.sv",user);
+    files.write(files.root/"design.f","leaf.sv\nfixed.sv\nparent.sv\nconsumer.sv\n");
+    struct Harness:ServerHarness {
+        using server::SlangServer::m_driver;
+        using ServerHarness::ServerHarness;
+    };
+    std::vector<std::vector<std::string>> expected;
+    for (bool enabled:{false,true}) {
+        Config config;
+        config.build="design.f";
+        config.flags="--single-unit --threads 1 --timescale 1ns/1ps --top top";
+        config.experimentalScopeSemanticCache=enabled;
+        config.semanticCacheUnlimited=true;
+        config.frozenSources=Config::FrozenSourcesConfig{.instances=std::vector<std::string>{"top.dut"}};
+        files.write(files.root/".slang/server.json",rfl::json::write(config));
+        Harness server(lsp::InitializeParams{.capabilities={},.workspaceFolders={{lsp::WorkspaceFolder{
+            .uri=URI::fromFile(files.root),.name="ambiguous-macro-error"}}}});
+        if (enabled) {
+            const auto setting=server.m_driver->options.get<server::TrustedUvmImport>();
+            REQUIRE(setting);
+            CHECK(setting->library->definitions==std::vector<std::string>{"leaf"});
+            const auto report=setting->library->preparationReport;
+            REQUIRE(report);
+            CHECK(report->excludedDeclarations==3);
+            CHECK(std::ranges::any_of(report->refusals,[](const auto& refusal) {
+                return refusal.category=="semantic-error-root" && refusal.declarations==2;
+            }));
+        }
+        auto doc=server.openFile("consumer.sv");
+        for (int edit=0;edit<3;++edit) {
+            auto text=user;
+            text.replace(text.find("EDIT=0"),6,fmt::format("EDIT={}",edit));
+            if (edit==1) text.insert(text.find("endmodule"),"initial missing_user=1; ");
+            doc.replaceAll(text);doc.publishChanges();
+            const auto& roots=server.m_driver->comp->getInstancesOfModule("top");
+            REQUIRE(roots.size()==1);
+            auto& comp=roots.front()->body.getCompilation();
+            const auto& parent=roots.front()->body.find("dut")->as<ast::InstanceSymbol>().body;
+            const auto& closed=parent.find("good")->as<ast::InstanceSymbol>().body;
+            CHECK_FALSE(comp.isImportedInstanceBody(parent));
+            CHECK_FALSE(comp.isImportedInstanceBody(closed));
+            CHECK(comp.isImportedInstanceBody(closed.find("child")->as<ast::InstanceSymbol>().body)==enabled);
+            const auto diagnostics=diagnosticMessages(server.m_driver->sm,comp.getSemanticDiagnostics());
+            REQUIRE_FALSE(diagnostics.empty());
+            if (enabled) CHECK(diagnostics==expected.at(edit));
+            else expected.push_back(diagnostics);
+        }
+    }
+}
+
+TEST_CASE("Internal custom net resolution remains native while builtin nets reuse",
+          "[scope-semantic][scope-internal-nettype]") {
+    const bool custom = GENERATE(false, true);
+    LibraryWorkspace files;
+    Config config;
+    config.experimentalScopeSemanticCache = true;
+    config.frozenSources = Config::FrozenSourcesConfig{
+        .packages = std::vector<std::string>{"fixed_nets"},
+        .instances = std::vector<std::string>{"top.u"}, .maxMiB = 64};
+    config.flagsByFile = std::vector<Config::FlagSource>{
+        {(files.root / "server.json").string(), "--single-unit --threads 1 --top top"}};
+    files.write(files.root / "fixed.sv",
+        "package fixed_nets; function automatic logic resolve(input logic drivers[]); "
+        "return drivers[0]; endfunction nettype logic custom_t with resolve; endpackage\n"
+        "module stable; " + std::string(custom ? "import fixed_nets::*; custom_t" : "wire") +
+        " value; assign value=1'b0; endmodule\n");
+    const std::string user = "module top; stable u(); endmodule\n";
+    files.write(files.root / "consumer.sv", user);
+    files.write(files.root / "design.f", "fixed.sv\nconsumer.sv\n");
+    Indexer indexer;
+    ClientHarness client;
+    auto driver = server::ServerDriver::createFromFileLists(indexer, client, config, {"design.f"},
+                                                            files.root.string(), nullptr, true);
+    REQUIRE(driver);
+    auto setting = driver->options.get<server::ScopeBodyImport>();
+    REQUIRE(setting);
+    auto cache = setting->cache.lock();
+    REQUIRE(cache);
+    for (int edit = 0; edit < 3; ++edit) {
+        auto make = [&](bool native) {
+            auto c = std::make_shared<ast::Compilation>(driver->options);
+            REQUIRE(server::importTrustedUvm(*c, driver->sm, driver->options));
+            if (native) c->setInstanceBodyReuseHooks({}, {});
+            c->addSyntaxTree(syntax::SyntaxTree::fromText(
+                "module top; stable u(); localparam int EDIT=" + std::to_string(edit) +
+                    "; endmodule\n", driver->sm, "net-consumer.sv", "", driver->options));
+            (void)c->getSemanticDiagnostics();
+            return c;
+        };
+        auto current = make(false), native = make(true);
+        const auto diagnostics = DiagnosticEngine::reportAll(driver->sm, current->getSemanticDiagnostics());
+        INFO(diagnostics);
+        CHECK(diagnostics == DiagnosticEngine::reportAll(driver->sm, native->getSemanticDiagnostics()));
+        CHECK_FALSE(current->hasIssuedErrors());
+        const auto& body = current->getRoot().topInstances.front()->body.find("u")->as<ast::InstanceSymbol>().body;
+        if (edit) CHECK(current->isImportedInstanceBody(body) == !custom);
+        if (!current->isImportedInstanceBody(body)) {
+            std::string_view reason;
+            CHECK(current->prepareInstanceBodyReuse(body, &reason) == !custom);
+            CHECK(reason == (custom ? "user-nettype-resolution" : ""));
+            std::string_view repeated = "sentinel";
+            CHECK(current->prepareInstanceBodyReuse(body, &repeated) == !custom);
+            CHECK(repeated == reason);
+        }
+        current->offerInstanceBodies(current);
+    }
+    const auto status = cache->status();
+    CHECK(status.refusalReportBytes > 0);
+    CHECK((status.hits > 0) == !custom);
+    if (custom) {
+        CHECK(std::ranges::any_of(status.refusals, [](const auto& refusal) {
+            return refusal.category == "user-nettype-resolution" && refusal.attempts > 0;
+        }));
+        CHECK(status.owners == 0);
+    }
+}
+
+TEST_CASE("Refusal reports own bounded samples without retaining editing models",
+          "[scope-semantic][scope-refusal-report]") {
+    LibraryWorkspace files;
+    Config config;
+    config.experimentalScopeSemanticCache = true;
+    config.frozenSources = Config::FrozenSourcesConfig{
+        .modules = std::vector<std::string>{"stable"}, .maxMiB = 64};
+    config.flagsByFile = std::vector<Config::FlagSource>{
+        {(files.root / "server.json").string(), "--single-unit --threads 1 --top top"}};
+    files.write(files.root / "fixed.sv", "module stable #(parameter int TAG=0); initial $printtimescale; endmodule\n");
+    const std::string name(300, 'x');
+    auto text = [&](int edit) {
+        std::string s = "module top; localparam int EDIT=" + std::to_string(edit) + ";\n";
+        for (int i = 0; i < 40; ++i)
+            s += "stable #(.TAG(" + std::to_string(i) + ")) i" +
+                 std::to_string(i) + "_" + name + "();\n";
+        return s + "endmodule\n";
+    };
+    files.write(files.root / "consumer.sv", text(0));
+    files.write(files.root / "design.f", "fixed.sv\nconsumer.sv\n");
+    Indexer indexer;
+    ClientHarness client;
+    auto driver = server::ServerDriver::createFromFileLists(indexer, client, config, {"design.f"},
+                                                            files.root.string(), nullptr, true);
+    REQUIRE(driver);
+    auto setting = driver->options.get<server::ScopeBodyImport>();
+    REQUIRE(setting);
+    auto cache = setting->cache.lock();
+    REQUIRE(cache);
+    auto library = driver->options.get<server::TrustedUvmImport>()->library;
+    for (int edit = 1; edit < 4; ++edit) {
+        auto c = std::make_shared<ast::Compilation>(driver->options);
+        REQUIRE(server::importTrustedUvm(*c, driver->sm, driver->options));
+        c->addSyntaxTree(syntax::SyntaxTree::fromText(
+            text(edit), driver->sm, "report-consumer.sv", "", driver->options));
+        INFO(DiagnosticEngine::reportAll(driver->sm, c->getSemanticDiagnostics()));
+        REQUIRE_FALSE(c->hasIssuedErrors());
+        c->offerInstanceBodies(c);
+        std::weak_ptr<ast::Compilation> editing = c;
+        c.reset();
+        CHECK(editing.expired());
+    }
+    const auto status = cache->status();
+    CHECK(status.owners == 0);
+    CHECK(status.refusalAttempts >= 120);
+    CHECK(status.refusalReportBytes > 0);
+    CHECK(status.refusalReportBytes < 4096);
+    CHECK(status.baseBytes == library->semanticBytes + status.refusalReportBytes);
+    CHECK(status.refusals.size() <= 32);
+    CHECK(status.refusalSamplesTruncated);
+    size_t samples = 0;
+    uint64_t attempts = status.uncategorizedRefusals;
+    for (const auto& refusal : status.refusals) {
+        attempts += refusal.attempts;
+        for (const auto& root : refusal.sampleRoots) {
+            ++samples;
+            CHECK(root.size() <= 255);
+        }
+    }
+    CHECK(samples > 0);
+    CHECK(samples <= 8);
+    CHECK(attempts == status.refusalAttempts);
+    const auto encoded = rfl::json::write(status);
+    CHECK(encoded.size() < 32 * 1024);
+    REQUIRE(rfl::json::read<server::ScopeBodyCache::Stats>(encoded));
+    auto fresh = std::make_shared<server::ScopeBodyCache>(library, 64 * 1024 * 1024,
+        std::vector<std::string>{"stable"}, std::vector<std::string>{});
+    CHECK(fresh->status().refusalAttempts == 0);
+    CHECK(fresh->status().refusals.empty());
+}
+
+
+TEST_CASE("Unrestricted semantic evaluation bypasses numeric scope and UVM limits",
+          "[scope-semantic][semantic-unlimited]") {
+    const bool unlimited = GENERATE(false, true);
+    const bool uvm = GENERATE(false, true);
+    CAPTURE(unlimited, uvm);
+    LibraryWorkspace files;
+    Config config;
+    if (uvm) {
+        config = files.config();
+        config.experimentalUvmSemanticCache = true;
+        config.uvm.value()->semanticMaxMiB = 0;
+        files.write(files.root / "design.f", "consumer.sv\n");
+    }
+    else {
+        config.experimentalScopeSemanticCache = true;
+        config.frozenSources = Config::FrozenSourcesConfig{
+            .instances = std::vector<std::string>{"top.u"}, .maxMiB = 0};
+        config.flagsByFile = std::vector<Config::FlagSource>{
+            {(files.root / "server.json").string(), "--single-unit --threads 1 --top top"}};
+        files.write(files.root / "fixed.sv",
+            "module stable(input int a, output int y); assign y=a+1; endmodule\n");
+        files.write(files.root / "consumer.sv", "module top; int a,y; stable u(.*); endmodule\n");
+        files.write(files.root / "design.f", "fixed.sv\nconsumer.sv\n");
+    }
+    config.semanticCacheUnlimited = unlimited;
+    CHECK(rfl::json::read<Config>(rfl::json::write(config)).value().semanticCacheUnlimited.value() == unlimited);
+    Indexer indexer;
+    ClientHarness client;
+    auto driver = server::ServerDriver::createFromFileLists(indexer, client, config, {"design.f"},
+                                                            files.root.string(), nullptr, true);
+    REQUIRE(driver);
+    const auto trusted = driver->options.get<server::TrustedUvmImport>();
+    CHECK(bool(trusted) == unlimited);
+    if (!unlimited) return;
+    REQUIRE(trusted);
+    if (uvm) {
+        CHECK(trusted->library->compilation->getPackage("uvm_pkg"));
+        CHECK(rfl::json::write(driver->trustedUvmStatus()).find("\"budgetUnlimited\":true") != std::string::npos);
+        return;
+    }
+    auto setting = driver->options.get<server::ScopeBodyImport>();
+    REQUIRE(setting);
+    auto cache = setting->cache.lock();
+    REQUIRE(cache);
+    for (int edit = 0; edit < 3; ++edit) {
+        auto c = std::make_shared<ast::Compilation>(driver->options);
+        REQUIRE(server::importTrustedUvm(*c, driver->sm, driver->options));
+        c->addSyntaxTree(syntax::SyntaxTree::fromText(
+            "module top; int a,y; stable u(.*); localparam int EDIT=" + std::to_string(edit) +
+            "; endmodule\n", driver->sm, "unlimited-consumer.sv", "", driver->options));
+        INFO(DiagnosticEngine::reportAll(driver->sm, c->getSemanticDiagnostics()));
+        CHECK_FALSE(c->hasIssuedErrors());
+        if (edit) CHECK(c->hasImportedInstanceBodies());
+        c->offerInstanceBodies(c);
+    }
+    const auto status = cache->status();
+    CHECK(status.budgetUnlimited);
+    CHECK(status.budgetBytes == 0);
+    CHECK(status.baseBytes > 0);
+    CHECK(status.ownerBytes > 0);
+    CHECK(status.capacitySkips == 0);
+    CHECK(status.hits > 0);
+    CHECK(rfl::json::write(driver->scopeLibraryStatus()).find("\"budgetUnlimited\":true") != std::string::npos);
+}
+
+
+TEST_CASE("Borrowed DPI routines keep their consumer export scope",
+          "[scope-semantic][scope-dpi-export-frame]") {
+    const bool outside = GENERATE(false, true);
+    LibraryWorkspace files;
+    Config config;
+    config.experimentalScopeSemanticCache = true;
+    config.semanticCacheUnlimited = true;
+    config.frozenSources = Config::FrozenSourcesConfig{
+        .packages = std::vector<std::string>{"api_pkg"},
+        .instances = std::vector<std::string>{"top.u"}};
+    config.flagsByFile = std::vector<Config::FlagSource>{
+        {(files.root / "server.json").string(), "--single-unit --threads 1 --top top"}};
+    const std::string function = "function automatic int api(input int a); return a+1; endfunction ";
+    files.write(files.root / "fixed.sv",
+        "package api_pkg; " + (outside ? function : "") + "endpackage\nmodule stable; " +
+        (outside ? "import api_pkg::*; " : function) +
+        "export \"DPI-C\" function api; endmodule\n");
+    const std::string user = "module top; stable u(); endmodule\n";
+    files.write(files.root / "consumer.sv", user);
+    files.write(files.root / "design.f", "fixed.sv\nconsumer.sv\n");
+    Indexer indexer;
+    ClientHarness client;
+    auto driver = server::ServerDriver::createFromFileLists(indexer, client, config, {"design.f"},
+                                                            files.root.string(), nullptr, true);
+    REQUIRE(driver);
+    auto setting = driver->options.get<server::ScopeBodyImport>();
+    REQUIRE(setting);
+    auto cache = setting->cache.lock();
+    REQUIRE(cache);
+    for (int edit = 0; edit < 3; ++edit) {
+        auto make = [&](bool native) {
+            auto c = std::make_shared<ast::Compilation>(driver->options);
+            REQUIRE(server::importTrustedUvm(*c, driver->sm, driver->options));
+            if (native) c->setInstanceBodyReuseHooks({}, {});
+            c->addSyntaxTree(syntax::SyntaxTree::fromText(
+                "module top; stable u(); localparam int EDIT=" + std::to_string(edit) +
+                "; endmodule\n", driver->sm, "export-consumer.sv", "", driver->options));
+            (void)c->getSemanticDiagnostics();
+            return c;
+        };
+        auto current = make(false), native = make(true);
+        const auto diagnostics = DiagnosticEngine::reportAll(driver->sm, current->getSemanticDiagnostics());
+        INFO(diagnostics);
+        CHECK(current->hasIssuedErrors() == outside);
+        CHECK(diagnostics == DiagnosticEngine::reportAll(driver->sm, native->getSemanticDiagnostics()));
+        if (edit) CHECK(current->hasImportedInstanceBodies() == !outside);
+        current->offerInstanceBodies(current);
+    }
+    CHECK((cache->status().hits > 0) == !outside);
+    CHECK(cache->status().budgetUnlimited);
+}
+
+TEST_CASE("Disjoint cached specializations preserve native warning and package usage profiles",
+          "[scope-semantic][scope-full-owner-profiles]") {
+    const bool full = GENERATE(false, true);
+    const bool overridden = GENERATE(false, true);
+    const bool conditional = GENERATE(false, true);
+    const bool earlyIndex = GENERATE(false, true);
+    const bool namedAssertion = GENERATE(false, true);
+    const bool externalClass = GENERATE(false, true);
+    CAPTURE(full, overridden, conditional, earlyIndex, namedAssertion, externalClass);
+    LibraryWorkspace files;
+    Config config;
+    config.experimentalScopeSemanticCache = true;
+    config.semanticCacheUnlimited = true;
+    config.frozenSources = Config::FrozenSourcesConfig{
+        .packages = std::vector<std::string>{"settings"},
+        .modules = std::vector<std::string>{"counter"}};
+    config.flagsByFile = std::vector<Config::FlagSource>{
+        {(files.root / "server.json").string(),
+         std::string("--single-unit --threads 1 --timescale 1ns/1ps --top top") +
+             (full ? " -G Q=2" : "")}};
+    std::string fixed = R"(
+package settings;
+  parameter int DEFAULT_W=4;
+  parameter time DEFAULT_DELAY=2ns;
+endpackage
+module counter #(parameter int W=settings::DEFAULT_W,
+                 parameter time DLY=settings::DEFAULT_DELAY);
+  logic [W-1:0] unsigned_value;
+  logic signed [W-1:0] signed_value;
+  initial begin
+    unsigned_value=1;
+    signed_value=2;
+    unsigned_value=unsigned_value + signed_value;
+    #(DLY);
+  end
+endmodule
+)";
+    if (conditional) {
+        const std::string original = "DLY=settings::DEFAULT_DELAY";
+        fixed.replace(fixed.find(original), original.size(),
+                      "DLY=1'b0 ? settings::DEFAULT_DELAY : 0");
+    }
+    if (namedAssertion) {
+        fixed.insert(fixed.find("  initial begin"),
+            "  logic clk;\n"
+            "  Check_A: assert property (@(posedge clk) unsigned_value == signed_value);\n");
+    }
+    if (externalClass) {
+        fixed.insert(0,
+            "class trace_item #(int W=1);\n"
+            "  int external_only;\n"
+            "  function int decode(input logic [W-1:0] instruction);\n"
+            "    case (instruction) 32'h12345678: return W; endcase\n"
+            "    return 0;\n"
+            "  endfunction\n"
+            "endclass\n");
+        fixed.insert(fixed.find("  initial begin"),
+            "  trace_item #(W) item;\n"
+            "  initial begin item=new(); unsigned_value=item.decode(0); end\n");
+    }
+    files.write(files.root / "fixed.sv", fixed);
+    auto text = [&](int edit) {
+        const std::string args = overridden ? ", .DLY(0)" : "";
+        const std::string caller = externalClass && edit != 1
+            ? "initial $display(\"%0d\", z_first.item.external_only); " : "";
+        return "module top #(parameter Q=1); "
+               "counter #(.W(4)" + args + ") z_first(); "
+               "counter #(.W(16)" + args + ") a_other(); "
+               "counter #(.W(4)" + args + ") m_duplicate(); "
+               "localparam int EDIT=" + std::to_string(edit) + "; " + caller + "endmodule\n";
+    };
+    files.write(files.root / "consumer.sv", text(0));
+    files.write(files.root / "design.f", "fixed.sv\nconsumer.sv\n");
+    Indexer indexer;
+    ClientHarness client;
+    auto driver = server::ServerDriver::createFromFileLists(indexer, client, config, {"design.f"},
+                                                            files.root.string(), nullptr, true);
+    REQUIRE(driver);
+    auto setting = driver->options.get<server::ScopeBodyImport>();
+    REQUIRE(setting);
+    auto cache = setting->cache.lock();
+    REQUIRE(cache);
+    for (int edit = 0; edit < 3; ++edit) {
+        auto make = [&](bool native) {
+            auto c = std::make_shared<ast::Compilation>(driver->options);
+            if (native) {
+                // A complete ordinary parse, with no shared declaration owner:
+                // shared-library usage itself is part of the contract under test.
+                const auto userBuffer = driver->sm.assignText(text(edit));
+                driver->sm.addLineDirective(SourceLocation(userBuffer.id, 0), 2,
+                                            "profiles-consumer.sv", 0);
+                const SourceBuffer buffers[] = {
+                    driver->sm.readSource(files.root / "fixed.sv").value(), userBuffer};
+                c->addSyntaxTree(syntax::SyntaxTree::fromBuffers(buffers, driver->sm, driver->options));
+            }
+            else {
+                REQUIRE(server::importTrustedUvm(*c, driver->sm, driver->options));
+                c->addSyntaxTree(syntax::SyntaxTree::fromText(
+                    text(edit), driver->sm, "profiles-consumer.sv", "", driver->options));
+            }
+            if (earlyIndex) {
+                InstanceIndexer instances;
+                instances.reset(&c->getRoot());
+            }
+            (void)c->getSemanticDiagnostics();
+            return c;
+        };
+        auto current = make(false), native = make(true);
+        const auto actual = DiagnosticEngine::reportAll(driver->sm, current->getSemanticDiagnostics());
+        const auto expected = DiagnosticEngine::reportAll(driver->sm, native->getSemanticDiagnostics());
+        INFO("semantic current:\n" << actual << "\nNative:\n" << expected);
+        CHECK_FALSE(current->hasIssuedErrors());
+        CHECK(actual == expected);
+        analysis::AnalysisOptions options{.flags = analysis::AnalysisFlags::CheckUnused |
+                                                  analysis::AnalysisFlags::CheckShadow};
+        analysis::AnalysisManager am(options), nm(options);
+        current->freeze(); am.analyze(*current); current->unfreeze();
+        native->freeze(); nm.analyze(*native); native->unfreeze();
+        auto actualFlow = am.getDiagnostics(), nativeFlow = nm.getDiagnostics();
+        actualFlow.sort(driver->sm);
+        nativeFlow.sort(driver->sm);
+        const auto a = DiagnosticEngine::reportAll(driver->sm, actualFlow);
+        const auto n = DiagnosticEngine::reportAll(driver->sm, nativeFlow);
+        INFO("flow current:\n" << a << "\nNative:\n" << n);
+        CHECK(diagnosticMessages(driver->sm, actualFlow) ==
+              diagnosticMessages(driver->sm, nativeFlow));
+        if (edit) CHECK(current->hasImportedInstanceBodies());
+        current->offerInstanceBodies(current);
+    }
+    CHECK(cache->status().hits > 0);
+    if (full) CHECK(cache->status().compactPublications == 0);
+}
+
+TEST_CASE("Assignment pattern type keys certify their original dependencies",
+          "[scope-semantic][scope-assignment-type-keys]") {
+    const bool full = GENERATE(false, true);
+    const std::string mode = GENERATE("local", "fixed", "fixed-alias", "member", "external");
+    const bool reusable = mode != "external";
+    CAPTURE(full, mode);
+    LibraryWorkspace files;
+    Config config;
+    config.experimentalScopeSemanticCache = true;
+    config.semanticCacheUnlimited = true;
+    config.frozenSources = Config::FrozenSourcesConfig{
+        .packages = std::vector<std::string>{"fixed_keys"},
+        .instances = std::vector<std::string>{"top.u"}};
+    config.flagsByFile = std::vector<Config::FlagSource>{
+        {(files.root / "server.json").string(),
+         std::string("--single-unit --threads 1 --top top") + (full ? " -G Q=2" : "")}};
+    const auto key = mode == "external" ? "type(mutable_keys::key)" :
+                     mode == "fixed" ? "type(fixed_keys::key)" :
+                     mode == "fixed-alias" ? "key_t" : "type(narrow)";
+    const std::string setters = mode == "member" ? "first:32\'h5a, second:0" :
+                                std::string(key) + ":32\'h5a, default:0";
+    files.write(files.root / "fixed.sv", std::string(R"(
+package fixed_keys; int key; typedef int key_t; endpackage
+module stable(output logic[95:0] y);
+  import fixed_keys::key_t;
+  typedef struct packed {int first; longint second;} pair_t;
+  int narrow;
+  pair_t value='{)") + setters + R"(};
+  initial y=value;
+endmodule
+)");
+    auto text = [](int edit) {
+        return std::string("package mutable_keys; ") + (edit == 1 ? "longint" : "int") +
+               " key; endpackage module top #(parameter Q=1); logic[95:0] y; stable u(.*); initial $display(y); endmodule\n";
+    };
+    files.write(files.root / "consumer.sv", text(0));
+    files.write(files.root / "design.f", "fixed.sv\nconsumer.sv\n");
+    Indexer indexer;
+    ClientHarness client;
+    auto driver = server::ServerDriver::createFromFileLists(indexer, client, config, {"design.f"},
+                                                            files.root.string(), nullptr, true);
+    REQUIRE(driver);
+    auto cache = driver->options.get<server::ScopeBodyImport>()->cache.lock();
+    REQUIRE(cache);
+    for (int edit=0; edit<3; ++edit) {
+        auto make = [&](bool native) {
+            auto c=std::make_shared<ast::Compilation>(driver->options);
+            if (native) {
+                const auto buffer=driver->sm.assignText(text(edit));
+                driver->sm.addLineDirective(SourceLocation(buffer.id,0),2,"type-key-consumer.sv",0);
+                const SourceBuffer buffers[]={driver->sm.readSource(files.root/"fixed.sv").value(),buffer};
+                c->addSyntaxTree(syntax::SyntaxTree::fromBuffers(buffers,driver->sm,driver->options));
+            }
+            else {
+                REQUIRE(server::importTrustedUvm(*c,driver->sm,driver->options));
+                c->addSyntaxTree(syntax::SyntaxTree::fromText(text(edit),driver->sm,
+                    "type-key-consumer.sv","",driver->options));
+            }
+            (void)c->getSemanticDiagnostics();
+            return c;
+        };
+        auto current=make(false), native=make(true);
+        const auto actual=DiagnosticEngine::reportAll(driver->sm,current->getSemanticDiagnostics());
+        INFO(actual);
+        CHECK_FALSE(current->hasIssuedErrors());
+        CHECK(actual==DiagnosticEngine::reportAll(driver->sm,native->getSemanticDiagnostics()));
+        const auto& body=current->getRoot().topInstances.front()->body.find("u")
+                             ->as<ast::InstanceSymbol>().body;
+        auto evaluate = [](const ast::InstanceBodySymbol& selected) {
+            const auto value=selected.find("value");
+            REQUIRE(value);
+            const auto init=value->as<ast::VariableSymbol>().getInitializer();
+            REQUIRE(init);
+            ast::EvalContext context(ast::ASTContext(selected,ast::LookupLocation::max));
+            return init->eval(context);
+        };
+        const auto& nativeBody=native->getRoot().topInstances.front()->body.find("u")
+                                   ->as<ast::InstanceSymbol>().body;
+        CHECK(evaluate(body)==evaluate(nativeBody));
+        analysis::AnalysisOptions options{.flags=analysis::AnalysisFlags::CheckUnused};
+        analysis::AnalysisManager am(options),nm(options);
+        current->freeze();am.analyze(*current);current->unfreeze();
+        native->freeze();nm.analyze(*native);native->unfreeze();
+        CHECK(diagnosticMessages(driver->sm,am.getDiagnostics())==
+              diagnosticMessages(driver->sm,nm.getDiagnostics()));
+        if (!reusable) {
+            std::string_view reason;
+            CHECK_FALSE(current->prepareInstanceBodyReuse(body,&reason));
+            CHECK_FALSE(reason.empty());
+        }
+        if (edit) CHECK(current->isImportedInstanceBody(body)==reusable);
+        current->offerInstanceBodies(current);
+        CHECK((cache->status().publications>0)==reusable);
+    }
+    if (full) CHECK(cache->status().compactPublications==0);
+}
+
+TEST_CASE("Statement payloads close block declarations and timing dependencies",
+          "[scope-semantic][scope-statement-field-closure]") {
+    const std::string origin=GENERATE("local","fixed","mutable");
+    const std::string form=GENERATE("unused-block-local","event-iff","repeat-event",
+                                    "trigger-delay","wait","randcase","case-pattern");
+    CAPTURE(origin,form);
+    LibraryWorkspace files;
+    const std::string control=origin=="local" ? "CONTROL" : "controls::VALUE";
+    std::string body;
+    if(form=="unused-block-local")
+        body="initial begin : outer begin : inner int unused="+control+"; end end ";
+    else if(form=="event-iff") body="always @(posedge clk iff "+control+") y=a; ";
+    else if(form=="repeat-event") body="initial begin repeat ("+control+") @(posedge clk); y=a; end ";
+    else if(form=="trigger-delay") body="event done; initial ->> #("+control+") done; ";
+    else if(form=="wait") body="initial begin wait (a=="+control+") y=a; end ";
+    else if(form=="randcase") body="initial randcase "+control+": y=a; 1: y=0; endcase ";
+    else body="initial case(a) matches "+control+": y=1; default: y=0; endcase ";
+    files.write(files.root/"fixed.sv",
+        "module leaf(input int a,output int b); assign b=a+1; endmodule\n"
+        "module stable(input logic clk,input int a,output int y,output int b); "
+        "localparam int CONTROL=7; leaf safe_child(.*); "+body+"endmodule\n");
+    if(origin=="fixed")
+        files.write(files.root/"provider.sv","package controls; parameter int VALUE=7; endpackage\n");
+    auto user=[&](int edit) {
+        return (origin=="mutable" ? "package controls; parameter int VALUE="+
+            std::to_string(edit==1 ? 8 : 7)+"; endpackage\n" : std::string{})+
+            "module top; logic clk; int a,y,b; stable dut(.*); "+
+            (edit==2 ? "initial missing_user=1; " : "")+"endmodule\n";
+    };
+    files.write(files.root/"consumer.sv",user(0));
+    files.write(files.root/"design.f",std::string(origin=="fixed" ? "provider.sv\n" : "")+
+        "fixed.sv\nconsumer.sv\n");
+    struct Result {std::vector<std::string> semantic,flow;};
+    std::vector<Result> expected;
+    for(bool enabled:{false,true}) {
+        Config config;
+        config.experimentalScopeSemanticCache=enabled;
+        config.semanticCacheUnlimited=true;
+        config.frozenSources=Config::FrozenSourcesConfig{
+            .packages=origin=="fixed" ? std::vector<std::string>{"controls"} : std::vector<std::string>{},
+            .instances=std::vector<std::string>{"top.dut"}};
+        config.flagsByFile=std::vector<Config::FlagSource>{
+            {(files.root/"server.json").string(),"--single-unit --threads 1 --timescale 1ns/1ps --top top"}};
+        Indexer indexer; ClientHarness client;
+        auto driver=server::ServerDriver::createFromFileLists(indexer,client,config,{"design.f"},
+                                                               files.root.string(),nullptr,true);
+        REQUIRE(driver);
+        const auto uri=URI::fromFile(files.root/"consumer.sv");
+        driver->openDocument(uri,user(0),0,true);
+        for(int edit=0;edit<4;++edit) {
+            driver->onDocDidChange({.textDocument={.version=edit+1,.uri=uri},
+                .contentChanges={lsp::TextDocumentContentChangeWholeDocument{.text=user(edit)}}});
+            driver->comp->prepareDiagnostics({});
+            const auto& roots=driver->comp->getInstancesOfModule("top");
+            REQUIRE(roots.size()==1);
+            const auto& parent=roots.front()->body.find("dut")->as<ast::InstanceSymbol>().body;
+            const auto& leaf=parent.find("safe_child")->as<ast::InstanceSymbol>().body;
+            auto& compilation=parent.getCompilation();
+            const auto& diagnostics=compilation.getSemanticDiagnostics();
+            INFO(DiagnosticEngine::reportAll(driver->sm,diagnostics));
+            CHECK(std::ranges::any_of(diagnostics,[](const auto& d) { return d.isError(); })==(edit==2));
+            CHECK(compilation.isImportedInstanceBody(parent)==(enabled && origin!="mutable"));
+            CHECK(compilation.isImportedInstanceBody(leaf)==enabled);
+            Result result{diagnosticMessages(driver->sm,diagnostics),{}};
+            analysis::AnalysisOptions opts{.flags=analysis::AnalysisFlags::CheckUnused |
+                                                  analysis::AnalysisFlags::CheckShadow};
+            analysis::AnalysisManager manager(opts);
+            compilation.freeze();manager.analyze(compilation);compilation.unfreeze();
+            result.flow=diagnosticMessages(driver->sm,manager.getDiagnostics());
+            if(enabled) {
+                CHECK(result.semantic==expected.at(edit).semantic);
+                CHECK(result.flow==expected.at(edit).flow);
+            }
+            else expected.push_back(std::move(result));
+        }
+    }
+}
+
+TEST_CASE("Class base constructor arguments close outside the ordinary member graph",
+          "[scope-semantic][scope-class-base-call-closure]") {
+    const std::string origin=GENERATE("local","fixed","mutable");
+    const bool full=GENERATE(false,true);
+    CAPTURE(origin,full);
+    LibraryWorkspace files;
+    const std::string control=origin=="local" ? "CONTROL" : "controls::VALUE";
+    const std::string body="class Base; function new(input int p); endfunction endclass "
+        "class Derived extends Base("+control+"); endclass Derived handle; initial handle=new; ";
+    files.write(files.root/"fixed.sv",
+        "module leaf(input int a,output int b); assign b=a+1; endmodule\n"
+        "module stable(input logic clk,input int a,output int y,output int b); "
+        "localparam int CONTROL=7; leaf safe_child(.*); "+body+"endmodule\n");
+    if(origin=="fixed")
+        files.write(files.root/"provider.sv","package controls; parameter int VALUE=7; endpackage\n");
+    auto user=[&](int edit) {
+        return (origin=="mutable" ? "package controls; parameter int VALUE="+
+            std::to_string(edit==1 ? 8 : 7)+"; endpackage\n" : std::string{})+
+            "module top #(parameter Q=1); logic clk; int a,y,b; stable dut(.*); "+
+            (edit==2 ? "initial missing_user=1; " : "")+"endmodule\n";
+    };
+    files.write(files.root/"consumer.sv",user(0));
+    files.write(files.root/"design.f",std::string(origin=="fixed" ? "provider.sv\n" : "")+
+        "fixed.sv\nconsumer.sv\n");
+    struct Result {std::vector<std::string> semantic,flow;};
+    std::vector<Result> expected;
+    for(bool enabled:{false,true}) {
+        Config config;
+        config.experimentalScopeSemanticCache=enabled;
+        config.semanticCacheUnlimited=true;
+        config.frozenSources=Config::FrozenSourcesConfig{
+            .packages=origin=="fixed" ? std::vector<std::string>{"controls"} : std::vector<std::string>{},
+            .instances=std::vector<std::string>{"top.dut"}};
+        config.flagsByFile=std::vector<Config::FlagSource>{
+            {(files.root/"server.json").string(),std::string("--single-unit --threads 1 --timescale 1ns/1ps --top top")+(full ? " -G Q=2" : "")}};
+        Indexer indexer; ClientHarness client;
+        auto driver=server::ServerDriver::createFromFileLists(indexer,client,config,{"design.f"},
+                                                               files.root.string(),nullptr,true);
+        REQUIRE(driver);
+        const auto uri=URI::fromFile(files.root/"consumer.sv");
+        driver->openDocument(uri,user(0),0,true);
+        for(int edit=0;edit<4;++edit) {
+            driver->onDocDidChange({.textDocument={.version=edit+1,.uri=uri},
+                .contentChanges={lsp::TextDocumentContentChangeWholeDocument{.text=user(edit)}}});
+            driver->comp->prepareDiagnostics({});
+            const auto& roots=driver->comp->getInstancesOfModule("top");
+            REQUIRE(roots.size()==1);
+            const auto& parent=roots.front()->body.find("dut")->as<ast::InstanceSymbol>().body;
+            const auto& leaf=parent.find("safe_child")->as<ast::InstanceSymbol>().body;
+            auto& compilation=parent.getCompilation();
+            const auto& diagnostics=compilation.getSemanticDiagnostics();
+            INFO(DiagnosticEngine::reportAll(driver->sm,diagnostics));
+            CHECK(std::ranges::any_of(diagnostics,[](const auto& d) { return d.isError(); })==(edit==2));
+            CHECK(compilation.isImportedInstanceBody(parent)==(enabled && origin!="mutable"));
+            CHECK(compilation.isImportedInstanceBody(leaf)==enabled);
+            Result result{diagnosticMessages(driver->sm,diagnostics),{}};
+            analysis::AnalysisOptions opts{.flags=analysis::AnalysisFlags::CheckUnused |
+                                                  analysis::AnalysisFlags::CheckShadow};
+            analysis::AnalysisManager manager(opts);
+            compilation.freeze();manager.analyze(compilation);compilation.unfreeze();
+            result.flow=diagnosticMessages(driver->sm,manager.getDiagnostics());
+            if(enabled) {
+                CHECK(result.semantic==expected.at(edit).semantic);
+                CHECK(result.flow==expected.at(edit).flow);
+            }
+            else expected.push_back(std::move(result));
+        }
+    }
+}
+
+TEST_CASE("Coverage selector targets close their otherwise hidden symbol dependency",
+          "[scope-semantic][scope-coverage-target-closure]") {
+    const std::string origin=GENERATE("local","fixed","mutable","mutable-hierarchy");
+    const bool full=GENERATE(false,true);
+    const bool bin=GENERATE(false,true);
+    CAPTURE(origin,full,bin);
+    LibraryWorkspace files;
+    const std::string target=std::string(origin=="local" ? "cp" : origin=="mutable-hierarchy" ? "top.cg.cp" : "controls::cg.cp")+(bin ? ".hit" : "");
+    files.write(files.root/"fixed.sv",
+        "module leaf(input int a,output int b); assign b=a+1; endmodule\n"
+        "module stable(input logic clk,input int a,output int y,output int b); "
+        "leaf safe_child(.*); assign y=a; covergroup own_group; cp: coverpoint a { bins hit={0}; } "
+        "other: coverpoint a; cr: cross cp,other { bins pick=binsof("+target+"); } "
+        "endgroup own_group cg=new; endmodule\n");
+    if(origin=="fixed")
+        files.write(files.root/"provider.sv","package controls; bit [6:0] value; "
+            "covergroup ext; cp: coverpoint value { bins hit={0}; } endgroup ext cg=new; endpackage\n");
+    auto user=[&](int edit) {
+        return (origin=="mutable" ? "package controls; bit ["+std::to_string(edit==1 ? 7 : 6)+
+                ":0] value; covergroup ext; cp: coverpoint value { bins hit={0}; } endgroup ext cg=new; endpackage\n" : std::string{})+
+            "module top #(parameter Q=1); logic clk; int a,y,b; "+
+            (origin=="mutable-hierarchy" ? "bit ["+std::to_string(edit==1 ? 7 : 6)+
+                ":0] value; covergroup ext; cp: coverpoint value { bins hit={0}; } endgroup ext cg=new; " : std::string{})+
+            "stable dut(.*); "+(edit==2 ? "initial missing_user=1; " : "")+"endmodule\n";
+    };
+    files.write(files.root/"consumer.sv",user(0));
+    files.write(files.root/"design.f",std::string(origin=="fixed" ? "provider.sv\n" : "")+
+        "fixed.sv\nconsumer.sv\n");
+    struct Result {std::vector<std::string> semantic,flow; std::vector<uint64_t> widths;};
+    std::vector<Result> expected;
+    for(bool enabled:{false,true}) {
+        Config config;
+        config.experimentalScopeSemanticCache=enabled;
+        config.semanticCacheUnlimited=true;
+        config.frozenSources=Config::FrozenSourcesConfig{
+            .packages=origin=="fixed" ? std::vector<std::string>{"controls"} : std::vector<std::string>{},
+            .instances=std::vector<std::string>{"top.dut"}};
+        config.flagsByFile=std::vector<Config::FlagSource>{
+            {(files.root/"server.json").string(),std::string("--single-unit --threads 1 --timescale 1ns/1ps --top top")+(full ? " -G Q=2" : "")}};
+        Indexer indexer; ClientHarness client;
+        auto driver=server::ServerDriver::createFromFileLists(indexer,client,config,{"design.f"},
+                                                               files.root.string(),nullptr,true);
+        REQUIRE(driver);
+        const auto uri=URI::fromFile(files.root/"consumer.sv");
+        driver->openDocument(uri,user(0),0,true);
+        for(int edit=0;edit<4;++edit) {
+            driver->onDocDidChange({.textDocument={.version=edit+1,.uri=uri},
+                .contentChanges={lsp::TextDocumentContentChangeWholeDocument{.text=user(edit)}}});
+            driver->comp->prepareDiagnostics({});
+            const auto& roots=driver->comp->getInstancesOfModule("top");
+            REQUIRE(roots.size()==1);
+            const auto& parent=roots.front()->body.find("dut")->as<ast::InstanceSymbol>().body;
+            const auto& leaf=parent.find("safe_child")->as<ast::InstanceSymbol>().body;
+            auto& compilation=parent.getCompilation();
+            const auto& diagnostics=compilation.getSemanticDiagnostics();
+            INFO(DiagnosticEngine::reportAll(driver->sm,diagnostics));
+            CHECK(std::ranges::any_of(diagnostics,[](const auto& d) { return d.isError(); })==(edit==2));
+            CHECK(compilation.isImportedInstanceBody(parent)==(enabled && !origin.starts_with("mutable")));
+            CHECK(compilation.isImportedInstanceBody(leaf)==enabled);
+            if(!enabled && origin.starts_with("mutable")) {
+                std::string_view reason;
+                const bool certified=compilation.prepareInstanceBodyReuse(parent,&reason);
+                INFO("direct certificate refusal: " << reason);
+                CHECK_FALSE(certified);
+            }
+            Result result{diagnosticMessages(driver->sm,diagnostics),{}, {}};
+            auto targets=ast::makeVisitor([&](auto& visitor,const ast::ConditionBinsSelectExpr& expr) {
+                const auto& point=expr.target.kind==ast::SymbolKind::CoverageBin
+                    ? expr.target.getParentScope()->asSymbol() : expr.target;
+                if(point.kind==ast::SymbolKind::Coverpoint)
+                    result.widths.push_back(point.as<ast::CoverpointSymbol>().getType().getBitWidth());
+                visitor.visitDefault(expr);
+            });
+            parent.visit(targets);
+            REQUIRE(result.widths.size()==1);
+            CHECK(result.widths.front()==(origin=="local" ? 32 : origin.starts_with("mutable") && edit==1 ? 8 : 7));
+            analysis::AnalysisOptions opts{.flags=analysis::AnalysisFlags::CheckUnused |
+                                                  analysis::AnalysisFlags::CheckShadow};
+            analysis::AnalysisManager manager(opts);
+            compilation.freeze();manager.analyze(compilation);compilation.unfreeze();
+            result.flow=diagnosticMessages(driver->sm,manager.getDiagnostics());
+            if(enabled) {
+                CHECK(result.widths==expected.at(edit).widths);
+                CHECK(result.semantic==expected.at(edit).semantic);
+                CHECK(result.flow==expected.at(edit).flow);
+            }
+            else expected.push_back(std::move(result));
+        }
+    }
+}
+
+TEST_CASE("Class interface contracts close implemented and extended provider dependencies",
+          "[scope-semantic][scope-class-interface-closure]") {
+    const std::string origin=GENERATE("local","fixed","mutable");
+    const bool full=GENERATE(false,true);
+    const bool bridge=GENERATE(false,true);
+    CAPTURE(origin,full,bridge);
+    LibraryWorkspace files;
+    auto contract=[](bool extra) {
+        return std::string("interface class Contract; pure virtual function int value(); ")+
+            (extra ? "pure virtual function int added(); " : "")+"endclass ";
+    };
+    const std::string provider=origin=="local" ? "Contract" : "controls::Contract";
+    files.write(files.root/"fixed.sv",
+        "module leaf(input int a,output int b); assign b=a+1; endmodule\n"
+        "module stable(input logic clk,input int a,output int y,output int b); "
+        "leaf safe_child(.*); assign y=a; "+(origin=="local" ? contract(false) : "")+
+        (bridge ? "interface class Bridge extends "+provider+"; endclass " : "")+
+        "class Impl implements "+(bridge ? "Bridge" : provider)+"; "
+        "virtual function int value(); return 1; endfunction endclass "
+        "Impl handle; initial handle=new; endmodule\n");
+    if(origin=="fixed")
+        files.write(files.root/"provider.sv","package controls; "+contract(false)+"endpackage\n");
+    auto user=[&](int edit) {
+        return (origin=="mutable" ? "package controls; "+contract(edit==1)+"endpackage\n" : std::string{})+
+            "module top #(parameter Q=1); logic clk; int a,y,b; stable dut(.*); "+
+            (edit==2 ? "initial missing_user=1; " : "")+"endmodule\n";
+    };
+    files.write(files.root/"consumer.sv",user(0));
+    files.write(files.root/"design.f",std::string(origin=="fixed" ? "provider.sv\n" : "")+
+        "fixed.sv\nconsumer.sv\n");
+    struct Result {std::vector<std::string> semantic,flow;};
+    std::vector<Result> expected;
+    for(bool enabled:{false,true}) {
+        Config config;
+        config.experimentalScopeSemanticCache=enabled;
+        config.semanticCacheUnlimited=true;
+        config.frozenSources=Config::FrozenSourcesConfig{
+            .packages=origin=="fixed" ? std::vector<std::string>{"controls"} : std::vector<std::string>{},
+            .instances=std::vector<std::string>{"top.dut"}};
+        config.flagsByFile=std::vector<Config::FlagSource>{
+            {(files.root/"server.json").string(),std::string("--single-unit --threads 1 --timescale 1ns/1ps --top top")+(full ? " -G Q=2" : "")}};
+        Indexer indexer; ClientHarness client;
+        auto driver=server::ServerDriver::createFromFileLists(indexer,client,config,{"design.f"},
+                                                               files.root.string(),nullptr,true);
+        REQUIRE(driver);
+        const auto uri=URI::fromFile(files.root/"consumer.sv");
+        driver->openDocument(uri,user(0),0,true);
+        for(int edit=0;edit<4;++edit) {
+            driver->onDocDidChange({.textDocument={.version=edit+1,.uri=uri},
+                .contentChanges={lsp::TextDocumentContentChangeWholeDocument{.text=user(edit)}}});
+            driver->comp->prepareDiagnostics({});
+            const auto& roots=driver->comp->getInstancesOfModule("top");
+            REQUIRE(roots.size()==1);
+            const auto& parent=roots.front()->body.find("dut")->as<ast::InstanceSymbol>().body;
+            const auto& leaf=parent.find("safe_child")->as<ast::InstanceSymbol>().body;
+            auto& compilation=parent.getCompilation();
+            const auto& diagnostics=compilation.getSemanticDiagnostics();
+            INFO(DiagnosticEngine::reportAll(driver->sm,diagnostics));
+            CHECK(std::ranges::any_of(diagnostics,[](const auto& d) { return d.isError(); })==(edit==2 || (edit==1 && origin=="mutable")));
+            CHECK(compilation.isImportedInstanceBody(parent)==(enabled && !origin.starts_with("mutable")));
+            CHECK(compilation.isImportedInstanceBody(leaf)==enabled);
+            if(!enabled && origin.starts_with("mutable")) {
+                std::string_view reason;
+                const bool certified=compilation.prepareInstanceBodyReuse(parent,&reason);
+                INFO("direct certificate refusal: " << reason);
+                CHECK_FALSE(certified);
+            }
+            Result result{diagnosticMessages(driver->sm,diagnostics),{}};
+            analysis::AnalysisOptions opts{.flags=analysis::AnalysisFlags::CheckUnused |
+                                                  analysis::AnalysisFlags::CheckShadow};
+            analysis::AnalysisManager manager(opts);
+            compilation.freeze();manager.analyze(compilation);compilation.unfreeze();
+            result.flow=diagnosticMessages(driver->sm,manager.getDiagnostics());
+            if(enabled) {
+                CHECK(result.semantic==expected.at(edit).semantic);
+                CHECK(result.flow==expected.at(edit).flow);
+            }
+            else expected.push_back(std::move(result));
+        }
+    }
+}
+
+TEST_CASE("Frozen pattern variables and loop metadata retain native semantics",
+          "[scope-semantic][scope-pattern-loop-metadata]") {
+    const bool full = GENERATE(false, true);
+    const bool pattern = GENERATE(false, true);
+    CAPTURE(full, pattern);
+    LibraryWorkspace files;
+    Config config;
+    config.experimentalScopeSemanticCache = true;
+    config.semanticCacheUnlimited = true;
+    config.frozenSources = Config::FrozenSourcesConfig{
+        .modules = std::vector<std::string>{"stable"}};
+    config.flagsByFile = std::vector<Config::FlagSource>{
+        {(files.root / "server.json").string(),
+         std::string("--single-unit --threads 1 --top top") + (full ? " -G Q=2" : "")}};
+    files.write(files.root / "fixed.sv", std::string(R"(
+module stable(output int result);
+  typedef struct packed {int first; int second;} pair_t;
+  function automatic int sum(input pair_t value);
+    int table_values[2][3];
+    int total=0;
+    foreach (table_values[i,j]) table_values[i][j]=i+j;
+    foreach (table_values[,j]) total+=table_values[0][j];
+    for (int unused=0; total<0; ) break;
+)") + (pattern ? R"(
+    if (value matches '{first:.v, second:.*}) total+=v;
+    case (value) matches
+      '{first:0, second:.v}: total+=v;
+      default: total+=value.second;
+    endcase
+)" : "    total+=value.first+value.second;\n") + R"(
+    return total;
+  endfunction
+  initial result=sum('{1,2});
+endmodule
+)");
+    auto text = [](int edit) {
+        return "module top #(parameter Q=1); int result; stable u(.*); "
+               "initial $display(result); localparam EDIT=" + std::to_string(edit) +
+               "; endmodule\n";
+    };
+    files.write(files.root / "consumer.sv", text(0));
+    files.write(files.root / "design.f", "fixed.sv\nconsumer.sv\n");
+    Indexer indexer;
+    ClientHarness client;
+    auto driver = server::ServerDriver::createFromFileLists(indexer, client, config, {"design.f"},
+                                                            files.root.string(), nullptr, true);
+    REQUIRE(driver);
+    auto cache = driver->options.get<server::ScopeBodyImport>()->cache.lock();
+    REQUIRE(cache);
+    for (int edit=0; edit<3; ++edit) {
+        auto make = [&](bool native) {
+            auto c=std::make_shared<ast::Compilation>(driver->options);
+            if (native) {
+                const auto buffer=driver->sm.assignText(text(edit));
+                driver->sm.addLineDirective(SourceLocation(buffer.id,0),2,"metadata-consumer.sv",0);
+                const SourceBuffer buffers[]={driver->sm.readSource(files.root/"fixed.sv").value(),buffer};
+                c->addSyntaxTree(syntax::SyntaxTree::fromBuffers(buffers,driver->sm,driver->options));
+            }
+            else {
+                REQUIRE(server::importTrustedUvm(*c,driver->sm,driver->options));
+                c->addSyntaxTree(syntax::SyntaxTree::fromText(text(edit),driver->sm,
+                    "metadata-consumer.sv","",driver->options));
+            }
+            (void)c->getSemanticDiagnostics();
+            return c;
+        };
+        auto current=make(false), native=make(true);
+        const auto actual=DiagnosticEngine::reportAll(driver->sm,current->getSemanticDiagnostics());
+        INFO(actual);
+        CHECK_FALSE(current->hasIssuedErrors());
+        CHECK(actual==DiagnosticEngine::reportAll(driver->sm,native->getSemanticDiagnostics()));
+        analysis::AnalysisOptions options{.flags=analysis::AnalysisFlags::CheckUnused};
+        analysis::AnalysisManager am(options),nm(options);
+        current->freeze();am.analyze(*current);current->unfreeze();
+        native->freeze();nm.analyze(*native);native->unfreeze();
+        CHECK(diagnosticMessages(driver->sm,am.getDiagnostics())==
+              diagnosticMessages(driver->sm,nm.getDiagnostics()));
+        if (edit) CHECK(current->hasImportedInstanceBodies());
+        current->offerInstanceBodies(current);
+    }
+    CHECK(cache->status().hits>0);
+}
+
+TEST_CASE("Imported fixed definitions preserve native instantiation metadata",
+          "[scope-semantic][scope-dormant-discovery]") {
+    const bool full = GENERATE(false, true);
+    const bool active = GENERATE(false, true);
+    const int hierarchyEffect = GENERATE(0, 1, 2);
+    const bool hierarchicalWrite = hierarchyEffect != 0;
+    CAPTURE(full, active, hierarchyEffect);
+    LibraryWorkspace files;
+    Config config;
+    config.experimentalScopeSemanticCache = true;
+    config.semanticCacheUnlimited = true;
+    config.frozenSources = Config::FrozenSourcesConfig{
+        .packages = std::vector<std::string>{"settings"},
+        .modules = std::vector<std::string>{"container"}};
+    config.flagsByFile = std::vector<Config::FlagSource>{
+        {(files.root / "server.json").string(),
+         std::string("--single-unit --threads 1 --timescale 1ns/1ps --top top") +
+         (full ? " -G Q=2" : "")}};
+    std::string fixed = R"(
+package settings;
+  parameter time UNUSED_DELAY=2ns;
+  parameter time INTRA_DELAY=3ns;
+endpackage
+module counter #(parameter W=4, parameter time DLY=0);
+  logic [W-1:0] unsigned_value;
+  logic signed [W-1:0] signed_value;
+  logic delayed;
+  always @(unsigned_value) delayed <= #(settings::INTRA_DELAY) unsigned_value[0];
+  initial $display("%b", delayed);
+  initial begin
+    unsigned_value=1; signed_value=2;
+    unsigned_value=unsigned_value+signed_value;
+    #(DLY);
+  end
+endmodule
+module container #(parameter W=4);
+  if (1'b0) begin : g_dormant
+    counter #(.W(16), .DLY(settings::UNUSED_DELAY)) unused();
+  end
+  counter #(.W(W)) u_real();
+endmodule
+)";
+    if (active)
+        fixed.replace(fixed.find("if (1'b0)"), std::string_view("if (1'b0)").size(), "if (1'b1)");
+    if (hierarchicalWrite) {
+        if (hierarchyEffect == 2) {
+            const auto end = fixed.find("endmodule\nmodule container");
+            REQUIRE(end != std::string::npos);
+            fixed.insert(end,
+                "  function automatic int poke();\n"
+                "    unsigned_value=0; return 0;\n"
+                "  endfunction\n");
+        }
+        const auto at = fixed.find("  counter #(.W(W)) u_real();");
+        REQUIRE(at != std::string::npos);
+        fixed.insert(at,
+            std::string("  counter #(.W(W)) other();\n") +
+            (hierarchyEffect == 1 ? "  initial u_real.unsigned_value=0;\n"
+                                  : "  initial void'(u_real.poke());\n"));
+    }
+    auto user = [](int edit) {
+        return "module top #(parameter Q=1); container #(.W(4)) a_first(); "
+               "container #(.W(16)) z_other(); container #(.W(4)) m_duplicate(); "
+               "localparam int EDIT=" + std::to_string(edit) + "; endmodule\n";
+    };
+    files.write(files.root / "fixed.sv", fixed);
+    files.write(files.root / "consumer.sv", user(0));
+    files.write(files.root / "design.f", "fixed.sv\nconsumer.sv\n");
+    Indexer indexer;
+    ClientHarness client;
+    auto driver = server::ServerDriver::createFromFileLists(indexer, client, config, {"design.f"},
+                                                            files.root.string(), nullptr, true);
+    REQUIRE(driver);
+    auto setting = driver->options.get<server::ScopeBodyImport>();
+    REQUIRE(setting);
+    auto cache = setting->cache.lock();
+    REQUIRE(cache);
+    for (int edit = 0; edit < 3; ++edit) {
+        auto make = [&](bool native) {
+            auto c = std::make_shared<ast::Compilation>(driver->options);
+            if (native) {
+                const auto buffer = driver->sm.assignText(user(edit));
+                driver->sm.addLineDirective(SourceLocation(buffer.id,0),2,"dormant-consumer.sv",0);
+                const SourceBuffer buffers[] = {driver->sm.readSource(files.root / "fixed.sv").value(),buffer};
+                c->addSyntaxTree(syntax::SyntaxTree::fromBuffers(buffers,driver->sm,driver->options));
+            }
+            else {
+                REQUIRE(server::importTrustedUvm(*c,driver->sm,driver->options));
+                c->addSyntaxTree(syntax::SyntaxTree::fromText(user(edit),driver->sm,
+                    "dormant-consumer.sv","",driver->options));
+            }
+            (void)c->getSemanticDiagnostics();
+            return c;
+        };
+        auto current=make(false), native=make(true);
+        if (hierarchicalWrite && edit) {
+            auto instance = [](ast::Compilation& c) -> const ast::InstanceBodySymbol& {
+                const auto parent = c.getRoot().topInstances.front()->body.find("a_first");
+                REQUIRE(parent);
+                return parent->as<ast::InstanceSymbol>().body;
+            };
+            const auto& cachedParent = instance(*current);
+            CHECK(current->isImportedInstanceBody(cachedParent));
+            const auto cachedOther = cachedParent.find("u_real");
+            const auto nativeOther = instance(*native).find("u_real");
+            REQUIRE(cachedOther);
+            REQUIRE(nativeOther);
+            CHECK(bool(current->getCanonicalInstanceBody(cachedOther->as<ast::InstanceSymbol>())) ==
+                  bool(native->getCanonicalInstanceBody(nativeOther->as<ast::InstanceSymbol>())));
+        }
+        const auto semantic=DiagnosticEngine::reportAll(driver->sm,current->getSemanticDiagnostics());
+        const auto expected=DiagnosticEngine::reportAll(driver->sm,native->getSemanticDiagnostics());
+        INFO("current:\n" << semantic << "\nNative:\n" << expected);
+        CHECK(semantic==expected);
+        auto usage = [](const ast::Compilation& c, std::string_view name) {
+            const auto package = c.getPackage("settings");
+            REQUIRE(package);
+            const auto delay = package->find(name);
+            REQUIRE(delay);
+            REQUIRE(delay->getSyntax());
+            return c.isReferenced(*delay->getSyntax());
+        };
+        for (const auto name : {"UNUSED_DELAY", "INTRA_DELAY"}) {
+            CAPTURE(name);
+            CHECK(usage(*current, name) == usage(*native, name));
+        }
+        analysis::AnalysisOptions options{.flags=analysis::AnalysisFlags::CheckUnused};
+        analysis::AnalysisManager am(options),nm(options);
+        current->freeze();am.analyze(*current);current->unfreeze();
+        native->freeze();nm.analyze(*native);native->unfreeze();
+        auto flowDiagnostics = am.getDiagnostics(), nativeDiagnostics = nm.getDiagnostics();
+        flowDiagnostics.sort(driver->sm);
+        nativeDiagnostics.sort(driver->sm);
+        const auto flow=DiagnosticEngine::reportAll(driver->sm,flowDiagnostics);
+        const auto wanted=DiagnosticEngine::reportAll(driver->sm,nativeDiagnostics);
+        INFO("flow current:\n" << flow << "\nNative:\n" << wanted);
+        CHECK(diagnosticMessages(driver->sm, flowDiagnostics) ==
+              diagnosticMessages(driver->sm, nativeDiagnostics));
+        current->offerInstanceBodies(current);
+    }
+    CHECK(cache->status().hits>0);
+}
+
+TEST_CASE("Independent fixed declarations isolate erroneous native unit bindings",
+          "[scope-semantic][scope-unit-isolation]") {
+    const std::string mode = GENERATE("independent", "wildcard-shadow", "explicit-unit",
+                                      "deferred-unit", "macro-shared", "generic-qualifier", "member-name-collision", "opaque-name-collision");
+    const bool packageSelected = GENERATE(false, true);
+    CAPTURE(mode, packageSelected);
+    LibraryWorkspace files;
+    files.write(files.root / "native.sv",
+                "task bad_helper(); endtask\n"
+                "task bad_caller(); bad_helper(1); endtask\n"
+                "parameter int WIDTH=9; parameter int UNIT_WIDTH=9;\n" +
+                std::string(mode == "opaque-name-collision" ? "parameter int counter=7;\n" : ""));
+    files.write(files.root / "fixed.sv",
+                "module stable(input int a,output int y);\n`ifdef UNUSED_PROBE\n"
+                "wire disabled;\n`endif\nassign y=a+1; endmodule\n");
+    std::string package = "package stable_pkg; parameter int WIDTH=4; ";
+    if (mode == "explicit-unit")
+        package += "typedef logic[$unit::WIDTH-1:0] word_t; ";
+    else if (mode == "deferred-unit")
+        package += "class Deferred #(type T); logic[UNIT_WIDTH-1:0] field; endclass ";
+    else
+        package += "typedef logic[WIDTH-1:0] word_t; class Local; "
+                   "localparam int VALUE=3; int counter; endclass localparam int N=Local::VALUE; ";
+    if (mode == "opaque-name-collision") package += "localparam int COUNT=counter; ";
+    if (mode == "generic-qualifier")
+        package += "class Deferred #(type T); logic[T::VALUE-1:0] field; endclass "
+                   "function process current_process(); return process::self(); endfunction ";
+    package += "endpackage\n";
+    if (mode == "macro-shared") package = "`define LIB_VALUE 0\n" + package;
+    files.write(files.root / "package.sv", package);
+    files.write(files.root / "imports.sv", mode == "wildcard-shadow"
+                    ? "import stable_pkg::*;\n" : "\n");
+    const std::string original =
+        "module top; int a,y; stable dut(.*); localparam int EDIT=0; " +
+        std::string(mode == "macro-shared" ? "localparam int SHARED_VALUE=`LIB_VALUE; " : "") +
+        std::string(mode == "generic-qualifier"
+            ? "stable_pkg::Deferred#(stable_pkg::Local) object; " : "") +
+        "endmodule\n" + std::string((mode == "member-name-collision" || mode == "opaque-name-collision")
+            ? "module counter; endmodule\n" : "");
+    files.write(files.root / "consumer.sv", original);
+    files.write(files.root / "design.f",
+                "native.sv\nfixed.sv\npackage.sv\nimports.sv\nconsumer.sv\n");
+    std::vector<std::string> expected;
+    for (bool enabled : {false, true}) {
+        Config config;
+        config.flagsByFile = std::vector<Config::FlagSource>{
+            {(files.root / "server.json").string(), "--single-unit --threads 1 --top top"}};
+        config.experimentalScopeSemanticCache = enabled;
+        config.semanticCacheUnlimited = true;
+        config.frozenSources = Config::FrozenSourcesConfig{
+            .packages = packageSelected ? std::vector<std::string>{"stable_pkg"}
+                                        : std::vector<std::string>{},
+            .modules = std::vector<std::string>{"stable"}};
+        Indexer indexer;
+        ClientHarness client;
+        auto driver = server::ServerDriver::createFromFileLists(
+            indexer, client, config, {"design.f"}, files.root.string(), nullptr, true);
+        REQUIRE(driver);
+        if (enabled) {
+            INFO(rfl::json::write(driver->scopeLibraryStatus()));
+            const auto setting = driver->options.get<server::TrustedUvmImport>();
+            const bool refused = packageSelected &&
+                (mode == "explicit-unit" || mode == "deferred-unit" || mode == "opaque-name-collision");
+            CHECK(bool(setting) == !refused);
+            if (setting) {
+                const auto library = setting->library;
+                CHECK(library->definitions == std::vector<std::string>{"stable"});
+                CHECK(library->packages == (packageSelected
+                    ? std::vector<std::string>{"stable_pkg"} : std::vector<std::string>{}));
+                CHECK_FALSE(library->files.contains((files.root / "native.sv").generic_string()));
+                CHECK_FALSE(library->files.contains((files.root / "consumer.sv").generic_string()));
+            }
+        }
+        const auto uri = URI::fromFile(files.root / "consumer.sv");
+        driver->openDocument(uri, original, 1, true);
+        for (int edit = 0; edit < 3; ++edit) {
+            auto text = original;
+            if (edit) {
+                text.replace(text.find("EDIT=0"), 6, fmt::format("EDIT={}", edit));
+                if (edit == 1) text.insert(text.find("endmodule"), "initial missing_user=1; ");
+                driver->onDocDidChange({.textDocument = {.version = edit + 1, .uri = uri},
+                    .contentChanges = {lsp::TextDocumentContentChangeWholeDocument{.text = text}}});
+            }
+            const auto& body = driver->comp->getInstancesOfModule("top").front()->body;
+            const auto diagnostics = DiagnosticEngine::reportAll(
+                driver->sm, body.getCompilation().getSemanticDiagnostics());
+            CHECK(diagnostics.find("too many arguments") != std::string::npos);
+            CHECK((diagnostics.find("missing_user") != std::string::npos) == (edit == 1));
+            if (enabled) CHECK(diagnostics == expected.at(edit));
+            else expected.push_back(diagnostics);
+        }
+    }
+}
+
+TEST_CASE("Isolated fixed RTL closes typed ports and package references beside native errors",
+          "[scope-semantic][scope-unit-type-closure]") {
+    const std::string mode=GENERATE("closed","unit-alias","mixed-provider","unit-wildcard","unit-explicit");
+    CAPTURE(mode);
+    LibraryWorkspace files;
+    files.write(files.root / "native.sv", "task bad_helper(); endtask\n"
+                "task bad_caller(); bad_helper(1); endtask\n" +
+                std::string(mode=="unit-alias" ? "typedef logic[3:0] external_word_t;\n" : ""));
+    files.write(files.root / "types.sv", "package stable_types; parameter int WIDTH=4; "
+                "typedef logic[WIDTH-1:0] word_t; endpackage\n");
+    files.write(files.root / "leaf.sv", "module typed_leaf #(parameter type T=logic) "
+                "(input T x,output T y); assign y=x; endmodule\n");
+    const std::string portType=mode=="unit-alias" ? "external_word_t" :
+        mode=="mixed-provider" ? "mutable_types::word_t" : "word_t";
+    const bool unitImport=mode=="unit-wildcard" || mode=="unit-explicit";
+    files.write(files.root / "fixed.sv", std::string(unitImport
+        ? (mode=="unit-wildcard" ? "import stable_types::*;\n" : "import stable_types::word_t;\n") : "") + fmt::format(
+                "module typed_stable {1}"
+                "(input {0} x,output {0} y); localparam int TYPE_BITS=$bits({0}); "
+                "typed_leaf #(.T({0})) child(.*); endmodule\n",portType,
+                unitImport ? "" : "import stable_types::*; "));
+    const std::string original = std::string(mode=="mixed-provider"
+        ? "package mutable_types; typedef logic[3:0] word_t; endpackage\n" : "") +
+                "module top; stable_types::word_t x,y; "
+                "typed_stable dut(.*); localparam int EDIT=0; endmodule\n";
+    files.write(files.root / "consumer.sv", original);
+    files.write(files.root / "design.f", "native.sv\ntypes.sv\nleaf.sv\nfixed.sv\nconsumer.sv\n");
+    std::vector<std::string> expected;
+    for (bool enabled : {false,true}) {
+        Config config;
+        config.flagsByFile = std::vector<Config::FlagSource>{
+            {(files.root / "server.json").string(), "--single-unit --threads 1 --top top"}};
+        config.experimentalScopeSemanticCache=enabled;
+        config.semanticCacheUnlimited=true;
+        config.frozenSources=Config::FrozenSourcesConfig{
+            .packages=std::vector<std::string>{"stable_types"},
+            .modules=std::vector<std::string>{"typed_stable"}};
+        Indexer indexer;
+        ClientHarness client;
+        auto driver=server::ServerDriver::createFromFileLists(
+            indexer,client,config,{"design.f"},files.root.string(),nullptr,true);
+        REQUIRE(driver);
+        if (enabled) {
+            INFO(rfl::json::write(driver->scopeLibraryStatus()));
+            const auto setting=driver->options.get<server::TrustedUvmImport>();
+            REQUIRE(setting);
+            CHECK((std::ranges::find(setting->library->definitions,"typed_stable") !=
+                    setting->library->definitions.end())==(mode=="closed" || unitImport));
+            REQUIRE(std::ranges::find(setting->library->definitions,"typed_leaf") !=
+                    setting->library->definitions.end());
+            CHECK(setting->library->packages==std::vector<std::string>{"stable_types"});
+            if (mode=="unit-alias" || mode=="mixed-provider") {
+                const auto& report=*setting->library->preparationReport;
+                const auto name=mode=="unit-alias" ? "external_word_t" : "mutable_types";
+                CHECK(std::ranges::any_of(report.refusals,[&](const auto& refusal) {
+                    return std::ranges::find(refusal.sampleBindings,name)!=refusal.sampleBindings.end();
+                }));
+                CHECK(report.bindings<=8);
+            }
+            CHECK_FALSE(setting->library->files.contains((files.root/"native.sv").generic_string()));
+            CHECK_FALSE(setting->library->files.contains((files.root/"consumer.sv").generic_string()));
+            if (unitImport) {
+                auto library=setting->library;
+                const auto& owned=library->compilation->getSyntaxTrees();
+                REQUIRE(owned.size()==1);
+                std::string_view refusal;
+                CHECK(server::trustedLibraryNamespaceMatches(*library,driver->sm,owned,&refusal));
+                const auto& members=owned.front()->root().as<syntax::CompilationUnitSyntax>().members;
+                std::vector<const syntax::MemberSyntax*> noImports,firstUnit,secondUnit;
+                for (auto member:members) {
+                    if (member->kind!=syntax::SyntaxKind::PackageImportDeclaration) noImports.push_back(member);
+                    if (member->kind==syntax::SyntaxKind::ModuleDeclaration &&
+                        member->as<syntax::ModuleDeclarationSyntax>().header->name.valueText()=="typed_stable")
+                        secondUnit.push_back(member);
+                    else firstUnit.push_back(member);
+                }
+                std::vector<std::shared_ptr<syntax::SyntaxTree>> current{
+                    syntax::SyntaxTree::selectCompilationUnitMembers(owned.front(),noImports,true)};
+                CHECK_FALSE(server::trustedLibraryNamespaceMatches(*library,driver->sm,current,&refusal));
+                CHECK(refusal=="missing-current-unit-import");
+                current={syntax::SyntaxTree::selectCompilationUnitMembers(owned.front(),firstUnit,true),
+                         syntax::SyntaxTree::selectCompilationUnitMembers(owned.front(),secondUnit,true)};
+                CHECK_FALSE(server::trustedLibraryNamespaceMatches(*library,driver->sm,current,&refusal));
+                CHECK(refusal=="compilation-unit-context");
+                for (bool changed:{false,true}) {
+                    SourceManager sources;
+                    std::vector<SourceBuffer> buffers;
+                    for (const auto& name:{"types.sv","leaf.sv","fixed.sv"}) {
+                        auto path=files.root/name;
+                        std::ifstream input(path);
+                        std::string text((std::istreambuf_iterator<char>(input)),{});
+                        if (changed && std::string_view(name)=="fixed.sv")
+                            text.replace(text.find("stable_types"),std::string_view("stable_types").size(),
+                                         "changed_types");
+                        buffers.push_back(sources.assignText(path.string(),text));
+                    }
+                    current={syntax::SyntaxTree::fromBuffers(buffers,sources,driver->options)};
+                    CHECK(server::trustedLibraryNamespaceMatches(*library,sources,current,&refusal)==!changed);
+                    if (changed) CHECK(refusal=="unit-import-syntax");
+                }
+            }
+        }
+        const auto uri=URI::fromFile(files.root/"consumer.sv");
+        driver->openDocument(uri,original,1,true);
+        for (int edit=0;edit<3;++edit) {
+            if (edit) {
+                auto text=original;
+                text.replace(text.find("EDIT=0"),6,fmt::format("EDIT={}",edit));
+                if (edit==1) text.insert(text.find("endmodule"),"initial missing_user=1; ");
+                driver->onDocDidChange({.textDocument={.version=edit+1,.uri=uri},
+                    .contentChanges={lsp::TextDocumentContentChangeWholeDocument{.text=text}}});
+            }
+            const auto& instances=driver->comp->getInstancesOfModule("typed_stable");
+            REQUIRE(instances.size()==1);
+            if (enabled && (mode=="closed" || unitImport))
+                CHECK(driver->hasCompatibleTrustedNamespace());
+            const auto& body=instances.front()->body;
+            CHECK(body.find("x")->as<ast::ValueSymbol>().getType().getBitWidth()==4);
+            CHECK(body.find("TYPE_BITS")->as<ast::ParameterSymbol>().getValue().integer().as<int>()==4);
+            CHECK(body.find("child")->as<ast::InstanceSymbol>().body.find("x")
+                ->as<ast::ValueSymbol>().getType().getBitWidth()==4);
+            const auto diagnostics=DiagnosticEngine::reportAll(
+                driver->sm,body.getCompilation().getSemanticDiagnostics());
+            CHECK(diagnostics.find("too many arguments")!=std::string::npos);
+            CHECK((diagnostics.find("missing_user")!=std::string::npos)==(edit==1));
+            if (enabled) CHECK(diagnostics==expected.at(edit));
+            else expected.push_back(diagnostics);
+        }
+    }
+}
+
+TEST_CASE("Isolated definition templates defer instance edges to current-frame certification",
+          "[scope-semantic][scope-deferred-instance-closure]") {
+    LibraryWorkspace files;
+    files.write(files.root/"native.sv","task bad_helper(); endtask\n"
+                "task bad_caller(); bad_helper(1); endtask\n");
+    files.write(files.root/"types.sv","package stable_types; typedef logic[3:0] word_t; endpackage\n");
+    files.write(files.root/"fixed.sv",R"(
+module leaf(output wire [3:0] y); assign y=4'b1010; endmodule
+module parent import stable_types::*; #(parameter bit USE_VENDOR=0)(output word_t y);
+  wire [3:0] data;
+  leaf good(.y(data));
+  if (USE_VENDOR) begin: vendor_branch
+    missing_vendor vendor();
+  end
+  assign y=data;
+endmodule
+)");
+    auto source=[](bool active) {
+        return fmt::format("module top; wire [3:0] y; parent #(.USE_VENDOR({})) u(.*); endmodule\n",
+                           int(active));
+    };
+    files.write(files.root/"consumer.sv",source(false));
+    files.write(files.root/"design.f","native.sv\ntypes.sv\nfixed.sv\nconsumer.sv\n");
+    Config config;
+    config.experimentalScopeSemanticCache=true;
+    config.semanticCacheUnlimited=true;
+    config.flagsByFile=std::vector<Config::FlagSource>{
+        {(files.root/"server.json").string(),"--single-unit --threads 1 --top top"}};
+    config.frozenSources=Config::FrozenSourcesConfig{
+        .packages=std::vector<std::string>{"stable_types"},
+        .modules=std::vector<std::string>{"parent"}};
+    Indexer indexer;
+    ClientHarness client;
+    auto driver=server::ServerDriver::createFromFileLists(indexer,client,config,{"design.f"},
+                                                        files.root.string(),nullptr,true);
+    REQUIRE(driver);
+    auto setting=driver->options.get<server::TrustedUvmImport>();
+    REQUIRE(setting);
+    INFO(rfl::json::write(driver->scopeLibraryStatus()));
+    auto library=setting->library;
+    REQUIRE(std::ranges::find(library->definitions,"parent")!=library->definitions.end());
+    auto cache=std::make_shared<server::ScopeBodyCache>(library,std::numeric_limits<size_t>::max(),
+        std::vector<std::string>{},std::vector<std::string>{"top.u"});
+    auto make=[&](bool active,bool native) {
+        auto options=driver->options;
+        options.set(server::ScopeBodyImport{cache});
+        auto compilation=std::make_shared<ast::Compilation>(options);
+        if (native) {
+            for (auto name:{"types.sv","fixed.sv"}) {
+                auto tree=syntax::SyntaxTree::fromFile((files.root/name).string(),driver->sm,options);
+                REQUIRE(tree);
+                compilation->addSyntaxTree(*tree);
+            }
+        }
+        else REQUIRE(server::importTrustedUvm(*compilation,driver->sm,options));
+        auto error=syntax::SyntaxTree::fromFile((files.root/"native.sv").string(),driver->sm,options);
+        REQUIRE(error);
+        compilation->addSyntaxTree(*error);
+        compilation->addSyntaxTree(syntax::SyntaxTree::fromText(source(active),driver->sm,
+            "frame.sv","",options));
+        return compilation;
+    };
+    int step=0;
+    for (bool active:{false,false,true,true,false}) {
+        CAPTURE(step,active);
+        auto current=make(active,false);
+        auto native=make(active,true);
+        const auto expected=DiagnosticEngine::reportAll(driver->sm,native->getSemanticDiagnostics());
+        CHECK(expected.find("too many arguments")!=std::string::npos);
+        CHECK((expected.find("missing_vendor")!=std::string::npos)==active);
+        CHECK(DiagnosticEngine::reportAll(driver->sm,current->getSemanticDiagnostics())==expected);
+        const auto& body=current->getRoot().topInstances.front()->body.find("u")
+            ->as<ast::InstanceSymbol>().body;
+        CHECK(current->isImportedInstanceBody(body)==(!active && step>0));
+        CHECK(body.find("y")->as<ast::ValueSymbol>().getType().getBitWidth()==4);
+        current->offerInstanceBodies(current);
+        ++step;
+    }
+    CHECK(cache->status().budgetUnlimited);
+    CHECK(cache->status().capacitySkips==0);
+}
+
+TEST_CASE("Deferred instance names cannot hide other lookups from repeated macro arguments",
+          "[scope-semantic][scope-deferred-instance-namespace]") {
+    const bool eagerUse=GENERATE(false,true);
+    LibraryWorkspace files;
+    files.write(files.root/"native.sv","task bad_helper(); endtask\n"
+                "task bad_caller(); bad_helper(1); endtask\n");
+    files.write(files.root/"types.sv","package stable_types; endpackage\n");
+    files.write(files.root/"fixed.sv",std::string(
+        "`define BOTH(N) if(USE) begin: vendor_branch N child(); end ") +
+        (eagerUse ? "class Deferred #(type T); static function int value(); return N.VALUE; endfunction endclass" : "") +
+        "\nmodule parent #(parameter bit USE=0); `BOTH(missing_vendor) endmodule\n");
+    files.write(files.root/"consumer.sv","module top; parent u(); endmodule\n");
+    files.write(files.root/"design.f","native.sv\ntypes.sv\nfixed.sv\nconsumer.sv\n");
+    Config config;
+    config.experimentalScopeSemanticCache=true;
+    config.semanticCacheUnlimited=true;
+    config.flagsByFile=std::vector<Config::FlagSource>{
+        {(files.root/"server.json").string(),"--single-unit --threads 1 --top top"}};
+    config.frozenSources=Config::FrozenSourcesConfig{
+        .packages=std::vector<std::string>{"stable_types"},
+        .modules=std::vector<std::string>{"parent"}};
+    Indexer indexer;
+    ClientHarness client;
+    auto driver=server::ServerDriver::createFromFileLists(indexer,client,config,{"design.f"},
+                                                        files.root.string(),nullptr,true);
+    REQUIRE(driver);
+    auto setting=driver->options.get<server::TrustedUvmImport>();
+    REQUIRE(setting);
+    auto library=setting->library;
+    CHECK(std::ranges::binary_search(library->deferredDefinitionNames,"missing_vendor")==!eagerUse);
+    const auto tree=syntax::SyntaxTree::fromText(
+        "module missing_vendor; localparam int VALUE=7; endmodule\n",driver->sm);
+    const std::shared_ptr<syntax::SyntaxTree> current[]={tree};
+    std::string_view refusal;
+    CHECK(server::trustedLibraryNamespaceMatches(*library,driver->sm,current,&refusal)==!eagerUse);
+    if (eagerUse) CHECK(refusal=="unclosed-global-name");
+}
+
+TEST_CASE("Fixed RTL closes included compilation-unit class and enum type providers",
+          "[scope-semantic][scope-unit-type-providers]") {
+    LibraryWorkspace files;
+    files.write(files.root/"native.sv","task bad_helper(); endtask\n"
+                "task bad_caller(); bad_helper(1); endtask\n");
+    files.write(files.root/"types.sv","package stable_types; endpackage\n");
+    files.write(files.root/"types.svh",R"(
+function automatic logic[63:0] keep(input logic[63:0] value); return value; endfunction
+typedef enum logic[1:0] {Idle,Busy} state_t;
+class Trace #(type T=logic);
+  T data;
+  function new(T x); data=x; endfunction
+  function T get(); return T'(keep(data)); endfunction
+endclass
+)");
+    files.write(files.root/"fixed.sv",R"(
+`include "types.svh"
+module parent #(parameter int W=4)(input logic[W-1:0] x,output logic[W-1:0] y);
+  Trace#(logic[W-1:0]) handle;
+  state_t state=Idle;
+  initial begin handle=new(x); y=handle.get(); end
+endmodule
+)");
+    auto source=[](int width) {
+        return fmt::format("module top; logic[{}:0] x,y; parent #(.W({})) u(.*); endmodule\n",
+                           width-1,width);
+    };
+    files.write(files.root/"consumer.sv",source(4));
+    files.write(files.root/"design.f","native.sv\ntypes.sv\nfixed.sv\nconsumer.sv\n");
+    Config config;
+    config.experimentalScopeSemanticCache=true;
+    config.semanticCacheUnlimited=true;
+    config.flagsByFile=std::vector<Config::FlagSource>{
+        {(files.root/"server.json").string(),"--single-unit --threads 1 --top top"}};
+    config.frozenSources=Config::FrozenSourcesConfig{
+        .packages=std::vector<std::string>{"stable_types"},
+        .modules=std::vector<std::string>{"parent"}};
+    Indexer indexer;
+    ClientHarness client;
+    auto driver=server::ServerDriver::createFromFileLists(indexer,client,config,{"design.f"},
+                                                        files.root.string(),nullptr,true);
+    REQUIRE(driver);
+    auto setting=driver->options.get<server::TrustedUvmImport>();
+    REQUIRE(setting);
+    INFO(rfl::json::write(driver->scopeLibraryStatus()));
+    auto library=setting->library;
+    REQUIRE(std::ranges::find(library->definitions,"parent")!=library->definitions.end());
+    REQUIRE(library->hasUnitDeclarations);
+    CHECK_FALSE(library->files.contains((files.root/"native.sv").generic_string()));
+    auto cache=std::make_shared<server::ScopeBodyCache>(library,std::numeric_limits<size_t>::max(),
+        std::vector<std::string>{},std::vector<std::string>{"top.u"});
+    auto make=[&](int width,bool native) {
+        auto options=driver->options;
+        options.set(server::ScopeBodyImport{cache});
+        auto result=std::make_shared<ast::Compilation>(options);
+        if (native) {
+            for (auto name:{"types.sv","fixed.sv"}) {
+                auto tree=syntax::SyntaxTree::fromFile((files.root/name).string(),driver->sm,options);
+                REQUIRE(tree);
+                result->addSyntaxTree(*tree);
+            }
+        }
+        else REQUIRE(server::importTrustedUvm(*result,driver->sm,options));
+        result->addSyntaxTree(syntax::SyntaxTree::fromText(source(width),driver->sm,"frame.sv","",options));
+        return result;
+    };
+    int step=0;
+    for (int width:{4,4,8,8,4}) {
+        CAPTURE(width,step);
+        auto current=make(width,false),native=make(width,true);
+        CHECK(DiagnosticEngine::reportAll(driver->sm,current->getSemanticDiagnostics())==
+              DiagnosticEngine::reportAll(driver->sm,native->getSemanticDiagnostics()));
+        analysis::AnalysisOptions analysisOptions{.flags=analysis::AnalysisFlags::CheckUnused |
+                                                       analysis::AnalysisFlags::CheckShadow};
+        analysis::AnalysisManager actualFlow(analysisOptions),expectedFlow(analysisOptions);
+        current->freeze(); actualFlow.analyze(*current); current->unfreeze();
+        native->freeze(); expectedFlow.analyze(*native); native->unfreeze();
+        CHECK(DiagnosticEngine::reportAll(driver->sm,actualFlow.getDiagnostics())==
+              DiagnosticEngine::reportAll(driver->sm,expectedFlow.getDiagnostics()));
+        const auto& body=current->getRoot().topInstances.front()->body.find("u")
+            ->as<ast::InstanceSymbol>().body;
+        CHECK(current->isImportedInstanceBody(body)==(step==1 || step==3 || step==4));
+        const auto& type=body.find("handle")->as<ast::ValueSymbol>().getType().getCanonicalType();
+        CHECK(type.as<ast::ClassType>().find("data")->as<ast::ValueSymbol>().getType().getBitWidth()==unsigned(width));
+        current->offerInstanceBodies(current);
+        ++step;
+    }
+}
+
+TEST_CASE("Fixed CU providers preserve before-use diagnostics and compilation-unit isolation",
+          "[scope-semantic][scope-unit-provider-order]") {
+    const bool separateUnits=GENERATE(false,true);
+    const bool before=GENERATE(false,true);
+    CAPTURE(separateUnits,before);
+    LibraryWorkspace files;
+    files.write(files.root/"native.sv","task bad_helper(); endtask\n"
+                "task bad_caller(); bad_helper(1); endtask\n");
+    files.write(files.root/"types.sv","package stable_types; endpackage\n");
+    files.write(files.root/"fixed.sv","typedef enum logic[1:0] {Idle,Busy} state_t;\n"
+                "class Trace; int value; endclass\nmodule parent; endmodule\n");
+    files.write(files.root/"consumer.sv","Trace handle; state_t state=Idle;\n"
+                "module top; parent u(); endmodule\n");
+    const std::vector<std::string> order=before
+        ? std::vector<std::string>{"native.sv","types.sv","consumer.sv","fixed.sv"}
+        : std::vector<std::string>{"native.sv","types.sv","fixed.sv","consumer.sv"};
+    std::string list;
+    for (const auto& name:order) list+=name+"\n";
+    files.write(files.root/"design.f",list);
+    Config config;
+    config.experimentalScopeSemanticCache=true;
+    config.semanticCacheUnlimited=true;
+    config.flagsByFile=std::vector<Config::FlagSource>{{(files.root/"server.json").string(),
+        separateUnits ? "--threads 1 --top top" : "--single-unit --threads 1 --top top"}};
+    config.frozenSources=Config::FrozenSourcesConfig{
+        .packages=std::vector<std::string>{"stable_types"},
+        .modules=std::vector<std::string>{"parent"}};
+    Indexer indexer;
+    ClientHarness client;
+    auto driver=server::ServerDriver::createFromFileLists(indexer,client,config,{"design.f"},
+                                                        files.root.string(),nullptr,true);
+    REQUIRE(driver);
+    auto setting=driver->options.get<server::TrustedUvmImport>();
+    REQUIRE(setting);
+    auto library=setting->library;
+    CHECK(library->hasUnitDeclarations==!separateUnits);
+    const auto actual=DiagnosticEngine::reportAll(driver->sm,
+        driver->comp->getInstancesOfModule("top").front()->body.getCompilation().getSemanticDiagnostics());
+    auto nativeConfig=config;
+    nativeConfig.experimentalScopeSemanticCache=false;
+    Indexer nativeIndexer;
+    ClientHarness nativeClient;
+    auto native=server::ServerDriver::createFromFileLists(nativeIndexer,nativeClient,nativeConfig,
+        {"design.f"},files.root.string(),nullptr,true);
+    REQUIRE(native);
+    const auto expected=DiagnosticEngine::reportAll(native->sm,
+        native->comp->getInstancesOfModule("top").front()->body.getCompilation().getSemanticDiagnostics());
+    INFO(expected);
+    CHECK(actual==expected);
+    CHECK((expected.find("Trace")!=std::string::npos)==(before || separateUnits));
+    if (!separateUnits) {
+        // Exercise the native importer's positional path directly; server
+        // namespace rejection alone must not conceal a broken SDK import.
+        std::vector<SourceBuffer> buffers;
+        for (const auto& name:order) {
+            auto loaded=driver->sm.readSource(files.root/name);
+            REQUIRE(loaded);
+            buffers.push_back(*loaded);
+        }
+        auto tree=syntax::SyntaxTree::fromBuffers(buffers,driver->sm,driver->options);
+        auto current=std::make_shared<ast::Compilation>(driver->options);
+        REQUIRE(server::importTrustedUvm(*current,driver->sm,driver->options));
+        current->addSyntaxTree(tree,true);
+        CHECK(DiagnosticEngine::reportAll(driver->sm,current->getSemanticDiagnostics())==expected);
+    }
+}
+
+TEST_CASE("Selective CU providers keep forward pairs extern methods and outside helpers native",
+          "[scope-semantic][scope-unit-provider-boundaries]") {
+    const std::string mode=GENERATE("closed","forward","extern","outside-helper");
+    CAPTURE(mode);
+    LibraryWorkspace files;
+    files.write(files.root/"native.sv","task bad_helper(); endtask\n"
+                "task bad_caller(); bad_helper(1); endtask\n");
+    files.write(files.root/"types.sv","package stable_types; endpackage\n");
+    files.write(files.root/"helper.sv",mode=="outside-helper"
+        ? "function int helper(); return 3; endfunction\n" : "\n");
+    std::string fixed=mode=="forward" ? "typedef class Trace;\n" : "";
+    if (mode=="closed") fixed+="function int helper(); return 3; endfunction\n";
+    fixed+="class Trace; ";
+    if (mode=="extern") fixed+="extern function int get(); endclass\nfunction int Trace::get(); return 3; endfunction\n";
+    else fixed+="function int get(); return "+std::string(mode=="forward" ? "3" : "helper()")+"; endfunction endclass\n";
+    fixed+="module leaf; endmodule\nmodule parent; Trace handle; leaf child(); endmodule\n";
+    files.write(files.root/"fixed.sv",fixed);
+    files.write(files.root/"consumer.sv","module top; parent u(); endmodule\n");
+    files.write(files.root/"design.f","native.sv\ntypes.sv\nhelper.sv\nfixed.sv\nconsumer.sv\n");
+    std::string expected;
+    for (bool enabled:{false,true}) {
+        Config config;
+        config.experimentalScopeSemanticCache=enabled;
+        config.semanticCacheUnlimited=true;
+        config.flagsByFile=std::vector<Config::FlagSource>{
+            {(files.root/"server.json").string(),"--single-unit --threads 1 --top top"}};
+        config.frozenSources=Config::FrozenSourcesConfig{
+            .packages=std::vector<std::string>{"stable_types"},
+            .modules=std::vector<std::string>{"parent"}};
+        Indexer indexer;
+        ClientHarness client;
+        auto driver=server::ServerDriver::createFromFileLists(indexer,client,config,{"design.f"},
+                                                            files.root.string(),nullptr,true);
+        REQUIRE(driver);
+        if (enabled) {
+            const auto setting=driver->options.get<server::TrustedUvmImport>();
+            REQUIRE(setting);
+            const auto library=setting->library;
+            INFO(rfl::json::write(driver->scopeLibraryStatus()));
+            CHECK((std::ranges::find(library->definitions,"parent")!=library->definitions.end())==(mode=="closed"));
+            CHECK(std::ranges::find(library->definitions,"leaf")!=library->definitions.end());
+            CHECK_FALSE(library->files.contains((files.root/"helper.sv").generic_string()));
+            if (mode!="closed") {
+                const auto category=mode=="forward" ? "forward-unit-type-context" :
+                    mode=="extern" ? "external-unit-method-context" : "unit-provider-root-context";
+                CHECK(std::ranges::any_of(library->preparationReport->refusals,[&](const auto& row) {
+                    return row.category==category;
+                }));
+            }
+        }
+        const auto& body=driver->comp->getInstancesOfModule("top").front()->body;
+        const auto diagnostics=DiagnosticEngine::reportAll(driver->sm,body.getCompilation().getSemanticDiagnostics());
+        if (enabled) CHECK(diagnostics==expected);
+        else expected=diagnostics;
+    }
+}
+
+
+TEST_CASE("Fixed declaration witnesses tolerate relocated external parser-state directives",
+          "[scope-semantic][scope-relocated-directive]") {
+    const std::string directive = GENERATE(std::string("`resetall\n"),
+        std::string("`default_nettype wire\n"), std::string("`timescale 1ns/1ps\n"),
+        std::string("`unconnected_drive pull0\n"), std::string("`nounconnected_drive\n"),
+        std::string("`celldefine\n"), std::string("`endcelldefine\n"),
+        std::string("`define UNUSED 1\n"), std::string("`line 100 \"logical.sv\" 0\n"));
+    CAPTURE(directive);
+    const bool allowRelocation = !directive.starts_with("`define") &&
+                                 !directive.starts_with("`line");
+    LibraryWorkspace files;
+    const std::string original = "module editable; function automatic int f(input int x); "
+        "return x+1; endfunction endmodule\n" + directive;
+    files.write(files.root/"editable.sv",original);
+    files.write(files.root/"fixed.sv",
+        "module stable(output wire y); assign y=1'b1; endmodule\n");
+    files.write(files.root/"consumer.sv","module top; wire y; stable dut(.*); endmodule\n");
+    files.write(files.root/"design.f","editable.sv\nfixed.sv\nconsumer.sv\n");
+    struct Harness:ServerHarness {
+        using server::SlangServer::m_driver;
+        using ServerHarness::ServerHarness;
+    };
+    std::vector<std::string> expected;
+    for (bool enabled:{false,true}) {
+        Config config;
+        config.build="design.f";
+        config.flags="--single-unit --threads 1 --top top";
+        config.experimentalScopeSemanticCache=enabled;
+        config.semanticCacheUnlimited=true;
+        config.frozenSources=Config::FrozenSourcesConfig{.modules=std::vector<std::string>{"stable"}};
+        files.write(files.root/".slang/server.json",rfl::json::write(config));
+        Harness server(lsp::InitializeParams{.capabilities={},.workspaceFolders={{lsp::WorkspaceFolder{
+            .uri=URI::fromFile(files.root),.name="external-directive-relocation"}}}});
+        auto doc=server.openFile("editable.sv");
+        for (int edit=0;edit<4;++edit) {
+            auto text=original;
+            if (edit) text.insert(text.find("return"),edit,'\n');
+            if (edit==3) {
+                // Changed external directive text still rejects the old witness.
+                auto at=text.rfind(directive);
+                text.replace(at,directive.size(),directive=="`resetall\n"
+                    ? "`default_nettype none\n" : "`resetall\n");
+            }
+            doc.replaceAll(text);doc.publishChanges();
+            const auto& instances=server.m_driver->comp->getInstancesOfModule("stable");
+            REQUIRE(instances.size()==1);
+            auto& compilation=instances.front()->body.getCompilation();
+            CHECK(compilation.isImportedInstanceBody(instances.front()->body)==(enabled && (edit==0 || (edit!=3 && allowRelocation))));
+            auto diagnostics=DiagnosticEngine::reportAll(server.m_driver->sm,
+                compilation.getSemanticDiagnostics());
+            analysis::AnalysisOptions flowOptions{.flags=analysis::AnalysisFlags::CheckUnused};
+            analysis::AnalysisManager manager(flowOptions);
+            compilation.freeze();manager.analyze(compilation);compilation.unfreeze();
+            diagnostics+=DiagnosticEngine::reportAll(server.m_driver->sm,manager.getDiagnostics());
+            if (enabled) CHECK(diagnostics==expected.at(edit));
+            else expected.push_back(diagnostics);
+        }
+    }
+}
+
+
+
+TEST_CASE("Stable included providers do not freeze separate editable include siblings",
+          "[scope-semantic][scope-include-file-footprint]") {
+    const std::string mode=GENERATE(std::string("plain"),std::string("macro"),
+                                    std::string("type"),std::string("wrapper-macro"),std::string("mixed-file"));
+    const bool selectInstance=GENERATE(false,true);
+    CAPTURE(mode,selectInstance);
+    LibraryWorkspace files;
+    const bool wrapperMacro=mode=="wrapper-macro";
+    const bool macro=mode=="macro" || wrapperMacro,typed=mode=="type",mixed=mode=="mixed-file";
+    const std::string editable="class editable; function int f(input int x); "
+        "return x+1; endfunction endclass\n";
+    const std::string fixed="module stable(output "+std::string(typed ? "stable_types::bit_t" : "wire")+
+        " y); assign y="+(macro ? "`FIXED_VALUE" : "1'b1")+"; endmodule\n";
+    const std::string original=mixed ? fixed+"package env_pkg; "+editable+"endpackage\n" : editable;
+    const auto target=mixed ? "fixed.sv" : "editable.svh";
+    files.write(files.root/"fixed.sv",mixed ? original : fixed);
+    if (!mixed) files.write(files.root/target,original);
+    files.write(files.root/"controls.svh","`define FIXED_VALUE 1'b1\n");
+    files.write(files.root/"types.svh","package stable_types; typedef logic bit_t; endpackage\n");
+    const std::string rootText=std::string(wrapperMacro ? "`define FIXED_VALUE 1'b1\n" :
+        macro ? "`include \"controls.svh\"\n" : "")+
+        (typed ? "`include \"types.svh\"\n" : "")+"`include \"fixed.sv\"\n"+
+        (mixed ? "" : "package env_pkg;\n`include \"editable.svh\"\nendpackage\n")+
+        "module top; wire y; stable dut(.*); endmodule\n";
+    files.write(files.root/"root.sv",rootText);
+    files.write(files.root/"design.f","root.sv\n");
+    struct Harness:ServerHarness {
+        using server::SlangServer::m_driver;
+        using ServerHarness::ServerHarness;
+    };
+    std::vector<std::string> expected;
+    for (bool enabled:{false,true}) {
+        Config config;
+        config.build="design.f";
+        config.flags="--single-unit --threads 1 --top top";
+        config.experimentalScopeSemanticCache=enabled;
+        config.semanticCacheUnlimited=true;
+        config.frozenSources=selectInstance
+            ? Config::FrozenSourcesConfig{.instances=std::vector<std::string>{"top.dut"}}
+            : Config::FrozenSourcesConfig{.modules=std::vector<std::string>{"stable"}};
+        files.write(files.root/".slang/server.json",rfl::json::write(config));
+        Harness server(lsp::InitializeParams{.capabilities={},.workspaceFolders={{lsp::WorkspaceFolder{
+            .uri=URI::fromFile(files.root),.name="include-file-footprint"}}}});
+        auto doc=server.openFile(target);
+        if (enabled) {
+            auto setting=server.m_driver->options.get<server::TrustedUvmImport>();
+            REQUIRE(setting);
+            auto library=setting->library;
+            CHECK(library->files.contains((files.root/"fixed.sv").generic_string()));
+            CHECK(library->files.contains((files.root/target).generic_string())==mixed);
+            if (macro) CHECK(library->files.contains((files.root/
+                (wrapperMacro ? "root.sv" : "controls.svh")).generic_string()));
+            if (typed) CHECK(library->files.contains((files.root/"types.svh").generic_string()));
+        }
+        for (int edit=1;edit<=2;++edit) {
+            auto text=original;
+            text.replace(text.find("x+1"),3,edit==1 ? "x+2" : "x+missing_user");
+            doc.replaceAll(text);
+            bool updated=true;
+            try {doc.publishChanges();}
+            catch (const lsp::RequestFailed& error) {INFO(error.what());updated=false;}
+            CHECK(updated==!(enabled && mixed));
+            if (!updated) continue;
+            const auto& instances=server.m_driver->comp->getInstancesOfModule("stable");
+            REQUIRE(instances.size()==1);
+            auto& compilation=instances.front()->body.getCompilation();
+            CHECK(compilation.isImportedInstanceBody(instances.front()->body)==enabled);
+            auto diagnostics=DiagnosticEngine::reportAll(server.m_driver->sm,
+                compilation.getSemanticDiagnostics());
+            CHECK((diagnostics.find("missing_user")!=std::string::npos)==(edit==2));
+            analysis::AnalysisOptions flowOptions{.flags=analysis::AnalysisFlags::CheckUnused};
+            analysis::AnalysisManager manager(flowOptions);
+            compilation.freeze();manager.analyze(compilation);compilation.unfreeze();
+            diagnostics+=DiagnosticEngine::reportAll(server.m_driver->sm,manager.getDiagnostics());
+            if (enabled) CHECK(diagnostics==expected.at(edit-1));
+            else expected.push_back(diagnostics);
+        }
+        if (enabled && !mixed && (macro || typed)) {
+            auto dependency=server.openFile(wrapperMacro ? "root.sv" : macro ? "controls.svh" : "types.svh");
+            auto changedDependency=wrapperMacro ? rootText : macro ? "`define FIXED_VALUE 1'b0\n" :
+                "package stable_types; typedef logic [1:0] bit_t; endpackage\n";
+            if (wrapperMacro) changedDependency.replace(changedDependency.find("1'b1"),4,"1'b0");
+            dependency.replaceAll(changedDependency);
+            CHECK_THROWS_AS(dependency.publishChanges(),lsp::RequestFailed);
+        }
+    }
+}
+
+
+TEST_CASE("Shared macro files preserve independent compilation-unit provider identities",
+          "[scope-semantic][scope-shared-macro-units]") {
+    const bool nominal=GENERATE(false,true);
+    CAPTURE(nominal);
+    LibraryWorkspace files;
+    files.write(files.root/"shared.svh",std::string("`define VALUE 1'b1\n")+
+        (nominal ? "typedef enum logic {OFF,ON} shared_t;\n" : ""));
+    for (const auto& name:{"a","b"})
+        files.write(files.root/(std::string(name)+".sv"),
+            "`include \"shared.svh\"\nmodule stable_"+std::string(name)+"(output "+
+            (nominal ? "shared_t" : "wire")+" y); assign y="+
+            (nominal ? "shared_t'(`VALUE)" : "`VALUE")+"; endmodule\n");
+    const std::string source="module top; wire a,b; stable_a u1(a); stable_b u2(b); "
+        "function int f(input int x); return x+1; endfunction endmodule\n";
+    files.write(files.root/"consumer.sv",source);
+    files.write(files.root/"design.f","a.sv\nb.sv\nconsumer.sv\n");
+    struct Harness:ServerHarness {
+        using server::SlangServer::m_driver;
+        using ServerHarness::ServerHarness;
+    };
+    std::vector<std::string> expected;
+    for (bool enabled:{false,true}) {
+        Config config;
+        config.build="design.f";
+        config.flags="--threads 1 --top top";
+        config.experimentalScopeSemanticCache=enabled;
+        config.semanticCacheUnlimited=true;
+        config.frozenSources=Config::FrozenSourcesConfig{
+            .modules=std::vector<std::string>{"stable_a","stable_b"}};
+        files.write(files.root/".slang/server.json",rfl::json::write(config));
+        Harness server(lsp::InitializeParams{.capabilities={},.workspaceFolders={{lsp::WorkspaceFolder{
+            .uri=URI::fromFile(files.root),.name="shared-macro-units"}}}});
+        auto doc=server.openFile("consumer.sv");
+        for (int edit=1;edit<=2;++edit) {
+            auto text=source;text.replace(text.find("x+1"),3,edit==1 ? "x+2" : "x+missing_user");
+            doc.replaceAll(text);doc.publishChanges();
+            std::string diagnostics;
+            for (const auto& name:{"stable_a","stable_b"}) {
+                const auto& instances=server.m_driver->comp->getInstancesOfModule(name);
+                REQUIRE(instances.size()==1);
+                auto& compilation=instances.front()->body.getCompilation();
+                CHECK(compilation.isImportedInstanceBody(instances.front()->body)==(enabled && !nominal));
+                diagnostics=DiagnosticEngine::reportAll(server.m_driver->sm,
+                    compilation.getSemanticDiagnostics());
+            }
+            CHECK((diagnostics.find("missing_user")!=std::string::npos)==(edit==2));
+            if (enabled) CHECK(diagnostics==expected.at(edit-1));
+            else expected.push_back(diagnostics);
+        }
+        if (enabled && !nominal) {
+            auto setting=server.m_driver->options.get<server::TrustedUvmImport>();
+            REQUIRE(setting);
+            CHECK(setting->library->files.contains((files.root/"shared.svh").generic_string()));
+            auto macro=server.openFile("shared.svh");
+            macro.replaceAll("`define VALUE 1'b0\n");
+            CHECK_THROWS_AS(macro.publishChanges(),lsp::RequestFailed);
+        }
+    }
+}
+
+TEST_CASE("Namespace witnesses reuse exact live inputs and release retired source owners",
+          "[scope-semantic][scope-namespace-witness-lifetime]") {
+    const std::string fixed = "module leaf; localparam int P=4; endmodule\n";
+    const auto path = (fs::temp_directory_path()/"namespace-witness-leaf.sv").string();
+    auto provider = std::make_shared<SourceManager>();
+    auto providerTree = syntax::SyntaxTree::fromBuffer(provider->assignText(path, fixed), *provider);
+    auto library = std::make_shared<server::TrustedUvmLibrary>();
+    library->packages.clear();
+    library->definitions = {"leaf"};
+    library->projectedDefinitions = true;
+    library->compilation = std::make_shared<ast::Compilation>();
+    library->compilation->retainSourceOwner(provider);
+    library->compilation->addSyntaxTree(providerTree);
+    REQUIRE(library->compilation->tryGetDefinition("leaf", library->compilation->getRoot()).definition);
+
+    auto sources = std::make_shared<SourceManager>();
+    auto tree = syntax::SyntaxTree::fromBuffer(sources->assignText(path, fixed), *sources);
+    server::TrustedUvmImport setting{library, sources};
+    auto check = [&](const std::shared_ptr<syntax::SyntaxTree>& input, bool expected,
+                     std::string_view reason = {}) {
+        const std::shared_ptr<syntax::SyntaxTree> trees[] = {input};
+        std::string_view refusal;
+        CHECK(server::cachedTrustedLibraryNamespaceMatches(setting, *sources, trees, &refusal) ==
+              expected);
+        CHECK(refusal == reason);
+    };
+    check(tree, true);
+    const auto builds = library->namespaceWitnessBuilds.load();
+    const auto hits = library->namespaceWitnessHits.load();
+    check(tree, true);
+    CHECK(library->namespaceWitnessBuilds.load() == builds);
+    CHECK(library->namespaceWitnessHits.load() == hits + 1);
+    // Reusing the same pathname and source owner does not authenticate new
+    // syntax, shifted locations, or an absent declaration.
+    for (auto text : {std::string("module leaf; localparam int P=8; endmodule\n"),
+                      " " + fixed, std::string("// no definition\n")}) {
+        auto changed = syntax::SyntaxTree::fromBuffer(sources->assignQueryText(path, text), *sources);
+        const auto reason = text.starts_with("//") ? "missing-current-definition" : "projected-syntax";
+        check(changed, false, reason);
+        const auto count = library->namespaceWitnessBuilds.load();
+        check(changed, false, reason);
+        CHECK(library->namespaceWitnessBuilds.load() == count);
+    }
+    // No owning source lease means no reusable proof, even with the same tree.
+    setting.sourceOwner.reset();
+    const auto cachedHits = library->namespaceWitnessHits.load();
+    check(tree, true);
+    CHECK(library->namespaceWitnessHits.load() == cachedHits);
+    setting.sourceOwner = sources;
+    std::weak_ptr<SourceManager> weakSources = sources;
+    std::weak_ptr<syntax::SyntaxTree> weakTree = tree;
+    tree.reset();
+    sources.reset();
+    CHECK(weakSources.expired());
+    CHECK(weakTree.expired());
+
+    // Several simultaneously live views cannot make bookkeeping grow without
+    // bound. These are weak proof records, independent of semantic retention.
+    std::vector<std::shared_ptr<SourceManager>> owners;
+    std::vector<std::shared_ptr<syntax::SyntaxTree>> views;
+    for (int i = 0; i < 12; ++i) {
+        sources = std::make_shared<SourceManager>();
+        tree = syntax::SyntaxTree::fromBuffer(sources->assignText(path, fixed), *sources);
+        setting.sourceOwner = sources;
+        check(tree, true);
+        owners.push_back(sources);
+        views.push_back(tree);
+        CHECK(library->namespaceWitnesses.size() <= 8);
+    }
 }

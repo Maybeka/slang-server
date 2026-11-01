@@ -614,6 +614,20 @@ std::shared_ptr<ShallowAnalysis> SlangDoc::getAnalysis(const lsp::RequestContext
         m_analysisContextRevision != m_driver.getExplicitContextRevision(m_uri)) {
         refreshAnalysis(ctx);
     }
+    else if (auto fixed = m_driver.trustedLibrarySourceContext(m_uri)) {
+        // Construction selects the certified provider's projected source tree.
+        // Validating it against the native include tree would rebuild the same
+        // view on every query (and on every reference within a single request).
+        // Resolve prior context errors and retain the same namespace / overlay
+        // checks as getAnalysisInputs before accepting this immutable owner.
+        if (m_driver.hasExplicitContextError(m_uri)) {
+            (void)m_driver.getIncludeContext(m_uri, nullptr, ctx);
+            m_driver.requireExplicitContext(m_uri);
+        }
+        if (m_analysis->getSyntaxTree() != fixed->tree ||
+            m_analysis->getBuffer() != fixed->buffer)
+            refreshAnalysis(ctx);
+    }
     else {
         ctx.checkpoint("before cached owner resolution");
         auto previousAnalysis = m_analysis;

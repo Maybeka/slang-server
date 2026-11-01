@@ -68,16 +68,20 @@ auto completionSourceRoot(const ast::Symbol& symbol) {
     return sources->getFullPath(location.buffer());
 }
 
-bool sourceImportVisible(const ast::Symbol& import, const ast::Symbol& boundary) {
-    if (import.isDeclaredBefore(boundary) == false)
-        return false;
+bool sourceMemberVisible(const ast::Symbol& member, const ast::Symbol& boundary) {
     const auto body = boundary.as_if<ast::InstanceBodySymbol>();
     const auto definitionScope = body ? body->getDefinition().getParentScope() : nullptr;
     if (!definitionScope || &body->getCompilation() == &definitionScope->getCompilation())
         return true; // Preserve the ordinary native compilation-unit view.
-    const auto source = completionSourceRoot(import);
+    const auto source = completionSourceRoot(member);
     const auto target = completionSourceRoot(boundary);
     return source.empty() || target.empty() || source == target;
+}
+
+bool sourceImportVisible(const ast::Symbol& import, const ast::Symbol& boundary) {
+    // The ordering query returns optional<bool>; a known false result must
+    // reject, while incomparable retained scopes retain the source-root check.
+    return import.isDeclaredBefore(boundary) != false && sourceMemberVisible(import, boundary);
 }
 
 const ast::Symbol& unwrapCompletionMember(const ast::Symbol& symbol) {
@@ -98,7 +102,10 @@ std::string getCompletionTypeString(const ast::Symbol& symbol, const ast::Type& 
                 return std::move(*result);
         }
     }
-    return type.toString();
+    ast::TypePrinter printer;
+    printer.options.anonymousTypeStyle = ast::TypePrintingOptions::FriendlyName;
+    printer.append(type);
+    return printer.toString();
 }
 
 const ast::Type* getResolvedTypeParameter(const ast::Symbol& symbol) {
@@ -118,6 +125,7 @@ std::string getTypeDetail(const ast::Type& type) {
     ast::TypePrinter printer;
     printer.options.elideScopeNames = true;
     printer.options.skipTypeDefs = true;
+    printer.options.anonymousTypeStyle = ast::TypePrintingOptions::FriendlyName;
     printer.append(type);
     return printer.toString();
 }
@@ -132,7 +140,7 @@ public:
     template<typename T>
         requires std::is_base_of_v<ast::Symbol, T>
     void handle(const T& symbol) {
-        ctx.throwIfCancelled("while locating completion symbol");
+        ctx.checkpoint("while locating completion symbol");
         if (!inspect(symbol))
             return;
         if constexpr (std::is_base_of_v<ast::ValueSymbol, T>) {
@@ -427,6 +435,7 @@ lsp::CompletionItemKind MemberCompletionQuery::getCompletionKind(const slang::as
             return lsp::CompletionItemKind::Interface;
         case slang::ast::SymbolKind::Instance:
         case slang::ast::SymbolKind::InstanceArray:
+        case slang::ast::SymbolKind::UninstantiatedDef:
             return lsp::CompletionItemKind::Class;
         case slang::ast::SymbolKind::EnumValue:
             return lsp::CompletionItemKind::EnumMember;
@@ -509,6 +518,12 @@ std::string getMemberCompletionDetail(const slang::ast::Symbol& symbol) {
     else if (slang::ast::InstanceSymbol::isKind(symbol.kind)) {
         auto& defName = symbol.as<slang::ast::InstanceSymbol>().getDefinition().name;
         detailStr = std::string{defName};
+    }
+    else if (auto instance = symbol.as_if<ast::UninstantiatedDefSymbol>()) {
+        // A source-only completion context can retain an instance declaration
+        // before its provider is available. Its syntactic provider name and
+        // instance category remain known without elaborating that provider.
+        detailStr = std::string{instance->definitionName};
     }
     else if (slang::ast::InstanceArraySymbol::isKind(symbol.kind)) {
         detailStr = getInstanceArrayCompletionDetail(symbol.as<ast::InstanceArraySymbol>());
@@ -654,7 +669,14 @@ lsp::CompletionItem MemberCompletionQuery::getCompletion(const slang::ast::Symbo
     // Check if symbol is from a different scope and add lexical path
     std::optional<std::string> descriptionStr;
     auto parentScope = symbol.getParentScope();
-    if (parentScope && (!currentScope || parentScope != currentScope)) {
+    bool sameScope = parentScope == currentScope;
+    if (!sameScope && parentScope && currentScope) {
+        const auto parent = parentScope->asSymbol().as_if<ast::InstanceBodySymbol>();
+        const auto current = currentScope->asSymbol().as_if<ast::InstanceBodySymbol>();
+        if (parent && current)
+            sameScope = &currentScope->getCompilation().getCurrentInstanceBody(*parent) == current;
+    }
+    if (parentScope && !sameScope) {
         auto hierPath = parentScope->asSymbol().getLexicalPath();
         if (!hierPath.empty()) {
             descriptionStr = hierPath;
@@ -794,6 +816,12 @@ void MemberCompletionQuery::addCompletions(std::vector<lsp::CompletionItem>& res
             if (member.name.empty() || member.kind == slang::ast::SymbolKind::Package) {
                 continue;
             }
+            if (prevSym && currentScope->asSymbol().kind == ast::SymbolKind::CompilationUnit &&
+                !sourceMemberVisible(member, *prevSym))
+                continue;
+            if (currentScope->asSymbol().kind == ast::SymbolKind::InstanceBody &&
+                !sourceMemberVisible(member, currentScope->asSymbol()))
+                continue;
             if (prevSym && currentScope->asSymbol().kind == ast::SymbolKind::CompilationUnit &&
                 member.kind == ast::SymbolKind::ExplicitImport &&
                 !sourceImportVisible(member, *prevSym))
@@ -978,6 +1006,50 @@ void MemberCompletionQuery::resolve(CompletionDispatch& dispatch, lsp::Completio
                           symbol->kind == ast::SymbolKind::Subroutine)))
             return;
     }
+    const ast::Symbol* logical = nullptr;
+    bool lookedUpPath = false;
+    auto lookupPath = [&]() -> const ast::Symbol* {
+        if (!lookedUpPath) {
+            lookedUpPath = true;
+            ctx.throwIfCancelled("before completion symbol lookup");
+            try {
+                logical = root.lookupName(data->symbolPath, ast::LookupLocation::max,
+                                          ast::LookupFlags::AllowUnnamedGenerate);
+            }
+            catch (const std::exception& e) {
+                WARN("Invalid symbol path for completion {}: {}", item.label, e.what());
+            }
+        }
+        return logical;
+    };
+    if (!symbol && data->bufferId) {
+        // A completion already carries its exact current-graph address. Most
+        // names resolve directly; validate every physical/semantic coordinate
+        // before using it instead of scanning unrelated retained design trees.
+        auto candidate = lookupPath();
+        if (candidate) {
+            candidate = &unwrapCompletionMember(*candidate);
+            // Hierarchical lookup exposes a port's internal net/variable. The
+            // completion selected the port declaration, including its direction.
+            if (candidate->kind != data->symbolKind)
+                if (auto parent = candidate->getParentScope())
+                    if (auto body = parent->asSymbol().as_if<ast::InstanceBodySymbol>())
+                        for (auto port : body->getPortList())
+                            if (port->kind == data->symbolKind && port->name == data->symbolName) {
+                                candidate = port;
+                                break;
+                            }
+            if (data->symbolKind == ast::SymbolKind::MethodPrototype)
+                if (auto method = candidate->as_if<ast::SubroutineSymbol>())
+                    if (auto prototype = method->getPrototype())
+                        candidate = prototype;
+            if (candidate->location == SourceLocation(
+                    BufferID(data->bufferId, "completion item resolve"), data->offset) &&
+                candidate->kind == data->symbolKind && candidate->name == data->symbolName &&
+                candidate->getHierarchicalPath() == data->symbolPath)
+                symbol = candidate;
+        }
+    }
     if (!symbol && data->bufferId) {
         // Forwarded nominal fields can belong to an immutable provider buffer,
         // not the querying document's current buffer. Search only the current
@@ -1000,16 +1072,8 @@ void MemberCompletionQuery::resolve(CompletionDispatch& dispatch, lsp::Completio
                     package->visit(finder);
         symbol = finder.result;
     }
-    if (!symbol) {
-        ctx.throwIfCancelled("before completion symbol lookup");
-        try {
-            symbol = root.lookupName(data->symbolPath, ast::LookupLocation::max,
-                                     ast::LookupFlags::AllowUnnamedGenerate);
-        }
-        catch (const std::exception& e) {
-            WARN("Invalid symbol path for completion {}: {}", item.label, e.what());
-        }
-    }
+    if (!symbol)
+        symbol = lookupPath();
     if (!symbol) {
         WARN("No symbol found for completion {} at {}", item.label, data->symbolPath);
         return;

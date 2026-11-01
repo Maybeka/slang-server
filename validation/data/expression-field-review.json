@@ -1,0 +1,267 @@
+{
+  "scope": "40 noninvalid native expression kinds. Child traversal is separated from type/symbol/context/folded/side-table proof. This is not exhaustive dynamic coverage or a proof for future SDK field additions.",
+  "sdkPatchSha256": "22854ca63518f681c8233121c9a0342e7d414ae4610fd94964f5f8280b04e176",
+  "sources": {
+    "include/slang/ast/Expression.h": "884bda1e0e575e5cecfde7bc2e3e146c68a2e3072b1d60a3803f257e6293b0fd",
+    "include/slang/ast/expressions/LiteralExpressions.h": "17885e9e7f5322120de0b3536ccb9a47107e251a4adb5fcf324a9479916ffbef",
+    "include/slang/ast/expressions/OperatorExpressions.h": "b31b8d6d6f8c1b4de0b49fbc54aa92758699e07fe47309d07cc01c936c7ca0f0",
+    "include/slang/ast/expressions/ConversionExpression.h": "4df7ae29baf5cb8ab36ae7d2080d06f50a57c7849bc6bb4c1fa8e591160117e8",
+    "include/slang/ast/expressions/SelectExpressions.h": "d5ee2c587a38ac9617bba68dbe8320661a327f98d3d8923eb5818bc98276efef",
+    "include/slang/ast/expressions/AssignmentExpressions.h": "855afb162fb4ceb546ae89381111b3518b5470568c3b7ef9a8c3273f31cf63f4",
+    "include/slang/ast/expressions/MiscExpressions.h": "45247116eaab451e82ff43ec3121874ea2a72fb85ff1b634f16ab62dd36bb35b",
+    "include/slang/ast/expressions/CallExpression.h": "9e9ab7dfe971956ac59d6f606fab779b3ef0787b5210746340107b0df4a3a529",
+    "include/slang/ast/symbols/AttributeSymbol.h": "d3ca54744e3dd3e585d36fde0ccac42bb46f6b937513bd0bf5f8e200be2bcec8",
+    "source/ast/symbols/AttributeSymbol.cpp": "508e716bdf6fd22488629db761e688116dba745d257143c7f87b56ccf2f9608e",
+    "source/ast/expressions/LiteralExpressions.cpp": "f6e85187dfeb1cef7bce4739bffe0347a13a3d3ebb75ebc7e2d7ed4efa0702e8",
+    "source/ast/expressions/MiscExpressions.cpp": "94d64acce72bd1f590ff3e297147420588882cf4255496eccf487fd23684458a",
+    "source/ast/Compilation.cpp": "3c33cf3538422f17ef441b57a0a96670e5ea301a11005d0807d68d28907a3468",
+    "source/ast/Lookup.cpp": "c6df929b9cdbb0c1b469698a365279a8ff89c96b5f524bc84d652a2dae89bbd9",
+    "source/ast/types/Type.cpp": "87c7fa22885e26ee34bf3e235daa893ea94b215420b9ba6b6b22844798b3177a"
+  },
+  "baseFields": {
+    "type": "Recursive closed value/nominal type or explicit wrapper rule.",
+    "syntaxAndSourceRange": "Immutable source/metadata retained by the independent compiler owner.",
+    "constant": "Arena-owned compile-time result does not replace auditing original operands / hidden graphs.",
+    "attributeMap": "Out-of-band for symbol/statement/expression/port connection. Original bound expression retained after value evaluation; scope-filtered fixed point audits internal metadata, excludes current caller/root-connection metadata."
+  },
+  "groups": [
+    {
+      "id": "literal-payloads",
+      "kinds": [
+        "IntegerLiteral",
+        "RealLiteral",
+        "TimeLiteral",
+        "UnbasedUnsizedIntegerLiteral",
+        "NullLiteral",
+        "UnboundedLiteral",
+        "StringLiteral"
+      ],
+      "normalChildren": "Owned literal storage; no hidden expression children.",
+      "additionalProof": "Type/builtin lifetime and source namespace retained. TimeLiteral stores its lexical TimeScale; parser context/options witness preserves it. Null/unbounded wrappers have no symbol target.",
+      "testTags": [
+        "[scope-local-types-calls]",
+        "[scope-body-string-parameters]",
+        "[scope-body-named-assertions]"
+      ]
+    },
+    {
+      "id": "leaf-type-and-lvalue-wrappers",
+      "kinds": [
+        "DataType",
+        "TypeReference",
+        "EmptyArgument",
+        "LValueReference"
+      ],
+      "normalChildren": "DataType uses expression.type; TypeReference additionally stores targetType. Empty/LValueReference wrappers have no target pointer.",
+      "additionalProof": "Recursive type graph or explicit integral TypeReference proof; original type(expr) operand recorded before folding. LValueReference relies on the enclosing audited assignment frame, not a retained runtime value.",
+      "testTags": [
+        "[scope-body-type-queries]",
+        "[scope-assignment-type-keys]",
+        "[scope-body-argument-contract]"
+      ]
+    },
+    {
+      "id": "symbol-and-member-identities",
+      "kinds": [
+        "NamedValue",
+        "HierarchicalValue",
+        "ArbitrarySymbol",
+        "MemberAccess"
+      ],
+      "normalChildren": "MemberAccess visits its base; direct/hierarchical names retain symbol/path metadata.",
+      "additionalProof": "Direct binding checks, complete local hierarchy path, current frame mapping, base-owned aggregate provenance and fixed/local nominal type graph. ArbitrarySymbol is only admitted through proven control-target/interface contexts.",
+      "testTags": [
+        "[scope-body-aggregate-provenance]",
+        "[scope-boundary]",
+        "[scope-folded-lookup-indices]"
+      ]
+    },
+    {
+      "id": "ordinary-operator-graphs",
+      "kinds": [
+        "UnaryOp",
+        "BinaryOp",
+        "ConditionalOp",
+        "Inside",
+        "Concatenation",
+        "Replication",
+        "ValueRange",
+        "Conversion"
+      ],
+      "normalChildren": "Visitors cover operand(s), both conditional sides, condition patterns, inside ranges, replication count and conversion operand.",
+      "additionalProof": "Result/operand types, pattern metadata and actual binding locality are checked separately. Cached constant values remain arena-owned; unevaluated branches are not omitted from dependency closure.",
+      "testTags": [
+        "[scope-local-types-calls]",
+        "[scope-pattern-loop-metadata]",
+        "[scope-body-closed-dependencies]"
+      ]
+    },
+    {
+      "id": "assignment-and-delay",
+      "kinds": [
+        "Assignment"
+      ],
+      "normalChildren": "Visitor includes timingControl, left and right.",
+      "additionalProof": "Lvalue ownership, port/output actuals and Native read/write profiles; no runtime value is memoized.",
+      "testTags": [
+        "[scope-body-argument-contract]",
+        "[scope-full-owner-profiles]"
+      ]
+    },
+    {
+      "id": "streaming-folded-shape",
+      "kinds": [
+        "Streaming"
+      ],
+      "normalChildren": "Visitor covers each operand and withExpr.",
+      "additionalProof": "Fixed-size stream required. sliceSize is recorded before folding; bitstreamWidth/constantWithWidth derive from audited operands/types/with expressions.",
+      "testTags": [
+        "[scope-body-closed-dependencies]",
+        "[scope-body-fixed-arrays]"
+      ]
+    },
+    {
+      "id": "value-selectors",
+      "kinds": [
+        "ElementSelect",
+        "RangeSelect"
+      ],
+      "normalChildren": "Visitor covers base/index or base/left/right.",
+      "additionalProof": "Result nominal type and binding ownership checked. Hierarchy selectors folded out of these value graphs are separately recorded by Lookup.",
+      "testTags": [
+        "[scope-body-fixed-arrays]",
+        "[scope-folded-lookup-indices]"
+      ]
+    },
+    {
+      "id": "call-hidden-context",
+      "kinds": [
+        "Call"
+      ],
+      "normalChildren": "Visitor covers receiver, arguments, iterator expression or inline constraints.",
+      "additionalProof": "Scope/subroutine/extraInfo/iterator variable/restrictions are not accepted by child traversal alone. Argument-only contract requires local scope, no receiver and monostate extraInfo; other calls require explicit context proof, otherwise refuse.",
+      "testTags": [
+        "[scope-body-argument-contract]",
+        "[scope-body-randomize]",
+        "[scope-body-foreign-calls]",
+        "[scope-body-closed-dependencies]"
+      ]
+    },
+    {
+      "id": "construct-and-copy",
+      "kinds": [
+        "NewArray",
+        "NewClass",
+        "NewCovergroup",
+        "CopyClass"
+      ],
+      "normalChildren": "Visitors cover size/initializer, optional constructor call, covergroup arguments and copy source.",
+      "additionalProof": "Close class/covergroup nominal graph, signatures/defaults/prototypes/bases and all constructor actuals. super.new void wrapper still visits its real call. Runtime objects are not compile-time memoized values.",
+      "testTags": [
+        "[scope-type-closure]",
+        "[scope-body-coverage]",
+        "[scope-body-closed-dependencies]"
+      ]
+    },
+    {
+      "id": "assignment-pattern-metadata",
+      "kinds": [
+        "SimpleAssignmentPattern",
+        "StructuredAssignmentPattern",
+        "ReplicatedAssignmentPattern"
+      ],
+      "normalChildren": "Simple/replicated visit materialized elements and replicated count. Structured visits all setter expressions/indices/default.",
+      "additionalProof": "Structured type/member identities additionally audited; materialized conversions use already audited setters and closed destination types. Original type-key expressions use the type/control fixed point.",
+      "testTags": [
+        "[scope-assignment-type-keys]",
+        "[scope-body-argument-contract]",
+        "[scope-body-closed-dependencies]"
+      ]
+    },
+    {
+      "id": "assertion-and-clock-wrappers",
+      "kinds": [
+        "ClockingEvent",
+        "AssertionInstance"
+      ],
+      "normalChildren": "Visitor covers timing event or expanded assertion body/local-variable initializers.",
+      "additionalProof": "Assertion declaration identity, local variables, recursion and arguments checked explicitly; unsupported formals/recursive contexts refuse. Detailed AssertionExpr/TimingControl field review remains a separate family.",
+      "testTags": [
+        "[scope-body-named-assertions]",
+        "[scope-finite-boundaries]"
+      ]
+    },
+    {
+      "id": "min-typ-max-all-branches",
+      "kinds": [
+        "MinTypMax"
+      ],
+      "normalChildren": "Native visitor visits min, typ and max; selected points to one of those children.",
+      "additionalProof": "Compilation minTypMax option is preserved; all three branches close even when two are unevaluated. Local/fixed/mutable branch placement checked across min/typ/max options.",
+      "testTags": [
+        "[scope-mtm-branches]"
+      ]
+    },
+    {
+      "id": "distribution-items-and-default",
+      "kinds": [
+        "Dist"
+      ],
+      "normalChildren": "Visitor covers left, every value, every explicit weight and default weight expression.",
+      "additionalProof": "Constraint call context and variable/type ownership still apply. Default weights are qualified with explicit 1800-2023 language options.",
+      "testTags": [
+        "[scope-body-randomize]"
+      ]
+    },
+    {
+      "id": "tagged-union-member",
+      "kinds": [
+        "TaggedUnion"
+      ],
+      "normalChildren": "Visitor covers optional initializer.",
+      "additionalProof": "Native binder selects member from assignmentTarget canonical union scope. Closed result nominal type/fields close member identity; unclosed/unsupported union types refuse.",
+      "testTags": [
+        "[scope-body-package-types]",
+        "[scope-pattern-loop-metadata]"
+      ]
+    }
+  ],
+  "newDefect": {
+    "kind": "attribute dependencies omitted from normal AST traversal",
+    "before": "29 failures in four attachment categories, including stale7 instead of8 and Native flow mismatches",
+    "implementation": "AttributeSymbol retains boundExpression and exposes actual binding scope; certificate fixed point collects local metadata before auditing original expressions. Scalar precomputed bare attributes have no binding graph.",
+    "tests": [
+      "[scope-attribute-dependencies]"
+    ],
+    "callerBoundary": "Root instance/connection attributes remain current caller metadata; changing/removing them must preserve body hits and Native flow."
+  },
+  "originalReviewStatus": "source-field review complete for current expression declarations and common attribute metadata; final all-family/runtime/lifetime qualification incomplete",
+  "status": "Source-field reconciliation retained; all recorded source definitions unchanged at final candidate. Family-level current qualification complete; not exhaustive per-kind dynamic coverage.",
+  "currentQualification": {
+    "binarySha256": "a007bfe4777bb2008e3a7af6d24ffbfba403005339fb713b51932e0af4f058fb",
+    "validation": "../macos-generic-freezing-2026-11-01.json",
+    "ctestPassed": 1066,
+    "scopeCases": 113,
+    "scopeAssertions": 33693,
+    "asanServerCases": 1052,
+    "asanServerAssertions": 205189,
+    "publicProjects": 16,
+    "performanceScenarios": 32,
+    "versionMatchedPerformanceStates": 4320,
+    "longEditRecheck": 8192,
+    "exhaustivePerKindDynamicCoverage": false
+  },
+  "currentSourceReconciliation": {
+    "checkedSourceFiles": 15,
+    "allReviewedDefinitionsUnchanged": true,
+    "originalReviewSha256": "0f27297559ca40187937aba4d011bb1f3d18fbbdbbea22a1929f48af68bb9924",
+    "currentSdkPatchSha256": "c09a0c56ede92b8ae7693c90d96c2c4644a52d721a4b5804e7fa9e10fc87fedb"
+  },
+  "historicalRemainingAtReview": [
+    "Symbol/type/scope source review recorded separately in symbol-field-review.json",
+    "Statement/timing/pattern source review is recorded separately in statement-field-review.json",
+    "Assertion/constraint/coverage selector source review is recorded separately in verification-field-review.json",
+    "Complete frozen-code public queries",
+    "Formal latency/RSS/retirement and rebuilt ASan/release"
+  ]
+}

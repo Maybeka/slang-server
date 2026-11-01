@@ -10,6 +10,7 @@
 #include "ConeTracer.h"
 #include "InstanceIndexer.h"
 #include "ReferenceIndexer.h"
+#include "TrustedImportStatus.h"
 #include "document/SlangDoc.h"
 #include <functional>
 #include <memory>
@@ -53,6 +54,7 @@ public:
     void prepareDisposableDiagnostics(const lsp::RequestContext& ctx);
     bool diagnosticsReady() const { return bool(m_driverAnalysis); }
     ParallelDiagnosticStats parallelDiagnosticStats() const { return m_parallelStats; }
+    const TrustedImportStatus& libraryImportStatus() const { return m_libraryImportStatus; }
 
     slang::ast::Compilation compilation;
 
@@ -98,6 +100,7 @@ private:
     slang::analysis::AnalysisOptions m_analysisOptions;
     ParallelDiagnosticOptions m_parallelOptions;
     ParallelDiagnosticStats m_parallelStats;
+    TrustedImportStatus m_libraryImportStatus;
 
     /// Lazily created analysis manager used for diagnostics and driver queries.
     // Declare the intrinsic owner first so serial views are destroyed before it.

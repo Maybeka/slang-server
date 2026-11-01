@@ -9,6 +9,7 @@
 #include <fmt/format.h>
 #include <fstream>
 #include <map>
+#include <limits>
 
 #include "slang/ast/ASTVisitor.h"
 #include "slang/ast/symbols/BlockSymbols.h"
@@ -34,6 +35,10 @@ struct AdmissionTraversal : ASTVisitor<AdmissionTraversal, VisitFlags::Symbols> 
         if (consider(instance.body))
             visitDefault(instance);
     }
+    void handle(const GenerateBlockSymbol& block) {
+        if (!block.isUninstantiated)
+            visitDefault(block);
+    }
 };
 
 struct Bodies : ASTVisitor<Bodies, VisitFlags::Symbols> {
@@ -41,6 +46,10 @@ struct Bodies : ASTVisitor<Bodies, VisitFlags::Symbols> {
     void handle(const InstanceSymbol& instance) {
         values.push_back(&instance.body);
         visitDefault(instance);
+    }
+    void handle(const GenerateBlockSymbol& block) {
+        if (!block.isUninstantiated)
+            visitDefault(block);
     }
 };
 struct SubtreeBodies : ASTVisitor<SubtreeBodies, VisitFlags::Symbols> {
@@ -86,13 +95,16 @@ struct BodyContext {
     std::string source;
     ClosedTypeContext types;
     std::string instancePath;
+    // The independent proof replaces this ancestor with a minimal scaffold.
+    // It must not simultaneously import the original fixed definition.
+    std::string scaffoldTop;
 };
 std::optional<BodyContext> compactContext(const Compilation& current,
                                           const InstanceBodySymbol& body,
                                           const TrustedUvmLibrary& library) {
     if (!current.getOptions().paramOverrides.empty())
         return std::nullopt;
-    if (!current.isInstanceBodyBindContextCompatible())
+    if (!current.isInstanceBodyBindContextCompatible(&body))
         return std::nullopt;
     if (auto disable = current.getDefaultDisable(body)) {
         const auto& entries = current.getDefaultDisableMap();
@@ -135,8 +147,7 @@ std::optional<BodyContext> compactContext(const Compilation& current,
         }
     }
     std::ranges::reverse(chain);
-    if (chain.size() < 2 || chain.front()->kind != SymbolKind::InstanceBody ||
-        current.getOptions().topModules.size() != 1)
+    if (chain.size() < 2 || chain.front()->kind != SymbolKind::InstanceBody)
         return std::nullopt;
     const auto top = chain.front()->as<InstanceBodySymbol>().parentInstance;
     if (!top || !current.getOptions().topModules.contains(top->name))
@@ -154,7 +165,7 @@ std::optional<BodyContext> compactContext(const Compilation& current,
         for (;;) {
             auto name = fmt::format("__slang_scope_cache_wrapper_{}", counter++);
             if (std::ranges::find(library.definitions, name) == library.definitions.end() &&
-                name != top->name)
+                name != top->name && !current.getOptions().topModules.contains(name))
                 return name;
         }
     };
@@ -298,7 +309,25 @@ std::optional<BodyContext> compactContext(const Compilation& current,
         if (!last)
             text += fmt::format("module {}; ", next);
     }
-    return BodyContext{std::move(text), std::move(types), body.getHierarchicalPath()};
+    // Preserve the original compilation options so import compatibility remains
+    // exact. Unrelated mutable tops need names, not bodies, in a closed proof.
+    // Fixed tops are left as their original imported definitions: replacing one
+    // could change a definition used inside the candidate's subtree.
+    for (const auto& name : current.getOptions().topModules) {
+        if (name == top->name || std::ranges::find(library.definitions, name) !=
+                                     library.definitions.end())
+            continue;
+        auto spelling = identifier(name);
+        if (!spelling)
+            return std::nullopt;
+        // Do not manufacture a top which was absent from the native model.
+        if (std::ranges::none_of(current.getRootNoFinalize().topInstances,
+                                [&](auto instance) { return instance->name == name; }))
+            return std::nullopt;
+        text += fmt::format("module {}; endmodule\n", *spelling);
+    }
+    return BodyContext{std::move(text), std::move(types), body.getHierarchicalPath(),
+                       std::string(top->name)};
 }
 size_t charge(const Compilation& compilation) {
     size_t bytes = compilation.getTotalBytesAllocated() +
@@ -316,8 +345,10 @@ ScopeBodyCache::ScopeBodyCache(std::shared_ptr<TrustedUvmLibrary> library, size_
                                std::shared_ptr<SourceStorageRegistry> sourceRegistry) :
     library(std::move(library)), sourceRegistry(std::move(sourceRegistry)),
     modules(std::move(modules)), instances(std::move(instances)) {
+    counters.budgetUnlimited = budget == std::numeric_limits<size_t>::max();
     counters.budgetBytes = budget;
-    counters.baseBytes = this->library->semanticBytes;
+    counters.refusalReportBytes = sizeof(refusalReport);
+    counters.baseBytes = this->library->semanticBytes + counters.refusalReportBytes;
 }
 
 void ScopeBodyCache::install(Compilation& compilation,
@@ -343,6 +374,24 @@ bool ScopeBodyCache::selected(const InstanceBodySymbol& body) const {
         return false;
     if (std::ranges::find(modules, body.getDefinition().name) != modules.end())
         return true;
+    // Selecting a module selects its instantiated descendants as well. The
+    // descendant still needs its own immutable definition above; an unsafe
+    // parent must not disable otherwise closed children.
+    const Scope* ancestor = body.parentInstance ? body.parentInstance->getParentScope() : nullptr;
+    while (!modules.empty() && ancestor) {
+        const auto& symbol = ancestor->asSymbol();
+        if (auto parent = symbol.as_if<InstanceBodySymbol>()) {
+            const auto& type = parent->getDefinition();
+            const auto declarationScope = type.getParentScope();
+            if (type.sourceLibrary.isDefault && declarationScope &&
+                declarationScope->asSymbol().kind == SymbolKind::CompilationUnit &&
+                std::ranges::find(modules, type.name) != modules.end())
+                return true;
+            ancestor = parent->parentInstance ? parent->parentInstance->getParentScope() : nullptr;
+        }
+        else
+            ancestor = symbol.getParentScope();
+    }
     const auto path = body.getHierarchicalPath();
     return std::ranges::any_of(instances, [&](const auto& root) {
         return path == root || path.starts_with(root + ".");
@@ -384,11 +433,81 @@ void ScopeBodyCache::lookup(Compilation& current, InstanceBodySymbol& body) {
     ++counters.misses;
 }
 
-ScopeBodyCache::Stats ScopeBodyCache::status() const {
+void ScopeBodyCache::recordRefusal(std::string_view category, std::string_view path) {
+    // Categories are static compiler/cache literals. Paths are copied into a
+    // fixed report buffer; no certificate, syntax or editing owner escapes.
+    ++counters.refusalAttempts;
+    if (category.empty())
+        category = "uncertified-body";
+    size_t index = 0;
+    while (index < refusalReport.countSize && refusalReport.counts[index].category != category)
+        ++index;
+    if (index == refusalReport.countSize) {
+        if (index == refusalReport.counts.size()) {
+            counters.refusalSamplesTruncated = true;
+            ++counters.uncategorizedRefusals;
+            return;
+        }
+        refusalReport.counts[index].category = category;
+        ++refusalReport.countSize;
+    }
+    ++refusalReport.counts[index].attempts;
+    counters.refusalSamplesTruncated |= path.size() > 255;
+    size_t end = std::min(path.size(), size_t(255));
+    while (end && end < path.size() && (static_cast<unsigned char>(path[end]) & 0xc0) == 0x80)
+        --end; // Keep a complete UTF-8 code point at the sample boundary.
+    path = path.substr(0, end);
+    for (size_t i = 0; i < refusalReport.sampleSize; ++i)
+        if (refusalReport.samples[i].category == index &&
+            std::string_view(refusalReport.samples[i].path.data()) == path)
+            return;
+    if (refusalReport.sampleSize == refusalReport.samples.size()) {
+        counters.refusalSamplesTruncated = true;
+        return;
+    }
+    auto& sample = refusalReport.samples[refusalReport.sampleSize++];
+    sample.category = index;
+    std::copy(path.begin(), path.end(), sample.path.begin());
+}
+
+bool ScopeBodyCache::certify(Compilation& compilation, const InstanceBodySymbol& body,
+                             std::string_view path) {
+    std::string_view reason;
+    if (compilation.prepareInstanceBodyReuse(body, &reason))
+        return true;
+    if (path.empty() && refusalReport.sampleSize < refusalReport.samples.size())
+        recordRefusal(reason, body.getHierarchicalPath());
+    else
+        recordRefusal(reason, path);
+    return false;
+}
+
+ScopeBodyCache::Stats ScopeBodyCache::accounting() const {
+    // Admission needs byte totals only. Public reports allocate value copies
+    // when queried, never for each candidate in a large design traversal.
     auto result = counters;
     result.owners = groups.size();
-    for (const auto& group : groups) {
+    for (const auto& group : groups)
         result.ownerBytes += group.bytes;
+    for (const auto& pin : pins)
+        if (!pin.owner.expired())
+            result.pinnedBytes += pin.bytes;
+    return result;
+}
+
+ScopeBodyCache::Stats ScopeBodyCache::status() const {
+    auto result = accounting();
+    if (result.budgetUnlimited)
+        result.budgetBytes = 0; // No finite limit; do not serialize SIZE_MAX as a fake quota.
+    for (size_t i = 0; i < refusalReport.countSize; ++i) {
+        Refusal refusal{std::string(refusalReport.counts[i].category),
+                        refusalReport.counts[i].attempts, {}};
+        for (size_t n = 0; n < refusalReport.sampleSize; ++n)
+            if (refusalReport.samples[n].category == i)
+                refusal.sampleRoots.emplace_back(refusalReport.samples[n].path.data());
+        result.refusals.push_back(std::move(refusal));
+    }
+    for (const auto& group : groups) {
         for (const auto& [path, _] : group.bodies)
             result.retainedRoots.push_back(path);
     }
@@ -396,9 +515,6 @@ ScopeBodyCache::Stats ScopeBodyCache::status() const {
     result.retainedRoots.erase(std::unique(result.retainedRoots.begin(),
                                            result.retainedRoots.end()),
                                result.retainedRoots.end());
-    for (const auto& pin : pins)
-        if (!pin.owner.expired())
-            result.pinnedBytes += pin.bytes;
     return result;
 }
 
@@ -442,7 +558,7 @@ void ScopeBodyCache::rememberRejection(std::string_view context, size_t stagedBy
         rejectedContexts.pop_back();
     }
     counters.admissionRecords = rejectedContexts.size();
-    const auto usage = status();
+    const auto usage = accounting();
     const auto reserved = usage.ownerBytes + usage.pinnedBytes + stagedBytes;
     if (reserved > counters.budgetBytes || counters.baseBytes > counters.budgetBytes - reserved ||
         counters.admissionBytes + bytes > counters.budgetBytes - reserved - counters.baseBytes)
@@ -454,7 +570,7 @@ void ScopeBodyCache::rememberRejection(std::string_view context, size_t stagedBy
 
 bool ScopeBodyCache::capacityAdvice(const Compilation& current, const InstanceBodySymbol& body,
                                     const std::vector<Group>& staged, size_t stagedBytes) const {
-    const auto usage = status();
+    const auto usage = accounting();
     size_t unavailable = counters.baseBytes + counters.admissionBytes + usage.pinnedBytes +
                          stagedBytes;
     for (const auto& group : groups)
@@ -526,7 +642,8 @@ void ScopeBodyCache::publish(std::shared_ptr<Compilation> current,
         for (const auto& name : library->packages)
             result->importPackage(library->compilation, name, *ownerSources);
         for (const auto& name : library->definitions)
-            result->importDefinition(library->compilation, name, *ownerSources);
+            if (!compact || name != compact->scaffoldTop)
+                result->importDefinition(library->compilation, name, *ownerSources);
         if (library->hasUnitDeclarations)
             result->importCompilationUnitDeclarations(library->compilation, *ownerSources);
         if (compact) {
@@ -642,13 +759,15 @@ void ScopeBodyCache::publish(std::shared_ptr<Compilation> current,
         if (covered)
             return false;
         auto context = compactContext(*current, *body, *library);
-        if (context && rejected(context->source))
+        if (context && rejected(context->source)) {
+            recordRefusal("remembered-admission", path);
             return true; // Still consider descendants of a rejected parent.
+        }
         // Every independent owner is charged this same source namespace. If
         // pinned owners and this batch leave less than that unavoidable charge,
         // constructing any further graph cannot succeed. Keep existing hits.
         size_t unavailable = counters.baseBytes + counters.admissionBytes + stagedBytes +
-                             status().pinnedBytes;
+                             accounting().pinnedBytes;
         for (const auto& group : groups)
             if (group.owner.use_count() > 1)
                 unavailable += group.bytes;
@@ -656,7 +775,7 @@ void ScopeBodyCache::publish(std::shared_ptr<Compilation> current,
         trimRejections(unavailable - counters.baseBytes - counters.admissionBytes + sourceFloor);
         // Metadata may yield space to a real owner.
         unavailable = counters.baseBytes + counters.admissionBytes + stagedBytes +
-                      status().pinnedBytes;
+                      accounting().pinnedBytes;
         for (const auto& group : groups)
             if (group.owner.use_count() > 1)
                 unavailable += group.bytes;
@@ -664,20 +783,23 @@ void ScopeBodyCache::publish(std::shared_ptr<Compilation> current,
             sourceFloor > counters.budgetBytes - unavailable) {
             ++counters.capacitySkips;
             ++counters.declines;
+            recordRefusal("budget-source-floor", path);
             stopped = true;
             return false;
         }
         if (capacityAdvice(*current, *body, staged, stagedBytes)) {
+            recordRefusal("budget-advice", path);
             ++counters.capacitySkips;
             return true;
         }
-        const bool certified = current->prepareInstanceBodyReuse(*body);
+        const bool certified = certify(*current, *body, path);
         const bool promotion = !certified && context &&
                                (current->instanceBodyReuseRequiresFreshOwner(*body) ||
                                 !context->types.dependencies.empty());
         if (!certified && !promotion)
             return true;
         if (!context) {
+            recordRefusal("compact-context-unavailable", path);
             if (tryFull()) {
                 fullPublished = stopped = true;
                 return false;
@@ -694,9 +816,10 @@ void ScopeBodyCache::publish(std::shared_ptr<Compilation> current,
                                       current->hasMatchingInstanceBodyParameters(*candidate,
                                                                                  *body) &&
                                       matchesNativeSubtree(*body, *candidate) &&
-                                      owner->prepareInstanceBodyReuse(*candidate);
+                                      certify(*owner, *candidate, path);
                            }) && !owner->hasUncertifiedInstanceBodyErrors();
         if (!valid) {
+            recordRefusal("compact-context-mismatch-or-errors", path);
             if (auto trace = std::getenv("SLANG_SCOPE_BODY_TRACE"); trace && *trace) {
                 fmt::print(stderr, "scope-body compact-context invalid\t{}\terrors={}\n", path,
                            owner->hasIssuedErrors());
@@ -714,7 +837,7 @@ void ScopeBodyCache::publish(std::shared_ptr<Compilation> current,
             }
             return true;
         }
-        auto group = prepareGroup(std::move(owner));
+        auto group = prepareGroup(std::move(owner), path);
         if (!group)
             return true;
         const bool oversized = group->bytes > counters.budgetBytes ||
@@ -723,6 +846,7 @@ void ScopeBodyCache::publish(std::shared_ptr<Compilation> current,
         const auto base = counters.baseBytes + counters.admissionBytes;
         if (oversized || stagedBytes + group->bytes > counters.budgetBytes ||
             base > counters.budgetBytes - stagedBytes - group->bytes) {
+            recordRefusal("budget-owner", path);
             group.reset(); // Release this graph before attempting the full route.
             if (tryFull()) {
                 fullPublished = stopped = true;
@@ -746,7 +870,7 @@ void ScopeBodyCache::publish(std::shared_ptr<Compilation> current,
 }
 
 std::optional<ScopeBodyCache::Group> ScopeBodyCache::prepareGroup(
-    std::shared_ptr<Compilation> owner) {
+    std::shared_ptr<Compilation> owner, std::string_view admittedRoot) {
     Bodies prepared;
     owner->getRoot().visit(prepared);
     std::unordered_map<std::string, const InstanceBodySymbol*> bodies;
@@ -764,8 +888,13 @@ std::optional<ScopeBodyCache::Group> ScopeBodyCache::prepareGroup(
             }
             scope = parent->parentInstance ? parent->parentInstance->getParentScope() : nullptr;
         }
-        if (!covered && selected(*body) && !contains(*owner, *body) &&
-            owner->prepareInstanceBodyReuse(*body))
+        // Compact ancestors are scaffolds, so their declaration names cannot
+        // re-prove a module selector. Use the exact root already validated
+        // against the selected native graph, never an unchecked new path.
+        const bool admitted = admittedRoot.empty() ? selected(*body)
+                                                   : body->getHierarchicalPath() == admittedRoot;
+        if (!covered && admitted && !contains(*owner, *body) &&
+            certify(*owner, *body))
             bodies.emplace(body->getHierarchicalPath(), body);
     }
     if (bodies.empty()) {
@@ -807,7 +936,7 @@ bool ScopeBodyCache::retain(Group group, bool compact, size_t protectedGroups) {
         return false;
     }
     while (groups.size() > protectedGroups) {
-        const auto usage = status();
+        const auto usage = accounting();
         if (usage.ownerBytes + usage.pinnedBytes <= counters.budgetBytes - base - bytes)
             break;
         auto& oldest = groups.back();
@@ -815,7 +944,7 @@ bool ScopeBodyCache::retain(Group group, bool compact, size_t protectedGroups) {
         groups.pop_back();
         ++counters.evictions;
     }
-    const auto usage = status();
+    const auto usage = accounting();
     if (usage.ownerBytes + usage.pinnedBytes > counters.budgetBytes - base - bytes) {
         ++counters.declines;
         return false;

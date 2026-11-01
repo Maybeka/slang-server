@@ -7,6 +7,7 @@
 //------------------------------------------------------------------------------
 
 #include "ServerDriver.h"
+#include <limits>
 
 #include "Indexer.h"
 #include "ServerDiagClient.h"
@@ -159,7 +160,8 @@ ServerDriver::ServerDriver(Indexer& indexer, SlangLspClient& client, const Confi
             (void)overlays->trustedLibrarySourceContext(URI{});
         m_trustedScopes = overlays->m_trustedScopes;
         m_scopeBodies = overlays->m_scopeBodies;
-        if (borrowInitialLibraries && m_scopeBodies) {
+        if (m_scopeBodies && (borrowInitialLibraries ||
+            config.semanticCacheUnlimited.value() != overlays->m_config.semanticCacheUnlimited.value())) {
             // Exploration can leave independently analyzed RTL fragments and
             // rejected-context hints. They must not consume the first complete
             // design's admission budget. Keep fixed nominal semantics, but give
@@ -168,7 +170,9 @@ ServerDriver::ServerDriver(Indexer& indexer, SlangLspClient& client, const Confi
             const auto frozen = config.frozenSources.value().value_or(
                 Config::FrozenSourcesConfig{});
             m_scopeBodies = std::make_shared<ScopeBodyCache>(
-                m_trustedScopes, size_t(frozen.maxMiB.value()) * 1024 * 1024,
+                m_trustedScopes, config.semanticCacheUnlimited.value()
+                    ? std::numeric_limits<size_t>::max()
+                    : size_t(frozen.maxMiB.value()) * 1024 * 1024,
                 frozen.modules.value(), frozen.instances.value(), m_sourceRegistry);
         }
         m_scopeRoots = overlays->m_scopeRoots;

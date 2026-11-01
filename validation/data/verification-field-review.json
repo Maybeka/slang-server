@@ -1,0 +1,218 @@
+{
+  "meaning": "Conditional finite contract; not exhaustive dynamic coverage, not a claim about future SDK fields. Invalid/unknown kinds refused.",
+  "noninvalidKindsReviewed": {
+    "assertions": 12,
+    "constraints": 8,
+    "coverageSelectors": 6
+  },
+  "sdkPatchSha256": "22854ca63518f681c8233121c9a0342e7d414ae4610fd94964f5f8280b04e176",
+  "sources": {
+    "include/slang/ast/expressions/AssertionExpr.h": "4066b6570dbb5747d3c3d7c8312cdc6b0e8cebc3831be91f925f4e64ec74d38a",
+    "include/slang/ast/expressions/MiscExpressions.h": "45247116eaab451e82ff43ec3121874ea2a72fb85ff1b634f16ab62dd36bb35b",
+    "include/slang/ast/Constraints.h": "b3cb153ac7f856c2943be8b03294dd43838bb2418d4189ddbb618f8ad0447473",
+    "include/slang/ast/symbols/CoverSymbols.h": "226bf261ec2a01542a4ad26317b36dcfb6f03a2361ffc525e9132c4edbc9c218",
+    "include/slang/ast/ASTVisitor.h": "934d79035c649c0af5d703347e95428e22f5cd0ffbe02efbeccd159eda5f9ada",
+    "source/ast/expressions/AssertionExpr.cpp": "25be434dd249aa3561dbcdbf390d9b044edd167600f6d4f5f472b9b6529eaec9",
+    "source/ast/expressions/MiscExpressions.cpp": "94d64acce72bd1f590ff3e297147420588882cf4255496eccf487fd23684458a",
+    "source/ast/Constraints.cpp": "7e09ac15f6915c8b861beeaf0c5478b82ed4ed3648a4b0dea15f896e8e6469e2",
+    "source/ast/symbols/CoverSymbols.cpp": "1966bd24c5e5e5ed08fa211fd5895830d27e8222e20b100e49d1842c7dc28c17",
+    "source/ast/Compilation.cpp": "3c33cf3538422f17ef441b57a0a96670e5ea301a11005d0807d68d28907a3468",
+    "source/ast/Lookup.cpp": "c6df929b9cdbb0c1b469698a365279a8ff89c96b5f524bc84d652a2dae89bbd9",
+    "source/ast/InstanceCacheKey.cpp": "807f6c0f1157a5a995511bfacd39a57548145d7f444a854fb3956df01af5f4ad"
+  },
+  "groups": [
+    {
+      "id": "assertion-folded-ranges",
+      "family": "assertions",
+      "kinds": [
+        "Simple",
+        "SequenceConcat",
+        "SequenceWithMatch",
+        "Unary"
+      ],
+      "normalChildren": "Simple visits bound expr; concat visits every sequence; with-match visits sequence and all match items; Unary visits operand.",
+      "additionalProof": "SequenceRange/repetition payloads are folded integer metadata. Both fromSyntax overloads bind every scalar/lower/upper endpoint through bindSequenceBound, which records the original expression as body elaboration control. Original dependencies audited at scope/type/control fixed point. Repetition/operator/null flags owned scalars.",
+      "testTags": [
+        "[scope-body-named-assertions]",
+        "[scope-body-constant-closure]"
+      ]
+    },
+    {
+      "id": "assertion-binary-and-first-match",
+      "family": "assertions",
+      "kinds": [
+        "Binary",
+        "FirstMatch"
+      ],
+      "normalChildren": "Binary visits both operands; first-match visits sequence and every match item.",
+      "additionalProof": "Operator/source ranges immutable. All branches audited; match assignment/call targets use ordinary ownership/signature/effect proof.",
+      "testTags": [
+        "[scope-body-named-assertions]",
+        "[scope-body-closed-dependencies]"
+      ]
+    },
+    {
+      "id": "assertion-clock-and-disable",
+      "family": "assertions",
+      "kinds": [
+        "Clocking",
+        "DisableIff"
+      ],
+      "normalChildren": "Visit timing/clock and property, or disable condition and property.",
+      "additionalProof": "Default/inherited clocking and disables are checked even when absent as direct child pointers; outside context refuses. Clocking items/formals/recursive assertion use remain explicit exclusions.",
+      "testTags": [
+        "[scope-body-named-assertions]",
+        "[scope-finite-boundaries]"
+      ]
+    },
+    {
+      "id": "assertion-control-graphs",
+      "family": "assertions",
+      "kinds": [
+        "StrongWeak",
+        "Abort",
+        "Conditional",
+        "Case"
+      ],
+      "normalChildren": "Strong/weak visits body; Abort visits condition and body; Conditional visits condition and both optional branches; Case visits selector, every label/body/default.",
+      "additionalProof": "Strength/action/sync/operator enums are owned scalar state. No unevaluated branch is skipped. Original declaration identity, local assertion variables, recursion and arguments checked on AssertionInstance wrappers.",
+      "testTags": [
+        "[scope-body-named-assertions]",
+        "[scope-finite-boundaries]"
+      ]
+    },
+    {
+      "id": "constraint-ordinary-children",
+      "family": "constraints",
+      "kinds": [
+        "List",
+        "Expression",
+        "Implication",
+        "Conditional",
+        "Uniqueness",
+        "DisableSoft",
+        "SolveBefore"
+      ],
+      "normalChildren": "Visit every constraint child, expression/predicate/branch, uniqueness item, disable target and both solve-before lists.",
+      "additionalProof": "Soft flag owned scalar. Constraints describe runtime solving, not memoized solver results. Every expression needs closed types/bindings; call randomize scope/extra context has separate contract and class randomize remains Native.",
+      "testTags": [
+        "[scope-body-randomize]",
+        "[scope-body-closed-dependencies]"
+      ]
+    },
+    {
+      "id": "constraint-foreach-hidden-variables",
+      "family": "constraints",
+      "kinds": [
+        "Foreach"
+      ],
+      "normalChildren": "Visits arrayRef and body.",
+      "additionalProof": "loopDims variables are outside native visitor; explicit common loop metadata audit visits every nonnull iterator and its arrayType. Static ranges derive from the checked array shape.",
+      "testTags": [
+        "[scope-pattern-loop-metadata]",
+        "[scope-body-randomize]"
+      ]
+    },
+    {
+      "id": "coverage-target-symbol",
+      "family": "coverageSelectors",
+      "kinds": [
+        "Condition"
+      ],
+      "normalChildren": "Visits intersects only; target is a retained Symbol reference.",
+      "additionalProof": "Certificate explicitly accepts only local target or immutable imported-provider target. Package-qualified name does not imply upward-reference bookkeeping. Mutable package targets refuse the parent while safe children reuse; fixed package targets remain valid.",
+      "testTags": [
+        "[scope-coverage-target-closure]",
+        "[scope-body-coverage]"
+      ]
+    },
+    {
+      "id": "coverage-ordinary-selectors",
+      "family": "coverageSelectors",
+      "kinds": [
+        "Unary",
+        "Binary",
+        "SetExpr",
+        "WithFilter"
+      ],
+      "normalChildren": "Unary/binary visit all selector operands. SetExpr visits expression/matches; WithFilter visits selector/filter/matches.",
+      "additionalProof": "WithFilter binder creates temporary IteratorSymbols from parent cross target types; referenced variables pass local binding/type proof. Parent cross targets are derived by Native from same-scope coverpoints/cross targets or synthesized coverpoints added as members; all members and initializer/type dependencies audited. CrossQueueType is synthesized from that same closed target graph.",
+      "testTags": [
+        "[scope-body-coverage]",
+        "[scope-pattern-loop-metadata]",
+        "[scope-body-randomize]"
+      ]
+    },
+    {
+      "id": "coverage-cross-id",
+      "family": "coverageSelectors",
+      "kinds": [
+        "CrossId"
+      ],
+      "normalChildren": "No retained pointer or expression payload.",
+      "additionalProof": "Native creates this marker only when simple identifier equals the current parent cross name. Owning cross/type/scope graph is audited; this is not a free external identity.",
+      "testTags": [
+        "[scope-body-coverage]"
+      ]
+    }
+  ],
+  "relatedSymbolFields": {
+    "CovergroupType": "Body added as Scope member; arguments/signature/defaults, inherited group and sampling event closed separately.",
+    "CovergroupBody": "options explicitly added to pending expressions because not normal visitor children.",
+    "Coverpoint/CoverCross": "Native visits initializer/iff/options; scope members visited. Cross.targets are same-scope resolved or synthesized local coverpoints; inherited base graph must close.",
+    "CoverageBin": "Native visits iff/number-of-bins/set/with/cross-select/values/all transition sets, including original repetition endpoints. Bin flags are owned scalar metadata.",
+    "ConditionBinsSelectExpr.target": "New explicit target owner proof added after actual stale-width reproduction.",
+    "Attributes": "Common metadata fixed point still applies."
+  },
+  "newDefect": {
+    "before": "12 failed assertions across compact/full owner paths: mutable package binsof target was imported and retained bit width7 after source width changed to8. Hierarchical top.cg.cp already declined via upward-side-effect; package qualification bypassed that incidental guard.",
+    "fix": "Audit hidden coverage target identity with common local or imported fixed-provider ownership rule; no new retained owner/cache/side table.",
+    "fixture": "[scope-coverage-target-closure]",
+    "configurations": 16,
+    "statesPerArm": 4,
+    "targetKinds": [
+      "coverpoint",
+      "coverage-bin"
+    ],
+    "origins": [
+      "local",
+      "fixed package",
+      "mutable package",
+      "mutable hierarchy"
+    ],
+    "checks": [
+      "actual parent and safe-child imports",
+      "target type widths",
+      "Native semantic and flow diagnostics",
+      "direct certificate refusal for unclosed providers"
+    ],
+    "qualification": "Post-fix1124 focused assertions,30669 assertions/100scope cases,1048CTest entries and16/16 unlimited real projects passed. Formal query/performance/memory/lifetime/release gates remain pending."
+  },
+  "originalReviewStatus": "source-field reconciliation complete for current assertion/constraint/coverage selector declarations; full runtime/lifetime/public-query qualification pending",
+  "status": "Source-field reconciliation retained; all recorded source definitions unchanged at final candidate. Family-level current qualification complete; not exhaustive per-kind dynamic coverage.",
+  "currentQualification": {
+    "binarySha256": "a007bfe4777bb2008e3a7af6d24ffbfba403005339fb713b51932e0af4f058fb",
+    "validation": "../macos-generic-freezing-2026-11-01.json",
+    "ctestPassed": 1066,
+    "scopeCases": 113,
+    "scopeAssertions": 33693,
+    "asanServerCases": 1052,
+    "asanServerAssertions": 205189,
+    "publicProjects": 16,
+    "performanceScenarios": 32,
+    "versionMatchedPerformanceStates": 4320,
+    "longEditRecheck": 8192,
+    "exhaustivePerKindDynamicCoverage": false
+  },
+  "currentSourceReconciliation": {
+    "checkedSourceFiles": 12,
+    "allReviewedDefinitionsUnchanged": true,
+    "originalReviewSha256": "fa4d585b57a7e8e0b8da692e1b06b2e74d667cd55be0a776f2fd9fbaf1f0c5ed",
+    "currentSdkPatchSha256": "c09a0c56ede92b8ae7693c90d96c2c4644a52d721a4b5804e7fa9e10fc87fedb"
+  },
+  "historicalRemainingAtReview": [
+    "Symbol/type/scope source review recorded separately in symbol-field-review.json",
+    "Frozen-code public query matrix",
+    "Formal latency/RSS/retirement/ASan/release"
+  ]
+}

@@ -2413,6 +2413,52 @@ struct CertificationServer : BodyTestServer {
 };
 } // namespace
 
+TEST_CASE("Method certificates accept native source-data aliases but reject replacement data",
+          "[body-certification][method-native-buffer-alias]") {
+    Workspace workspace;
+    const std::string source =
+        "module owner; function automatic int work(input int arg); "
+        "return arg + 1; endfunction endmodule\n";
+    workspace.write("owner.sv", source);
+    workspace.write(".slang/server.json", certificationConfig());
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("owner.sv", source);
+    doc.doc->getAnalysis();
+    server::MethodScopeOverlay certificate(*server.m_driver, server.m_config, doc.m_uri,
+                                           source.find("arg + 1"), {});
+    REQUIRE(certificate.valid(server.m_config, {}));
+    auto& sources = server.m_driver->sm;
+    const auto original = doc.doc->getBuffer();
+    auto alias = sources.readSource(workspace.root / "owner.sv", nullptr,
+                                    sources.getSortKey(original) + 1000);
+    REQUIRE(alias);
+    REQUIRE(alias->id != original);
+    REQUIRE(sources.getSourceText(alias->id).data() == sources.getSourceText(original).data());
+    auto adopt = [&](SourceBuffer buffer) {
+        auto tree = syntax::SyntaxTree::fromBuffer(buffer, sources, server.m_driver->options);
+        auto unit = server::SlangDoc::fromTree(*server.m_driver, std::move(tree));
+        doc.doc->adoptNativeCompilationUnit(*unit);
+    };
+    adopt(*alias);
+    CHECK(certificate.valid(server.m_config, {}));
+    CHECK_FALSE(certificate.observedInputChange());
+    SECTION("a fresh allocation with equal text is still a new input generation") {
+        SmallVector<char> copy(source.begin(), source.end());
+        copy.push_back('\0');
+        const auto* previousData = sources.getSourceText(original).data();
+        auto replacement = sources.replaceBuffer(original, std::move(copy));
+        REQUIRE(sources.getSourceText(replacement.id).data() != previousData);
+        adopt(replacement);
+        CHECK_FALSE(certificate.valid(server.m_config, {}));
+    }
+    SECTION("an external dependency change still invalidates the complete proof") {
+        workspace.write("prelude.sv", "package prelude; int different; endpackage\n");
+        CHECK_FALSE(certificate.valid(server.m_config, {}));
+        CHECK(certificate.observedInputChange());
+    }
+}
+
 TEST_CASE("Macro identity witness cancellation preserves incoming text and recovers",
           "[method-macro-proof][macro-boundaries][macro-cancellation]") {
     const bool cached = GENERATE(false, true);

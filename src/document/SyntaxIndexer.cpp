@@ -51,57 +51,75 @@ SyntaxIndexer::SyntaxIndexer(const slang::syntax::SyntaxTree& tree, slang::Buffe
     flushMacroExpansion();
 }
 
-void SyntaxIndexer::visit(const slang::syntax::SyntaxNode& node) {
-    if (node.kind == syntax::SyntaxKind::ClassDeclaration) {
-        auto first = node.getFirstToken();
-        auto firstBuffer = first && first.location() != SourceLocation::NoLocation &&
-                                   first.location().valid()
-                               ? m_sourceManager->getFullyExpandedLoc(first.location()).buffer()
-                               : BufferID{};
-        auto last = node.getLastToken().location();
-        auto lastBuffer = last.valid() && last != SourceLocation::NoLocation
-                              ? m_sourceManager->getFullyExpandedLoc(last).buffer()
-                              : BufferID{};
-        if (firstBuffer.valid() && firstBuffer == lastBuffer &&
-            std::ranges::find(m_includeAncestors, firstBuffer) == m_includeAncestors.end()) {
-            // An unrelated class body cannot contain the edited include. Pending
-            // directives (including an entirely inactive header) can still be
-            // attached to its first token, so retain those before skipping it.
-            processTrivia(first.trivia(), node);
-            flushMacroExpansion();
-            return;
-        }
-    }
-    switch (node.kind) {
-        case syntax::SyntaxKind::MacroUsage: {
-            if (node.getFirstToken().location().buffer() == m_buffer) {
-                collectedHints.emplace(
-                    static_cast<uint32_t>(node.getFirstToken().location().offset()), &node);
+void SyntaxIndexer::visit(const slang::syntax::SyntaxNode& root) {
+    auto enter = [&](const slang::syntax::SyntaxNode& node) {
+        if (node.kind == syntax::SyntaxKind::ClassDeclaration) {
+            auto first = node.getFirstToken();
+            auto firstBuffer = first && first.location() != SourceLocation::NoLocation &&
+                                       first.location().valid()
+                                   ? m_sourceManager->getFullyExpandedLoc(first.location()).buffer()
+                                   : BufferID{};
+            auto last = node.getLastToken().location();
+            auto lastBuffer = last.valid() && last != SourceLocation::NoLocation
+                                  ? m_sourceManager->getFullyExpandedLoc(last).buffer()
+                                  : BufferID{};
+            if (firstBuffer.valid() && firstBuffer == lastBuffer &&
+                std::ranges::find(m_includeAncestors, firstBuffer) == m_includeAncestors.end()) {
+                // An unrelated class body cannot contain the edited include. Pending
+                // directives (including an entirely inactive header) can still be
+                // attached to its first token, so retain those before skipping it.
+                processTrivia(first.trivia(), node);
+                flushMacroExpansion();
+                return false;
             }
-            break;
         }
-        case syntax::SyntaxKind::InvocationExpression:
-        case syntax::SyntaxKind::HierarchyInstantiation:
-        case syntax::SyntaxKind::ClassName:
-        case syntax::SyntaxKind::AssignmentPatternExpression:
-            if (node.getFirstToken().location().buffer() == m_buffer)
-                collectedHints.emplace(
-                    static_cast<uint32_t>(node.getFirstToken().location().offset()), &node);
-            break;
-        case syntax::SyntaxKind::ParameterDeclaration:
-            if (node.getFirstToken().location().buffer() == m_buffer) {
-                collectedHints.emplace(
-                    static_cast<uint32_t>(node.getFirstToken().location().offset()), &node);
+        switch (node.kind) {
+            case syntax::SyntaxKind::MacroUsage: {
+                if (node.getFirstToken().location().buffer() == m_buffer) {
+                    collectedHints.emplace(
+                        static_cast<uint32_t>(node.getFirstToken().location().offset()), &node);
+                }
+                break;
             }
-            break;
-        default:
-            break;
-    }
+            case syntax::SyntaxKind::InvocationExpression:
+            case syntax::SyntaxKind::HierarchyInstantiation:
+            case syntax::SyntaxKind::ClassName:
+            case syntax::SyntaxKind::AssignmentPatternExpression:
+                if (node.getFirstToken().location().buffer() == m_buffer)
+                    collectedHints.emplace(
+                        static_cast<uint32_t>(node.getFirstToken().location().offset()), &node);
+                break;
+            case syntax::SyntaxKind::ParameterDeclaration:
+                if (node.getFirstToken().location().buffer() == m_buffer) {
+                    collectedHints.emplace(
+                        static_cast<uint32_t>(node.getFirstToken().location().offset()), &node);
+                }
+                break;
+            default:
+                break;
+        }
 
-    for (uint32_t i = 0; i < node.getChildCount(); i++) {
-        auto child = node.childNode(i);
-        if (child)
-            visit(*child);
+        return true;
+    };
+    if (!enter(root))
+        return;
+    struct Frame {
+        const syntax::SyntaxNode* node;
+        uint32_t nextChild = 0;
+    };
+    std::vector<Frame> stack{{&root}};
+    while (!stack.empty()) {
+        auto& frame = stack.back();
+        const auto& node = *frame.node;
+        if (frame.nextChild == node.getChildCount()) {
+            stack.pop_back();
+            continue;
+        }
+        const auto i = frame.nextChild++;
+        if (auto child = node.childNode(i)) {
+            if (enter(*child))
+                stack.push_back({child});
+        }
         else {
             auto token = const_cast<slang::syntax::SyntaxNode&>(node).childTokenPtr(i);
             if (!token || !*token)

@@ -64,6 +64,8 @@ public:
         return m_dirty || !m_analysis || !m_analysis->diagnosticsReady();
     }
     const std::vector<std::string>& lastModelSharedRoots() const { return m_lastModelSharedRoots; }
+    const TrustedImportStatus& lastModelLibraryImport() const { return m_lastModelLibraryImport; }
+    bool hasCurrentModel() const { return !m_dirty && bool(m_analysis); }
     /// Preserve the root and selections while releasing unborrowed derived analysis.
     /// The driver must discard cached diagnostic routes before calling this.
     bool releaseUnsharedAnalysisCaches();
@@ -235,6 +237,7 @@ private:
     std::shared_ptr<ServerCompilationAnalysis> m_analysis;
     // Value-only evidence survives model retirement; never a cache-preparation claim.
     std::vector<std::string> m_lastModelSharedRoots;
+    TrustedImportStatus m_lastModelLibraryImport;
     /// Syntax discovery may consult the previous model while rebuilding a released root.
     std::unordered_map<std::string, std::string> m_releasedSymbolPaths;
 
