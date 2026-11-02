@@ -5,6 +5,7 @@
 #include "util/UvmPhaseTrace.h"
 #include "ast/TrustedUvmLibrary.h"
 #include "ast/ScopePreparationReport.h"
+#include "ast/ClosedTypeContext.h"
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
@@ -1460,17 +1461,17 @@ bool ServerDriver::prepareScopeLibrary() {
                     return decline(
                         "fixed RTL selection does not resolve to a canonical module subtree: " +
                         item.instance, "unresolved-hierarchy-selection");
-                // A formal type boundary can require a reconstructed nominal
-                // context after definition import. Keep that established route
-                // instead of retaining a complete unused initial model.
+                // A closed native type needs provenance, not a second model.
+                // Contextual or open types keep the reconstructed-owner route.
                 ast::LookupResult lookup;
                 ast::ASTContext context(planning.getRoot(), ast::LookupLocation::max);
                 ast::Lookup::name(planning.parseName(item.instance), context,
                                  ast::LookupFlags::AllowUnnamedGenerate, lookup);
                 if (auto instance = lookup.found ? lookup.found->as_if<ast::InstanceSymbol>() : nullptr)
-                    contextualInitial |= std::ranges::any_of(
-                        instance->getDefinition().parameters,
-                        [](const auto& parameter) { return parameter.isTypeParam && !parameter.isLocalParam; });
+                    for (auto parameter : instance->body.getParameters())
+                        if (auto type = parameter->symbol.as_if<ast::TypeParameterSymbol>())
+                            contextualInitial |= !ClosedTypeContext{}.add(
+                                type->targetType.getType()).has_value();
                 item.reason = "fixed definition closure planned; eligible integral subtrees use "
                               "independent owners";
             }

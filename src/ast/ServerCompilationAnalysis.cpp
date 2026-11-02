@@ -111,6 +111,7 @@ ServerCompilationAnalysis::ServerCompilationAnalysis(
         std::shared_ptr<TrustedUvmLibrary> library;
     };
     if (auto bodySetting = options.get<ScopeBodyImport>()) {
+        m_scopeBodyCache = bodySetting->cache;
         auto cache = bodySetting->cache.lock();
         auto librarySetting = options.get<TrustedUvmImport>();
         if (cache && cache->wantsInitialModel() && librarySetting && librarySetting->enabled &&
@@ -209,7 +210,11 @@ ServerCompilationAnalysis::~ServerCompilationAnalysis() {
 }
 
 bool ServerCompilationAnalysis::releaseRecomputableCaches() {
-    const bool released = m_driverAnalysis || m_intrinsicAnalysis || m_analysisQueries || m_references.has_value();
+    bool releasedAnalysis = false;
+    if (auto cache = m_scopeBodyCache.lock())
+        releasedAnalysis = cache->releaseAnalysisSnapshots();
+    const bool released = releasedAnalysis || m_driverAnalysis || m_intrinsicAnalysis ||
+                          m_analysisQueries || m_references.has_value();
     // Queries and reference indexes contain pointers into the manager.
     m_references.reset();
     m_analysisQueries.reset();
@@ -246,6 +251,9 @@ slang::analysis::AnalysisManager& ServerCompilationAnalysis::getProcedureReuseBa
 slang::analysis::AnalysisManager& ServerCompilationAnalysis::getAnalysisManager(
     const lsp::RequestContext& ctx) {
     if (!m_driverAnalysis) {
+        m_importedProcedureReplay = false;
+        if (m_independentInitialBodyModel || compilation.hasImportedInstanceBodies())
+            m_analysisOptions.flags |= slang::analysis::AnalysisFlags::RetainProcedureSummaries;
         // A query can refresh the design before the save-triggered diagnostic
         // pass. Complete elaboration before freezing it for driver analysis.
         ctx.throwIfCancelled("before full-design semantics");
@@ -305,6 +313,17 @@ slang::analysis::AnalysisManager& ServerCompilationAnalysis::getAnalysisManager(
             return result;
         };
         auto analysis = makeManager(pool);
+        if (!pool)
+            if (auto cache = m_scopeBodyCache.lock())
+                if (auto baseline = cache->analysisFor(compilation)) {
+                    try {
+                        analysis->setImportedBodyProcedureReuse(std::move(baseline));
+                        m_importedProcedureReplay = true;
+                    }
+                    catch (const std::invalid_argument&) {
+                        // Changed analysis settings keep the Native route.
+                    }
+                }
         std::shared_ptr<slang::analysis::AnalysisManager> intrinsic;
         compilation.freeze();
         {
@@ -345,6 +364,11 @@ slang::analysis::AnalysisManager& ServerCompilationAnalysis::getAnalysisManager(
         }
         ctx.throwIfCancelled("after full-design dataflow");
         m_intrinsicAnalysis = std::move(intrinsic);
+        if (m_importedProcedureReplay)
+            if (auto cache = m_scopeBodyCache.lock()) {
+                const auto [reused, recomputed] = analysis->getProcedureReuseCounts();
+                cache->noteProcedureReuse(reused, recomputed);
+            }
         m_driverAnalysis = std::move(analysis);
         if (modelOwnerTraceEnabled())
             traceModelOwner("full-dataflow", &compilation, nullptr,
@@ -355,6 +379,11 @@ slang::analysis::AnalysisManager& ServerCompilationAnalysis::getAnalysisManager(
     // must not escape while its editing analysis is still populating it.
     if (m_independentInitialBodyModel)
         compilation.offerInstanceBodies(m_compilationOwner);
+    if (auto cache = m_scopeBodyCache.lock()) {
+        if (!m_importedProcedureReplay)
+            cache->retainAnalysis(m_compilationOwner,
+                                  m_intrinsicAnalysis ? m_intrinsicAnalysis : m_driverAnalysis);
+    }
     return *m_driverAnalysis;
 }
 
@@ -404,7 +433,7 @@ const slang::ast::Symbol& ServerCompilationAnalysis::lookupConeSymbol(
     ctx.checkpoint("before cone path lookup");
     slang::ast::LookupResult result;
     slang::ast::ASTContext context(compilation.getRoot(), slang::ast::LookupLocation::max);
-    slang::ast::Lookup::name(compilation.parseName(path), context, slang::ast::LookupFlags::None,
+    slang::ast::Lookup::name(compilation.parseName(path), context, slang::ast::LookupFlags::NoBodyScopeDependencies,
                              result);
     if (!result.found) {
         throw std::runtime_error(fmt::format("Could not find path in compiled design: {}", path));

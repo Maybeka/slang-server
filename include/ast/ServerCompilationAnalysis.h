@@ -110,7 +110,9 @@ private:
     /// Lazily created analysis manager used for diagnostics and driver queries.
     // Declare the intrinsic owner first so serial views are destroyed before it.
     std::shared_ptr<slang::analysis::AnalysisManager> m_intrinsicAnalysis;
-    std::unique_ptr<slang::analysis::AnalysisManager> m_driverAnalysis;
+    std::shared_ptr<slang::analysis::AnalysisManager> m_driverAnalysis;
+    bool m_importedProcedureReplay = false;
+    std::weak_ptr<class ScopeBodyCache> m_scopeBodyCache;
 
     /// Instance-aware driver queries that can elaborate the unfrozen compilation.
     std::unique_ptr<slang::analysis::AnalysisQueries> m_analysisQueries;

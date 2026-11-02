@@ -241,7 +241,8 @@ const ast::Symbol* lookupDesignSymbol(std::string_view path, ast::Compilation& d
     ast::LookupResult result;
     ast::ASTContext context(designCompilation.getRoot(), ast::LookupLocation::max);
     ast::Lookup::name(designCompilation.parseName(path), context,
-                      ast::LookupFlags::AllowUnnamedGenerate, result);
+                      ast::LookupFlags::AllowUnnamedGenerate |
+                          ast::LookupFlags::NoBodyScopeDependencies, result);
     return result.found;
 }
 

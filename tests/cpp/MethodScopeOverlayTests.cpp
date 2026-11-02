@@ -22,6 +22,8 @@
 #    include <unistd.h>
 #endif
 
+#include "slang/ast/ASTContext.h"
+#include "slang/ast/Lookup.h"
 #include "slang/ast/symbols/ClassSymbols.h"
 #include "slang/ast/symbols/ParameterSymbols.h"
 #include "slang/ast/symbols/SubroutineSymbols.h"
@@ -8410,3 +8412,61 @@ TEST_CASE("Method directory leases preserve serial retry and final mutable depen
     }
 }
 #endif
+
+TEST_CASE("Hovering a module function formal does not create an elaboration dependency",
+          "[method-body-diagnostics][automatic-context-diagnostics][hover-dependency]") {
+    Workspace workspace;
+    workspace.write(".slang/server.json", certificationConfig());
+    const std::string original =
+        "function automatic int work(input int arg);\n  return arg + 1;\nendfunction\n";
+    workspace.write("item.svh", original);
+    workspace.write("owner.sv", "module owner;\n`include \"item.svh\"\nendmodule\n");
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    server.runBackgroundWork({});
+    auto hover = server.getDocHover({.textDocument = {.uri = doc.m_uri},
+                                    .position = doc.getPosition(original.find("input int arg") + 10)});
+    REQUIRE(hover);
+    auto text = original;
+    text.replace(text.find("arg + 1"), 7, "arg + 2");
+    change(server, doc.m_uri, 2, text);
+    server.runBackgroundWork({});
+    const auto status = diagnosticState(server);
+    INFO(status.localDiagnosticDecline);
+    CHECK(status.localDiagnosticUpdates == 1);
+    checkNativeDiagnostics(workspace, server, text, true);
+}
+
+TEST_CASE("Tooling lookup leaves real body scope dependencies enabled",
+          "[method-body-diagnostics][hover-dependency]") {
+    using namespace slang;
+    ast::CompilationOptions options;
+    options.flags |= ast::CompilationFlags::TrackSubroutineBodyDependencies;
+    ast::Compilation compilation(options);
+    compilation.addSyntaxTree(syntax::SyntaxTree::fromText(
+        "module owner; function automatic int work(input int arg); return arg; "
+        "endfunction endmodule"));
+    (void)compilation.getSemanticDiagnostics();
+    const auto& body = compilation.getRoot().topInstances.front()->body;
+    const auto& method = body.find("work")->as<ast::SubroutineSymbol>();
+    REQUIRE_FALSE(method.bodyHasExternalDependents.load());
+    ast::ASTContext context(compilation.getRoot(), ast::LookupLocation::max);
+    ast::LookupResult tooling;
+    ast::Lookup::name(compilation.parseName("owner.work.arg"), context,
+                      ast::LookupFlags::NoBodyScopeDependencies, tooling);
+    // Automatic locals may be rejected as hierarchical names. A tooling
+    // lookup, successful or not, must leave body dependency facts unchanged.
+    CHECK_FALSE(method.bodyHasExternalDependents.load());
+    CHECK_FALSE(compilation.bodySyntaxHasExternalDependents(*method.getSyntax()));
+    ast::LookupResult ordinary;
+    ast::Lookup::name(compilation.parseName("owner.work.arg"), context,
+                      ast::LookupFlags::None, ordinary);
+    CHECK(tooling.found == ordinary.found);
+    ast::LookupResult semantic;
+    ast::Lookup::name(compilation.parseName("owner.work.not_yet_declared"), context,
+                      ast::LookupFlags::None, semantic);
+    CHECK_FALSE(semantic.found);
+    CHECK(method.bodyHasExternalDependents.load());
+    CHECK(compilation.bodySyntaxHasExternalDependents(*method.getSyntax()));
+}

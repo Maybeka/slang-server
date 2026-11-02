@@ -767,3 +767,106 @@ per Native/frozen/combined arm, seven named scenarios and 15 states per process.
 Evidence records hashes, configuration, per-state query/diagnostic times, fallback
 and rebuild counters, and physical memory separately. Ended raw logs and superseded
 probe programs/installations are discarded; useful reusable caches are retained.
+
+### Four-stage retained architecture acceptance — 2026-11-02
+
+The four planned stages are implemented and qualified with experiments still off
+by default. Detailed configurations, code and binary hashes, metric definitions,
+all 945 qualified states and the previous main comparison are recorded in
+`validation/macos-frozen-architecture-2026-11-02.json`.
+
+1. **Ownership and memory.** Native retained namespaces share a copy-on-write
+   location table with owned macro names. Pinned replacement preserves original
+   IDs; detached queries require the exact native prefix and an explicit source
+   lifetime lease. Rebuildable admission indexes are released after publication;
+   bound objects, reference facts and certificates remain. New certificates can
+   rebuild the indexes. The SoC mechanism probe removed about 82MiB of accounted
+   owner storage; accounted arena bytes and kernel footprint are distinct metrics.
+2. **First-edit certification.** Tooling symbol mapping suppresses its own
+   artificial scope-dependency event. Ordinary HDL lookup, missing-name dependency
+   tracking, lazy binding and constant evaluation continue to collect facts in
+   normal analysis. This avoids a false first-edit full fallback after hover.
+3. **Progressive fallback.** Existing certified body updates retain their whole
+   original context. Larger edits import eligible frozen instance scopes and can
+   replay completed closed procedure summaries. The explicit replay mode preserves
+   the old same-compilation reuse contract; ports, driver registration, constraints
+   and consumer checks run freshly. Package callees outside the imported-body
+   closure are recomputed. Only exact original owners publish flow snapshots;
+   edited generations cannot form a retention chain. Snapshot release preserves
+   active readers through separately accounted weak leases. Analysis remains
+   immediate and cancellable; no debounce was added.
+4. **Closed type contexts.** Explicit instance selectors may retain the original
+   semantic objects for caller-provided simple integral types, enums, packed
+   structs, untagged non-soft packed unions and fixed arrays of supported elements.
+   Provenance is recorded before certification, without copying those objects.
+   Fixed imported-provider members retain their existing identities without being
+   mutated. Every consumer still checks provenance and complete concrete layout.
+   Class/covergroup contexts, open types and arbitrary module-selector type
+   contexts retain conservative fallback. An unsafe ancestor does not prevent
+   eligible descendants from remaining frozen. CVA6 now directly retains the
+   complete selected DUT with zero additional owner builds.
+
+The original compilation's allocation arena remains indivisible. Direct ownership
+can retain surrounding native context after a larger edit; it cannot free individual
+unselected objects from that arena. This is a material cost of the current design,
+especially in CVA6 real edits. Source sharing removes duplication where ownership
+allows it, without claiming that all retained arena bytes are avoidable.
+
+#### Qualified comparison with previous main
+
+Values are previous main `e837638` → this implementation, using the same target
+source bytes. Each entry is the median of three fresh processes. Startup includes
+initialization, build selection and the initial hover response. Diagnostic latency
+runs from the edit notification to the edited-file publication and overlaps query
+time. Continuous latency is the within-process median of six body edits, followed
+by the across-process median. Peak is the median lifetime physical-footprint peak
+over all fifteen states, including manual rebuild. OS and project parse caches may
+already be warm. Background fixtures and real project edits are separate scenarios.
+
+| 场景 | 启动 ms | 首次诊断 ms | 连续诊断 ms | 结构回退诊断 ms | 全流程峰值 MiB |
+|---|---:|---:|---:|---:|---:|
+| opentitan-soc-large / background | 5390.27 → 5046.97 | 407.88 → 23.04 | 1.48 → 1.33 | 676.73 → 562.15 | 2671.83 → 2535.99 |
+| opentitan-soc-large / real-edit | 2170.69 → 2127.38 | 76.26 → 69.17 | 36.62 → 32.48 | 1377.67 → 1384.35 | 1576.72 → 1575.35 |
+| cva6-uvm / background | 3135.25 → 2893.23 | 801.63 → 48.22 | 12.59 → 11.30 | 946.28 → 1140.60 | 1056.69 → 939.44 |
+| cva6-uvm / real-edit | 3504.70 → 2793.90 | 862.72 → 48.99 | 13.34 → 11.86 | 773.00 → 894.91 | 970.20 → 1260.14 |
+| serdes-pcs-verification / background | 76.76 → 74.39 | 29.77 → 5.94 | 1.52 → 1.10 | 30.27 → 30.50 | 49.44 → 37.33 |
+| opentitan-aes-uvm / background | 2489.21 → 2252.37 | 273.19 → 20.17 | 3.65 → 3.34 | 377.15 → 390.28 | 697.63 → 720.72 |
+| ethernet-udp-medium / background | 57.44 → 58.81 | 7.96 → 4.61 | 0.59 → 0.63 | 10.05 → 9.27 | 26.66 → 26.22 |
+
+CVA6 structural fallback regresses despite its large first-edit and startup gains:
+background diagnostics increase by about 194ms, and real-edit diagnostics by about
+122ms. CVA6 real-edit peak footprint also increases by about 290MiB. AES+UVM has a
+smaller peak and structural-latency increase. These are recorded tradeoffs; this
+release does not establish an improvement on every path. The next performance
+priority is typed-context structural validation / flow replay cost and the lifetime
+of the indivisible original arena. UDP sub-millisecond variation is not treated as
+an optimization claim.
+
+#### Correctness, packaging and reproduction
+
+Acceptance passed 1079 CTest entries, including 2650 SDK unit cases; 1064 server
+cases / 205263 assertions under ASan; and 43 source-snapshot cases / 8758 assertions
+in both normal and ASan builds. Leak detection was disabled. Sixteen indexed public
+query projects × two arms × seven states and sixteen real-edit projects × three
+arms × fifteen states matched Native results. ASan additionally covered UBUS and
+CVA6 real-edit lifecycles plus the SoC public-query lifecycle. Full project indexes
+are required for the public-query oracle; otherwise Native lacks package symbols.
+
+Default-off smoke, installed default/custom cold/custom warm UVM profiles, archive
+and source integrity, and fresh offline SDK restoration of all 709 files passed.
+Only the default UVM configuration is distributed as a preparsed result; custom
+project configurations retain their existing one-time project cache policy.
+
+The serial harness records cached-body imports separately from certified local
+updates of the original full model. Both preserve already analyzed fixed code;
+only imports increment import counters. Earlier four qualified scenarios used a
+stricter post-measurement check; the remaining three use the explicit evidence
+labels. Timing boundaries and timestamp code are unchanged.
+
+Reproduction uses `untracked/frozen-architecture-2026-11-02` qualification scripts
+and `untracked/rtl-freeze-audit-2026-10-30` workload harnesses. Functional checks use
+`TMPDIR=/private/tmp` to avoid Mac temporary-directory alias differences. Timing
+runs are serial after functional jobs end, with three Native/frozen/combined
+processes per scenario and unlimited semantic test caches. Versioned evidence
+contains per-state data and configuration; ended raw logs and expired probes are
+removed. Useful source corpora, current builds and active caches remain available.

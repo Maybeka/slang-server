@@ -1,3 +1,4 @@
+#include "slang/analysis/AnalysisManager.h"
 // SPDX-License-Identifier: MIT
 #include "ast/ScopeBodyCache.h"
 
@@ -514,13 +515,82 @@ bool ScopeBodyCache::certify(Compilation& compilation, const InstanceBodySymbol&
     return false;
 }
 
+std::shared_ptr<const slang::analysis::AnalysisManager> ScopeBodyCache::analysisFor(
+    const Compilation& current) {
+    for (const auto& group : groups) {
+        if (!group.analysis)
+            continue;
+        for (const auto& [_, body] : group.bodies)
+            if (current.isImportedInstanceBody(*body) ||
+                &current.getCurrentInstanceBody(*body) != body) {
+                ++counters.analysisHits;
+                return group.analysis;
+            }
+    }
+    return {};
+}
+
+void ScopeBodyCache::retainAnalysis(
+    std::shared_ptr<Compilation> current,
+    std::shared_ptr<slang::analysis::AnalysisManager> analysis) {
+    if (!analysis || !analysis->hasFlag(slang::analysis::AnalysisFlags::RetainProcedureSummaries))
+        return;
+    for (auto& group : groups) {
+        // No edited consumer, reconstruction or analysis chain is retained.
+        // The exact standalone semantic owner already belongs to this group.
+        if (group.owner != current || group.analysis)
+            continue;
+        const auto bytes = analysis->getStats().memoryUsage;
+        const auto usage = accounting();
+        if (bytes > counters.budgetBytes || counters.baseBytes > counters.budgetBytes - bytes ||
+            usage.ownerBytes > counters.budgetBytes - bytes - counters.baseBytes ||
+            usage.pinnedBytes > counters.budgetBytes - bytes - counters.baseBytes - usage.ownerBytes)
+            return;
+        struct Snapshot {
+            std::shared_ptr<Compilation> owner;
+            std::shared_ptr<slang::analysis::AnalysisManager> analysis;
+        };
+        // Server callbacks capture a request cell that is cleared on completion,
+        // not the editing analysis wrapper. Keep the manager unchanged.
+        auto snapshot = std::make_shared<Snapshot>(current, analysis);
+        group.analysis = {snapshot, analysis.get()};
+        group.analysisBytes = bytes;
+        group.bytes += bytes;
+        return;
+    }
+}
+
+bool ScopeBodyCache::releaseAnalysisSnapshots() {
+    bool released = false;
+    std::erase_if(pins, [](const auto& pin) { return pin.owner.expired(); });
+    for (auto& group : groups) {
+        if (!group.analysis)
+            continue;
+        // Active replay managers can still use this immutable snapshot. Charge
+        // that lease until the last reader releases it, without keeping it alive.
+        pins.push_back({group.analysis, group.analysisBytes});
+        group.bytes -= group.analysisBytes;
+        group.analysisBytes = 0;
+        group.analysis.reset();
+        released = true;
+    }
+    return released;
+}
+
+void ScopeBodyCache::noteProcedureReuse(size_t reused, size_t recomputed) {
+    counters.proceduresReused += reused;
+    counters.proceduresRecomputed += recomputed;
+}
+
 ScopeBodyCache::Stats ScopeBodyCache::accounting() const {
     // Admission needs byte totals only. Public reports allocate value copies
     // when queried, never for each candidate in a large design traversal.
     auto result = counters;
     result.owners = groups.size();
-    for (const auto& group : groups)
+    for (const auto& group : groups) {
         result.ownerBytes += group.bytes;
+        result.analysisBytes += group.analysisBytes;
+    }
     for (const auto& pin : pins)
         if (!pin.owner.expired())
             result.pinnedBytes += pin.bytes;
@@ -635,6 +705,28 @@ void ScopeBodyCache::publish(std::shared_ptr<Compilation> current,
     UvmPhaseTrace publicationTrace;
     auto publicationDone = ScopeGuard([&] { publicationTrace.mark("scope-owner-publication"); });
     auto& sources = *const_cast<SourceManager*>(current->getSourceManager());
+    if (independentInitial && groups.empty() && !current->hasImportedInstanceBodies()) {
+        // Record original nominal identities before asking for any certificate.
+        // Import still checks provenance and the complete concrete layout in
+        // each consumer; an unsupported argument keeps the existing fallback.
+        AdmissionTraversal types([&](const InstanceBodySymbol& body) {
+            if (selected(body))
+                for (auto parameter : body.getParameters())
+                    if (auto type = parameter->symbol.as_if<TypeParameterSymbol>()) {
+                        const auto& argument = type->targetType.getType();
+                        if (!current->isFixedInstanceBodyTypeArgument(argument, body) &&
+                            !current->retainInstanceBodyTypeDependency(argument) &&
+                            std::getenv("SLANG_SCOPE_BODY_TRACE")) {
+                            auto scope = argument.getParentScope();
+                            fmt::print(stderr, "scope-body native-type-refusal\t{}\t{}\t{}\towned={}\n",
+                                       body.getHierarchicalPath(), type->name, argument.toString(),
+                                       scope && &scope->getCompilation() == current.get());
+                        }
+                    }
+            return true;
+        });
+        current->getRoot().visit(types);
+    }
     // A batch can publish multiple independent bodies. Share one namespace for
     // their generated wrappers, but never append later editor generations to it.
     std::shared_ptr<SourceManager> compactSources;
@@ -1032,6 +1124,7 @@ std::optional<ScopeBodyCache::Group> ScopeBodyCache::prepareGroup(
             sourceBytes, sources ? sources->getSourceLocationTableBytes() : 0,
             sources ? sources->getMemoryUsage() : 0);
     }
+    owner->releaseInstanceBodyAdmissionIndexes();
     size_t bytes = charge(*owner) + sizeof(Group) + 2 * sizeof(void*) +
                    bodies.bucket_count() * sizeof(void*);
     for (const auto& [path, _] : bodies)

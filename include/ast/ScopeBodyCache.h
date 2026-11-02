@@ -10,6 +10,8 @@
 
 #include "slang/ast/Compilation.h"
 
+namespace slang::analysis { class AnalysisManager; }
+
 namespace server {
 struct TrustedUvmLibrary;
 class SourceStorageRegistry;
@@ -28,6 +30,8 @@ public:
         uint64_t hits = 0, misses = 0, publications = 0, compactPublications = 0, evictions = 0,
                  declines = 0, ownerBuilds = 0, admissionHits = 0, capacitySkips = 0;
         size_t admissionBytes = 0, admissionRecords = 0;
+        size_t analysisBytes = 0;
+        uint64_t analysisHits = 0, proceduresReused = 0, proceduresRecomputed = 0;
         std::vector<std::string> retainedRoots;
         // Lifetime attempt counts, not unique bodies or current-model coverage.
         uint64_t refusalAttempts = 0, uncategorizedRefusals = 0;
@@ -43,6 +47,13 @@ public:
                  std::shared_ptr<const void> sourceLibraries = {}, bool independentInitial = false);
     Stats status() const;
     bool wantsInitialModel() const;
+    std::shared_ptr<const slang::analysis::AnalysisManager> analysisFor(
+        const slang::ast::Compilation& current);
+    void retainAnalysis(std::shared_ptr<slang::ast::Compilation> current,
+                        std::shared_ptr<slang::analysis::AnalysisManager> analysis);
+    void noteProcedureReuse(size_t reused, size_t recomputed);
+    bool releaseAnalysisSnapshots();
+
     void trackInitialSources(const std::shared_ptr<slang::SourceManager>& sources);
 
 private:
@@ -50,9 +61,11 @@ private:
         std::shared_ptr<slang::ast::Compilation> owner;
         std::unordered_map<std::string, const slang::ast::InstanceBodySymbol*> bodies;
         size_t bytes;
+        std::shared_ptr<const slang::analysis::AnalysisManager> analysis;
+        size_t analysisBytes = 0;
     };
     struct Pin {
-        std::weak_ptr<slang::ast::Compilation> owner;
+        std::weak_ptr<const void> owner;
         size_t bytes;
     };
     std::shared_ptr<TrustedUvmLibrary> library;

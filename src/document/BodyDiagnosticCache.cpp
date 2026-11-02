@@ -1043,6 +1043,8 @@ BodyDiagnosticCache::Slice BodyDiagnosticCache::analyze(
     Slice result;
     result.compilation = std::make_shared<ast::Compilation>(Bag{owner->getOptions()});
     auto& compilation = *result.compilation;
+    if (&tree->sourceManager() != owner->getSourceManager())
+        compilation.retainSourceOwner(driver.driver.getSourceOwner());
     compilation.setBodyQueryContext(owner, tree);
     ast::BodyQueryReferenceGuard referenceGuard(compilation);
     const syntax::FunctionDeclarationSyntax* syntax = nullptr;
