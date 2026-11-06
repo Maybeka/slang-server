@@ -359,7 +359,15 @@ add_library(
   src/document/DefinitionInfo.cpp
   src/document/ShallowAnalysis.cpp
   src/document/MethodScopeOverlay.cpp
+  src/document/MethodScopeCertificate.cpp
+  src/document/MethodScopeQueries.cpp
+  src/document/MethodScopeDiagnostics.cpp
+  src/util/MethodPreprocessingProof.cpp
   src/document/BodyDiagnosticCache.cpp
+  src/document/BodyDiagnosticRendering.cpp
+  src/document/DiagnosticAnalysisOwner.cpp
+  src/document/LocalDiagnosticSession.cpp
+  src/util/MethodInputProof.cpp
   src/document/BodyLineProof.cpp
   src/document/MacroLineProof.cpp
   src/document/SlangDoc.cpp
@@ -396,6 +404,7 @@ add_library(
   src/FrozenSources.cpp
   src/document/FrozenSourceRegistry.cpp
   src/SlangServer.cpp
+  src/SlangServerRetirement.cpp
   src/ServerDiagClient.cpp
   src/diagnostics/DiagnosticProcess.cpp
   src/diagnostics/DiagnosticSnapshotCodec.cpp

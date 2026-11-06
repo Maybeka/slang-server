@@ -10,6 +10,7 @@
 
 #include "slang/diagnostics/CompilationDiags.h"
 #include "slang/diagnostics/ExpressionsDiags.h"
+#include "slang/diagnostics/LookupDiags.h"
 #include "slang/diagnostics/SysFuncsDiags.h"
 
 TEST_CASE("SingleFileDiag") {
@@ -58,6 +59,43 @@ endmodule
 )");
 
     golden.record(doc.getDiagnostics());
+}
+
+TEST_CASE("Macro diagnostic notes link physical definitions but not generated command text",
+          "[macro-warnings][generated-macro-note]") {
+    // Chip DV supplies hierarchical paths with -D. A retained or replayed
+    // predefinition need not keep its generated buffer's internal path.
+    const bool generated = GENERATE(false, true);
+    const bool replayed = GENERATE(false, true);
+    slang::SourceManager sources;
+    ClientHarness client;
+    auto diagnostics = std::make_shared<server::ServerDiagClient>(sources, client);
+    diagnostics->disableDestructorPublication();
+    slang::DiagnosticEngine engine(sources);
+    engine.addClient(diagnostics);
+    auto user = sources.assignText("/tmp/slang-macro-user.sv", "`PATH\n");
+    auto definition = generated
+                          ? (replayed ? sources.assignQueryText("", "missing\n")
+                                      : sources.assignText("missing\n"))
+                          : sources.assignText("/tmp/slang-macro-definition.svh", "missing\n");
+    auto expansion = sources.createExpansionLoc(
+        {definition.id, 0}, {{user.id, 0}, {user.id, 5}}, "PATH");
+    slang::Diagnostic raw(slang::diag::UndeclaredIdentifier, expansion);
+    raw << std::string_view("missing");
+    engine.issue(raw);
+    diagnostics->pushDiags();
+    auto values = client.getDiagnostics(URI::fromFile("/tmp/slang-macro-user.sv"));
+    REQUIRE(values.size() == 1);
+    CHECK(values.front().severity == lsp::DiagnosticSeverity::Error);
+    CHECK(values.front().message.find("missing") != std::string::npos);
+    if (generated)
+        CHECK_FALSE(values.front().relatedInformation);
+    else {
+        REQUIRE(values.front().relatedInformation);
+        REQUIRE(values.front().relatedInformation->size() == 1);
+        CHECK(values.front().relatedInformation->front().location.uri ==
+              URI::fromFile("/tmp/slang-macro-definition.svh"));
+    }
 }
 
 TEST_CASE("LineDirectiveDiagnosticsUseBufferPositions") {

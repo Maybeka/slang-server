@@ -4,6 +4,7 @@
 #include "Config.h"
 #include "ServerDriver.h"
 #include "diagnostics/DiagnosticSnapshotCodec.h"
+#include "document/LocalDiagnosticSession.h"
 #include <array>
 #include <map>
 #include <optional>
@@ -14,8 +15,10 @@
 namespace server {
 
 class BodyDiagnosticCache;
+class DocumentEditTransaction;
 class BodyMacroProof;
 class DirectoryProofPlan;
+class UvmPhaseTrace;
 struct BodyDiagnosticBaseline;
 
 /// Opt-in local function/task queries retaining one original lexical context.
@@ -38,9 +41,9 @@ public:
     ~MethodScopeOverlay();
     bool belongsTo(const ServerDriver&) const;
     bool valid(const Config&, const lsp::RequestContext&) const;
-    /// synced becomes true before native sync starts. The caller must never replay after it.
+    /// The transaction forbids replay once native synchronization has started.
     bool apply(const lsp::DidChangeTextDocumentParams&, const Config&, const lsp::RequestContext&,
-               bool& synced, bool deferBinding = false);
+               DocumentEditTransaction& transaction, bool deferBinding = false);
     std::optional<std::vector<lsp::CompletionItem>> complete(const lsp::CompletionParams&,
                                                              const Config&,
                                                              const lsp::RequestContext&);
@@ -56,7 +59,7 @@ public:
                                                                 const lsp::RequestContext&) const;
     bool isBodyQuery() const { return bodyQueries; }
     bool hasPreparedLocalDiagnostics() const {
-        return bodyQueries && accepted && bodyDiagnostics && diagnosticDecline.empty();
+        return bodyQueries && accepted && localDiagnostics.isPrepared();
     }
     bool publishLocalDiagnostics(const Config&, const lsp::RequestContext&,
                                  bool deferTransport = false);
@@ -91,10 +94,18 @@ private:
         int version;
         std::string text;
     };
+    struct ResolvedSource {
+        std::shared_ptr<slang::syntax::SyntaxTree> tree;
+        std::shared_ptr<ShallowAnalysis> analysis;
+        slang::BufferID occurrence;
+        std::shared_ptr<SlangDoc> document;
+    };
+    ResolvedSource resolveSource(const Config&, const lsp::RequestContext&, UvmPhaseTrace&);
+    void captureWitnesses(const Config&, slang::ast::Compilation&, slang::BufferID,
+                          const lsp::RequestContext&, UvmPhaseTrace&);
     ServerDriver* driver;
     mutable bool inputChanged = false;
-    std::unique_ptr<BodyDiagnosticCache> bodyDiagnostics;
-    std::shared_ptr<const BodyDiagnosticBaseline> diagnosticBaseline;
+    LocalDiagnosticSession localDiagnostics;
     bool optimizedCertification(const Config&) const;
     bool validContext(const Config&, const lsp::RequestContext&) const;
     bool validForWork(const Config&, const lsp::RequestContext&) const;
@@ -109,9 +120,6 @@ private:
         std::optional<Config::HoverConfig::MacroView>);
     std::optional<lsp::CompletionItem> resolveImpl(const lsp::CompletionItem&, const Config&,
                                                    const lsp::RequestContext&);
-    std::string diagnosticDecline, diagnosticCaptureDecline;
-    uint64_t diagnosticUpdates = 0;
-    int diagnosticBaselineVersion = -1, diagnosticCaptureVersion = -1;
     void captureLocalBaseline(const Config&, const lsp::RequestContext&);
     void prepareLocalDiagnostics(const Config&, const lsp::RequestContext&,
                                  bool completeDeferred = false);
@@ -133,12 +141,12 @@ private:
     std::unique_ptr<slang::BumpAllocator> macroArena;
     std::vector<const slang::syntax::DefineDirectiveSyntax*> bodyMacros;
     bool generalApply(const lsp::DidChangeTextDocumentParams&, const Config&,
-                      const lsp::RequestContext&, bool&, std::string next, size_t nextBodyEnd,
-                      size_t nextFunctionEnd, bool bindOnly = false);
+                      const lsp::RequestContext&, DocumentEditTransaction&, std::string next,
+                      size_t nextBodyEnd, size_t nextFunctionEnd, bool bindOnly = false);
     void ensureGeneralBinding(const Config&, const lsp::RequestContext&);
     void commitGeneralText(const lsp::DidChangeTextDocumentParams&, std::string next,
                            size_t nextBodyEnd, size_t nextFunctionEnd, const lsp::RequestContext&,
-                           bool& synced);
+                           DocumentEditTransaction& transaction);
     bool generalSite(const lsp::Position&) const;
     size_t functionBegin = 0, functionEnd = 0, bodyBegin = 0, bodyEnd = 0, localCount = 0;
     size_t originalBodyEnd = 0;

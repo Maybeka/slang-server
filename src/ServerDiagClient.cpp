@@ -284,17 +284,38 @@ void ServerDiagClient::report(const slang::ReportedDiagnostic& diag) {
     std::vector<lsp::DiagnosticRelatedInformation> related;
     for (auto it = diag.expansionLocs.rbegin(); it != diag.expansionLocs.rend(); it++) {
         SourceLocation loc = *it;
+        auto original = sourceManager->getFullyOriginalLoc(loc);
+        // Command-line definitions live in generated source buffers. Their
+        // internal names are not editor documents and can disappear on replay.
+        // Borrow the source's immutable name; ordinary macro notes need no extra
+        // filesystem path or string allocation just to check addressability.
+        auto filename = sourceManager->getRawFileName(original.buffer());
+#ifdef _WIN32
+        auto separator = filename.find_last_of("/\\");
+#else
+        auto separator = filename.find_last_of('/');
+#endif
+        if (separator != std::string_view::npos)
+            filename.remove_prefix(separator + 1);
+        constexpr std::string_view generatedPrefix = "<unnamed_buffer";
+        const bool generated =
+            filename.starts_with(generatedPrefix) && filename.ends_with('>') &&
+            filename.size() > generatedPrefix.size() + 1 &&
+            std::ranges::all_of(filename.substr(generatedPrefix.size(),
+                                                filename.size() - generatedPrefix.size() - 1),
+                                [](char c) { return c >= '0' && c <= '9'; });
+        if (filename.empty() || generated)
+            continue;
+
         std::string name(sourceManager->getMacroName(loc));
         if (name.empty())
             name = "expanded from here";
         else
             name = fmt::format("expanded from macro '{}'", name);
-
         SmallVector<SourceRange> macroRanges;
         engine->mapSourceRanges(loc, diag.ranges, macroRanges);
-
-        auto relatedLoc = getLocation(sourceManager->getFullyOriginalLoc(loc), macroRanges, name);
-        if (relatedLoc) {
+        auto relatedLoc = getLocation(original, macroRanges, name);
+        if (relatedLoc && relatedLoc->uri != URI{}) {
             related.emplace_back(lsp::DiagnosticRelatedInformation{
                 .location = *relatedLoc, .message = std::string{diag.formattedMessage}});
         }

@@ -2,6 +2,7 @@
 #pragma once
 
 #include "ServerDriver.h"
+#include "document/DiagnosticAnalysisOwner.h"
 #include "document/NativeDiagnosticSnapshot.h"
 #include <array>
 #include <map>
@@ -28,17 +29,14 @@ struct BodyDiagnosticBaseline {
     slang::BufferID targetBuffer;
     std::vector<std::shared_ptr<void>> sourcePins;
     std::string text;
-    std::shared_ptr<slang::ast::Compilation> owner;
+    DiagnosticAnalysisOwner retainedAnalysis;
     std::shared_ptr<const NativeReferenceUsage> nativeReferences;
     std::vector<const slang::ast::SubroutineSymbol*> originals;
     std::unordered_set<const slang::syntax::SyntaxNode*> independentReceiverReads;
     std::unordered_set<const slang::syntax::SyntaxNode*> independentCalleeReads;
     std::array<slang::Diagnostics, 3> diagnostics;
     std::shared_ptr<const struct NativeDiagnosticSnapshot> publication;
-    // owner aliases the completed ServerCompilationAnalysis and pins this manager.
-    const slang::analysis::AnalysisManager* analysis = nullptr;
-    const slang::analysis::AnalysisManager* completeAnalysis = nullptr;
-    const slang::analysis::AnalysisManager* procedureReuseAnalysis = nullptr;
+    // Analysis views are available only through retainedAnalysis above.
     std::vector<const slang::analysis::AnalyzedProcedure*> timingCallers;
     slang::analysis::AnalysisOptions analysisOptions;
     slang::DiagnosticEngine::SettingsSnapshot settings;
@@ -95,7 +93,8 @@ private:
     std::vector<std::shared_ptr<void>> linePins;
     std::shared_ptr<class BodyLineProof> lineProof;
     std::shared_ptr<class MacroLineProof> macroLineProof;
-    std::shared_ptr<slang::ast::Compilation> owner, baselineBinding;
+    DiagnosticAnalysisOwner retainedAnalysis;
+    std::shared_ptr<slang::ast::Compilation> baselineBinding;
     std::vector<const slang::ast::ClassType*> specializations;
     std::vector<const slang::ast::SubroutineSymbol*> originals;
     std::unordered_set<const slang::syntax::SyntaxNode*> independentReceiverReads;
@@ -134,10 +133,7 @@ private:
     bool baselineClassLookups = false;
     bool stableExternalDriverLocations = true;
     std::unordered_set<const slang::syntax::SyntaxNode*> effectSensitiveCalls;
-    // owner aliases the completed ServerCompilationAnalysis and pins this manager.
-    const slang::analysis::AnalysisManager* analysis = nullptr;
-    const slang::analysis::AnalysisManager* completeAnalysis = nullptr;
-    const slang::analysis::AnalysisManager* procedureReuseAnalysis = nullptr;
+    // Analysis views are available only through retainedAnalysis above.
     std::vector<const slang::analysis::AnalyzedProcedure*> timingCallers;
     slang::analysis::AnalysisOptions analysisOptions;
     slang::DiagnosticEngine::SettingsSnapshot settings;

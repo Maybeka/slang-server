@@ -4,16 +4,19 @@
 #pragma once
 
 #include <filesystem>
+#include <stdexcept>
 
 #include "slang/util/Util.h"
 
 namespace fs = std::filesystem;
 
-static std::filesystem::path findSlangRoot() {
-    auto path = fs::current_path();
+static std::filesystem::path findSlangRoot(fs::path path = fs::current_path()) {
+    const auto start = path;
     while (!fs::exists(path / "tests")) {
-        path = path.parent_path();
-        SLANG_ASSERT(!path.empty());
+        const auto parent = path.parent_path();
+        if (parent == path || parent.empty())
+            throw std::runtime_error("Cannot find test source root from " + start.string());
+        path = parent;
     }
     return path;
 }

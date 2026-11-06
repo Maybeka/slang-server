@@ -3,6 +3,7 @@
 
 #include "ast/ServerCompilation.h"
 #include "ast/TrustedUvmLibrary.h"
+#include "diagnostics/DiagnosticIdentity.h"
 #include "document/BodyLineProof.h"
 #include "document/MacroLineProof.h"
 #include "document/NativeDiagnosticSnapshot.h"
@@ -36,46 +37,9 @@
 
 namespace server {
 using namespace slang;
+using diagnostic_identity::rawDiagnosticHash;
+using diagnostic_identity::scalarDiagnosticEqual;
 namespace {
-size_t rawDiagnosticHash(const Diagnostic& value) {
-    size_t hash = std::hash<const ast::Symbol*>{}(value.symbol);
-    auto add = [&](size_t part) { hash ^= part + size_t(0x9e3779b9) + (hash << 6) + (hash >> 2); };
-    add(size_t(value.code.getSubsystem()));
-    add(value.code.getCode());
-    add(value.location.buffer().getId());
-    add(value.location.offset());
-    return hash;
-}
-// Custom arguments have no generic equality, and ConstantValue equality does not
-// prove identical formatting (for example signed zero). Reformat these fresh
-// diagnostics; hashes only locate candidates and never prove equality.
-bool scalarDiagnosticEqual(const Diagnostic& a, const Diagnostic& b) {
-    if (a.code != b.code || a.location != b.location || a.symbol != b.symbol ||
-        a.coalesceCount != b.coalesceCount || a.ranges != b.ranges ||
-        a.args.size() != b.args.size() || a.notes.size() != b.notes.size())
-        return false;
-    for (size_t i = 0; i < a.args.size(); ++i) {
-        if (a.args[i].index() != b.args[i].index())
-            return false;
-        bool same = std::visit(
-            [&](const auto& value) {
-                using T = std::decay_t<decltype(value)>;
-                if constexpr (std::is_same_v<T, Diagnostic::CustomArgType> ||
-                              std::is_same_v<T, ConstantValue>)
-                    return false;
-                else
-                    return value == std::get<T>(b.args[i]);
-            },
-            a.args[i]);
-        if (!same)
-            return false;
-    }
-    for (size_t i = 0; i < a.notes.size(); ++i)
-        if (!scalarDiagnosticEqual(a.notes[i], b.notes[i]))
-            return false;
-    return true;
-}
-
 void require(bool condition, const char* reason) {
     if (!condition)
         throw std::runtime_error(reason);
@@ -412,7 +376,7 @@ std::shared_ptr<const BodyDiagnosticBaseline> BodyDiagnosticCache::capture(
     require(baseline->settings.errorLimit == 0, "bounded diagnostic streams require full analysis");
     auto design = d.comp->createActiveDesignContext({}, ctx);
     auto owner = design.retainCompilation();
-    baseline->owner = owner;
+    baseline->retainedAnalysis = DiagnosticAnalysisOwner::pending(design);
     baseline->pendingDesign = std::make_shared<ActiveDesignContext>(std::move(design));
     baseline->text = std::string(d.getDocument(uri)->getText());
     baseline->config = rfl::json::write(d.m_config);
@@ -440,7 +404,7 @@ std::shared_ptr<const BodyDiagnosticBaseline> BodyDiagnosticCache::completeCaptu
     // Work on a private copy: cancellation leaves the exact pre-edit witness available.
     auto baseline = std::make_shared<BodyDiagnosticBaseline>(*saved);
     auto& design = *baseline->pendingDesign;
-    auto owner = baseline->owner;
+    auto owner = baseline->retainedAnalysis.compilation();
     const auto start = baseline->begin;
     require(!owner->hasFatalErrors(), "fatal baseline diagnostics require native analysis");
     if (!design.getAnalysis().diagnosticsReady()) {
@@ -456,9 +420,8 @@ std::shared_ptr<const BodyDiagnosticBaseline> BodyDiagnosticCache::completeCaptu
         ctx.checkpoint("after shared baseline semantic diagnostics");
         require(!owner->hasFatalErrors(), "fatal baseline diagnostics require native analysis");
     }
-    auto& manager = design.getAnalysis().getAnalysisManager(ctx);
-    baseline->completeAnalysis = &manager;
-    baseline->procedureReuseAnalysis = &design.getAnalysis().getProcedureReuseBaseline(ctx);
+    baseline->retainedAnalysis = DiagnosticAnalysisOwner::prepared(design, ctx);
+    auto& manager = baseline->retainedAnalysis.manager();
     baseline->analysisOptions = manager.getOptions();
     if (modelOwnerTraceEnabled())
         traceModelOwner("baseline-pin", owner.get(), nullptr, owner->getTotalBytesAllocated(),
@@ -511,7 +474,7 @@ std::shared_ptr<const BodyDiagnosticBaseline> BodyDiagnosticCache::completeCaptu
     // the complete timing-only set together; retaining an "unaffected" sibling
     // could duplicate or suppress a changed caller's diagnostic after coalescing.
     if (baseline->originals.front()->subroutineKind == ast::SubroutineKind::Task) {
-        baseline->analysis = &manager;
+        baseline->retainedAnalysis.selectTaskTiming(*baseline->originals.front());
         baseline->timingCallers = manager.getTaskTimingProcedures(
             [&] { ctx.checkpoint("task diagnostic caller dependencies"); });
     }
@@ -552,11 +515,9 @@ BodyDiagnosticCache::BodyDiagnosticCache(ServerDriver& d, const URI& target, siz
     bufferLimit = baseline->bufferLimit;
     settings = baseline->settings;
     analysisOptions = baseline->analysisOptions;
-    analysis = baseline->analysis;
-    completeAnalysis = baseline->completeAnalysis;
-    procedureReuseAnalysis = baseline->procedureReuseAnalysis;
+    retainedAnalysis = baseline->retainedAnalysis;
+    const auto* analysis = retainedAnalysis.timing();
     timingCallers = baseline->timingCallers;
-    owner = baseline->owner;
     originals = baseline->originals;
     independentReceiverReads = baseline->independentReceiverReads;
     independentCalleeReads = baseline->independentCalleeReads;
@@ -1040,6 +1001,10 @@ BodyDiagnosticCache::BodyDiagnosticCache(ServerDriver& d, const URI& target, siz
 
 BodyDiagnosticCache::Slice BodyDiagnosticCache::analyze(
     const std::shared_ptr<syntax::SyntaxTree>& tree, const lsp::RequestContext& ctx) {
+    const auto& owner = retainedAnalysis.compilation();
+    const auto* analysis = retainedAnalysis.timing();
+    const auto* completeAnalysis = retainedAnalysis.complete();
+    const auto* procedureReuseAnalysis = retainedAnalysis.procedures();
     Slice result;
     result.compilation = std::make_shared<ast::Compilation>(Bag{owner->getOptions()});
     auto& compilation = *result.compilation;
@@ -1359,6 +1324,7 @@ BodyDiagnosticCache::Slice BodyDiagnosticCache::analyze(
 }
 
 void BodyDiagnosticCache::validateSlice(const Slice& slice) const {
+    const auto& owner = retainedAnalysis.compilation();
     if (slice.references != references && !(slice.fullFlow && nativeReferences)) {
         // A fixed provider's exported use exists independently of this editable
         // caller. Changing a bit already set by that provider cannot change the
@@ -1448,6 +1414,8 @@ void BodyDiagnosticCache::validateSlice(const Slice& slice) const {
 
 std::vector<const syntax::FunctionDeclarationSyntax*> BodyDiagnosticCache::validateGeneratedMacros(
     std::string_view current, size_t newEnd, const lsp::RequestContext& ctx) {
+    const auto& owner = retainedAnalysis.compilation();
+    const auto* completeAnalysis = retainedAnalysis.complete();
     require(completeAnalysis, "generated macro native analysis unavailable");
     if (!macroLineProof) {
         require(bool(lineText), "generated macro baseline text unavailable");
@@ -1462,93 +1430,10 @@ std::vector<const syntax::FunctionDeclarationSyntax*> BodyDiagnosticCache::valid
     return macroLineProof->functionContexts();
 }
 
-void BodyDiagnosticCache::prepareFormatted(const lsp::RequestContext& ctx) {
-    if (formattedPrepared || !formattedPublication)
-        return;
-    ctx.checkpoint("before immutable diagnostic rendering index");
-    const auto& raw = formattedPublication->diagnostics;
-    const auto path = driver.sm.getFullPath(driver.getDocument(uri)->getBuffer()).generic_string();
-    auto targetUri = [&](const URI& value) { return value.getPath() == path; };
-    auto touchesTarget = [&](auto&& self, const Diagnostic& value) -> bool {
-        auto location = [&](SourceLocation loc) {
-            return loc &&
-                   (nativeTargetBuffers.contains(driver.sm.getFullyExpandedLoc(loc).buffer()) ||
-                    nativeTargetBuffers.contains(driver.sm.getFullyOriginalLoc(loc).buffer()));
-        };
-        if (location(value.location))
-            return true;
-        for (auto range : value.ranges)
-            if (location(range.start()) || location(range.end()))
-                return true;
-        for (const auto& note : value.notes)
-            if (self(self, note))
-                return true;
-        return false;
-    };
-    // Build privately: cancellation may occur while an existing local cache is
-    // being promoted to a full effect replay. No partial index can escape.
-    std::vector<CachedFormatted> nextEntries = formattedEntries;
-    std::unordered_multimap<size_t, size_t> nextByHash;
-    std::unordered_map<const Diagnostic*, size_t> nextRetained = formattedRetained;
-    size_t total = 0;
-    for (const auto& values : raw)
-        total += values.size();
-    nextEntries.reserve(total);
-    nextByHash.reserve(total);
-    nextRetained.reserve(total);
-    for (size_t phase = 0; phase < raw.size(); ++phase) {
-        const auto& rendered = formattedPublication->rendered[phase];
-        if (rendered.size() != raw[phase].size())
-            continue;
-        std::vector<size_t> entries(raw[phase].size(), size_t(-1));
-        for (size_t i = 0; i < raw[phase].size(); ++i) {
-            ctx.checkpoint("prepare immutable diagnostic rendering");
-            if (!rendered[i].key || rendered[i].values.size() != 1 ||
-                touchesTarget(touchesTarget, raw[phase][i]))
-                continue;
-            const auto& value = rendered[i].values.front();
-            bool sensitive = targetUri(value.uri);
-            if (value.value.relatedInformation)
-                for (const auto& note : *value.value.relatedInformation)
-                    sensitive |= targetUri(note.location.uri);
-            if (sensitive)
-                continue;
-            entries[i] = nextEntries.size();
-            nextByHash.emplace(rawDiagnosticHash(raw[phase][i]), entries[i]);
-            nextEntries.push_back({&raw[phase][i], &rendered[i]});
-        }
-        for (const auto& [key, indices] : retainedNativeIndices[phase]) {
-            const auto& diagnostics = retained[phase].at(key);
-            for (size_t i = 0; i < indices.size(); ++i)
-                if (entries[indices[i]] != size_t(-1))
-                    nextRetained.emplace(&diagnostics[i], entries[indices[i]]);
-        }
-    }
-    ctx.checkpoint("commit immutable diagnostic rendering index");
-    formattedEntries = std::move(nextEntries);
-    formattedByHash = std::move(nextByHash);
-    formattedRetained = std::move(nextRetained);
-    formattedPrepared = true;
-    retainedNativeIndices = {};
-    nativeTargetBuffers = {};
-}
-
-const BodyDiagnosticCache::CachedFormatted* BodyDiagnosticCache::findFormatted(
-    const Diagnostic& value) const {
-    if (auto found = formattedRetained.find(&value); found != formattedRetained.end())
-        return &formattedEntries[found->second];
-    auto [begin, end] = formattedByHash.equal_range(rawDiagnosticHash(value));
-    for (auto it = begin; it != end; ++it) {
-        const auto& entry = formattedEntries[it->second];
-        if (scalarDiagnosticEqual(value, *entry.raw))
-            return &entry;
-    }
-    return nullptr;
-}
-
 void BodyDiagnosticCache::publish(const std::shared_ptr<syntax::SyntaxTree>& tree, size_t newEnd,
                                   const lsp::RequestContext& ctx,
                                   const std::function<void()>& validate, bool deferTransport) {
+    const auto& owner = retainedAnalysis.compilation();
     UvmPhaseTrace phases;
     auto document = driver.getDocument(uri);
     lsp::Position coordinate{};

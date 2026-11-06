@@ -13,12 +13,13 @@
 #include "ast/WcpClient.h"
 #include "completions/CompletionContext.h"
 #include "completions/CompletionDispatch.h"
+#include "document/DocumentEditTransaction.h"
 #include "lsp/LspTypeExtensions.h"
 #include "lsp/LspTypes.h"
 #include "lsp/URI.h"
 #include "util/Converters.h"
 #include "util/Logging.h"
-#include "util/SourceHistoryBudget.h"
+#include "util/SourceHistoryPolicy.h"
 #include "util/UvmPhaseTrace.h"
 #include <algorithm>
 #include <cctype>
@@ -94,14 +95,7 @@ std::optional<ProcessMemoryUsage> processMemoryUsage() {
 #endif
     return std::nullopt;
 }
-bool sourceHistoryEnabled(const Config& config) {
-    return config.experimentalUvmPrefixCache.value() || config.experimentalFrozenSources.value() ||
-           config.experimentalUvmSemanticCache.value() ||
-           config.experimentalScopeSemanticCache.value() ||
-           config.experimentalCooperativeAnalysis.value() ||
-           (config.experimentalMethodBodyQueries.value() &&
-            config.experimentalMethodBodyCertificateRenewal.value());
-}
+
 void republishDriverDiagnostics(ServerDriver& driver) {
     // A candidate can publish during construction. The retired owner's final
     // clears must precede the current owner's authoritative publication.
@@ -264,12 +258,12 @@ lsp::InitializeResult SlangServer::getInitialize(const lsp::InitializeParams& pa
             // An unavailable platform observation is omitted, never reported as zero.
             std::optional<ProcessMemoryUsage> processMemory;
         };
-        return rfl::to_generic(
-            Status{m_driver->sourceStorageUsage(),
-                   sourceHistoryEnabled(m_config) && !std::getenv("SLANG_UVM_GENERATION_DISABLE"),
-                   m_config.sourceHistoryMaxMiB.value(), m_contextBaseBytes, m_contextBudget,
-                   m_contextHardBudget, m_contextRetirementPending, m_driver->deferredEditorBytes(),
-                   m_contextAdmissionPending, processMemoryUsage()});
+        return rfl::to_generic(Status{
+            m_driver->sourceStorageUsage(),
+            sourceHistoryEnabled(m_config) && !std::getenv("SLANG_UVM_GENERATION_DISABLE"),
+            m_config.sourceHistoryMaxMiB.value(), m_contextBaseBytes, m_contextBudget,
+            m_contextHardBudget, m_contextRetirement.isPending(), m_driver->deferredEditorBytes(),
+            m_contextRetirement.awaitsInputs(), processMemoryUsage()});
     });
     registerCommand<std::monostate, bool>("slang.rebuildScopeLibrary", [this](std::monostate) {
         m_driver->invalidateUvmParseCache();
@@ -1181,8 +1175,8 @@ bool SlangServer::loadConfig(const Config& config, bool forceIndexing, bool requ
     m_cancelObsoleteDocumentQueries.store(config.experimentalMethodBodyQueries.value(),
                                           std::memory_order_relaxed);
     m_driver = std::move(newDriver);
-    m_contextAdmissionPending = false;
-    m_contextRetirementPending = false;
+    m_contextRetirement.admitInputs();
+    m_contextRetirement.clearRequest();
     m_contextRetry.reset();
     m_buildfile = std::move(buildfile);
     if (!preserveDesign)
@@ -1749,17 +1743,6 @@ void SlangServer::onProtocolStopped() {
     m_activeDiagnosticSnapshot.reset();
 }
 
-void SlangServer::admitRetirementInputs(const lsp::RequestContext& ctx) {
-    if (m_contextAdmissionPending) {
-        ctx.checkpoint("before deferred editor admission");
-        maybeRetireParsedContext(&ctx);
-        if (m_contextAdmissionPending)
-            throw lsp::RequestFailed(
-                "Pending editor text could not be admitted; retry after fixing inputs");
-        ctx.checkpoint("after deferred editor admission");
-    }
-}
-
 void SlangServer::recoverMethodInputs(const lsp::RequestContext& ctx) {
     admitRetirementInputs(ctx);
     if (m_driver && m_driver->hasStaleSyntaxPrefixInputs())
@@ -1870,9 +1853,9 @@ void SlangServer::onForegroundComplete() {
         m_activeDiagnosticSnapshot.reset();
         return;
     }
-    if (m_contextRetirementPending)
+    if (m_contextRetirement.isPending())
         m_contextRetry.noteActivity();
-    if (m_contextAdmissionPending) {
+    if (m_contextRetirement.awaitsInputs()) {
         if (m_diagnosticProcess)
             m_diagnosticProcess->cancel();
         m_activeDiagnosticSnapshot.reset();
@@ -1892,42 +1875,15 @@ void SlangServer::onForegroundComplete() {
         m_activeDiagnosticSnapshot.reset();
     }
     phases.mark("foreground-snapshot-check");
-    // A query can allocate source names or complete a previously deferred parse.
-    // Observe that growth after publishing the reply, without counting queries
-    // as edits or introducing a settling delay. Soft pressure schedules private
-    // maintenance; only the existing hard bound requires immediate retirement.
-    if (m_driver && sourceHistoryEnabled(m_config) &&
-        !std::getenv("SLANG_UVM_GENERATION_DISABLE")) {
-        const auto epoch = m_driver->completions.getCompletionEpoch();
-        const auto bytes = m_driver->sm.getSourceLocationTableBytes() +
-                           m_driver->sm.getMemoryUsage();
-        if (m_contextEpoch != epoch) {
-            m_contextEpoch = epoch;
-            resetSourceHistoryBudget(bytes);
-        }
-        if (bytes > m_contextBudget) {
-            m_contextRetirementPending = true;
-            if (bytes >= m_contextHardBudget)
-                maybeRetireParsedContext();
-        }
-    }
+    observeSourceHistory();
     phases.mark("foreground-source-accounting");
-}
-
-bool SlangServer::retirementIsOnlyBackgroundWork() const {
-    if (m_contextAdmissionPending)
-        return !m_methodInputReloadPending && !m_configReloadPending;
-    return m_contextRetirementPending && m_driver && !m_methodInputReloadPending &&
-           !m_configReloadPending && !m_activeDiagnosticSnapshot &&
-           !m_diagnosticWake->ready.load() && !m_driver->hasPendingDiagnostics() &&
-           !m_driver->hasCertifiedLocalDiagnostics() && !m_driver->hasDeferredSaveIndexes();
 }
 
 bool SlangServer::hasBackgroundWork() const {
     return !m_shutdownRequested && m_driver &&
-           (m_contextAdmissionPending || m_driver->hasDeferredSaveIndexes() ||
+           (m_contextRetirement.awaitsInputs() || m_driver->hasDeferredSaveIndexes() ||
             m_driver->hasCertifiedLocalDiagnostics() ||
-            (m_contextRetirementPending && !m_activeDiagnosticSnapshot &&
+            (m_contextRetirement.isPending() && !m_activeDiagnosticSnapshot &&
              !m_driver->hasPendingDiagnostics()) ||
             m_diagnosticWake->ready.load() ||
             (!m_activeDiagnosticSnapshot && m_driver->hasPendingDiagnostics()));
@@ -1968,7 +1924,7 @@ void SlangServer::runBackgroundWork(const lsp::RequestContext& ctx) {
         return;
     if (retirementIsOnlyBackgroundWork() && m_contextRetry.remaining().count())
         return;
-    if (m_contextAdmissionPending) {
+    if (m_contextRetirement.awaitsInputs()) {
         admitRetirementInputs(ctx);
     }
     recoverMethodInputs(ctx);
@@ -2118,7 +2074,7 @@ void SlangServer::runBackgroundWork(const lsp::RequestContext& ctx) {
 }
 
 void SlangServer::onDocDidOpen(const lsp::DidOpenTextDocumentParams& params) {
-    if (m_contextAdmissionPending) {
+    if (m_contextRetirement.awaitsInputs()) {
         m_driver->deferDocumentOpen(params);
         return;
     }
@@ -2129,157 +2085,17 @@ void SlangServer::onDocDidOpen(const lsp::DidOpenTextDocumentParams& params) {
                            params.textDocument.version, !m_diagnosticExecutable.empty());
 }
 
-void SlangServer::resetSourceHistoryBudget(size_t initialBytes) {
-    if (m_driver && !m_driver->deferredEditorBytes())
-        m_contextAdmissionPending = false;
-    m_contextEdits = 0;
-    m_contextRetirementPending = false;
-    m_contextRetry.reset();
-    if (!sourceHistoryEnabled(m_config)) {
-        m_contextEpoch = 0;
-        m_contextBaseBytes = m_contextBudget = m_contextHardBudget = 0;
-        return;
-    }
-    // Tickets emitted before the first retirement must already identify their
-    // namespace, including cooperative Native mode without any frozen library.
-    m_driver->completions.requireCompletionEpoch();
-    m_contextEpoch = m_driver->completions.getCompletionEpoch();
-    m_contextBaseBytes = initialBytes;
-    auto limits = SourceHistoryBudget::limits(initialBytes, m_config.sourceHistoryMaxMiB.value());
-    m_contextBudget = limits.soft;
-    m_contextHardBudget = limits.hard;
-}
-
-void SlangServer::maybeRetireParsedContext(const lsp::RequestContext* retirementContext) {
-    if (!sourceHistoryEnabled(m_config) || std::getenv("SLANG_UVM_GENERATION_DISABLE") ||
-        !m_driver) {
-        m_contextRetirementPending = false;
-        m_contextRetry.reset();
-        return;
-    }
-    auto epoch = m_driver->completions.getCompletionEpoch();
-    auto table = m_driver->sm.getSourceLocationTableBytes();
-    auto bytes = table + m_driver->sm.getMemoryUsage();
-    if (m_contextEpoch != epoch) {
-        m_contextEpoch = epoch;
-        resetSourceHistoryBudget(bytes);
-        m_contextEdits = 0;
-        m_contextRetirementPending = false;
-        m_contextRetry.reset();
-    }
-    uint64_t forced = 0;
-    if (auto* value = std::getenv("SLANG_UVM_GENERATION_EDIT_LIMIT"))
-        forced = std::strtoull(value, nullptr, 10);
-    if (!m_contextAdmissionPending && bytes <= m_contextBudget &&
-        (!forced || m_contextEdits < forced)) {
-        ++m_contextEdits;
-        m_contextRetirementPending = false;
-        m_contextRetry.reset();
-        return;
-    }
-    if (!retirementContext && m_config.experimentalCooperativeAnalysis.value()) {
-        // At the hard mark, stop adding editor generations to this namespace.
-        // Subsequent edits retain only their latest owned text until a private,
-        // cancellable replacement admits it. The source allowance is unchanged.
-        if (bytes >= m_contextHardBudget && !m_contextAdmissionPending) {
-            m_contextAdmissionPending = true;
-            // No semantic consumer may use this driver before admission. Drop
-            // unborrowed state now, rather than overlap it with each cancelled
-            // replacement. Consumers that still own a model keep it alive.
-            discardMethodScope();
-            if (m_diagnosticProcess)
-                m_diagnosticProcess->cancel();
-            m_activeDiagnosticSnapshot.reset();
-            m_driver->prepareForContextRetirement(true);
-        }
-        m_contextRetirementPending = true;
-        ++m_contextEdits;
-        return;
-    }
-    auto oldEntries = m_driver->sm.getSourceLocationEntryCount();
-    UvmPhaseTrace phases;
-    auto trace = [&](const char* result, uint64_t newEpoch, size_t newBytes) {
-        if (auto* path = std::getenv("SLANG_UVM_GENERATION_TRACE"))
-            if (auto* file = std::fopen(path, "a")) {
-                std::fprintf(file, "%ld\t%s\t%llu\t%llu\t%zu\t%zu\t%zu\n",
-                             long(slang::OS::getpid()), result, (unsigned long long)epoch,
-                             (unsigned long long)newEpoch, oldEntries, bytes, newBytes);
-                std::fclose(file);
-            }
-    };
-    // Foreground and background model access is serialized by serverStateMutex.
-    // Diagnostic children own copied snapshots; cancel and discard their old owner before swapping.
-    if (!retirementContext) {
-        discardMethodScope();
-        if (m_diagnosticProcess)
-            m_diagnosticProcess->cancel();
-        m_activeDiagnosticSnapshot.reset();
-        m_driver->prepareForContextRetirement(true);
-    }
-    m_driver->preserveTrustedUvmForRetirement();
-    auto clearPreservation = slang::ScopeGuard([this] {
-        if (m_driver)
-            m_driver->preserveTrustedUvmForRetirement(false);
-    });
-    phases.mark("retirement-release");
-    const auto attemptStarted = MaintenanceRetry::Clock::now();
-    try {
-        if (!loadConfig(m_config, false, true, true, true, retirementContext)) {
-            ++m_contextEdits;
-            // Invalid configuration is retried after another edit, without an idle spin.
-            m_contextRetirementPending = false;
-            m_contextRetry.reset();
-            trace("replacement-failed", epoch, bytes);
-            return;
-        }
-        phases.mark("retirement-load-publish");
-        m_contextRetired = true;
-        m_driver->completions.requireCompletionEpoch();
-        m_contextEpoch = m_driver->completions.getCompletionEpoch();
-        auto fresh = m_driver->sm.getSourceLocationTableBytes() + m_driver->sm.getMemoryUsage();
-        resetSourceHistoryBudget(fresh);
-        m_contextEdits = 0;
-        m_contextRetry.reset();
-        trace("retired", m_contextEpoch, fresh);
-    }
-    catch (const lsp::RequestCancelled&) {
-        m_contextRetirementPending = true;
-        m_contextRetry.defer(MaintenanceRetry::Clock::now() - attemptStarted);
-        trace("replacement-cancelled", epoch, bytes);
-        throw;
-    }
-    catch (const std::exception&) {
-        m_contextRetirementPending = false;
-        m_contextRetry.reset();
-        // A failed construction keeps the old owner. If a later publication step threw after
-        // the swap, fence that new owner too; the incoming text change is still applied once.
-        auto actual = m_driver->completions.getCompletionEpoch();
-        if (actual != epoch) {
-            m_contextRetired = true;
-            m_driver->completions.requireCompletionEpoch();
-            m_contextEpoch = actual;
-            auto fresh = m_driver->sm.getSourceLocationTableBytes() + m_driver->sm.getMemoryUsage();
-            resetSourceHistoryBudget(fresh);
-            m_contextEdits = 0;
-        }
-        else
-            ++m_contextEdits;
-        trace("replacement-exception", actual,
-              m_driver->sm.getSourceLocationTableBytes() + m_driver->sm.getMemoryUsage());
-    }
-}
-
 void SlangServer::onDocDidChange(const lsp::DidChangeTextDocumentParams& params,
                                  lsp::RequestContext ctx) {
-    if (m_contextAdmissionPending) {
+    if (m_contextRetirement.awaitsInputs()) {
         m_driver->deferDocumentChanges(params);
-        m_contextRetirementPending = true;
+        m_contextRetirement.request();
         return;
     }
+    DocumentEditTransaction transaction;
     if (!m_methodInputReloadPending &&
         (m_config.experimentalMethodBodyQueries.value() ||
          (m_config.experimentalMethodScopeOverlay.value() && !m_driver->comp))) {
-        bool synced = false;
         try {
             ensureMethodScopeDriver();
             if (!m_methodScope) {
@@ -2310,7 +2126,7 @@ void SlangServer::onDocDidChange(const lsp::DidChangeTextDocumentParams& params,
                                                                      params.textDocument.uri,
                                                                      offset, ctx);
             }
-            if (m_methodScope->apply(params, m_config, ctx, synced)) {
+            if (m_methodScope->apply(params, m_config, ctx, transaction)) {
                 m_methodScopeDecline.clear();
                 maybeRetireParsedContext();
                 return;
@@ -2318,9 +2134,9 @@ void SlangServer::onDocDidChange(const lsp::DidChangeTextDocumentParams& params,
         }
         catch (const lsp::RequestCancelled&) {
             bool retained = false;
-            if (!synced && m_methodScope && m_methodScope->isBodyQuery()) {
+            if (transaction.canSynchronize() && m_methodScope && m_methodScope->isBodyQuery()) {
                 try {
-                    retained = m_methodScope->apply(params, m_config, {}, synced, true);
+                    retained = m_methodScope->apply(params, m_config, {}, transaction, true);
                 }
                 catch (const std::exception&) {
                     // A changed interface / dependency still takes native sync.
@@ -2328,9 +2144,10 @@ void SlangServer::onDocDidChange(const lsp::DidChangeTextDocumentParams& params,
             }
             if (!retained)
                 discardMethodScope();
-            if (!synced)
-                m_driver->onDocDidChange(params,
-                                         {}); // Cancellation never drops text synchronization.
+            if (transaction.canSynchronize())
+                transaction.synchronize([&] {
+                    m_driver->onDocDidChange(params, {});
+                }); // Cancellation never drops text synchronization.
             if (m_config.experimentalCooperativeAnalysis.value())
                 maybeRetireParsedContext(); // Cancelled notifications still count toward the limit.
             throw;
@@ -2340,11 +2157,11 @@ void SlangServer::onDocDidChange(const lsp::DidChangeTextDocumentParams& params,
             if (dynamic_cast<const MethodScopeOverlay::InputsChanged*>(&error))
                 m_methodInputReloadPending = true;
             discardMethodScope();
-            if (synced)
+            if (!transaction.canSynchronize())
                 throw; // Text may already be committed: never replay an incremental range.
         }
     }
-    m_driver->onDocDidChange(params, ctx);
+    transaction.synchronize([&] { m_driver->onDocDidChange(params, ctx); });
     recoverMethodInputs(ctx);
     // Seed a replacement with the latest unsaved text. Rebuilding before this
     // notification would parse the previous version and immediately invalidate it.
@@ -2352,7 +2169,7 @@ void SlangServer::onDocDidChange(const lsp::DidChangeTextDocumentParams& params,
 }
 
 void SlangServer::onDocDidSave(const lsp::DidSaveTextDocumentParams& params) {
-    if (m_contextAdmissionPending) {
+    if (m_contextRetirement.awaitsInputs()) {
         m_driver->deferDocumentSave(params);
         return;
     }
@@ -2622,9 +2439,10 @@ lsp::CompletionItem SlangServer::getCompletionItemResolve(const lsp::CompletionI
                 }
     }
     lsp::CompletionItem ret = item;
-    if (m_contextRetired && (m_config.experimentalUvmPrefixCache.value() ||
-                             m_config.experimentalUvmSemanticCache.value() ||
-                             m_config.experimentalScopeSemanticCache.value()))
+    if (m_contextRetirement.hasPublishedReplacement() &&
+        (m_config.experimentalUvmPrefixCache.value() ||
+         m_config.experimentalUvmSemanticCache.value() ||
+         m_config.experimentalScopeSemanticCache.value()))
         m_driver->completions.requireCompletionEpoch();
     m_driver->completions.getCompletionItemResolve(ret, ctx);
     return ret;

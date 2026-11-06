@@ -1575,7 +1575,7 @@ TEST_CASE(
         using SlangServer::hasBackgroundWork;
         using SlangServer::m_contextBudget;
         using SlangServer::m_contextHardBudget;
-        using SlangServer::m_contextRetirementPending;
+        using SlangServer::m_contextRetirement;
         using SlangServer::m_contextRetry;
         using SlangServer::runBackgroundWork;
     };
@@ -1590,7 +1590,7 @@ TEST_CASE(
     changeWithoutDiagnostics(server, uri, 2, original + "\n");
     const std::string invalid = "module top; int value; initial value=missing_value; endmodule\n";
     changeWithoutDiagnostics(server, uri, 3, invalid);
-    CHECK(server.m_contextRetirementPending);
+    CHECK(server.m_contextRetirement.isPending());
     CHECK(server.m_driver.get() == owner);
     server.runBackgroundWork({}); // Current diagnostics precede opportunistic retirement.
     CHECK(server.client.diagnosticVersions.at(uri) == 3);
@@ -1613,7 +1613,7 @@ TEST_CASE(
     CHECK(candidateModels == 0); // Old query owners still live until the driver commits.
     CHECK(server.m_driver.get() == owner);
     CHECK(server.m_driver->completions.getCompletionEpoch() == epoch);
-    CHECK(server.m_contextRetirementPending);
+    CHECK(server.m_contextRetirement.isPending());
     CHECK(server.client.diagnosticPublications.size() == publications);
     CHECK(diagnosticObjects(server.client.getDiagnostics(uri)) == diagnostics);
     CHECK(server.m_driver->getDocument(uri)->textMatches(invalid));
@@ -1635,7 +1635,7 @@ TEST_CASE(
     server.m_contextRetry.reset(); // Explicitly dispatch the next maintenance attempt.
     server.runBackgroundWork({});
     CHECK(server.m_driver.get() == owner);
-    CHECK_FALSE(server.m_contextRetirementPending);
+    CHECK_FALSE(server.m_contextRetirement.isPending());
     CHECK(server.client.diagnosticPublications.size() == publications);
     CHECK(diagnosticObjects(server.client.getDiagnostics(uri)) == diagnostics);
     std::ofstream(root / "files.f") << filelist;
@@ -1648,11 +1648,11 @@ TEST_CASE(
     CHECK(server.client.diagnosticVersions.at(uri) == 4);
     CHECK(diagnosticObjects(server.client.getDiagnostics(uri)) == baselineDiagnostics);
     server.runBackgroundWork({});
-    CHECK(server.m_contextRetirementPending);
+    CHECK(server.m_contextRetirement.isPending());
     CHECK(server.m_driver.get() == owner);
     server.m_contextRetry.reset();
     server.runBackgroundWork({});
-    CHECK_FALSE(server.m_contextRetirementPending);
+    CHECK_FALSE(server.m_contextRetirement.isPending());
     CHECK(server.m_driver->completions.getCompletionEpoch() != epoch);
     CHECK(server.m_driver->getDocument(uri)->textMatches(original));
     auto* committed = server.m_driver.get();
@@ -1686,12 +1686,12 @@ TEST_CASE(
     server.m_contextBudget = 1;
     server.m_contextHardBudget = 1;
     changeWithoutDiagnostics(server, uri, 6, original);
-    CHECK(server.m_contextRetirementPending);
+    CHECK(server.m_contextRetirement.isPending());
     CHECK(server.m_driver->completions.getCompletionEpoch() == beforeHardLimit);
     // Hard pressure fences further namespace growth; semantic admission, rather
     // than text synchronization, completes the cancellable replacement.
     server.admitRetirementInputs({});
-    CHECK_FALSE(server.m_contextRetirementPending);
+    CHECK_FALSE(server.m_contextRetirement.isPending());
     CHECK(server.m_driver->completions.getCompletionEpoch() != beforeHardLimit);
     CHECK(server.m_driver->getDocument(uri)->textMatches(original));
 }
@@ -1785,9 +1785,9 @@ TEST_CASE("Hard source pressure defers ranged text without growing the retiring 
     struct Harness : ServerHarness {
         using ServerHarness::ServerHarness;
         using SlangServer::admitRetirementInputs;
-        using SlangServer::m_contextAdmissionPending;
         using SlangServer::m_contextBudget;
         using SlangServer::m_contextHardBudget;
+        using SlangServer::m_contextRetirement;
         using SlangServer::maybeRetireParsedContext;
         using SlangServer::onBeforeMessage;
         using SlangServer::runBackgroundWork;
@@ -1801,7 +1801,7 @@ TEST_CASE("Hard source pressure defers ranged text without growing the retiring 
     auto* owner = server.m_driver.get();
     server.m_contextBudget = server.m_contextHardBudget = 0;
     server.maybeRetireParsedContext();
-    REQUIRE(server.m_contextAdmissionPending);
+    REQUIRE(server.m_contextRetirement.awaitsInputs());
     REQUIRE(server.m_driver.get() == owner);
     const auto bytes = owner->sm.getMemoryUsage() + owner->sm.getSourceLocationTableBytes();
     const auto entries = owner->sm.getSourceLocationEntryCount();
@@ -1834,7 +1834,7 @@ TEST_CASE("Hard source pressure defers ranged text without growing the retiring 
     CHECK_THROWS_AS(server.admitRetirementInputs(cancellation), lsp::RequestCancelled);
     REQUIRE(reached);
     CHECK(server.m_driver.get() == owner);
-    CHECK(server.m_contextAdmissionPending);
+    CHECK(server.m_contextRetirement.awaitsInputs());
     CHECK(owner->editorVersion(uri) == 65);
     CHECK(owner->editorText(uri) == latest + '\0');
     CHECK(server.client.diagnosticPublications.size() == publications);
@@ -1859,7 +1859,7 @@ TEST_CASE("Hard source pressure defers ranged text without growing the retiring 
         });
         CHECK_THROWS_AS(server.onBeforeMessage(indexing), lsp::RequestCancelled);
         REQUIRE(indexingReached);
-        CHECK_FALSE(server.m_contextAdmissionPending);
+        CHECK_FALSE(server.m_contextRetirement.awaitsInputs());
         CHECK(server.m_driver->hasDeferredSaveIndexes());
         CHECK(server.m_driver->editorVersion(uri) == 65);
         CHECK(server.m_driver->getDocument(uri)->textMatches(latest));
@@ -1886,7 +1886,7 @@ TEST_CASE("Hard source pressure defers ranged text without growing the retiring 
         server.setBuildFile((root / "files.f").string());
     }
     server.onBeforeMessage(lsp::RequestContext("textDocument/codeLens", lsp::ID_t{1001}));
-    CHECK_FALSE(server.m_contextAdmissionPending);
+    CHECK_FALSE(server.m_contextRetirement.awaitsInputs());
     CHECK(server.m_driver->editorVersion(uri) == finalVersion);
     CHECK(server.m_driver->getDocument(uri)->textMatches(latest));
     CHECK(server.m_driver->deferredEditorBytes() == 0);
