@@ -392,10 +392,10 @@ index f75c08089..f4e757815 100644
          sequenceChecker(*this, reportDiags ? &context : nullptr) {}
  
 diff --git a/include/slang/ast/ASTDiagMap.h b/include/slang/ast/ASTDiagMap.h
-index 68513c503..20aa61385 100644
+index 68513c503..a61ff80b8 100644
 --- a/include/slang/ast/ASTDiagMap.h
 +++ b/include/slang/ast/ASTDiagMap.h
-@@ -14,6 +14,7 @@
+@@ -14,20 +14,47 @@
  #include "slang/util/FlatMap.h"
  
  namespace slang::ast {
@@ -403,10 +403,29 @@ index 68513c503..20aa61385 100644
  
  /// A helper class that maintains a map of issued diagnostics keyed by
  /// their code and location to aid in deduplicating diagnostics across
-@@ -23,9 +24,18 @@ public:
+ /// an AST hierarchy.
+ class SLANG_EXPORT ASTDiagMap {
+ public:
++    // Keys and occurrence ordinals survive hash-table / vector reallocations.
++    // Coalescing can reorder occurrences; clients must refresh on revision changes.
++    using RawReference = std::tuple<DiagCode, SourceLocation, size_t>;
++    uint64_t rawOrderRevision() const { return orderRevision; }
++    const Diagnostic& resolveRaw(const RawReference& reference) const {
++        auto [code, location, occurrence] = reference;
++        return map.at({code, location}).at(occurrence);
++    }
++
      /// Adds a diagnostic to the map, deduplicating if needed.
-     Diagnostic& add(Diagnostic diag, bool& isNew);
- 
+-    Diagnostic& add(Diagnostic diag, bool& isNew);
++    Diagnostic& add(Diagnostic diag, bool& isNew, RawReference* reference = nullptr);
++
++    template<typename Visitor>
++    void visitRawReferences(Visitor&& visitor) const {
++        for (const auto& [key, diagnostics] : map)
++            for (size_t i = 0; i < diagnostics.size(); ++i)
++                visitor(RawReference{std::get<0>(key), std::get<1>(key), i}, diagnostics[i]);
++    }
++
 +    /// Visits diagnostics before instance coalescing, preserving occurrence identity.
 +    template<typename Visitor>
 +    void visitRaw(Visitor&& visitor) const {
@@ -414,7 +433,7 @@ index 68513c503..20aa61385 100644
 +            for (const auto& diagnostic : diagnostics)
 +                visitor(diagnostic);
 +    }
-+
+ 
      /// Coalesces all issued diagnostics into a set that is ready for presenting.
      /// If the @a sourceManager is provided it will be used to sort the diagnostics.
 -    Diagnostics coalesce(const SourceManager* sourceManager);
@@ -422,7 +441,10 @@ index 68513c503..20aa61385 100644
 +                         const Compilation* compilation = nullptr);
  
  private:
++    uint64_t orderRevision = 0;
      flat_hash_map<std::tuple<DiagCode, SourceLocation>, std::vector<Diagnostic>> map;
+ };
+ 
 diff --git a/include/slang/ast/ASTVisitor.h b/include/slang/ast/ASTVisitor.h
 index 133958b90..6208d7475 100644
 --- a/include/slang/ast/ASTVisitor.h
@@ -437,7 +459,7 @@ index 133958b90..6208d7475 100644
  
  template<typename TVisitor>
 diff --git a/include/slang/ast/Compilation.h b/include/slang/ast/Compilation.h
-index b7ddc64e4..e26fe3de8 100644
+index b7ddc64e4..9ff9c48da 100644
 --- a/include/slang/ast/Compilation.h
 +++ b/include/slang/ast/Compilation.h
 @@ -7,7 +7,9 @@
@@ -545,7 +567,7 @@ index b7ddc64e4..e26fe3de8 100644
      /// @name Top-level API
      /// @{
  
-@@ -349,7 +403,108 @@ public:
+@@ -349,7 +403,116 @@ public:
  
      /// Adds a syntax tree to the compilation. If the compilation has already been finalized
      /// by calling @a getRoot this call will throw an exception.
@@ -628,6 +650,14 @@ index b7ddc64e4..e26fe3de8 100644
 +    void detachRetainedParameterInitializers(InstanceBodySymbol& body);
 +    bool hasImportedInstanceBodies() const { return !importedBodyFrames.empty(); }
 +    size_t getInstanceBodyReuseMemoryUsage() const;
++
++    /// Work counters for fixed-body admission, independent of wall-clock timing.
++    struct BodyReuseIndexStats {
++        size_t attributesIndexed = 0, attributesVisited = 0;
++        size_t effectsIndexed = 0, effectsVisited = 0;
++        size_t diagnosticsIndexed = 0, diagnosticsVisited = 0;
++    };
++    BodyReuseIndexStats getBodyReuseIndexStats() const { return bodyReuseIndexStats; }
 +    void setInstanceBodyReuseHooks(std::function<void(Compilation&, InstanceBodySymbol&)> lookup,
 +                                   std::function<void(std::shared_ptr<Compilation>)> publish);
 +    void tryReuseInstanceBodyOnLookup(InstanceBodySymbol& body);
@@ -655,7 +685,7 @@ index b7ddc64e4..e26fe3de8 100644
  
      /// Gets the override node for a top-level definition, creating it if necessary. This must be
      /// called before the compilation is finalized. The syntax node can come from another
-@@ -366,10 +521,66 @@ public:
+@@ -366,10 +529,66 @@ public:
      /// so will result in an exception.
      const RootSymbol& getRoot();
  
@@ -723,7 +753,7 @@ index b7ddc64e4..e26fe3de8 100644
  
      /// Indicates whether the design has been compiled and can no longer accept modifications.
      bool isFinalized() const { return finalized; }
-@@ -391,11 +602,17 @@ public:
+@@ -391,11 +610,17 @@ public:
      /// for lazy evaluation.
      const Diagnostics& getSemanticDiagnostics();
  
@@ -741,7 +771,7 @@ index b7ddc64e4..e26fe3de8 100644
  
      /// Returns true if there are any fatal errors reported in the compilation,
      /// or if we've hit the configured error limit and stopped elaboration early
-@@ -512,6 +729,11 @@ public:
+@@ -512,6 +737,11 @@ public:
  
      /// Gets the package with the give name, or nullptr if there is no such package.
      const PackageSymbol* getPackage(std::string_view name) const;
@@ -753,7 +783,7 @@ index b7ddc64e4..e26fe3de8 100644
  
      /// Gets the built-in 'std' package.
      const PackageSymbol& getStdPackage() const { return *stdPkg; }
-@@ -676,12 +898,29 @@ public:
+@@ -676,12 +906,29 @@ public:
      /// Notes that the given syntax node is "referenced" somewhere in the AST.
      /// This is used to diagnose unused variables, nets, etc. The @a isLValue parameter
      /// is used to tell whether a value is only assigned or whether it's also read somewhere.
@@ -785,7 +815,7 @@ index b7ddc64e4..e26fe3de8 100644
  
      /// Checks whether the given syntax node has been referenced in the AST thus far.
      /// The result is a pair, the first item of which is true if the node has been used
-@@ -689,6 +928,14 @@ public:
+@@ -689,6 +936,14 @@ public:
      /// The second item is only relevant for nodes where it makes sense; e.g. variables and nets.
      std::pair<bool, bool> isReferenced(const syntax::SyntaxNode& node) const;
  
@@ -800,7 +830,7 @@ index b7ddc64e4..e26fe3de8 100644
      /// Notes that the given symbol has a name conflict in its parent scope.
      /// This will cause appropriate errors to be issued.
      void noteNameConflict(const Symbol& symbol);
-@@ -706,7 +953,8 @@ public:
+@@ -706,7 +961,8 @@ public:
      void noteUpwardReference(const Scope& scope, const HierarchicalReference& ref);
  
      /// Notes the existence of an assignment to a hierarchical reference.
@@ -810,7 +840,7 @@ index b7ddc64e4..e26fe3de8 100644
  
      /// Registers and returns the given virtual interface instance with the compilation,
      /// or if it matches an already existing instance returns that one instead.
-@@ -719,6 +967,10 @@ public:
+@@ -719,6 +975,10 @@ public:
      /// be elaborated and any relevant diagnostics to be issued.
      void forceElaborate(const Symbol& symbol);
  
@@ -821,7 +851,7 @@ index b7ddc64e4..e26fe3de8 100644
      /// Gets the default time scale to use when none is specified in the source code.
      std::optional<TimeScale> getDefaultTimeScale() const { return options.defaultTimeScale; }
  
-@@ -857,6 +1109,82 @@ private:
+@@ -857,6 +1117,88 @@ private:
      friend class Scope;
      friend struct DiagnosticVisitor;
  
@@ -862,6 +892,9 @@ index b7ddc64e4..e26fe3de8 100644
 +    std::vector<BodyElaborationControl> bodyElaborationControls;
 +    struct BodyReuseMetadataIndex;
 +    std::unique_ptr<BodyReuseMetadataIndex> bodyReuseMetadataIndex;
++    BodyReuseIndexStats bodyReuseIndexStats;
++    void indexBodyReuseAttributes(const void* node,
++                                  std::span<const AttributeSymbol* const> attributes);
 +    std::vector<std::pair<const Scope*, const DefinitionSymbol*>> bodyDefinitionSites;
 +    std::vector<std::pair<const Scope*, const HierarchicalReference*>> bodyHierarchicalEffects;
 +    bool bodyHasUnscopedHierarchicalEffects = false;
@@ -887,6 +920,9 @@ index b7ddc64e4..e26fe3de8 100644
 +        // Proof binding can append diagnostics at an existing source location,
 +        // invalidating the raw map's occurrence vectors. Own replay snapshots.
 +        std::vector<Diagnostic> diagnostics;
++        // Ordinals, never pointers into a vector that proof binding can grow.
++        flat_hash_map<const InstanceBodySymbol*, std::vector<size_t>> diagnosticBodies;
++        flat_hash_map<const ClassType*, std::vector<size_t>> diagnosticClasses;
 +        std::vector<std::pair<const Scope*, const Expression*>> defaultDisables;
 +        std::vector<std::pair<const Symbol*, const Symbol*>> defaultClockings;
 +    };
@@ -904,7 +940,7 @@ index b7ddc64e4..e26fe3de8 100644
      // Collected information about a resolved bind directive.
      struct ResolvedBind {
          SmallVector<const Symbol*> instTargets;
-@@ -884,8 +1212,9 @@ private:
+@@ -884,8 +1226,9 @@ private:
  
      Diagnostic& addDiag(Diagnostic diag);
  
@@ -916,7 +952,7 @@ index b7ddc64e4..e26fe3de8 100644
      void insertDefinition(Symbol& symbol, const Scope& scope);
      void parseParamOverrides(
          bool skipDefParams,
-@@ -895,7 +1224,10 @@ private:
+@@ -895,7 +1238,10 @@ private:
      void checkModportExports(
          std::span<const std::pair<const InterfacePortSymbol*, const ModportSymbol*>> modports);
      void checkElemTimeScale(std::optional<TimeScale> timeScale, SourceRange sourceRange);
@@ -928,7 +964,7 @@ index b7ddc64e4..e26fe3de8 100644
      void resolveBindTargets(const syntax::BindDirectiveSyntax& syntax, const Scope& scope,
                              ResolvedBind& resolvedBind);
      void checkBindTargetParams(const syntax::BindDirectiveSyntax& syntax, const Scope& scope,
-@@ -935,7 +1267,25 @@ private:
+@@ -935,7 +1281,25 @@ private:
      // A map of syntax nodes that have been referenced in the AST.
      // The value indicates whether the node has been used as an lvalue vs non-lvalue,
      // for things like variables and nets.
@@ -955,7 +991,7 @@ index b7ddc64e4..e26fe3de8 100644
  
      // The name map for all module, interface, program, and primitive definitions.
      // The key is a combination of definition name + the scope in which it was declared.
-@@ -996,6 +1346,10 @@ private:
+@@ -996,6 +1360,10 @@ private:
      std::unique_ptr<RootSymbol> root;
      SourceManager* sourceManager = nullptr;
      size_t numErrors = 0; // total number of errors inserted into the diagMap
@@ -966,7 +1002,7 @@ index b7ddc64e4..e26fe3de8 100644
      bool finalized = false;
      bool finalizing = false; // to prevent reentrant calls to getRoot()
      bool anyElemsWithTimescales = false;
-@@ -1010,6 +1364,7 @@ private:
+@@ -1010,6 +1378,7 @@ private:
      TypedBumpAllocator<AssertionInstanceDetails> assertionDetailsAllocator;
      TypedBumpAllocator<ConfigBlockSymbol> configBlockAllocator;
      TypedBumpAllocator<Scope::WildcardImportData> wildcardImportAllocator;
@@ -974,7 +1010,7 @@ index b7ddc64e4..e26fe3de8 100644
  
      // This is storage for a temporary diagnostic that is being constructed.
      // Typically this is done in-place within the diagMap, but for diagnostics
-@@ -1019,6 +1374,20 @@ private:
+@@ -1019,6 +1388,20 @@ private:
      // A map of instances that have been created by virtual interface type declarations.
      flat_hash_map<InstanceCacheKey, const InstanceSymbol*> virtualIfaceCache;
      std::vector<const InstanceSymbol*> virtualIfaceInstances;
@@ -995,7 +1031,7 @@ index b7ddc64e4..e26fe3de8 100644
  
      // A list of assignments via hierarchical reference.
      std::vector<const HierarchicalReference*> hierarchicalAssignments;
-@@ -1134,6 +1503,16 @@ private:
+@@ -1134,6 +1517,16 @@ private:
      // The default library.
      std::unique_ptr<SourceLibrary> defaultLibMem;
      const SourceLibrary* defaultLibPtr;
@@ -1039,6 +1075,26 @@ index ee13c73b0..cff268717 100644
  class SLANG_EXPORT EvalContext {
  public:
      /// The AST context in which the evaluation is occurring.
+diff --git a/include/slang/ast/Lookup.h b/include/slang/ast/Lookup.h
+index f62cf7596..dca10dcc0 100644
+--- a/include/slang/ast/Lookup.h
++++ b/include/slang/ast/Lookup.h
+@@ -82,10 +82,14 @@ enum class SLANG_EXPORT LookupFlags {
+     /// Allow unnamed generate blocks to be looked up by their external name.
+     AllowUnnamedGenerate = 1 << 14,
+ 
++    /// Tooling-only scope traversal is not an HDL dependency on a body-local name.
++    /// Lazy semantic binding and constant evaluation still record dependencies.
++    NoBodyScopeDependencies = 1 << 15,
++
+     /// Treat this lookup as hierarchical even if it's a simple name.
+     ForceHierarchical = AllowDeclaredAfter | NoUndeclaredErrorIfUninstantiated
+ };
+-SLANG_BITMASK(LookupFlags, AllowUnnamedGenerate)
++SLANG_BITMASK(LookupFlags, NoBodyScopeDependencies)
+ 
+ /// Flags that indicate additional details about the result of a lookup operation.
+ enum class SLANG_EXPORT LookupResultFlags : uint8_t {
 diff --git a/include/slang/ast/Scope.h b/include/slang/ast/Scope.h
 index 04b935cb0..127874b12 100644
 --- a/include/slang/ast/Scope.h
@@ -1166,22 +1222,23 @@ index 20c1eac9b..b233b60a5 100644
                          const std::vector<const Type*>& argTypes = {}, bool isMethod = false) :
          SimpleSystemSubroutine(name, SubroutineKind::Function, requiredArgs, argTypes, returnType,
 diff --git a/include/slang/ast/symbols/AttributeSymbol.h b/include/slang/ast/symbols/AttributeSymbol.h
-index 6d4a6f28a..586d21279 100644
+index 6d4a6f28a..ecb29d6fb 100644
 --- a/include/slang/ast/symbols/AttributeSymbol.h
 +++ b/include/slang/ast/symbols/AttributeSymbol.h
-@@ -29,6 +29,11 @@ public:
+@@ -29,6 +29,12 @@ public:
  
      const ConstantValue& getValue() const;
  
 +    /// Original bound dependency graph, including after the value was folded.
 +    /// Bare attributes constructed from a constant have no expression / scope.
 +    const Expression* getExpression() const;
++    bool hasExpression() const { return expr != nullptr; }
 +    const Scope* getBindingScope() const;
 +
      void serializeTo(ASTSerializer& serializer) const;
  
      static std::span<const AttributeSymbol* const> fromSyntax(
-@@ -46,6 +51,7 @@ private:
+@@ -46,6 +52,7 @@ private:
      const Scope* scope = nullptr;
      const syntax::ExpressionSyntax* expr = nullptr;
      mutable const ConstantValue* value = nullptr;
@@ -2108,7 +2165,7 @@ index a8d51f774..f6b5433f5 100644
 +};
  } // namespace slang::syntax
 diff --git a/include/slang/text/SourceManager.h b/include/slang/text/SourceManager.h
-index de1d1c271..2168d738c 100644
+index de1d1c271..cc4f388e9 100644
 --- a/include/slang/text/SourceManager.h
 +++ b/include/slang/text/SourceManager.h
 @@ -16,15 +16,25 @@
@@ -2254,7 +2311,7 @@ index de1d1c271..2168d738c 100644
      /// Information about a `line directive in a source buffer.
      struct LineDirectiveInfo {
          std::string name;       // File name set by directive
-@@ -60,6 +180,44 @@ public:
+@@ -60,6 +180,48 @@ public:
      SourceManager(const SourceManager&) = delete;
      SourceManager& operator=(const SourceManager&) = delete;
  
@@ -2291,6 +2348,10 @@ index de1d1c271..2168d738c 100644
 +    /// shared only within this call; no successful projection survives it.
 +    std::optional<std::vector<SourceLocation>> projectImmutableOriginalLocations(
 +        std::span<const SourceLocation> locations) const;
++    struct OriginalLocationIndexStats {
++        size_t builds = 0, entries = 0, candidates = 0;
++    };
++    OriginalLocationIndexStats getOriginalLocationIndexStats() const;
 +
 +    /// Own expansion names before releasing parser / driver storage. Future
 +    /// expansions also retain names. Ordinary parsing does not enable this mode.
@@ -2299,7 +2360,7 @@ index de1d1c271..2168d738c 100644
      /// @brief Adds one or more system include directories that match
      /// the given pattern.
      ///
-@@ -74,6 +232,9 @@ public:
+@@ -74,6 +236,9 @@ public:
      /// and that path does not exist or is not a directory.
      std::error_code addUserDirectories(std::string_view pattern);
  
@@ -2309,7 +2370,7 @@ index de1d1c271..2168d738c 100644
      /// Gets the source line number for a given source location.
      size_t getLineNumber(SourceLocation location) const;
  
-@@ -229,6 +390,18 @@ public:
+@@ -229,6 +394,18 @@ public:
                                        std::string_view macroName);
  
      /// Instead of loading source from a file, copy it from text already in memory.
@@ -2328,7 +2389,7 @@ index de1d1c271..2168d738c 100644
      SourceBuffer assignText(std::string_view text, SourceLocation includedFrom = SourceLocation(),
                              const SourceLibrary* library = nullptr);
  
-@@ -256,28 +429,57 @@ public:
+@@ -256,28 +433,57 @@ public:
      /// Returns true if the given file path is already loaded and cached in the source manager.
      bool isCached(const std::filesystem::path& path) const;
  
@@ -2391,7 +2452,7 @@ index de1d1c271..2168d738c 100644
  
      /// Stores information specified in a pragma diagnostic directive, which alters the
      /// currently active set of diagnostic mappings.
-@@ -319,7 +521,9 @@ public:
+@@ -319,7 +525,9 @@ public:
      /// source manager.
      std::vector<BufferID> getAllBuffers() const;
  
@@ -2402,7 +2463,7 @@ index de1d1c271..2168d738c 100644
      /// Use this to retain buffer data for a compilation that needs to keep this data alive.
      std::vector<std::shared_ptr<void>> retainBuffers(std::span<const BufferID> ids) const;
  
-@@ -337,49 +541,136 @@ public:
+@@ -337,49 +545,136 @@ public:
      /// Determines whether the given BufferID points to non-stale data.
      bool isLatestData(BufferID id) const;
  
@@ -2555,7 +2616,7 @@ index de1d1c271..2168d738c 100644
          const LineDirectiveInfo* getPreviousLineDirective(size_t rawLineNumber) const;
      };
  
-@@ -432,6 +723,108 @@ private:
+@@ -432,6 +727,108 @@ private:
              originalLoc(originalLoc), expansionRange(expansionRange), macroName(macroName) {}
      };
  
@@ -2664,7 +2725,7 @@ index de1d1c271..2168d738c 100644
      // This mutex protects pretty much everything in this class.
      mutable std::shared_mutex mutex;
  
-@@ -440,7 +833,23 @@ private:
+@@ -440,7 +837,23 @@ private:
      mutable std::shared_mutex includeDirMutex;
  
      // index from BufferID to buffer metadata
@@ -2689,7 +2750,7 @@ index de1d1c271..2168d738c 100644
  
      // cache for file lookups; this holds on to the actual file data
      flat_hash_map<std::string, std::pair<std::shared_ptr<FileData>, std::error_code>> lookupCache;
-@@ -448,6 +857,14 @@ private:
+@@ -448,6 +861,14 @@ private:
      // directories for system and user includes
      std::vector<std::filesystem::path> systemDirectories;
      std::vector<std::filesystem::path> userDirectories;
@@ -2704,7 +2765,7 @@ index de1d1c271..2168d738c 100644
  
      // uniquified backing memory for directories
      std::set<std::filesystem::path> directories;
-@@ -455,6 +872,32 @@ private:
+@@ -455,6 +876,32 @@ private:
      // map from buffer to diagnostic directive lists
      flat_hash_map<BufferID, std::vector<DiagnosticDirectiveInfo>> diagDirectives;
  
@@ -2737,7 +2798,7 @@ index de1d1c271..2168d738c 100644
      std::atomic<uint32_t> unnamedBufferCount = 0;
      bool disableProximatePaths = false;
      bool disableLocalIncludes = false;
-@@ -472,11 +915,14 @@ private:
+@@ -472,11 +919,14 @@ private:
      template<IsLock TLock>
      const FileInfo* getFileInfo(BufferID buffer, TLock& lock) const;
  
@@ -4056,10 +4117,10 @@ index 49c40373c..90810d826 100644
          // Modport ports are aliases for interface members; references to the
          // facade also count as references to the connected value(s).
 diff --git a/source/ast/ASTDiagMap.cpp b/source/ast/ASTDiagMap.cpp
-index cb4f631f8..164f72153 100644
+index cb4f631f8..75938b9b7 100644
 --- a/source/ast/ASTDiagMap.cpp
 +++ b/source/ast/ASTDiagMap.cpp
-@@ -7,11 +7,16 @@
+@@ -7,23 +7,33 @@
  //------------------------------------------------------------------------------
  #include "slang/ast/ASTDiagMap.h"
  
@@ -4076,19 +4137,26 @@ index cb4f631f8..164f72153 100644
  
  namespace slang::ast {
  
-@@ -22,8 +27,10 @@ Diagnostic& ASTDiagMap::add(Diagnostic diag, bool& isNew) {
+-Diagnostic& ASTDiagMap::add(Diagnostic diag, bool& isNew) {
++Diagnostic& ASTDiagMap::add(Diagnostic diag, bool& isNew, RawReference* reference) {
+     auto [it, inserted] = map.try_emplace({diag.code, diag.location}, std::vector<Diagnostic>{});
+     isNew = inserted;
++    if (reference)
++        *reference = {diag.code, diag.location, it->second.size()};
+     it->second.emplace_back(std::move(diag));
      return it->second.back();
  }
  
 -Diagnostics ASTDiagMap::coalesce(const SourceManager* sourceManager) {
 +Diagnostics ASTDiagMap::coalesce(const SourceManager* sourceManager,
 +                                 const Compilation* compilation) {
++    ++orderRevision;
      Diagnostics results;
 +    std::unique_ptr<DiagnosticEngine> formatter;
      for (auto& [key, diagList] : map) {
          // If the location is NoLocation, just issue each diagnostic.
          if (std::get<1>(key) == SourceLocation::NoLocation) {
-@@ -32,6 +39,62 @@ Diagnostics ASTDiagMap::coalesce(const SourceManager* sourceManager) {
+@@ -32,6 +42,62 @@ Diagnostics ASTDiagMap::coalesce(const SourceManager* sourceManager) {
              continue;
          }
  
@@ -4151,7 +4219,7 @@ index cb4f631f8..164f72153 100644
          // Try to find a diagnostic in an instance that isn't at the top-level
          // (printing such a path seems silly).
          const Diagnostic* found = nullptr;
-@@ -78,14 +141,20 @@ Diagnostics ASTDiagMap::coalesce(const SourceManager* sourceManager) {
+@@ -78,14 +144,20 @@ Diagnostics ASTDiagMap::coalesce(const SourceManager* sourceManager) {
              if (auto scope = parent->getParentScope()) {
                  auto& sym = scope->asSymbol();
                  if (sym.kind != SymbolKind::Root && sym.kind != SymbolKind::CompilationUnit) {
@@ -4177,7 +4245,7 @@ index cb4f631f8..164f72153 100644
              // information to point the user towards the right ones.
              Diagnostic diag = *found;
 diff --git a/source/ast/Compilation.cpp b/source/ast/Compilation.cpp
-index ed7528f2c..bbbe6a182 100644
+index ed7528f2c..4e9617980 100644
 --- a/source/ast/Compilation.cpp
 +++ b/source/ast/Compilation.cpp
 @@ -9,22 +9,28 @@
@@ -4210,7 +4278,7 @@ index ed7528f2c..bbbe6a182 100644
  
  using namespace slang::parsing;
  
-@@ -39,10 +45,296 @@ const PackageSymbol& createStdPackage(Compilation&);
+@@ -39,10 +45,372 @@ const PackageSymbol& createStdPackage(Compilation&);
  
  namespace slang::ast {
  
@@ -4451,12 +4519,67 @@ index ed7528f2c..bbbe6a182 100644
 +}
 +
 +struct Compilation::BodyReuseMetadataIndex {
++    struct AttributeEntry {
++        const void* node;
++        const AttributeSymbol* attribute;
++        size_t revision;
++    };
++    std::vector<AttributeEntry> attributeEntries;
++    flat_hash_map<const void*, size_t> attributeRevisions;
++    flat_hash_map<const Scope*, std::vector<size_t>> attributes;
++    std::vector<size_t> pendingAttributes;
++    bool attributesIndexed = false;
++    flat_hash_map<const Scope*, std::vector<size_t>> effects;
++    size_t indexedEffects = 0;
++    std::vector<ASTDiagMap::RawReference> diagnosticEntries;
++    flat_hash_map<const Scope*, std::vector<size_t>> diagnostics;
++    std::vector<size_t> unscopedDiagnostics;
++    std::vector<size_t> pendingDiagnostics;
++    uint64_t diagnosticRevision = 0;
++    bool diagnosticsIndexed = false;
 +    flat_hash_map<const Scope*, std::vector<size_t>> controls;
 +    size_t indexedControls = 0;
 +    flat_hash_map<const Scope*, std::vector<size_t>> definitions;
 +    size_t indexedDefinitions = 0;
 +    flat_hash_map<const Scope*, std::vector<const Scope*>> referenceSubtrees;
 +    bool referencesIndexed = false;
++
++    static const Scope* scopeFor(const Symbol& symbol) {
++        if (symbol.kind == SymbolKind::InstanceBody)
++            return &symbol.as<InstanceBodySymbol>();
++        if (symbol.kind == SymbolKind::ClassType)
++            return &symbol.as<ClassType>();
++        return symbol.getParentScope();
++    }
++
++    static bool completeAncestry(const Scope* scope) {
++        while (scope) {
++            const auto& symbol = scope->asSymbol();
++            if (symbol.kind == SymbolKind::Root)
++                return true;
++            if (const auto body = symbol.as_if<InstanceBodySymbol>()) {
++                const auto instance = body->parentInstance;
++                scope = instance ? instance->getParentScope() : nullptr;
++            }
++            else
++                scope = symbol.getParentScope();
++        }
++        return false;
++    }
++
++    void appendDiagnostic(ASTDiagMap::RawReference reference, const Diagnostic& diagnostic) {
++        const auto i = diagnosticEntries.size();
++        diagnosticEntries.push_back(reference);
++        if (!diagnostic.symbol)
++            unscopedDiagnostics.push_back(i);
++        else if (diagnostic.symbol->kind != SymbolKind::Root) {
++            const auto scope = scopeFor(*diagnostic.symbol);
++            if (completeAncestry(scope))
++                append(diagnostics, scope, i);
++            else
++                pendingDiagnostics.push_back(i);
++        }
++    }
 +
 +    void appendReferenceScope(const Scope* bindingScope) {
 +        for (auto scope = bindingScope; scope;) {
@@ -4490,6 +4613,27 @@ index ed7528f2c..bbbe6a182 100644
 +    }
 +};
 +
++void Compilation::indexBodyReuseAttributes(const void* node,
++                                           std::span<const AttributeSymbol* const> attributes) {
++    if (!bodyReuseMetadataIndex || !bodyReuseMetadataIndex->attributesIndexed)
++        return;
++    auto& index = *bodyReuseMetadataIndex;
++    const auto revision = ++index.attributeRevisions[node];
++    for (const auto attribute : attributes) {
++        // Bare constant attributes have no hidden binding dependencies.
++        if (!attribute->hasExpression())
++            continue;
++        const auto i = index.attributeEntries.size();
++        index.attributeEntries.push_back({node, attribute, revision});
++        ++bodyReuseIndexStats.attributesIndexed;
++        if (const auto scope = attribute->getBindingScope();
++            BodyReuseMetadataIndex::completeAncestry(scope))
++            BodyReuseMetadataIndex::append(index.attributes, scope, i);
++        else
++            index.pendingAttributes.push_back(i); // A lazy symbol can be parented later.
++    }
++}
++
  Compilation::Compilation(const Bag& options, const SourceLibrary* defaultLib) :
      options(options.getOrDefault<CompilationOptions>()), tempDiag({}, {}), netAliasAllocator(*this),
      defaultLibPtr(defaultLib) {
@@ -4507,7 +4651,7 @@ index ed7528f2c..bbbe6a182 100644
      // Construct all built-in types.
      auto& bi = builtins::Builtins::Instance;
      bitType = &bi.bitType;
-@@ -148,11 +440,7 @@ Compilation::Compilation(const Bag& options, const SourceLibrary* defaultLib) :
+@@ -148,11 +516,7 @@ Compilation::Compilation(const Bag& options, const SourceLibrary* defaultLib) :
  
      // Set a default handler for printing types and symbol paths, for convenience.
      static std::once_flag onceFlag;
@@ -4520,7 +4664,7 @@ index ed7528f2c..bbbe6a182 100644
  
      // Reset systemId counters that may have been changed due to creation of types
      // in the std package.
-@@ -163,129 +451,3548 @@ Compilation::Compilation(const Bag& options, const SourceLibrary* defaultLib) :
+@@ -163,141 +527,3970 @@ Compilation::Compilation(const Bag& options, const SourceLibrary* defaultLib) :
  
  Compilation::~Compilation() = default;
  
@@ -4579,7 +4723,8 @@ index ed7528f2c..bbbe6a182 100644
 +    for (const auto& [node, metadata] : owner->syntaxMetadata)
 +        syntaxMetadata.try_emplace(node, metadata);
 +    for (const auto& [symbol, attributes] : owner->attributeMap)
-+        attributeMap.try_emplace(symbol, attributes);
++        if (attributeMap.try_emplace(symbol, attributes).second)
++            indexBodyReuseAttributes(symbol, attributes);
 +    importedCompilations.push_back(std::move(owner));
 +}
  
@@ -4725,7 +4870,7 @@ index ed7528f2c..bbbe6a182 100644
 -        result.cellDefine = meta.cellDefine;
 -
 -        syntaxMetadata[n] = result;
-     }
+-    }
 -
 -    for (auto& inst : tree->getMetadata().globalInstances)
 -        globalInstantiations.emplace(inst->type.valueText());
@@ -4737,7 +4882,7 @@ index ed7528f2c..bbbe6a182 100644
 -    else if (node.kind == SyntaxKind::LibraryMap) {
 -        for (auto member : node.as<LibraryMapSyntax>().members)
 -            unit->addMembers(*member);
--    }
+     }
 -    else {
 -        unit->addMembers(node);
 +    for (auto unit : owner->compilationUnits) {
@@ -4755,6 +4900,11 @@ index ed7528f2c..bbbe6a182 100644
 -HierarchyOverrideNode& Compilation::getOrAddTopLevelHierarchyOverride(
 -    const SyntaxNode& definitionSyntax) {
 -    SLANG_ASSERT(!isFrozen());
+-
+-    if (finalized)
+-        SLANG_THROW(std::logic_error("The compilation has already been finalized"));
+-
+-    return hierarchyOverrides.childNodes[definitionSyntax];
 +bool Compilation::isFixedInstanceBodyTypeArgument(const Type& type,
 +                                                  const InstanceBodySymbol& rootBody) const {
 +    auto fixed = [&](const Type& candidate) {
@@ -4809,10 +4959,10 @@ index ed7528f2c..bbbe6a182 100644
 +        return canonical.isSimpleBitVector() || canonical.isString();
 +    };
 +    return check(check, type);
-+}
+ }
  
--    if (finalized)
--        SLANG_THROW(std::logic_error("The compilation has already been finalized"));
+-std::span<const std::shared_ptr<SyntaxTree>> Compilation::getSyntaxTrees() const {
+-    return syntaxTrees;
 +std::string Compilation::instanceBodyTypeOrigin(const Type& type) const {
 +    if (auto found = fixedBodyTypeOrigins.find(&type); found != fixedBodyTypeOrigins.end())
 +        return found->second;
@@ -4833,17 +4983,24 @@ index ed7528f2c..bbbe6a182 100644
 +                       sourceManager->getColumnNumber(expanded),
 +                       type.getParentScope()->asSymbol().getHierarchicalPath(), type.name,
 +                       type.getSyntax() ? type.getSyntax()->toString() : std::string());
-+}
+ }
  
--    return hierarchyOverrides.childNodes[definitionSyntax];
+-std::span<const CompilationUnitSymbol* const> Compilation::getCompilationUnits() const {
+-    return compilationUnits;
 +const Compilation::InstanceBodyTypePresentation* Compilation::getInstanceBodyTypePresentation(
 +    const Type& type) const {
 +    auto found = fixedBodyTypePresentations.find(&type);
 +    return found == fixedBodyTypePresentations.end() ? nullptr : &found->second;
  }
  
--std::span<const std::shared_ptr<SyntaxTree>> Compilation::getSyntaxTrees() const {
--    return syntaxTrees;
+-std::vector<const Symbol*> Compilation::getDefinitions() const {
+-    std::vector<const Symbol*> result;
+-    for (auto& [key, val] : definitionMap) {
+-        for (auto sym : val.first) {
+-            result.insert(std::ranges::upper_bound(result, sym->name, {},
+-                                                   [](auto item) { return item->name; }),
+-                          sym);
+-        }
 +bool Compilation::isInstanceBodyBindContextCompatible(const InstanceBodySymbol* subtree) const {
 +    // Most projects have no mutable bind affecting fixed definitions. Establish
 +    // and reuse that cheap global result before walking any retained graph.
@@ -4858,7 +5015,9 @@ index ed7528f2c..bbbe6a182 100644
 +    for (auto definition : importedDefinitions) {
 +        fixed.emplace(definition->getSyntax());
 +        definitions.emplace(definition->name);
-+    }
+     }
+-
+-    return result;
 +    for (auto package : getImportedPackages())
 +        fixed.emplace(package->getSyntax());
 +    for (const auto& [syntax, _] : importedUnitDeclarations)
@@ -4943,8 +5102,13 @@ index ed7528f2c..bbbe6a182 100644
 +    return compatible;
  }
  
--std::span<const CompilationUnitSymbol* const> Compilation::getCompilationUnits() const {
--    return compilationUnits;
+-std::vector<const PackageSymbol*> Compilation::getPackages() const {
+-    std::vector<const PackageSymbol*> result;
+-    for (auto& [name, pkg] : packageMap) {
+-        result.insert(
+-            std::ranges::upper_bound(result, name, {}, [](auto item) { return item->name; }), pkg);
+-    }
+-    return result;
 +bool Compilation::retainInstanceBodyTypeDependency(const Type& type) {
 +    if (!isElaborated() || isFrozen() || hasFatalErrors() || hasImportedInstanceBodies() ||
 +        !bodyReuseCertificates.empty())
@@ -5007,13 +5171,10 @@ index ed7528f2c..bbbe6a182 100644
 +    return true;
  }
  
--std::vector<const Symbol*> Compilation::getDefinitions() const {
--    std::vector<const Symbol*> result;
--    for (auto& [key, val] : definitionMap) {
--        for (auto sym : val.first) {
--            result.insert(std::ranges::upper_bound(result, sym->name, {},
--                                                   [](auto item) { return item->name; }),
--                          sym);
+-const SourceLibrary* Compilation::getSourceLibrary(std::string_view name) const {
+-    if (auto it = libraryNameMap.find(name); it != libraryNameMap.end())
+-        return it->second;
+-    return nullptr;
 +bool Compilation::recordInstanceBodyTypeDependency(const Type& replacement, const Type& source) {
 +    if (!instanceBodyCacheContext || !isElaborated() || hasFatalErrors())
 +        return false;
@@ -5181,12 +5342,12 @@ index ed7528f2c..bbbe6a182 100644
 +            };
 +            if (!project(project, *root, *copy))
 +                return false;
-         }
++        }
 +        batch.locations.push_back(original->location);
 +        batch.targets.emplace_back(nullptr, sourceCopies.size());
 +        sourceCopies.emplace_back(const_cast<Symbol*>(target), SourceLocation{},
 +                                  syntax ? syntaxCopies.at(syntax) : nullptr);
-     }
++    }
 +    for (const auto& [manager, batch] : batches) {
 +        auto locations = manager->projectImmutableOriginalLocations(batch.locations);
 +        if (!locations)
@@ -5223,18 +5384,12 @@ index ed7528f2c..bbbe6a182 100644
 +    }
 +    return true;
 +}
- 
--    return result;
++
 +const Type* Compilation::getInstanceBodyTypeIdentity(const Type& type) const {
 +    auto found = importedBodyTypeIdentities.find(&type);
 +    return found == importedBodyTypeIdentities.end() ? &type : found->second;
- }
- 
--std::vector<const PackageSymbol*> Compilation::getPackages() const {
--    std::vector<const PackageSymbol*> result;
--    for (auto& [name, pkg] : packageMap) {
--        result.insert(
--            std::ranges::upper_bound(result, name, {}, [](auto item) { return item->name; }), pkg);
++}
++
 +bool Compilation::tryImportInstanceBody(std::shared_ptr<Compilation> owner,
 +                                        const InstanceBodySymbol& retained,
 +                                        InstanceBodySymbol& target) {
@@ -5262,9 +5417,7 @@ index ed7528f2c..bbbe6a182 100644
 +                       &retained.getDefinition() == &target.getDefinition(),
 +                       owner->importedBodyFrames.size());
 +        return false;
-     }
--    return result;
--}
++    }
 +
 +    if (getDefaultDisable(target) && !defaultDisableMap.contains(&target))
 +        return false;
@@ -5534,6 +5687,7 @@ index ed7528f2c..bbbe6a182 100644
 +            independent = false;
 +        };
 +        flat_hash_set<const Scope*> closedClasses;
++        flat_hash_map<const Scope*, size_t> attributeCursors;
 +        flat_hash_set<const CovergroupType*> closedCovergroups;
 +        // Parent links are stable, but closing another class can make an old
 +        // negative result local. Invalidate both answers at that boundary.
@@ -7176,13 +7330,43 @@ index ed7528f2c..bbbe6a182 100644
 +            // proof. The binding scope separates internal metadata from current
 +            // caller / root-connection attributes. Closing a class or prototype
 +            // can make more attribute scopes local on the next fixed-point pass.
++            if (!bodyReuseMetadataIndex)
++                bodyReuseMetadataIndex = std::make_unique<BodyReuseMetadataIndex>();
++            auto& metadataIndex = *bodyReuseMetadataIndex;
++            if (!metadataIndex.attributesIndexed) {
++                metadataIndex.attributesIndexed = true;
++                for (const auto& [node, attributes] : attributeMap)
++                    indexBodyReuseAttributes(node, attributes);
++            }
++            std::erase_if(metadataIndex.pendingAttributes, [&](size_t i) {
++                const auto& entry = metadataIndex.attributeEntries[i];
++                if (metadataIndex.attributeRevisions.at(entry.node) != entry.revision)
++                    return true;
++                if (const auto scope = entry.attribute->getBindingScope();
++                    BodyReuseMetadataIndex::completeAncestry(scope)) {
++                    BodyReuseMetadataIndex::append(metadataIndex.attributes, scope, i);
++                    return true;
++                }
++                return false;
++            });
 +            SmallVector<const AttributeSymbol*> pendingAttributes;
-+            for (const auto& [_, attributes] : attributeMap)
-+                for (const auto attribute : attributes)
-+                    if (const auto scope = attribute->getBindingScope();
-+                        scope && isLocal(scope->asSymbol()) &&
-+                        auditedAttributes.emplace(attribute).second)
-+                        pendingAttributes.push_back(attribute);
++            auto includeAttributes = [&](const Scope* scope) {
++                const auto found = metadataIndex.attributes.find(scope);
++                if (found == metadataIndex.attributes.end())
++                    return;
++                auto& next = attributeCursors[scope];
++                for (; next < found->second.size(); ++next) {
++                    ++bodyReuseIndexStats.attributesVisited;
++                    const auto entry = metadataIndex.attributeEntries[found->second[next]];
++                    if (metadataIndex.attributeRevisions.at(entry.node) == entry.revision &&
++                        isLocal(scope->asSymbol()) &&
++                        auditedAttributes.emplace(entry.attribute).second)
++                        pendingAttributes.push_back(entry.attribute);
++                }
++            };
++            includeAttributes(&retained);
++            for (const auto cls : closedClasses)
++                includeAttributes(cls);
 +            // Binding can grow attributeMap; never hold its iterators while
 +            // forcing lazy attribute expressions or their referenced bodies.
 +            for (const auto attribute : pendingAttributes)
@@ -7327,7 +7511,27 @@ index ed7528f2c..bbbe6a182 100644
 +            if (isLocal(scope->asSymbol()))
 +                certificate.instantiationSites.push_back(definition);
 +        }
-+        for (const auto& [origin, reference] : bodyHierarchicalEffects) {
++        while (definitions.indexedEffects < bodyHierarchicalEffects.size()) {
++            const auto i = definitions.indexedEffects++;
++            BodyReuseMetadataIndex::append(definitions.effects, bodyHierarchicalEffects[i].first,
++                                           i);
++            ++bodyReuseIndexStats.effectsIndexed;
++        }
++        std::vector<size_t> localEffects;
++        auto includeEffects = [&](const Scope* scope) {
++            if (const auto found = definitions.effects.find(scope);
++                found != definitions.effects.end())
++                localEffects.insert(localEffects.end(), found->second.begin(), found->second.end());
++        };
++        includeEffects(&retained);
++        for (const auto cls : closedClasses)
++            includeEffects(cls);
++        std::ranges::sort(localEffects);
++        const auto duplicateEffects = std::ranges::unique(localEffects);
++        localEffects.erase(duplicateEffects.begin(), duplicateEffects.end());
++        for (const auto i : localEffects) {
++            ++bodyReuseIndexStats.effectsVisited;
++            const auto& [origin, reference] = bodyHierarchicalEffects[i];
 +            if (!isLocal(origin->asSymbol()) || origin->isUninstantiated())
 +                continue;
 +            const auto body = origin->getContainingInstance();
@@ -7345,6 +7549,34 @@ index ed7528f2c..bbbe6a182 100644
 +                                   virtualPrototypeDefinitions.end());
 +        for (auto body : certificate.descendants)
 +            subtreeDefinitions.emplace(&body->getDefinition());
++        // Build physical declaration intervals once for this closed subtree.
++        flat_hash_map<BufferID, std::vector<std::pair<size_t, size_t>>> fixedRanges;
++        bool fixedRangesReady = false;
++        auto prepareFixedRanges = [&] {
++            auto addFixedRange = [&](const SyntaxNode& syntax) {
++                const auto range = syntax.sourceRange();
++                if (range.start().offset() <= range.end().offset())
++                    fixedRanges[range.start().buffer()].emplace_back(range.start().offset(),
++                                                                     range.end().offset());
++            };
++            for (const auto definition : subtreeDefinitions)
++                addFixedRange(*definition->getSyntax());
++            for (const auto type : certificate.classes)
++                if (const auto syntax = type->getSyntax())
++                    addFixedRange(*syntax);
++            for (auto& [_, ranges] : fixedRanges) {
++                std::ranges::sort(ranges);
++                size_t count = 0;
++                for (const auto range : ranges) {
++                    if (count && range.first <= ranges[count - 1].second)
++                        ranges[count - 1].second = std::max(ranges[count - 1].second, range.second);
++                    else
++                        ranges[count++] = range;
++                }
++                ranges.resize(count);
++            }
++            fixedRangesReady = true;
++        };
 +        // Keep raw occurrences: producer coalescing has already discarded instance
 +        // identity and counts, and must never be replayed in a different consumer.
 +        auto fixedLocation = [&](SourceLocation location) {
@@ -7354,22 +7586,17 @@ index ed7528f2c..bbbe6a182 100644
 +            // reside in an included macro header outside any module declaration.
 +            // Keep ordinary caller locations outside this boundary rejected.
 +            location = sourceManager->getFullyExpandedLoc(location);
-+            for (auto definition : subtreeDefinitions) {
-+                auto range = definition->getSyntax()->sourceRange();
-+                if (location.buffer() == range.start().buffer() &&
-+                    location.offset() >= range.start().offset() &&
-+                    location.offset() <= range.end().offset())
-+                    return true;
-+            }
-+            for (auto type : certificate.classes)
-+                if (auto syntax = type->getSyntax()) {
-+                    const auto range = syntax->sourceRange();
-+                    if (location.buffer() == range.start().buffer() &&
-+                        location.offset() >= range.start().offset() &&
-+                        location.offset() <= range.end().offset())
-+                        return true;
-+                }
-+            return false;
++            if (!fixedRangesReady)
++                prepareFixedRanges();
++            const auto found = fixedRanges.find(location.buffer());
++            if (found == fixedRanges.end())
++                return false;
++            const auto& ranges = found->second;
++            auto end = std::upper_bound(ranges.begin(), ranges.end(), location.offset(),
++                                        [](size_t offset, const auto& range) {
++                                            return offset < range.first;
++                                        });
++            return end != ranges.begin() && location.offset() <= std::prev(end)->second;
 +        };
 +        auto fixedAssertionTargetError = [&](const Diagnostic& diagnostic) {
 +            if (diagnostic.code != diag::ExpectedScopeOrAssert || !diagnostic.symbol)
@@ -7426,7 +7653,43 @@ index ed7528f2c..bbbe6a182 100644
 +                    return false;
 +            return true;
 +        };
-+        diagMap.visitRaw([&](const Diagnostic& diagnostic) {
++        if (!definitions.diagnosticsIndexed ||
++            definitions.diagnosticRevision != diagMap.rawOrderRevision()) {
++            definitions.diagnosticEntries.clear();
++            definitions.diagnostics.clear();
++            definitions.unscopedDiagnostics.clear();
++            definitions.pendingDiagnostics.clear();
++            diagMap.visitRawReferences([&](auto reference, const Diagnostic& diagnostic) {
++                definitions.appendDiagnostic(reference, diagnostic);
++                ++bodyReuseIndexStats.diagnosticsIndexed;
++            });
++            definitions.diagnosticRevision = diagMap.rawOrderRevision();
++            definitions.diagnosticsIndexed = true;
++        }
++        // Lazy construction can report a diagnostic before parenting its scope.
++        // Do not freeze an incomplete ancestry into the ownership index.
++        std::erase_if(definitions.pendingDiagnostics, [&](size_t i) {
++            const auto& diagnostic = diagMap.resolveRaw(definitions.diagnosticEntries[i]);
++            const auto scope = BodyReuseMetadataIndex::scopeFor(*diagnostic.symbol);
++            if (!BodyReuseMetadataIndex::completeAncestry(scope))
++                return false;
++            BodyReuseMetadataIndex::append(definitions.diagnostics, scope, i);
++            return true;
++        });
++        std::vector<size_t> localDiagnostics = definitions.unscopedDiagnostics;
++        auto includeDiagnostics = [&](const Scope* scope) {
++            if (const auto found = definitions.diagnostics.find(scope);
++                found != definitions.diagnostics.end())
++                localDiagnostics.insert(localDiagnostics.end(), found->second.begin(),
++                                        found->second.end());
++        };
++        includeDiagnostics(&retained);
++        for (const auto cls : closedClasses)
++            includeDiagnostics(cls);
++        std::ranges::sort(localDiagnostics);
++        const auto duplicateDiagnostics = std::ranges::unique(localDiagnostics);
++        localDiagnostics.erase(duplicateDiagnostics.begin(), duplicateDiagnostics.end());
++        auto auditDiagnostic = [&](const Diagnostic& diagnostic) {
 +            if (!independent)
 +                return;
 +            if (!diagnostic.symbol) {
@@ -7448,7 +7711,47 @@ index ed7528f2c..bbbe6a182 100644
 +                return;
 +            }
 +            certificate.diagnostics.push_back(diagnostic);
-+        });
++        };
++        for (const auto i : localDiagnostics) {
++            ++bodyReuseIndexStats.diagnosticsVisited;
++            auditDiagnostic(diagMap.resolveRaw(definitions.diagnosticEntries[i]));
++            if (!independent)
++                break;
++        }
++
++        if (independent) {
++            // Preserve the raw occurrence order within every replay bucket.
++            // Class diagnostics belong to Native's class phase; other records
++            // can be replayed by the root or a later revisited descendant.
++            for (size_t i = 0; i < certificate.diagnostics.size(); ++i) {
++                SmallVector<const InstanceBodySymbol*> bodies;
++                bool classDiagnostic = false;
++                for (auto symbol = certificate.diagnostics[i].symbol; symbol;) {
++                    if (const auto cls = symbol->as_if<ClassType>();
++                        cls &&
++                        std::ranges::find(certificate.classes, cls) != certificate.classes.end()) {
++                        certificate.diagnosticClasses[cls].push_back(i);
++                        classDiagnostic = true;
++                        break;
++                    }
++                    if (const auto body = symbol->as_if<InstanceBodySymbol>()) {
++                        bodies.push_back(body);
++                        if (body == certificate.root)
++                            break;
++                        const auto instance = body->parentInstance;
++                        const auto scope = instance ? instance->getParentScope() : nullptr;
++                        symbol = scope ? &scope->asSymbol() : nullptr;
++                    }
++                    else {
++                        const auto scope = symbol->getParentScope();
++                        symbol = scope ? &scope->asSymbol() : nullptr;
++                    }
++                }
++                if (!classDiagnostic)
++                    for (const auto body : bodies)
++                        certificate.diagnosticBodies[body].push_back(i);
++            }
++        }
 +
 +        // Reference profiles contain only body-local binding origins. Current
 +        // callers re-evaluate their outside uses; no old-consumer walk is needed.
@@ -7773,7 +8076,21 @@ index ed7528f2c..bbbe6a182 100644
 +    if (bodyReuseMetadataIndex) {
 +        result += sizeof(BodyReuseMetadataIndex) + mapBytes(bodyReuseMetadataIndex->controls) +
 +                  mapBytes(bodyReuseMetadataIndex->definitions) +
-+                  mapBytes(bodyReuseMetadataIndex->referenceSubtrees);
++                  mapBytes(bodyReuseMetadataIndex->referenceSubtrees) +
++                  mapBytes(bodyReuseMetadataIndex->attributeRevisions) +
++                  mapBytes(bodyReuseMetadataIndex->attributes) +
++                  mapBytes(bodyReuseMetadataIndex->effects) +
++                  mapBytes(bodyReuseMetadataIndex->diagnostics);
++        const auto& index = *bodyReuseMetadataIndex;
++        result += index.attributeEntries.capacity() *
++                      sizeof(BodyReuseMetadataIndex::AttributeEntry) +
++                  index.pendingAttributes.capacity() * sizeof(size_t) +
++                  index.diagnosticEntries.capacity() * sizeof(ASTDiagMap::RawReference) +
++                  (index.unscopedDiagnostics.capacity() + index.pendingDiagnostics.capacity()) *
++                      sizeof(size_t);
++        for (const auto* buckets : {&index.attributes, &index.effects, &index.diagnostics})
++            for (const auto& [_, indices] : *buckets)
++                result += indices.capacity() * sizeof(size_t);
 +        for (const auto& [_, scopes] : bodyReuseMetadataIndex->referenceSubtrees)
 +            result += scopes.capacity() * sizeof(const Scope*);
 +        for (const auto& [_, indices] : bodyReuseMetadataIndex->controls)
@@ -7817,6 +8134,12 @@ index ed7528f2c..bbbe6a182 100644
 +        result += certificate->hierarchicalEffects.capacity() *
 +                  sizeof(decltype(certificate->hierarchicalEffects)::value_type);
 +        result += certificate->diagnostics.capacity() * sizeof(Diagnostic);
++        result += mapBytes(certificate->diagnosticBodies) +
++                  mapBytes(certificate->diagnosticClasses);
++        for (const auto& [_, indices] : certificate->diagnosticBodies)
++            result += indices.capacity() * sizeof(size_t);
++        for (const auto& [_, indices] : certificate->diagnosticClasses)
++            result += indices.capacity() * sizeof(size_t);
 +        for (const auto& diagnostic : certificate->diagnostics)
 +            result += retainedDiagnosticStorage(diagnostic);
 +        result += certificate->defaultDisables.capacity() *
@@ -8025,7 +8348,7 @@ index ed7528f2c..bbbe6a182 100644
 +            if (auto syntax = symbol->getSyntax())
 +                wrapper->setSyntax(*syntax);
 +            if (auto attributes = attributeMap.find(symbol); attributes != attributeMap.end())
-+                attributeMap.emplace(wrapper, attributes->second);
++                setAttributes(*wrapper, attributes->second);
 +            unit->addMember(*wrapper);
 +        }
 +    };
@@ -8159,15 +8482,13 @@ index ed7528f2c..bbbe6a182 100644
 +    }
 +    return result;
 +}
- 
- const SourceLibrary* Compilation::getSourceLibrary(std::string_view name) const {
-     if (auto it = libraryNameMap.find(name); it != libraryNameMap.end())
-@@ -293,11 +4000,250 @@ const SourceLibrary* Compilation::getSourceLibrary(std::string_view name) const
-     return nullptr;
- }
- 
--const RootSymbol& Compilation::getRoot() {
--    return getRoot(/* skipDefParamsAndBinds */ false);
++
++const SourceLibrary* Compilation::getSourceLibrary(std::string_view name) const {
++    if (auto it = libraryNameMap.find(name); it != libraryNameMap.end())
++        return it->second;
++    return nullptr;
++}
++
 +namespace {
 +thread_local Compilation* bodyQueryReferenceTarget = nullptr;
 +thread_local const SubroutineSymbol* bodyReferenceOrigin = nullptr;
@@ -8386,24 +8707,24 @@ index ed7528f2c..bbbe6a182 100644
 +    if (!hierarchicalAssignments.empty() || !virtualIfaceInstances.empty())
 +        SLANG_THROW(std::logic_error("detached body requires design-dependent finalization"));
 +    return diagMap.coalesce(sourceManager, this);
-+}
-+
-+const RootSymbol& Compilation::getRoot() {
+ }
+ 
+ const RootSymbol& Compilation::getRoot() {
 +    // Keep finalized lookups on the ordinary path free of callback temporaries.
 +    if (bodyQueryContext)
 +        return bodyQueryContext->getRoot();
 +    if (finalized)
 +        return *root;
-+    return getRoot(/* skipDefParamsAndBinds */ false);
-+}
-+
+     return getRoot(/* skipDefParamsAndBinds */ false);
+ }
+ 
+-const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
 +const RootSymbol& Compilation::getDisposableRoot(const std::function<void()>& checkpoint) {
 +    if (bodyQueryContext || isFrozen())
 +        SLANG_THROW(std::logic_error("borrowed or frozen roots are not disposable"));
 +    return getRoot(false, checkpoint);
- }
- 
--const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
++}
++
 +const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds,
 +                                       const std::function<void()>& checkpoint) {
 +    auto check = [&] {
@@ -8416,7 +8737,7 @@ index ed7528f2c..bbbe6a182 100644
      if (finalized)
          return *root;
  
-@@ -310,20 +4256,43 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
+@@ -310,20 +4503,43 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
              defaultLiblist.push_back(lib);
      }
  
@@ -8461,7 +8782,7 @@ index ed7528f2c..bbbe6a182 100644
      }
  
      SLANG_ASSERT(!finalizing);
-@@ -398,7 +4367,7 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
+@@ -398,7 +4614,7 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
              if (inserted) {
                  topDefs.push_back({result, sourceRange});
                  SLANG_ASSERT(def->kind == SymbolKind::Definition);
@@ -8470,7 +8791,7 @@ index ed7528f2c..bbbe6a182 100644
              }
              else {
                  auto& diag = root->addDiag(diag::MultipleTopDupName, sourceRange.start()
-@@ -465,8 +4434,7 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
+@@ -465,8 +4681,7 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
                          else {
                              // Otherwise, issue an error because the user asked us to instantiate
                              // this.
@@ -8480,7 +8801,7 @@ index ed7528f2c..bbbe6a182 100644
                                  << userProvidedName;
                          }
                          continue;
-@@ -510,7 +4478,7 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
+@@ -510,7 +4725,7 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
  
                  auto& def = defSym->as<DefinitionSymbol>();
                  if (globalInstantiations.find(def.name) == globalInstantiations.end() &&
@@ -8489,7 +8810,7 @@ index ed7528f2c..bbbe6a182 100644
                      unreferencedDefs.push_back(&def);
                  }
              }
-@@ -549,10 +4517,16 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
+@@ -549,10 +4764,16 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
              hierarchyOverrideNode = &sit->second;
          }
  
@@ -8506,7 +8827,7 @@ index ed7528f2c..bbbe6a182 100644
      }
  
      if (!hasFlag(CompilationFlags::LintMode | CompilationFlags::AllowTopLevelIfacePorts) &&
-@@ -562,7 +4536,7 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
+@@ -562,7 +4783,7 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
  
      // For unreferenced definitions, go through and instantiate them with all empty
      // parameter values so that we get at least some semantic checking of the contents.
@@ -8515,7 +8836,7 @@ index ed7528f2c..bbbe6a182 100644
          for (auto def : unreferencedDefs) {
              const HierarchyOverrideNode* hierarchyOverrideNode = nullptr;
              if (auto* syntax = def->getSyntax()) {
-@@ -571,10 +4545,13 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
+@@ -571,10 +4792,13 @@ const RootSymbol& Compilation::getRoot(bool skipDefParamsAndBinds) {
                      hierarchyOverrideNode = &it->second;
                  }
              }
@@ -8529,7 +8850,7 @@ index ed7528f2c..bbbe6a182 100644
      root->topInstances = topList.copy(*this);
      root->compilationUnits = compilationUnits;
      finalizing = false;
-@@ -595,6 +4572,8 @@ const CompilationUnitSymbol* Compilation::getCompilationUnit(
+@@ -595,6 +4819,8 @@ const CompilationUnitSymbol* Compilation::getCompilationUnit(
  
  Compilation::DefinitionLookupResult Compilation::tryGetDefinition(std::string_view lookupName,
                                                                    const Scope& scope) const {
@@ -8538,7 +8859,7 @@ index ed7528f2c..bbbe6a182 100644
      // Try to find a config block for this scope to help choose the right definition.
      const ResolvedConfig* resolvedConfig = nullptr;
      if (auto inst = scope.getContainingInstance(); inst && inst->parentInstance)
-@@ -734,6 +4713,10 @@ const DefinitionSymbol* Compilation::getDefinition(const Scope& scope,
+@@ -734,6 +4960,10 @@ const DefinitionSymbol* Compilation::getDefinition(const Scope& scope,
  
              lookupScope = lookupScope->asSymbol().getParentScope();
          } while (lookupScope);
@@ -8549,7 +8870,7 @@ index ed7528f2c..bbbe6a182 100644
      }
      return nullptr;
  }
-@@ -824,6 +4807,27 @@ void Compilation::createDefinition(const Scope& scope, LookupLocation location,
+@@ -824,6 +5054,27 @@ void Compilation::createDefinition(const Scope& scope, LookupLocation location,
                                     const ModuleDeclarationSyntax& syntax) {
      SLANG_ASSERT(!isFrozen());
  
@@ -8577,7 +8898,7 @@ index ed7528f2c..bbbe6a182 100644
      // We can only be missing metadata if the definition is created programmatically
      // (i.e. not via the parser) so we just fill in the parent's default net type
      // so that it's not a null pointer.
-@@ -893,7 +4897,7 @@ void Compilation::insertDefinition(Symbol& symbol, const Scope& scope) {
+@@ -893,7 +5144,7 @@ void Compilation::insertDefinition(Symbol& symbol, const Scope& scope) {
              for (auto v = vecIt; v != defList.end(); v++) {
                  auto vSym = *v;
                  auto vLib = vSym->getSourceLibrary();
@@ -8586,7 +8907,7 @@ index ed7528f2c..bbbe6a182 100644
                      // Duplicate in the same library.
                      if (hasFlag(CompilationFlags::AllowLibModuleRedefinition)) {
                          // Silently keep the first definition and discard all subsequent ones,
-@@ -971,12 +4975,31 @@ void Compilation::insertDefinition(Symbol& symbol, const Scope& scope) {
+@@ -971,12 +5222,31 @@ void Compilation::insertDefinition(Symbol& symbol, const Scope& scope) {
  }
  
  const PackageSymbol* Compilation::getPackage(std::string_view lookupName) const {
@@ -8619,7 +8940,7 @@ index ed7528f2c..bbbe6a182 100644
  const PackageSymbol& Compilation::createPackage(const Scope& scope,
                                                  const ModuleDeclarationSyntax& syntax) {
      SLANG_ASSERT(!isFrozen());
-@@ -1077,6 +5100,8 @@ void Compilation::addSystemMethod(SymbolKind typeKind,
+@@ -1077,6 +5347,8 @@ void Compilation::addSystemMethod(SymbolKind typeKind,
  }
  
  const SystemSubroutine* Compilation::getSystemSubroutine(std::string_view name) const {
@@ -8628,7 +8949,7 @@ index ed7528f2c..bbbe6a182 100644
      auto it = subroutineNameMap.find(name);
      if (it == subroutineNameMap.end())
          return nullptr;
-@@ -1085,12 +5110,15 @@ const SystemSubroutine* Compilation::getSystemSubroutine(std::string_view name)
+@@ -1085,12 +5357,15 @@ const SystemSubroutine* Compilation::getSystemSubroutine(std::string_view name)
  
  const SystemSubroutine* Compilation::getSystemSubroutine(
      parsing::KnownSystemName knownNameId) const {
@@ -8645,7 +8966,33 @@ index ed7528f2c..bbbe6a182 100644
      auto it = methodMap.find(std::make_tuple(name, typeKind));
      if (it == methodMap.end())
          return nullptr;
-@@ -1136,10 +5164,14 @@ std::span<const AttributeSymbol* const> Compilation::getAttributes(
+@@ -1100,21 +5375,25 @@ const SystemSubroutine* Compilation::getSystemMethod(SymbolKind typeKind,
+ void Compilation::setAttributes(const Symbol& symbol,
+                                 std::span<const AttributeSymbol* const> attributes) {
+     attributeMap[&symbol] = attributes;
++    indexBodyReuseAttributes(&symbol, attributes);
+ }
+ 
+ void Compilation::setAttributes(const Statement& stmt,
+                                 std::span<const AttributeSymbol* const> attributes) {
+     attributeMap[&stmt] = attributes;
++    indexBodyReuseAttributes(&stmt, attributes);
+ }
+ 
+ void Compilation::setAttributes(const Expression& expr,
+                                 std::span<const AttributeSymbol* const> attributes) {
+     attributeMap[&expr] = attributes;
++    indexBodyReuseAttributes(&expr, attributes);
+ }
+ 
+ void Compilation::setAttributes(const PortConnection& conn,
+                                 std::span<const AttributeSymbol* const> attributes) {
+     attributeMap[&conn] = attributes;
++    indexBodyReuseAttributes(&conn, attributes);
+ }
+ 
+ std::span<const AttributeSymbol* const> Compilation::getAttributes(const Symbol& symbol) const {
+@@ -1136,10 +5415,14 @@ std::span<const AttributeSymbol* const> Compilation::getAttributes(
  
  std::span<const AttributeSymbol* const> Compilation::getAttributes(const void* ptr) const {
      auto it = attributeMap.find(ptr);
@@ -8664,7 +9011,7 @@ index ed7528f2c..bbbe6a182 100644
  }
  
  void Compilation::noteBindDirective(const BindDirectiveSyntax& syntax, const Scope& scope) {
-@@ -1254,7 +5286,7 @@ const Symbol* Compilation::getDefaultClocking(const Scope& scope) const {
+@@ -1254,7 +5537,7 @@ const Symbol* Compilation::getDefaultClocking(const Scope& scope) const {
              return getDefaultClocking(*parent);
      }
  
@@ -8673,7 +9020,7 @@ index ed7528f2c..bbbe6a182 100644
  }
  
  void Compilation::noteGlobalClocking(const Scope& scope, const Symbol& clocking,
-@@ -1384,12 +5416,21 @@ void Compilation::noteUpwardReference(const Scope& initialScope, const Hierarchi
+@@ -1384,12 +5667,21 @@ void Compilation::noteUpwardReference(const Scope& initialScope, const Hierarchi
      }
  }
  
@@ -8696,7 +9043,7 @@ index ed7528f2c..bbbe6a182 100644
      bool valid = true;
      SmallSet<const InstanceSymbol*, 2> visited;
      InstanceCacheKey key(symbol, valid, visited);
-@@ -1409,7 +5450,7 @@ const Expression* Compilation::getDefaultDisable(const Scope& scope) const {
+@@ -1409,7 +5701,7 @@ const Expression* Compilation::getDefaultDisable(const Scope& scope) const {
  
          curr = curr->asSymbol().getParentScope();
          if (!curr || curr->asSymbol().kind == SymbolKind::CompilationUnit)
@@ -8705,7 +9052,7 @@ index ed7528f2c..bbbe6a182 100644
      }
  }
  
-@@ -1458,27 +5499,304 @@ const SyntaxNode* Compilation::getExternDefinition(std::string_view name,
+@@ -1458,27 +5750,304 @@ const SyntaxNode* Compilation::getExternDefinition(std::string_view name,
      return nullptr;
  }
  
@@ -9019,7 +9366,7 @@ index ed7528f2c..bbbe6a182 100644
  }
  
  const NameSyntax& Compilation::parseName(std::string_view name) {
-@@ -1510,7 +5828,66 @@ CompilationUnitSymbol& Compilation::createScriptScope() {
+@@ -1510,7 +6079,66 @@ CompilationUnitSymbol& Compilation::createScriptScope() {
      return *unit;
  }
  
@@ -9087,7 +9434,7 @@ index ed7528f2c..bbbe6a182 100644
      SLANG_ASSERT(!isFrozen());
  
      // Make sure our root is created. It's possible that this results in a fatal
-@@ -1520,11 +5897,15 @@ void Compilation::elaborate() {
+@@ -1520,11 +6148,15 @@ void Compilation::elaborate() {
      if (sawFatalError)
          return;
  
@@ -9104,7 +9451,7 @@ index ed7528f2c..bbbe6a182 100644
  
      if (!elabVisitor.finishedEarly() && !elabVisitor.instanceDepthExceeded)
          elabVisitor.finalize();
-@@ -1560,10 +5941,12 @@ void Compilation::elaborate() {
+@@ -1560,10 +6192,12 @@ void Compilation::elaborate() {
      // Double check any bind directives for correctness. These were already
      // resolved prior to full elaboration but their diagnostics were not
      // issued so we need to check again.
@@ -9121,7 +9468,7 @@ index ed7528f2c..bbbe6a182 100644
      }
  
      // Report any lingering name conflicts.
-@@ -1680,14 +6063,503 @@ const Diagnostics& Compilation::getParseDiagnostics() {
+@@ -1680,14 +6314,488 @@ const Diagnostics& Compilation::getParseDiagnostics() {
      return *cachedParseDiagnostics;
  }
  
@@ -9141,29 +9488,14 @@ index ed7528f2c..bbbe6a182 100644
 +    if (found == importedBodyViews.end())
 +        return;
 +    const auto certificate = found->second;
-+    auto belongsToBody = [&](const Symbol& symbol) {
-+        auto current = &symbol;
-+        while (current) {
-+            if (const auto cls = current->as_if<ClassType>();
-+                cls && std::ranges::find(certificate->classes, cls) != certificate->classes.end())
-+                return false; // Replayed at Native's class-specialization phase.
-+            if (auto instanceBody = current->as_if<InstanceBodySymbol>()) {
-+                const auto& frame = getCurrentInstanceBody(*instanceBody);
-+                if (&frame == &body)
-+                    return true;
-+                const auto instance = frame.parentInstance;
-+                const auto parent = instance ? instance->getParentScope() : nullptr;
-+                current = parent ? &parent->asSymbol() : nullptr;
-+            }
-+            else {
-+                const auto parent = current->getParentScope();
-+                current = parent ? &parent->asSymbol() : nullptr;
-+            }
-+        }
-+        return false;
-+    };
-+    for (const auto& raw : certificate->diagnostics) {
-+        if (replayedBodyDiagnostics.contains(&raw) || !raw.symbol || !belongsToBody(*raw.symbol))
++    const auto* original = &getCurrentInstanceBody(*certificate->root) == &body ? certificate->root
++                                                                                : &body;
++    const auto bucket = certificate->diagnosticBodies.find(original);
++    if (bucket == certificate->diagnosticBodies.end())
++        return;
++    for (const auto i : bucket->second) {
++        const auto& raw = certificate->diagnostics[i];
++        if (replayedBodyDiagnostics.contains(&raw))
 +            continue;
 +        // Preserve Native canonical skips, but keep their raw occurrences
 +        // available: a hierarchy assignment can invalidate that skip later.
@@ -9628,7 +9960,25 @@ index ed7528f2c..bbbe6a182 100644
      return *cachedSemanticDiagnostics;
  }
  
-@@ -1794,17 +6666,53 @@ const ImplicitTypeSyntax& Compilation::createEmptyTypeSyntax(SourceLocation loc)
+@@ -1766,7 +6874,16 @@ Diagnostic& Compilation::addDiag(Diagnostic diag) {
+     const bool isError = diag.isError();
+ 
+     bool isNew;
+-    auto& result = diagMap.add(std::move(diag), isNew);
++    ASTDiagMap::RawReference reference;
++    const bool indexDiagnostic = bodyReuseMetadataIndex &&
++                                 bodyReuseMetadataIndex->diagnosticsIndexed &&
++                                 bodyReuseMetadataIndex->diagnosticRevision ==
++                                     diagMap.rawOrderRevision();
++    auto& result = diagMap.add(std::move(diag), isNew, indexDiagnostic ? &reference : nullptr);
++    if (indexDiagnostic) {
++        bodyReuseMetadataIndex->appendDiagnostic(reference, result);
++        ++bodyReuseIndexStats.diagnosticsIndexed;
++    }
+     if (isNew && isError)
+         numErrors++;
+ 
+@@ -1794,17 +6911,53 @@ const ImplicitTypeSyntax& Compilation::createEmptyTypeSyntax(SourceLocation loc)
                                          Token(*this, TokenKind::Placeholder, {}, {}, loc));
  }
  
@@ -9685,7 +10035,7 @@ index ed7528f2c..bbbe6a182 100644
  }
  
  const Type& Compilation::getType(SyntaxKind typeKind) const {
-@@ -2022,7 +6930,19 @@ void Compilation::checkDPIMethods(std::span<const SubroutineSymbol* const> dpiIm
+@@ -2022,7 +7175,19 @@ void Compilation::checkDPIMethods(std::span<const SubroutineSymbol* const> dpiIm
              continue;
          }
  
@@ -9933,7 +10283,7 @@ index 20da49191..fbd15a914 100644
                  return;
  
 diff --git a/source/ast/ElabVisitors.h b/source/ast/ElabVisitors.h
-index 2f346fa60..c9ce088e3 100644
+index 2f346fa60..08d12ed3d 100644
 --- a/source/ast/ElabVisitors.h
 +++ b/source/ast/ElabVisitors.h
 @@ -7,8 +7,11 @@
@@ -9985,7 +10335,7 @@ index 2f346fa60..c9ce088e3 100644
              member.visit(*this);
              if (abortCurrentRoot)
                  abortCurrentRoot = false;
-@@ -193,12 +208,58 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
+@@ -193,12 +208,50 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
          symbol.getResolutionFunction();
      }
  
@@ -9996,17 +10346,9 @@ index 2f346fa60..c9ce088e3 100644
 +        while (indexedClassDiagnosticCertificates < compilation.importedBodyCertificates.size()) {
 +            const auto certificate = compilation.importedBodyCertificates[
 +                indexedClassDiagnosticCertificates++];
-+            for (const auto& raw : certificate->diagnostics) {
-+                for (auto origin = raw.symbol; origin;) {
-+                    if (const auto cls = origin->as_if<ClassType>(); cls &&
-+                        std::ranges::find(certificate->classes, cls) != certificate->classes.end()) {
-+                        importedClassDiagnostics[cls].push_back(&raw);
-+                        break;
-+                    }
-+                    const auto parent = origin->getParentScope();
-+                    origin = parent ? &parent->asSymbol() : nullptr;
-+                }
-+            }
++            for (const auto& [cls, indices] : certificate->diagnosticClasses)
++                for (const auto i : indices)
++                    importedClassDiagnostics[cls].push_back(&certificate->diagnostics[i]);
 +        }
 +        const auto found = importedClassDiagnostics.find(&type);
 +        if (found == importedClassDiagnostics.end())
@@ -10044,7 +10386,7 @@ index 2f346fa60..c9ce088e3 100644
      }
  
      void handle(const CovergroupType& symbol) {
-@@ -314,7 +375,7 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
+@@ -314,7 +367,7 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
      }
  
      void handle(const InstanceSymbol& symbol) {
@@ -10053,7 +10395,7 @@ index 2f346fa60..c9ce088e3 100644
              return;
  
          // If we're not visiting instances and this instance came from a bind directive
-@@ -368,6 +429,37 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
+@@ -368,6 +421,37 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
          }
      }
  
@@ -10091,7 +10433,7 @@ index 2f346fa60..c9ce088e3 100644
      void handle(const SubroutineSymbol& symbol) {
          if (!handleDefault(symbol))
              return;
-@@ -377,7 +469,7 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
+@@ -377,7 +461,7 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
      }
  
      void handle(const DefParamSymbol& symbol) {
@@ -10100,15 +10442,15 @@ index 2f346fa60..c9ce088e3 100644
              return;
  
          symbol.getTarget();
-@@ -399,9 +491,29 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
+@@ -399,9 +483,29 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
      }
  
      void handle(const LetDeclSymbol& symbol) {
 -        if (!visitInstances || !handleDefault(symbol))
 +        if (!visitInstances &&
 +            (!compilation.bodyQueryContext || &symbol.getCompilation() != &compilation))
-             return;
- 
++            return;
++
 +        const SubroutineSymbol* body = nullptr;
 +        for (auto scope = symbol.getParentScope(); scope;
 +             scope = scope->asSymbol().getParentScope()) {
@@ -10120,8 +10462,8 @@ index 2f346fa60..c9ce088e3 100644
 +        // Detached methods must check even unused local templates, including
 +        // their ports and default arguments, without expanding design instances.
 +        if (!visitInstances && !body)
-+            return;
-+
+             return;
+ 
 +        // The default template is bound after getBody's origin guard has ended.
 +        // Its uses still belong to the lexical body and must disappear when that
 +        // body is replaced. A declaration outside a method remains a fixed use.
@@ -10131,7 +10473,7 @@ index 2f346fa60..c9ce088e3 100644
          symbol.makeDefaultInstance();
      }
  
-@@ -449,6 +561,7 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
+@@ -449,6 +553,7 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
      }
  
      void finalize() {
@@ -10139,7 +10481,7 @@ index 2f346fa60..c9ce088e3 100644
          // Once everything has been visited, go back over and check things that might
          // have been influenced by visiting later symbols.
  
-@@ -467,9 +580,15 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
+@@ -467,9 +572,15 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
                          // determined we could cache it, so we need to visit it here.
                          // Additionally we will unset the canonical pointer so that
                          // we don't try to cache it again in the future.
@@ -10158,7 +10500,7 @@ index 2f346fa60..c9ce088e3 100644
                              inst.visit(*this);
                          }
                      }
-@@ -477,16 +596,7 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
+@@ -477,16 +588,7 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
              }
          }
  
@@ -10176,7 +10518,7 @@ index 2f346fa60..c9ce088e3 100644
  
          // Visiting a specialization can trigger more specializations to be made for the
          // same or other generic classes, so we need to be careful here when iterating.
-@@ -495,13 +605,46 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
+@@ -495,13 +597,46 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
          bool didSomething;
          do {
              didSomething = false;
@@ -10224,7 +10566,7 @@ index 2f346fa60..c9ce088e3 100644
                      spec->visit(*this);
                      didSomething = true;
                  }
-@@ -513,7 +656,9 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
+@@ -513,7 +648,9 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
          // Go back over and find generic classes that were never instantiated
          // and force an empty one to make sure we collect all diagnostics that
          // don't depend on parameter values.
@@ -10235,7 +10577,7 @@ index 2f346fa60..c9ce088e3 100644
              if (symbol->numSpecializations() == 0)
                  symbol->getInvalidSpecialization().visit(*this);
          }
-@@ -525,6 +670,36 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
+@@ -525,6 +662,36 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
              for (auto attr : attrList)
                  attr->getValue();
          }
@@ -10272,7 +10614,7 @@ index 2f346fa60..c9ce088e3 100644
      }
  
      static bool isWithinInterface(const InstanceSymbol& symbol) {
-@@ -546,6 +721,9 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
+@@ -546,6 +713,9 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
          if (disableCache)
              return false;
  
@@ -10282,7 +10624,7 @@ index 2f346fa60..c9ce088e3 100644
          // We can use a cached version of this instance's body if we have already
          // visited an identical body elsewhere, with some caveats explained below.
          SLANG_ASSERT(symbol.getCanonicalBody() == nullptr);
-@@ -597,7 +775,14 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
+@@ -597,7 +767,14 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
          // Assuming we find an appropriately cached instance, we will store a pointer to it
          // in other instances to facilitate downstream consumers in not needing to recreate
          // this duplication detection logic again.
@@ -10298,7 +10640,7 @@ index 2f346fa60..c9ce088e3 100644
  
          // If this is an interface or an instance instantiated within an interface
          // we want to return false so that we continue visiting the body. This is
-@@ -605,7 +790,8 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
+@@ -605,7 +782,8 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
          // all types resolved before we freeze the compilation and move on to the
          // multithreaded analysis phase.
          auto defKind = symbol.getDefinition().definitionKind;
@@ -10308,7 +10650,7 @@ index 2f346fa60..c9ce088e3 100644
              defKind == DefinitionKind::Interface ||
              (defKind == DefinitionKind::Program && isWithinInterface(symbol))) {
              return false;
-@@ -625,6 +811,8 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
+@@ -625,6 +803,8 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
      Compilation& compilation;
      const size_t& numErrors;
      uint32_t errorLimit;
@@ -10317,7 +10659,7 @@ index 2f346fa60..c9ce088e3 100644
      bool visitInstances = true;
      bool disableCache = false;
      bool hierarchyProblem = false;
-@@ -633,7 +821,12 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
+@@ -633,7 +813,12 @@ struct DiagnosticVisitor : public ASTVisitor<DiagnosticVisitor> {
      flat_hash_map<InstanceCacheKey, InstanceCacheEntry> instanceCache;
      flat_hash_set<const InstanceBodySymbol*> activeInstanceBodies;
      flat_hash_set<const DefinitionSymbol*> usedIfacePorts;
@@ -14487,7 +14829,7 @@ index ac681a4db..e1df02d5d 100644
 +}
 +} // namespace slang::syntax
 diff --git a/source/text/SourceManager.cpp b/source/text/SourceManager.cpp
-index 386684b5a..667314b7e 100644
+index 386684b5a..674ed9172 100644
 --- a/source/text/SourceManager.cpp
 +++ b/source/text/SourceManager.cpp
 @@ -7,14 +7,33 @@
@@ -15328,7 +15670,7 @@ index 386684b5a..667314b7e 100644
  static size_t getTextEnd(const SmallVector<char>& mem) {
      size_t result = mem.size();
      if (result && mem[result - 1] == '\0')
-@@ -29,34 +845,417 @@ static size_t getTextEnd(const SmallVector<char>& mem) {
+@@ -29,34 +845,484 @@ static size_t getTextEnd(const SmallVector<char>& mem) {
      return result;
  }
  
@@ -15358,7 +15700,66 @@ index 386684b5a..667314b7e 100644
 +    uint32_t unnamedCount = 0;
 +    std::set<std::string, std::less<>> names;
 +    size_t auxiliaryBytes = 0;
++    // Built only when a detached type needs to project a new source occurrence.
++    // Hashes select candidates; full provenance and bytes are still compared.
++    mutable std::once_flag originIndexOnce;
++    mutable std::vector<std::pair<size_t, uint32_t>> originIndex;
++    mutable std::atomic<size_t> originIndexBytes{0}, originIndexEntries{0};
++    mutable std::atomic<size_t> originIndexBuilds{0}, originCandidates{0};
++
++    static size_t fileKey(const FileInfo& file, SourceLocation includedFrom) {
++        size_t result = 0;
++        hash_combine(result, 0u, file.data->fullPath, includedFrom, int(file.getBufferKind()),
++                     file.hasExternalDirectives(), file.data->mem.size());
++        return result;
++    }
++    static size_t expansionKey(const ExpansionInfo& expansion, SourceLocation original,
++                               SourceLocation start, SourceLocation end) {
++        size_t result = 0;
++        hash_combine(result, 1u, original, start, end, expansion.isMacroArg, expansion.macroName);
++        return result;
++    }
++    auto candidates(size_t key) const {
++        std::call_once(originIndexOnce, [&] {
++            std::vector<std::pair<size_t, uint32_t>> index;
++            index.reserve(entries.size());
++            for (size_t i = 1; i < entries.size(); ++i) {
++                if (const auto file = std::get_if<FileInfo>(&entries[i])) {
++                    if (file->data)
++                        index.emplace_back(fileKey(*file, file->includedFrom), uint32_t(i));
++                }
++                else {
++                    const auto& expansion = std::get<ExpansionInfo>(entries[i]);
++                    index.emplace_back(expansionKey(expansion, expansion.originalLoc,
++                                                    expansion.expansionRange.start(),
++                                                    expansion.expansionRange.end()),
++                                       uint32_t(i));
++                }
++            }
++            std::ranges::sort(index);
++            originIndex.swap(index);
++            originIndexBytes.store(originIndex.capacity() * sizeof(originIndex.front()));
++            originIndexEntries.store(originIndex.size());
++            ++originIndexBuilds;
++        });
++        // Equal hashes retain the original entry order, including duplicate includes.
++        return std::equal_range(
++            originIndex.begin(), originIndex.end(), key, [](const auto& a, const auto& b) {
++                if constexpr (std::is_same_v<std::remove_cvref_t<decltype(a)>, size_t>)
++                    return a < b.first;
++                else
++                    return a.first < b;
++            });
++    }
 +};
++
++SourceManager::OriginalLocationIndexStats SourceManager::getOriginalLocationIndexStats() const {
++    std::shared_lock lock(mutex);
++    if (!immutablePrefix)
++        return {};
++    return {immutablePrefix->originIndexBuilds.load(), immutablePrefix->originIndexEntries.load(),
++            immutablePrefix->originCandidates.load()};
++}
 +
 +std::shared_ptr<const SourceManager::ImmutablePrefix> SourceManager::captureImmutablePrefix(
 +    std::span<const BufferID> graph) {
@@ -15439,7 +15840,11 @@ index 386684b5a..667314b7e 100644
 +                                    : std::optional(SourceLocation{});
 +            if (!includedFrom)
 +                return std::nullopt;
-+            for (size_t i = 1; i < immutablePrefix->entries.size(); ++i) {
++            const auto [first, last] = immutablePrefix->candidates(
++                ImmutablePrefix::fileKey(*file, *includedFrom));
++            for (auto it = first; it != last; ++it) {
++                ++immutablePrefix->originCandidates;
++                const auto i = it->second;
 +                auto previous = std::get_if<FileInfo>(&immutablePrefix->entries[i]);
 +                if (previous && previous->data &&
 +                    previous->data->fullPath == file->data->fullPath &&
@@ -15465,7 +15870,11 @@ index 386684b5a..667314b7e 100644
 +        const auto end = self(self, expansion.expansionRange.end(), depth + 1);
 +        if (!original || !start || !end)
 +            return std::nullopt;
-+        for (size_t i = 1; i < immutablePrefix->entries.size(); ++i) {
++        const auto [first, last] = immutablePrefix->candidates(
++            ImmutablePrefix::expansionKey(expansion, *original, *start, *end));
++        for (auto it = first; it != last; ++it) {
++            ++immutablePrefix->originCandidates;
++            const auto i = it->second;
 +            auto previous = std::get_if<ExpansionInfo>(&immutablePrefix->entries[i]);
 +            if (previous && previous->originalLoc == *original &&
 +                previous->expansionRange.start() == *start &&
@@ -15746,7 +16155,7 @@ index 386684b5a..667314b7e 100644
  size_t SourceManager::getRawLineNumber(SourceLocation location) const {
      std::shared_lock<std::shared_mutex> lock(mutex);
      return getRawLineNumber(location, lock);
-@@ -85,7 +1284,8 @@ std::vector<SourceManager::LineDirectiveInfo> SourceManager::getLineDirectives(
+@@ -85,7 +1351,8 @@ std::vector<SourceManager::LineDirectiveInfo> SourceManager::getLineDirectives(
      if (!info)
          return {};
  
@@ -15756,7 +16165,7 @@ index 386684b5a..667314b7e 100644
  }
  
  size_t SourceManager::getColumnNumber(SourceLocation location) const {
-@@ -194,7 +1394,7 @@ std::string_view SourceManager::getFileName(SourceLocation location) const {
+@@ -194,7 +1461,7 @@ std::string_view SourceManager::getFileName(SourceLocation location) const {
          return "";
  
      // Avoid computing line offsets if we just need a name of `line-less file
@@ -15765,7 +16174,7 @@ index 386684b5a..667314b7e 100644
          return info->data->name;
  
      size_t rawLine = getRawLineNumber(fileLocation, lock);
-@@ -243,7 +1443,7 @@ const SourceLibrary* SourceManager::getLibraryFor(BufferID buffer) const {
+@@ -243,7 +1510,7 @@ const SourceLibrary* SourceManager::getLibraryFor(BufferID buffer) const {
      if (!info)
          return nullptr;
  
@@ -15774,7 +16183,7 @@ index 386684b5a..667314b7e 100644
  }
  
  SourceManager::BufferKind SourceManager::getBufferKind(BufferID buffer) const {
-@@ -252,7 +1452,7 @@ SourceManager::BufferKind SourceManager::getBufferKind(BufferID buffer) const {
+@@ -252,7 +1519,7 @@ SourceManager::BufferKind SourceManager::getBufferKind(BufferID buffer) const {
          if (auto exp = std::get_if<ExpansionInfo>(&bufferEntries[buffer.getId()]))
              return exp->isMacroArg ? BufferKind::MacroArg : BufferKind::Macro;
          else
@@ -15783,7 +16192,7 @@ index 386684b5a..667314b7e 100644
      }
  
      return BufferKind::Unknown;
-@@ -261,8 +1461,11 @@ SourceManager::BufferKind SourceManager::getBufferKind(BufferID buffer) const {
+@@ -261,8 +1528,11 @@ SourceManager::BufferKind SourceManager::getBufferKind(BufferID buffer) const {
  void SourceManager::setBufferKind(BufferID buffer, BufferKind kind) {
      std::unique_lock<std::shared_mutex> lock(mutex);
      auto info = getFileInfo(buffer, lock);
@@ -15797,7 +16206,7 @@ index 386684b5a..667314b7e 100644
  }
  
  std::string_view SourceManager::getMacroName(SourceLocation location) const {
-@@ -477,6 +1680,7 @@ SourceLocation SourceManager::createArgExpansionLoc(SourceLocation originalLoc,
+@@ -477,6 +1747,7 @@ SourceLocation SourceManager::createArgExpansionLoc(SourceLocation originalLoc,
                                                      SourceRange expansionRange) {
      std::unique_lock<std::shared_mutex> lock(mutex);
  
@@ -15805,7 +16214,7 @@ index 386684b5a..667314b7e 100644
      bufferEntries.emplace_back(ExpansionInfo(originalLoc, expansionRange, true));
      return SourceLocation(BufferID((uint32_t)(bufferEntries.size() - 1), ""sv), 0);
  }
-@@ -486,6 +1690,9 @@ SourceLocation SourceManager::createExpansionLoc(SourceLocation originalLoc,
+@@ -486,6 +1757,9 @@ SourceLocation SourceManager::createExpansionLoc(SourceLocation originalLoc,
                                                   std::string_view macroName) {
      std::unique_lock<std::shared_mutex> lock(mutex);
  
@@ -15815,7 +16224,7 @@ index 386684b5a..667314b7e 100644
      bufferEntries.emplace_back(ExpansionInfo(originalLoc, expansionRange, macroName));
      return SourceLocation(BufferID((uint32_t)(bufferEntries.size() - 1), macroName), 0);
  }
-@@ -495,10 +1702,118 @@ SourceBuffer SourceManager::assignText(std::string_view text, SourceLocation inc
+@@ -495,10 +1769,118 @@ SourceBuffer SourceManager::assignText(std::string_view text, SourceLocation inc
      return assignText("", text, includedFrom, library);
  }
  
@@ -15935,7 +16344,7 @@ index 386684b5a..667314b7e 100644
          using namespace std::literals;
          temp = "<unnamed_buffer"s + std::to_string(unnamedBufferCount++) + ">"s;
          path = temp;
-@@ -509,26 +1824,70 @@ SourceBuffer SourceManager::assignText(std::string_view path, std::string_view t
+@@ -509,26 +1891,70 @@ SourceBuffer SourceManager::assignText(std::string_view path, std::string_view t
      if (buffer.empty() || buffer.back() != '\0')
          buffer.push_back('\0');
  
@@ -16016,7 +16425,7 @@ index 386684b5a..667314b7e 100644
  }
  
  SourceManager::BufferOrError SourceManager::readSource(const fs::path& path,
-@@ -541,6 +1900,29 @@ SourceManager::BufferOrError SourceManager::readHeader(
+@@ -541,6 +1967,29 @@ SourceManager::BufferOrError SourceManager::readHeader(
      std::string_view path, SourceLocation includedFrom, const SourceLibrary* library,
      bool isSystemPath, std::span<std::filesystem::path const> additionalIncludePaths) {
  
@@ -16046,7 +16455,7 @@ index 386684b5a..667314b7e 100644
      // if the header is specified as an absolute path, just do a straight lookup
      SLANG_ASSERT(!path.empty());
      fs::path p = path;
-@@ -567,7 +1949,7 @@ SourceManager::BufferOrError SourceManager::readHeader(
+@@ -567,7 +2016,7 @@ SourceManager::BufferOrError SourceManager::readHeader(
          auto fileLoc = getFullyExpandedLoc(includedFrom);
  
          std::shared_lock<std::shared_mutex> lock(mutex);
@@ -16055,7 +16464,7 @@ index 386684b5a..667314b7e 100644
          if (info && info->data)
              currFileDir = info->data->directory;
      }
-@@ -614,29 +1996,49 @@ SourceManager::BufferOrError SourceManager::readHeader(
+@@ -614,29 +2063,49 @@ SourceManager::BufferOrError SourceManager::readHeader(
  }
  
  void SourceManager::addLineDirective(SourceLocation location, size_t lineNum, std::string_view name,
@@ -16109,7 +16518,7 @@ index 386684b5a..667314b7e 100644
  
      size_t offset = fileLocation.offset();
      auto& vec = diagDirectives[fileLocation.buffer()];
-@@ -672,37 +2074,223 @@ std::vector<BufferID> SourceManager::getAllBuffers() const {
+@@ -672,37 +2141,226 @@ std::vector<BufferID> SourceManager::getAllBuffers() const {
      return result;
  }
  
@@ -16143,7 +16552,7 @@ index 386684b5a..667314b7e 100644
 +        if (!data) {
 +            it = sourceData.erase(it);
 +            continue;
-+        }
+         }
 +        const auto bytes = sizeof(FileData) + data->mem.capacity() +
 +                           data->lineOffsets.capacity() * sizeof(size_t) + data->name.capacity() +
 +                           1 +
@@ -16154,7 +16563,7 @@ index 386684b5a..667314b7e 100644
 +        if (data->queryText) {
 +            result.queryBytes += bytes;
 +            ++result.queryBuffers;
-         }
++        }
 +        ++it;
      }
 -    return total;
@@ -16163,13 +16572,15 @@ index 386684b5a..667314b7e 100644
 +                            (sizeof(decltype(queryLeases)::value_type) + 1) +
 +                        nativeInputLeases.bucket_count() *
 +                            (sizeof(decltype(nativeInputLeases)::value_type) + 1);
++    if (immutablePrefix)
++        result.indexBytes += immutablePrefix->originIndexBytes.load();
 +    return result;
- }
- 
-+size_t SourceManager::getMemoryUsage() const {
-+    return getMemoryUsageDetails().total();
 +}
 +
++size_t SourceManager::getMemoryUsage() const {
++    return getMemoryUsageDetails().total();
+ }
+ 
 +void SourceManager::StorageUsageAccumulator::add(const SourceManager& manager) {
 +    if (!managers.insert(&manager).second)
 +        return;
@@ -16196,7 +16607,8 @@ index 386684b5a..667314b7e 100644
 +        addNames(manager.immutablePrefix->names);
 +        result.immutableTableBytes += manager.immutablePrefix->entries.capacity() *
 +                                          sizeof(manager.immutablePrefix->entries[0]) +
-+                                      manager.immutablePrefix->auxiliaryBytes;
++                                      manager.immutablePrefix->auxiliaryBytes +
++                                      manager.immutablePrefix->originIndexBytes.load();
 +    }
 +    for (auto it = manager.sourceData.begin(); it != manager.sourceData.end();) {
 +        auto file = it->second.lock();
@@ -16349,7 +16761,7 @@ index 386684b5a..667314b7e 100644
      oldData->isStale = true;
  
      // Create new FileData with the new buffer content
-@@ -713,23 +2301,32 @@ SourceBuffer SourceManager::replaceBufferImpl(FileInfo* oldInfo, SmallVector<cha
+@@ -713,23 +2371,32 @@ SourceBuffer SourceManager::replaceBufferImpl(FileInfo* oldInfo, SmallVector<cha
      lookupCache.insert_or_assign(getU8Str(newData->fullPath),
                                   std::pair{newData, std::error_code{}});
  
@@ -16387,7 +16799,7 @@ index 386684b5a..667314b7e 100644
      if (!oldInfo || !oldInfo->data)
          return nonstd::make_unexpected(make_error_code(std::errc::invalid_argument));
  
-@@ -738,7 +2335,7 @@ SourceManager::BufferOrError SourceManager::reloadBuffer(BufferID id) {
+@@ -738,7 +2405,7 @@ SourceManager::BufferOrError SourceManager::reloadBuffer(BufferID id) {
      if (std::error_code ec = OS::readFile(oldInfo->data->fullPath, buffer))
          return nonstd::make_unexpected(ec);
  
@@ -16396,7 +16808,7 @@ index 386684b5a..667314b7e 100644
  }
  
  bool SourceManager::isLatestData(BufferID id) const {
-@@ -765,6 +2362,20 @@ const SourceManager::FileInfo* SourceManager::getFileInfo(BufferID buffer, TLock
+@@ -765,6 +2432,20 @@ const SourceManager::FileInfo* SourceManager::getFileInfo(BufferID buffer, TLock
      return std::get_if<FileInfo>(&bufferEntries[buffer.getId()]);
  }
  
@@ -16417,7 +16829,7 @@ index 386684b5a..667314b7e 100644
  SourceBuffer SourceManager::createBufferEntry(std::shared_ptr<FileData> fd,
                                                SourceLocation includedFrom,
                                                const SourceLibrary* library, uint64_t sortKey,
-@@ -776,13 +2387,22 @@ SourceBuffer SourceManager::createBufferEntry(std::shared_ptr<FileData> fd,
+@@ -776,13 +2457,22 @@ SourceBuffer SourceManager::createBufferEntry(std::shared_ptr<FileData> fd,
      if (sortKey == UINT64_MAX)
          sortKey = (uint64_t)bufferEntries.size() << 32;
  
@@ -16441,7 +16853,7 @@ index 386684b5a..667314b7e 100644
      fs::path absPath;
      if (!disableProximatePaths) {
          std::error_code ec;
-@@ -803,6 +2423,51 @@ SourceManager::BufferOrError SourceManager::openCached(const fs::path& fullPath,
+@@ -803,6 +2493,51 @@ SourceManager::BufferOrError SourceManager::openCached(const fs::path& fullPath,
                                                         SourceLocation includedFrom,
                                                         const SourceLibrary* library,
                                                         uint64_t sortKey) {
@@ -16493,7 +16905,7 @@ index 386684b5a..667314b7e 100644
      fs::path absPath;
      if (!disableProximatePaths) {
          std::error_code ec;
-@@ -816,6 +2481,8 @@ SourceManager::BufferOrError SourceManager::openCached(const fs::path& fullPath,
+@@ -816,6 +2551,8 @@ SourceManager::BufferOrError SourceManager::openCached(const fs::path& fullPath,
  
      // first see if we have this file cached
      std::string pathStr = getU8Str(absPath);
@@ -16502,7 +16914,7 @@ index 386684b5a..667314b7e 100644
      {
          std::unique_lock<std::shared_mutex> lock(mutex);
          auto it = lookupCache.find(pathStr);
-@@ -844,31 +2511,23 @@ SourceManager::BufferOrError SourceManager::openCached(const fs::path& fullPath,
+@@ -844,31 +2581,23 @@ SourceManager::BufferOrError SourceManager::openCached(const fs::path& fullPath,
  SourceBuffer SourceManager::cacheBuffer(fs::path&& path, std::string&& pathStr,
                                          SourceLocation includedFrom, const SourceLibrary* library,
                                          uint64_t sortKey, SmallVector<char>&& buffer) {
@@ -16544,7 +16956,7 @@ index 386684b5a..667314b7e 100644
  }
  
  template<IsLock TLock>
-@@ -1012,9 +2671,20 @@ void SourceManager::computeLineOffsets(std::string_view text,
+@@ -1012,9 +2741,20 @@ void SourceManager::computeLineOffsets(std::string_view text,
      computeLineOffsetsImpl(text.data(), text.data() + text.size(), offsets);
  }
  
@@ -16565,7 +16977,7 @@ index 386684b5a..667314b7e 100644
      if (lineDirectives.empty())
          return nullptr;
  
-@@ -1039,4 +2709,133 @@ const SourceManager::LineDirectiveInfo* SourceManager::FileInfo::getPreviousLine
+@@ -1039,4 +2779,133 @@ const SourceManager::LineDirectiveInfo* SourceManager::FileInfo::getPreviousLine
      }
  }
  
@@ -23237,23 +23649,3 @@ index 000000000..7a842f9ce
 +        CHECK(owner->getSemanticDiagnostics().empty());
 +    }
 +}
-diff --git a/include/slang/ast/Lookup.h b/include/slang/ast/Lookup.h
-index f62cf7596..dca10dcc0 100644
---- a/include/slang/ast/Lookup.h
-+++ b/include/slang/ast/Lookup.h
-@@ -82,10 +82,14 @@ enum class SLANG_EXPORT LookupFlags {
-     /// Allow unnamed generate blocks to be looked up by their external name.
-     AllowUnnamedGenerate = 1 << 14,
- 
-+    /// Tooling-only scope traversal is not an HDL dependency on a body-local name.
-+    /// Lazy semantic binding and constant evaluation still record dependencies.
-+    NoBodyScopeDependencies = 1 << 15,
-+
-     /// Treat this lookup as hierarchical even if it's a simple name.
-     ForceHierarchical = AllowDeclaredAfter | NoUndeclaredErrorIfUninstantiated
- };
--SLANG_BITMASK(LookupFlags, AllowUnnamedGenerate)
-+SLANG_BITMASK(LookupFlags, NoBodyScopeDependencies)
- 
- /// Flags that indicate additional details about the result of a lookup operation.
- enum class SLANG_EXPORT LookupResultFlags : uint8_t {

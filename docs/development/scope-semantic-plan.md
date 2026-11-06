@@ -870,3 +870,118 @@ runs are serial after functional jobs end, with three Native/frozen/combined
 processes per scenario and unlimited semantic test caches. Versioned evidence
 contains per-state data and configuration; ended raw logs and expired probes are
 removed. Useful source corpora, current builds and active caches remain available.
+
+### Certification and diagnostic ownership indexes — 2026-11-06
+
+This stage removes repeated metadata searches during fixed-body certification
+and diagnostic replay. It does not add a syntax exception or change which
+dependencies are allowed to be frozen. All experimental options remain off by
+default; qualification explicitly uses unlimited semantic caches.
+
+The compilation lazily indexes expression-bearing attributes, hierarchical
+effects and raw diagnostic occurrences by their enclosing instance bodies and
+classes. Initial metadata is indexed once, and subsequent attachments and
+diagnostics are appended incrementally. Attribute attachment revisions discard
+superseded entries; attribute and diagnostic records created before their scope
+is parented wait for a complete ancestry. Fixed-point closure consumes only newly
+relevant attribute entries. Admission-local indexes are released after publication
+and included in the existing memory accounting while alive.
+
+Raw diagnostic handles contain code, location and occurrence ordinal, rather
+than pointers into growable vectors. Coalescing advances an order revision so
+admission can rebuild an invalidated index. Each certificate owns diagnostic
+snapshots and ordered body/class replay buckets. Selection preserves the original
+occurrence order, Native canonical skips, current-consumer remapping and class
+diagnostic phases. Diagnostic source membership uses merged declaration intervals
+per buffer, built only if a diagnostic actually needs a location check.
+
+Detached source projection uses one lazy reverse index shared by the immutable
+source prefix. Keys narrow the search; full file bytes, line directives, include
+provenance and macro identity are still compared. Equal keys retain source entry
+order, and collisions cannot authorize reuse. Query source storage is never
+retained by this index. Shared-prefix memory is charged once in aggregate storage
+accounting.
+
+Independent code-feature tests increase repeated instances through 1, 16, 64 and
+256. Each adds one expression attribute, one hierarchical write and one raw
+warning. The final indexed and visited counts are N for each feature; certifying
+the first instance visits one relevant record even with N-1 unrelated siblings.
+Projection tests increase macro occurrences through 16, 256 and 2048: one index
+build and N+2 exact candidate checks cover the N expansions and two files. Further
+tests exercise replacement attachments, 128 appended diagnostic occurrences,
+vector/hash-table growth, coalescing revisions and changed macro identity.
+
+These are bounded algorithmic claims. Ownership indexing still walks ancestry;
+nested overlapping certificates can legitimately inspect the same subtree.
+Unscoped diagnostics retain conservative checks, and still-unparented metadata
+may need another ancestry check. Hash collisions or genuinely
+duplicate provenance can produce multiple candidates. Full elaboration, global
+diagnostic rendering/coalescing and nonlocal edits still perform their required
+work; this stage does not claim to make those paths local.
+
+Acceptance includes 1083 normal CTest entries (including 2650 SDK cases), the
+entire ASan server suite (1068 cases / 206718 assertions) and entire ASan SDK
+suite (2650 cases / 37128 assertions), with leak detection disabled. Sixteen
+indexed public-query projects each compare two arms over seven states with
+Native. ASan additionally checks all fifteen real-edit states in UBUS and CVA6
+across three arms, and seven SoC public-query states across two arms. The four
+new feature tests contain 1455 assertions. All passed.
+
+Installed default-off, default shipped UVM, custom cold UVM and custom warm UVM
+checks passed. The 157-file installed UVM manifest, license/notice files and
+default archive digest were verified; only `default.cst` is distributed. Original
+project configuration and source bytes remained unchanged. Fresh offline
+restoration verified all 709 SDK files after applying the patch to raw baseline
+Git blobs. Updated dependency content was also checked against the manifest.
+
+Versioned measurements are in
+`validation/macos-certification-indexes-2026-11-06.json`. Query latency measures
+edit/request dispatch through the hover response; diagnostic latency measures
+the same dispatch through the matching edited-document version publication.
+These overlap and must not be added. Startup includes launch, initialization,
+build/active-instance selection and initial hover. These are new processes with
+potentially warm OS caches and existing one-time UVM artifacts, not cold-disk
+measurements. Physical footprint is distinct from RSS; lifecycle peaks include
+structural edits and manual rebuild. Serial awaited edits do not establish burst
+tail latency or long-session memory behavior.
+
+The main matrix covers sixteen real-edit projects plus whole-design background
+scenarios for SoC and CVA6, three processes per arm/version: 4860 states. Five
+SPI-PSS crossover pairs and two SoC crossover pairs add 630 qualified states.
+All diagnostic comparisons passed, and 540 arm/state comparisons preserved the
+exact retained-root count and root-set hash. Native uses the same scheduling and
+index settings with semantic/body reuse disabled. The baseline is local main
+`cb832f6514cbdacaab8485a8951e888cb3a20532`.
+
+Selected main-matrix combined-mode medians (before → after):
+
+| Scenario | Startup ms | First-edit diagnostics ms | Continuous diagnostics ms | Lifecycle peak MiB |
+| --- | ---: | ---: | ---: | ---: |
+| SoC real edit | 2138.120 → 2136.567 | 67.760 → 72.268 | 32.145 → 32.056 | 1575.580 → 1575.783 |
+| CVA6+UVM real edit | 2799.779 → 2797.513 | 47.879 → 47.734 | 11.946 → 11.929 | 1258.173 → 1262.470 |
+| Whole SoC background | 5097.150 → 5488.862 | 23.397 → 22.694 | 1.425 → 1.421 | 2639.065 → 2650.893 |
+| CVA6+UVM background | 2869.733 → 2902.508 | 46.538 → 46.726 | 11.173 → 11.315 | 938.142 → 936.705 |
+
+The results support improved certification scaling, with typical existing-project
+edit latency largely unchanged. They do not demonstrate a stable overall startup
+or peak-memory reduction. Important observations were investigated and retained:
+
+- SPI-PSS combined startup initially rose 361.767 → 431.729 ms. Five serial
+  crossover pairs did not reproduce that increase: 360.257 → 359.897 ms.
+- Whole-SoC combined startup was also higher in two full-lifecycle crossover
+  pairs (5147.357 → 5490.542 ms). Separate startup-only readiness runs were
+  4961.903 → 4940.135 ms. Existing phase timers in separate traced readiness
+  runs showed owner certification 1017.751 → 875.569 ms. These mechanism
+  observations are excluded from qualified timing; nested phases overlap.
+- SoC freeze-only lifecycle peak rose 3258.441 → 3868.722 MiB in the main matrix,
+  concentrated at manual rebuild. Crossover runs showed large physical-peak
+  variation and compression in both versions. Final active allocator bytes
+  increased by 3548016 bytes (3.384 MiB), while body-6 footprint increased by
+  about 4.5 MiB. These describe different memory quantities. The main peak
+  observation is retained, and no peak-memory improvement is claimed.
+
+Acceptance completed on 2026-11-07. Reusable qualification scripts and compact
+data are under `untracked/certification-indexes-2026-11-06`; workload recipes and
+corpora are reused offline. Ended raw logs, duplicate reports, temporary source
+trees and expired binary/install copies are removed after recording code identities
+and conclusions. Current build caches, dependencies and source corpora remain.
