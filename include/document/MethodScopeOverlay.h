@@ -160,6 +160,10 @@ private:
     std::vector<uint32_t> handles;
     std::vector<std::string> outerNames;
     std::map<std::string, std::optional<std::string>> disk;
+    // Raw positive slang lookups whose recorded physical path has another spelling.
+    // The target is covered by disk (or the immutable library contract).
+    std::map<std::string, std::string> sourceAliases;
+    std::optional<std::string> changedSourceAlias(const lsp::RequestContext&) const;
     std::unique_ptr<DirectoryProofPlan> directoryProofPlan;
     struct FileProofInput {
         const std::string* path;

@@ -107,6 +107,8 @@ public:
             }
         }
         require(begin && boundary, "method macro boundary journal unavailable");
+        require(begin->expandedDirectives == boundary->expandedDirectives,
+                "original method macro expansion emitted a compiler directive");
         require(begin->changes <= boundary->changes && boundary->changes <= history.macroChanges.size(),
                 "invalid macro boundary journal");
         if (begin->changes == boundary->changes) {

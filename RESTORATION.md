@@ -7,7 +7,7 @@ indexing changes. A fresh checkout must initialize submodules and run:
 python3 restoration/prepare-main-sdk.py --apply
 ```
 
-This verifies all 708 SDK files at main's SDK pin
+This verifies all 709 SDK files at main's SDK pin
 `151a801ceaf6faf23d79a42d210ff67e50eb4660` plus the restored patch. The
 historical whole-server inventory below does **not** describe this integrated
 server tree. Keep the SDK patch applied when building; the gitlink alone is

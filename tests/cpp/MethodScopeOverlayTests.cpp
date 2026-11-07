@@ -2415,6 +2415,59 @@ struct CertificationServer : BodyTestServer {
 };
 } // namespace
 
+TEST_CASE("Local method paste uses slang expansion and guards both preprocessing boundaries",
+          "[body-certification][method-macro-proof][macro-directive-boundary]") {
+    const auto mode = GENERATE("ordinary", "add-paste", "remove-substitution");
+    const std::string_view scenario = mode;
+    Workspace workspace;
+    auto config = certificationConfig();
+    config.insert(1, "\"experimentalMethodBodyMacroProof\":true,");
+    workspace.write(".slang/server.json", config);
+    auto original = std::string("`define VALUE_1 5\n"
+                                "`define VALUE_2 6\n"
+                                "`define LOOKUP(N) `VALUE_``N\n"
+                                "`define PASTE `de``fine LOCAL_FLAG 1\n"
+                                "`define SUBSTITUTE(D) `D LOCAL_FLAG 1\n") +
+                    header;
+    const std::string before = "    return (local_1 + charl);";
+    const std::string use = "    return (local_1 + charl + `LOOKUP(1));";
+    const std::string emit = "    `SUBSTITUTE(define)\n";
+    original.replace(original.find(before), before.size(),
+                     scenario == "remove-substitution" ? emit + use : use);
+    original.insert(original.rfind("endclass"),
+                    "  function int depends_on_flag();\n"
+                    "`ifdef LOCAL_FLAG\n"
+                    "    return macro_state_marker;\n"
+                    "`else\n"
+                    "    return 0;\n"
+                    "`endif\n"
+                    "  endfunction\n");
+    workspace.write("item.svh", original);
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    auto text = original;
+    if (scenario == "ordinary")
+        text[text.find("`LOOKUP(1)") + 8] = '2';
+    else if (scenario == "add-paste")
+        text.insert(text.find(use), "    `PASTE\n");
+    else
+        text.erase(text.find(emit), emit.size());
+    change(server, doc.m_uri, 2, text);
+    server.runBackgroundWork({});
+    const auto overlay = state(server);
+    CHECK(overlay.active == (scenario == "ordinary"));
+    if (scenario == "ordinary")
+        CHECK(diagnosticState(server).localDiagnosticUpdates == 1);
+    else if (scenario == "add-paste")
+        CHECK(overlay.decline == "macro expansion emitted a compiler directive");
+    else
+        CHECK(overlay.decline == "original method macro expansion emitted a compiler directive");
+    CHECK(server.m_driver->getDocument(doc.m_uri)->getText() == text + '\0');
+    checkNativeDiagnostics(workspace, server, text, true);
+}
+
 TEST_CASE("Method certificates accept native source-data aliases but reject replacement data",
           "[body-certification][method-native-buffer-alias]") {
     Workspace workspace;
@@ -3109,6 +3162,90 @@ TEST_CASE("Complete input proof rejects changed path identity and nonregular sou
             .has_value());
     CHECK(doc.doc->getVersion() == 2);
     CHECK(server.m_driver->getDocument(doc.m_uri)->getText() == edited() + '\0');
+}
+
+TEST_CASE("Method certificates recheck the physical target of native include aliases",
+          "[body-certification][method-dependency-reload][source-alias-proof]") {
+    namespace fs = std::filesystem;
+    const auto mode = GENERATE("parent-spelling", "equal-byte-retarget", "content", "cancel");
+    Workspace workspace;
+    workspace.write(".slang/server.json", certificationConfig());
+    fs::create_directory(workspace.root / "first");
+    fs::create_directory(workspace.root / "second");
+    const std::string types = "typedef logic [7:0] word_t;\n";
+    workspace.write("first/types.svh", types);
+    workspace.write("second/types.svh", types);
+    const bool parentSpelling = std::string_view(mode) == "parent-spelling";
+    if (!parentSpelling) {
+        std::error_code error;
+        fs::create_directory_symlink(workspace.root / "first", workspace.root / "alias", error);
+        if (error)
+            SKIP("Directory symlinks are unavailable: " << error.message());
+    }
+    const auto include = parentSpelling ? "second/../first/types.svh" : "alias/types.svh";
+    workspace.write("owner.sv", std::string("package owner;\n`include \"") + include +
+                                    "\"\n`include \"item.svh\"\nendpackage\n");
+    auto original = header;
+    original.insert(original.find("    int local_0"), "    word_t local_word = '0;\n");
+    workspace.write("item.svh", original);
+    CertificationServer server(workspace.params());
+    server.setBuildFile((workspace.root / "design.f").string());
+    auto doc = server.openFile("item.svh", original);
+    doc.doc->getAnalysis();
+    auto text = original;
+    text.replace(text.find("local_1 +"), 7, "local_0");
+    change(server, doc.m_uri, 2, text);
+    REQUIRE(state(server).active);
+    REQUIRE(server.m_methodScope);
+    REQUIRE(server.m_methodScope->valid(server.m_config, {}));
+    doc.m_text = text;
+    const auto definitionPosition = doc.getPosition(text.find("word_t") + 3);
+    auto definition = [&](auto& instance, const URI& uri) {
+        return rfl::json::write(instance.getDocDefinition(
+            {.textDocument = {.uri = uri}, .position = definitionPosition}));
+    };
+    const auto previous = definition(server, doc.m_uri);
+    REQUIRE(previous.find("/first/types.svh") != std::string::npos);
+
+    if (std::string_view(mode) == "equal-byte-retarget") {
+        fs::remove(workspace.root / "alias");
+        fs::create_directory_symlink(workspace.root / "second", workspace.root / "alias");
+        CHECK_FALSE(server.m_methodScope->valid(server.m_config, {}));
+        CHECK(server.m_methodScope->observedInputChange());
+    }
+    else if (std::string_view(mode) == "content") {
+        workspace.write("first/types.svh", "typedef logic [9:0] word_t;\n");
+        CHECK_FALSE(server.m_methodScope->valid(server.m_config, {}));
+        CHECK(server.m_methodScope->observedInputChange());
+    }
+    else if (std::string_view(mode) == "cancel") {
+        lsp::RequestContext ctx("cancel alias proof", 56);
+        ctx.setCheckpointObserverForTesting([&](std::string_view where) {
+            if (where == "method source alias validation")
+                ctx.cancel();
+        });
+        CHECK_THROWS_AS(server.m_methodScope->valid(server.m_config, ctx), lsp::RequestCancelled);
+        CHECK_FALSE(server.m_methodScope->observedInputChange());
+        CHECK(server.m_methodScope->valid(server.m_config, {}));
+    }
+
+    const auto actual = definition(server, doc.m_uri);
+    if (std::string_view(mode) == "equal-byte-retarget")
+        CHECK(actual.find("/second/types.svh") != std::string::npos);
+    const lsp::HoverParams hover{.textDocument = {.uri = doc.m_uri},
+                                 .position = definitionPosition};
+    const auto actualHover = rfl::json::write(server.getDocHover(hover));
+    CHECK(server.m_driver->getDocument(doc.m_uri)->getText() == text + '\0');
+    server.runBackgroundWork({});
+    const auto diagnostics = diagnosticMap(server);
+    bodyConfig(workspace, false);
+    BodyTestServer native(workspace.params());
+    native.setBuildFile((workspace.root / "design.f").string());
+    auto oracle = native.openFile("item.svh", text);
+    native.runBackgroundWork({});
+    CHECK(actual == definition(native, oracle.m_uri));
+    CHECK(actualHover == rfl::json::write(native.getDocHover(hover)));
+    CHECK(diagnostics == diagnosticMap(native));
 }
 
 TEST_CASE("Observed dependency changes refresh public native fallback before watch events",

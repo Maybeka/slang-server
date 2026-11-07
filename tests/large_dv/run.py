@@ -551,6 +551,7 @@ try:
                         "lastModelCurrent": scope["lastModelCurrent"],
                         "libraryImport": scope["lastModelLibraryImport"],
                         "bodies": scope["bodies"],
+                        "syntaxReplay": scope["syntaxReplay"],
                     },
                     "local": method,
                     "mechanismSourceStorage": mechanismStorage,

@@ -397,13 +397,15 @@ inputs that cannot yet be isolated, including interface-dependent libraries. Unl
 fixed until `slang.rebuildScopeLibrary` or configuration reload; no per-edit file
 witness is performed. Ordinary consumer edits and context retirement retain the
 owner. Consumer-dependent generic specializations remain in the consumer.
-A declaration-only closure reparses mutable roots rather than resuming a prefix
-that includes them; `syntaxResumes` can therefore stay zero despite semantic reuse.
+With a declaration-only closure, the server normally reparses mutable roots.
+The optional [configured syntax cache](configured-syntax-prefix-cache.md) can
+reuse the checked syntax of preceding roots separately. `syntaxResumes` may
+stay zero even when semantic imports succeed.
 
 Do not enable `experimentalFrozenSources` or method overlays with this route.
-The current prototype supports one configured fixed declaration prefix containing
-packages and module/interface definitions. Module selectors and concrete RTL
-instance selectors prepare that definition closure. Parameters, attributes,
+The server prepares fixed declarations through an ordered prefix or an isolated
+declaration view. Module selectors and concrete RTL instance selectors prepare
+the corresponding definition closure. Parameters, attributes,
 bind state and instance counts belong to each consumer; virtual interface types
 keep the shared definition identity. `instanceBodiesShared` reports whether the
 independent subtree registry has accumulated any whole-body hits. It does not
@@ -437,13 +439,13 @@ Prefix reuse declines inherited multi-unit preprocessing; a positively proved
 native declaration projection can still retain a closed subset. Unsupported unit
 contexts, ambiguous selectors, errors within retained declarations and budget
 overflow use ordinary analysis. A module/interface owner
-also uses native binding for an analysis containing compilation-unit functions,
-tasks, types, variables, classes or imports outside its fixed provider files: those
-names can be visible to native code but absent from the retained definition's
-lexical scope. Declarations inside an editable module are unaffected. Current
-`bind` directives keep their existing native binding path. Package-only UVM reuse
-has its separate package namespace boundary. `namespaceDeclines` counts these
-rejected imports; a prepared library need not be used by every analysis.
+also requires the consumer's compilation-unit visibility to match the retained
+view. A dependency on a function, task, type, variable, class or import outside
+that view keeps the affected declaration native when its dependency cannot be
+proved. Declarations inside an editable module are unaffected. The current
+compilation resolves `bind` directives before deciding which bodies can reuse.
+Package-only UVM reuse has its separate package namespace boundary.
+`namespaceDeclines` counts imports rejected by the namespace check.
 
 **Put fixed providers
 and editable consumers in separate physical files.** Selecting a scope also freezes
@@ -586,8 +588,11 @@ type dependencies stay native until specialization provenance is supported. Two
 independent owners cannot overwrite one current nominal type identity; a conflicting
 body stays native. Types with
 unsupported dependencies or source locations outside the immutable source snapshot
-continue through native analysis. Mutable module-target or hierarchical `bind`
-directives also prevent importing affected bodies.
+continue through native analysis. The server resolves mutable `bind` directives
+in the current compilation. Whole-body reuse requires a matching effective bind
+context or a proof that the differences leave that body unaffected. Unresolved
+or opaque contexts keep the affected body native. A rejected parent can still
+expose independently certified children.
 
 Body-local aliases, enums and packed structs / unions are also certified. Their
 field types, enum values and declaration names / dimensions are audited so a

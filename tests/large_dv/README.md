@@ -68,15 +68,18 @@ manual rebuild and an edit after rebuilding. Public hover and the complete
 observed diagnostic map must match Native at each state. Errors and repair must
 be observed, and noninitial frozen states must demonstrate actual semantic reuse.
 
+Use `--scenario background` to edit a separate consumer with the complete DV
+design loaded. Use `--scenario real-edit` to edit the configured DV source in
+the editor. The two scenarios exercise different source-ownership and
+preprocessing boundaries. Verify reuse while editing the DV source through
+the real-edit scenario, especially when its file is inside the fixed closure.
+
 For an explicitly unsupported profile, `--allow-native-fallback` checks the same
 exact public-result oracle while permitting native analysis. The report labels
 those states `native-fallback:<category>` and keeps the import/coverage status.
-It does not turn a prepared cache or a requested freeze into evidence of reuse.
-USB device exercises real retained RTL roots; SPI device exercises a global-name
-dependency refusal, correct fallback, and subsequent local method-body updates.
-The evaluated SPI device analysis profile has 14 initial Native errors; the
-fallback check preserves those diagnostics and separately verifies the inserted
-error and repair. It does not certify an error-free simulator configuration.
+Preparation and actual reuse are reported separately. The evaluated SPI device
+analysis profile has 14 initial Native errors. The oracle preserves existing
+design diagnostics and separately verifies the inserted error and repair.
 
 `queryMs` ends at receipt of the complete hover response for a batched change and
 query. `diagnosticMs` starts at the same dispatch and ends at the matching
@@ -92,26 +95,28 @@ after recording the conclusion, input/code identities and useful measurements.
 
 ## Newly exposed concerns
 
-The added projects are configurations of one OpenTitan codebase, not six
-independent repositories. Not every configuration is a successful freeze case.
-The versioned quality evaluation records passing cases and these limitations:
+The six profiles exercise configurations of the same pinned OpenTitan codebase.
+The original quality evaluation recorded these cases:
 
 - Chip DV exposed generated command-line macro buffers in diagnostic links. A
   small `[generated-macro-note]` C++ test now checks both retained/replayed
   generated locations and real macro-definition locations.
-- DMA exposes a preexisting warning representative difference between 32-bit and
-  64-bit generic class specializations. The exact public-payload oracle rejects
-  this result; it is not counted as diagnostic equivalence.
-- OTBN exposes a preexisting generic type-alias spelling difference in a
-  `dynamic-cast-const` warning. It is recorded as a mismatch, without normalizing
-  or suppressing the warning to obtain a pass.
-- The complete chip profile can decline fixed package preparation when constant
-  evaluation enters `lc_state_to_bin` with an invalid state and executes `$fatal`.
-  It continues on the native path; preparation and actual reuse must not be
-  inferred from a requested freeze configuration.
-- SPI host/device can prepare a fixed closure but decline importing it because
-  of `unclosed-global-name` dependencies. Their fallback coverage and any local
-  query/diagnostic reuse are reported independently of frozen-root reuse.
+- DMA exposed a warning representative difference between 32-bit and 64-bit
+  generic class specializations. OTBN exposed a forwarding type-alias spelling
+  difference in a `dynamic-cast-const` warning. The semantic reuse work fixes
+  representative selection and diagnostic type rendering, with exact payload
+  comparisons for both profiles.
+- The chip profile can report a Native `$fatal` during constant evaluation.
+  Declaration projection and closed-child admission can preserve reuse beside
+  that diagnostic. The status separates reused descendants from the enclosing
+  design and from structural edits that need native analysis.
+- SPI host/device exposed `unclosed-global-name` dependencies. The fixed
+  namespace witness now admits independently proven closures and reports
+  remaining refusals. Both SPI profiles, DMA, OTBN and USB device pass the
+  strict background-edit lifecycle with actual RTL imports and local updates.
+
+See the [semantic reuse plan](../../docs/development/semantic-reuse-completion-plan.md)
+for the ownership contract and release qualification.
 
 These additional corpora remain outside the routine test suite. Reduce concrete
 new lifecycle or language failures to independent regression tests as they are

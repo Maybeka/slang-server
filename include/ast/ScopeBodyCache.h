@@ -29,6 +29,7 @@ public:
         size_t budgetBytes = 0, baseBytes = 0, ownerBytes = 0, pinnedBytes = 0, owners = 0;
         uint64_t hits = 0, misses = 0, publications = 0, compactPublications = 0, evictions = 0,
                  declines = 0, ownerBuilds = 0, admissionHits = 0, capacitySkips = 0;
+        uint64_t publicationPathsIndexed = 0, publicationPathLookups = 0;
         size_t admissionBytes = 0, admissionRecords = 0;
         size_t analysisBytes = 0;
         uint64_t analysisHits = 0, proceduresReused = 0, proceduresRecomputed = 0;

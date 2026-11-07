@@ -222,9 +222,9 @@ struct Config {
 
     rfl::Description<
         "Experimental authenticated syntax-prefix reuse for configured single-unit inputs. "
-        "Default off. Requires cooperative analysis and a prepared fixed scope prefix. "
-        "Mutable preceding roots and includes are rechecked before reuse; this does not "
-        "declare them fixed or reuse their semantics.", bool>
+        "Default off. Requires cooperative analysis and prepared fixed scope semantics. "
+        "The server checks preceding mutable roots and includes before reusing their syntax. "
+        "Semantic reuse follows the frozenSources selection.", bool>
         experimentalSyntaxPrefixCache = false;
     rfl::Description<
         "Retained mutable syntax-prefix cache budget in MiB, default 256. Zero disables "

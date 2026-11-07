@@ -322,12 +322,14 @@ void MethodScopeOverlay::captureWitnesses(const Config& config, ast::Compilation
     // A path can appear as a source, lookup and context watch input. Never let
     // a later read replace a witness already checked against the parsed bytes.
     auto witness = [&](const std::string& path) -> const std::optional<std::string>& {
-        if (optimizedCertification(config))
-            if (auto found = disk.find(path); found != disk.end())
+        const auto alias = sourceAliases.find(path);
+        const auto& physical = alias != sourceAliases.end() ? alias->second : path;
+        if (fastWitnesses)
+            if (auto found = disk.find(physical); found != disk.end())
                 return found->second;
         ctx.checkpoint("method source witness read");
-        auto bytes = readWitness(path);
-        auto [it, inserted] = disk.try_emplace(path, bytes);
+        auto bytes = readWitness(physical);
+        auto [it, inserted] = disk.try_emplace(physical, bytes);
         if (!inserted && it->second != bytes) {
             throw InputsChanged("input changed during certification");
         }
@@ -356,7 +358,14 @@ void MethodScopeOverlay::captureWitnesses(const Config& config, ast::Compilation
     const auto& sourceLookups = sourceWitness ? sourceWitness->lookups
                                               : frozen.input->sources.lookups;
     for (const auto& lookup : sourceLookups) {
-        if (immutableFiles.contains(lookup.path))
+        if (sourceWitness && !sourceWitness->disableProximatePaths && lookup.fileId) {
+            const auto& file = sourceWitness->files.at(lookup.fileId - 1);
+            if (lookup.path != file.fullPath)
+                sourceAliases.emplace(lookup.path, file.fullPath);
+            if (immutableFiles.contains(file.fullPath))
+                continue;
+        }
+        else if (immutableFiles.contains(lookup.path))
             continue;
         require(lookup.fileId || lookup.errorValue == int(std::errc::no_such_file_or_directory),
                 "unsupported lookup failure");
@@ -396,6 +405,8 @@ void MethodScopeOverlay::captureWitnesses(const Config& config, ast::Compilation
     for (auto path : {fs::path(d.m_workspacePathPrefix) / ".slang/server.json",
                       fs::path(d.m_workspacePathPrefix) / ".slang/local/server.json"})
         witness(path.string());
+    if (auto changed = changedSourceAlias(ctx))
+        throw InputsChanged("source lookup resolution changed: " + *changed);
     if (fastWitnesses) {
         std::vector<std::string_view> missing;
         for (const auto& [path, bytes] : disk)

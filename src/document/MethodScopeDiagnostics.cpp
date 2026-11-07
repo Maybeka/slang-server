@@ -72,9 +72,10 @@ void MethodScopeOverlay::prepareLocalDiagnostics(const Config& config,
             if (directive.offset < functionBegin)
                 driver->sm.addDiagnosticDirective(SourceLocation(source.id, directive.offset),
                                                   directive.name, directive.severity, true);
-        auto tree = query.parse(treeOptions->bag(), bodyMacros);
-        for (const auto& reference : tree->getPreprocessorMetadata().macroRefs)
-            validateMacroPreprocessing(reference, bodyMacros, ctx);
+        auto tree = query.parse(treeOptions->bag(), bodyMacros, bool(bodyMacroProof));
+        if (!bodyMacroProof)
+            for (const auto& reference : tree->getPreprocessorMetadata().macroRefs)
+                validateMacroPreprocessing(reference, bodyMacros, ctx);
         auto cache = std::make_unique<BodyDiagnosticCache>(
             *driver, uri, functionBegin, baselineEnd, tree,
             bodyLineSensitiveDeclaration || !bodyLineDependents.empty(), ctx, baseline,

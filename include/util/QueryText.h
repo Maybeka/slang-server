@@ -17,18 +17,20 @@ public:
         cleanup.release();
     }
     std::shared_ptr<slang::syntax::SyntaxTree> parse(
-        const slang::Bag& options, slang::syntax::SyntaxTree::MacroList macros = {}) const {
+        const slang::Bag& options, slang::syntax::SyntaxTree::MacroList macros = {},
+        bool rejectExpandedDirectives = false) const {
         auto tree = [&] {
             const auto pp = options.get<slang::parsing::PreprocessorOptions>();
-            if (!pp || !pp->trackMacroAccesses)
+            if (!rejectExpandedDirectives && (!pp || !pp->trackMacroAccesses))
                 return slang::syntax::SyntaxTree::fromBuffer(buffer, sources, options, macros);
             // EOF here closes only this private fragment, never the original
             // compilation unit. Do not allocate inherited-name facts per edit
             // or expose a fragment as a full-source absence proof.
             auto local = options;
-            auto untracked = *pp;
-            untracked.trackMacroAccesses = false;
-            local.set(untracked);
+            auto fragment = options.getOrDefault<slang::parsing::PreprocessorOptions>();
+            fragment.trackMacroAccesses = false;
+            fragment.rejectExpandedDirectives |= rejectExpandedDirectives;
+            local.set(fragment);
             return slang::syntax::SyntaxTree::fromBuffer(buffer, sources, local, macros);
         }();
         auto result = tree.get();

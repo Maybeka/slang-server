@@ -566,6 +566,8 @@ OwnedOptions captureOptions(const slang::Bag& options, const Limits& limits) {
         ++count;
         if (input->bufferChangeCB)
             fail("live preprocessor buffer callback is unsupported");
+        if (input->rejectExpandedDirectives)
+            fail("disposable fragment preprocessor options are unsupported");
         auto& out = result.preprocessor.emplace();
         out.maxIncludeDepth = input->maxIncludeDepth;
         out.languageVersion = static_cast<uint32_t>(input->languageVersion);

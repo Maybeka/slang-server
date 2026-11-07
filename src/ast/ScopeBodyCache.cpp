@@ -864,11 +864,17 @@ void ScopeBodyCache::publish(std::shared_ptr<Compilation> current,
         if (group && !direct) {
             Bodies originals;
             current->getRoot().visit(originals);
+            std::unordered_map<std::string, const InstanceBodySymbol*> originalsByPath;
+            originalsByPath.reserve(originals.values.size());
+            for (const auto* body : originals.values) {
+                originalsByPath.try_emplace(body->getHierarchicalPath(), body);
+                ++counters.publicationPathsIndexed;
+            }
             for (const auto& [path, body] : group->bodies) {
-                const auto original = std::ranges::find_if(originals.values, [&](auto candidate) {
-                    return candidate->getHierarchicalPath() == path;
-                });
-                if (original == originals.values.end() || !matchesNativeSubtree(**original, *body)) {
+                ++counters.publicationPathLookups;
+                const auto original = originalsByPath.find(path);
+                if (original == originalsByPath.end() ||
+                    !matchesNativeSubtree(*original->second, *body)) {
                     ++counters.declines;
                     return false;
                 }
@@ -885,6 +891,8 @@ void ScopeBodyCache::publish(std::shared_ptr<Compilation> current,
                 return true;
             if (group->bodies.contains(body.getHierarchicalPath()))
                 return false;
+            if (!group->owner->isInstanceBodyBindContextCompatible(&body, &body))
+                return true;
             std::string_view reason;
             if (!group->owner->prepareInstanceBodyReuse(body, &reason)) {
                 // These refusals survive removal of the enclosing scaffold.
@@ -926,6 +934,10 @@ void ScopeBodyCache::publish(std::shared_ptr<Compilation> current,
                 return false;
             if (!selected(body))
                 return true;
+            if (!current->isInstanceBodyBindContextCompatible(&body, &body)) {
+                fragmented = true;
+                return true;
+            }
             std::string_view reason;
             if (current->prepareInstanceBodyReuse(body, &reason)) {
                 ++frontierRoots;
@@ -949,11 +961,15 @@ void ScopeBodyCache::publish(std::shared_ptr<Compilation> current,
         const auto body = &candidate;
         if (!selected(*body))
             return true;
-        const auto path = body->getHierarchicalPath();
         if (current->isImportedInstanceBody(*body))
             return false;
+        if (!current->isInstanceBodyBindContextCompatible(body, body)) {
+            recordRefusal("bind-context", body->getHierarchicalPath());
+            return true;
+        }
         if (contains(*current, *body))
             return true;
+        const auto path = body->getHierarchicalPath();
         bool covered = std::ranges::any_of(staged, [&](const Group& group) {
             return std::ranges::any_of(group.bodies, [&](const auto& entry) {
                 return path == entry.first || path.starts_with(entry.first + ".");
@@ -1098,8 +1114,15 @@ std::optional<ScopeBodyCache::Group> ScopeBodyCache::prepareGroup(
         // against the selected native graph, never an unchecked new path.
         const bool admitted = admittedRoot.empty() ? selected(*body)
                                                    : body->getHierarchicalPath() == admittedRoot;
-        if (!covered && admitted && !contains(*owner, *body) &&
-            certify(*owner, *body))
+        // Use the same bind boundary as import. Publishing an incompatible
+        // parent would hide its closed children and require another owner later.
+        if (covered || !admitted || contains(*owner, *body))
+            continue;
+        if (!owner->isInstanceBodyBindContextCompatible(body, body)) {
+            recordRefusal("bind-context", body->getHierarchicalPath());
+            continue;
+        }
+        if (certify(*owner, *body))
             bodies.emplace(body->getHierarchicalPath(), body);
     }
     if (bodies.empty()) {

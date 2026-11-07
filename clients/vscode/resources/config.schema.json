@@ -126,7 +126,7 @@
           "description": "Maximum full diagnostic workers, default2, capped8. Zero or one uses ordinary serial analysis. Does not parallelize local-body updates."
         },
         "experimentalSyntaxPrefixCache": {
-          "description": "Experimental authenticated syntax-prefix reuse for configured single-unit inputs. Default off. Requires cooperative analysis and a prepared fixed scope prefix. Mutable preceding roots and includes are rechecked before reuse; this does not declare them fixed or reuse their semantics.",
+          "description": "Experimental authenticated syntax-prefix reuse for configured single-unit inputs. Default off. Requires cooperative analysis and prepared fixed scope semantics. The server checks preceding mutable roots and includes before reusing their syntax. Semantic reuse follows the frozenSources selection.",
           "type": "boolean"
         },
         "syntaxPrefixCacheMaxMiB": {

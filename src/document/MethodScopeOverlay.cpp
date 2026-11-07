@@ -363,7 +363,9 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
             contextPhases.mark("body-context-methods");
             // Removing an existing directive or state-changing macro is just as
             // unsafe as introducing one: the borrowed suffix used its old state.
-            if (!config.experimentalMethodBodyMacroProof.value() || !config.methodBodyMacroProofMaxMiB.value())
+            const bool macroProof = config.experimentalMethodBodyMacroProof.value() &&
+                                    config.methodBodyMacroProofMaxMiB.value();
+            if (!macroProof)
                 validateBodyPreprocessing(text.substr(functionBegin, functionEnd - functionBegin));
             // Buffer identities and their paths are immutable during this
             // serialized construction. Resolve each physical source once even
@@ -376,14 +378,16 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
                     entry->second = d.sm.getFullPath(buffer) == occurrencePath;
                 return entry->second;
             };
-            size_t checkedMacros = 0;
-            for (const auto& reference : tree->getPreprocessorMetadata().macroRefs) {
-                if ((checkedMacros++ & 1023) == 0)
-                    ctx.checkpoint("original method preprocessing witness");
-                auto at = d.sm.getFullyExpandedLoc(reference.syntax->getFirstToken().location());
-                if (at && functionBegin <= at.offset() && at.offset() < functionEnd &&
-                    inOccurrence(at.buffer()))
-                    validateMacroPreprocessing(reference);
+            if (!macroProof) {
+                size_t checkedMacros = 0;
+                for (const auto& reference : tree->getPreprocessorMetadata().macroRefs) {
+                    if ((checkedMacros++ & 1023) == 0)
+                        ctx.checkpoint("original method preprocessing witness");
+                    auto at = d.sm.getFullyExpandedLoc(reference.syntax->getFirstToken().location());
+                    if (at && functionBegin <= at.offset() && at.offset() < functionEnd &&
+                        inOccurrence(at.buffer()))
+                        validateMacroPreprocessing(reference);
+                }
             }
             contextPhases.mark("body-context-macro-witnesses");
             functionName = bodyOriginals.front()->name;
@@ -522,7 +526,7 @@ MethodScopeOverlay::MethodScopeOverlay(ServerDriver& d, const Config& config, co
                 macroPins = d.sm.retainBuffers(pins);
             }
             phases.mark("body-prepare-macros");
-            if (config.experimentalMethodBodyMacroProof.value() && config.methodBodyMacroProofMaxMiB.value())
+            if (macroProof)
                 bodyMacroProof = std::make_unique<BodyMacroProof>(tree,
                     std::string_view(text).substr(functionBegin, functionEnd - functionBegin),
                     selected->prototype->keyword.location(), selected->end.location(), bodyMacros);
@@ -899,6 +903,18 @@ bool MethodScopeOverlay::readProofInputs(std::span<const FileProofInput> inputs,
 bool MethodScopeOverlay::validForWork(const Config& config, const lsp::RequestContext& ctx) const {
     return optimizedCertification(config) ? validContext(config, ctx) : valid(config, ctx);
 }
+std::optional<std::string> MethodScopeOverlay::changedSourceAlias(
+    const lsp::RequestContext& ctx) const {
+    for (const auto& [alias, target] : sourceAliases) {
+        ctx.checkpoint("method source alias validation");
+        std::error_code error;
+        // Match SourceManager::openCachedImpl's resolution. Comparing bytes
+        // alone misses retargeting to an equal file with a different include base.
+        if (fs::weakly_canonical(alias, error).native() != fs::path(target).native() || error)
+            return alias;
+    }
+    return std::nullopt;
+}
 bool MethodScopeOverlay::valid(const Config& config, const lsp::RequestContext& ctx) const try {
     if (!validContext(config, ctx))
         return false;
@@ -936,6 +952,10 @@ bool MethodScopeOverlay::valid(const Config& config, const lsp::RequestContext& 
         }
     }
     phases.mark("body-validate-files");
+    if (changedSourceAlias(ctx)) {
+        inputChanged = true;
+        return false;
+    }
     ctx.checkpoint("method inputs certified");
     return true;
 }
@@ -1284,7 +1304,7 @@ bool MethodScopeOverlay::generalApply(const lsp::DidChangeTextDocumentParams& p,
     phases.mark("body-apply-text");
     ast::BodyQueryEvaluationGuard guard(blocked, blockedSyntax);
     ctx.checkpoint("before method mini parse");
-    auto tree = query.parse(treeOptions->bag(), bodyMacros);
+    auto tree = query.parse(treeOptions->bag(), bodyMacros, bool(bodyMacroProof));
     // The mini source blanks outer code, including comments before the keyword.
     // Keep the native leading trivia for documentation without executing its
     // directives again. Install it before publishing / binding this fresh tree.
@@ -1299,8 +1319,9 @@ bool MethodScopeOverlay::generalApply(const lsp::DidChangeTextDocumentParams& p,
     }
     auto* first = tree->root().getFirstTokenPtr();
     *first = first->withTrivia(tree->allocator(), leading);
-    for (const auto& reference : tree->getPreprocessorMetadata().macroRefs)
-        validateMacroPreprocessing(reference, bodyMacros, ctx);
+    if (!bodyMacroProof)
+        for (const auto& reference : tree->getPreprocessorMetadata().macroRefs)
+            validateMacroPreprocessing(reference, bodyMacros, ctx);
     phases.mark("body-apply-parse");
     auto unit = std::make_shared<ShallowCompilation>(driver->sm, tree,
                                                      bodyOwner->getShallowCompilation(),

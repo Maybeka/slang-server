@@ -46,8 +46,17 @@ struct TrustedUvmLibrary {
     // Syntax-only instance names may remain dormant for this parameter frame.
     // Every active descendant still needs the ordinary body certificate.
     std::vector<std::string_view> deferredDefinitionNames;
+    // Names appearing only in introductions or labels cannot resolve to a
+    // design unit. Package and ordinary unit-name checks use the full inventory.
+    std::vector<std::string_view> definitionIndependentNames;
+    std::vector<std::string_view> locallyBoundDefinitionNames;
+    std::vector<std::string_view> localBindingPackages;
     std::vector<std::string_view> unitLookupNames;
     std::vector<std::string_view> safeUnitWildcardImports;
+    // Kept alive by the projected views of their original compilation units.
+    // These native packages have structural wildcard exports disjoint from
+    // the provider's lookup names. The current declaration must still match.
+    std::vector<const slang::syntax::ModuleDeclarationSyntax*> nativeWildcardPackages;
     std::vector<std::string_view> unitDpiCNames;
     std::shared_ptr<slang::syntax::SyntaxTree> uvmParseTree;
     uint64_t generation = 0;

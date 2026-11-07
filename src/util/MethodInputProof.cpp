@@ -137,9 +137,9 @@ ReadResult readCertificateFile(const std::string& path, [[maybe_unused]] bool fa
             // repeatedly. The fast predicate implies the original comparison;
             // all other spellings retain that comparison unchanged.
             const bool exactPath = relative || exactNormalizedPosixPath(path, resolved);
-            need(exactPath || (fs::path(resolved) == fs::path(path) &&
-                               fs::absolute(path).lexically_normal() == fs::path(path)),
-                 "symlink input unsupported");
+            if (!exactPath && (fs::path(resolved) != fs::path(path) ||
+                               fs::absolute(path).lexically_normal() != fs::path(path)))
+                throw std::runtime_error("symlink input unsupported: " + path);
             need(before.st_size >= 0 && uint64_t(before.st_size) <= std::string().max_size(),
                  "input size unavailable");
             const auto size = size_t(before.st_size);
@@ -189,7 +189,8 @@ ReadResult readCertificateFile(const std::string& path, [[maybe_unused]] bool fa
     if (error == std::errc::no_such_file_or_directory || (!error && !fs::exists(status)))
         return {{}, expected && !expected->has_value()};
     need(!error && fs::is_regular_file(status), ("nonregular certificate input: " + path).c_str());
-    need(fs::canonical(path) == fs::absolute(path).lexically_normal(), "symlink input unsupported");
+    if (fs::canonical(path) != fs::absolute(path).lexically_normal())
+        throw std::runtime_error("symlink input unsupported: " + path);
     // Read into one allocation. Iterator extraction spends most body-query time
     // copying unchanged project bytes a character at a time on large designs.
     // Keep exact byte comparison and reject files that shrink/grow during the read.

@@ -6939,6 +6939,77 @@ TEST_CASE("Configured syntax replay has an independent budget and invalidates ed
     }
 }
 
+TEST_CASE("Selective scope syntax checkpoint witnesses its ordered project inputs",
+          "[scope-semantic][configured-syntax-prefix][independent-syntax-prefix]") {
+    const bool newGlobMatch = GENERATE(false, true);
+    LibraryWorkspace files;
+    Config config;
+    config.experimentalScopeSemanticCache = true;
+    config.experimentalCooperativeAnalysis = true;
+    config.experimentalSyntaxPrefixCache = true;
+    config.frozenSources = Config::FrozenSourcesConfig{
+        .modules = std::vector<std::string>{"stable"}, .maxMiB = 64};
+    config.flagsByFile = std::vector<Config::FlagSource>{
+        {(files.root / "server.json").string(), "--single-unit --threads 1 --top top"}};
+    config.inputSources = std::vector<Config::InputSource>{
+        {(files.root / "server.json").string(), "{}\n"}};
+    files.write(files.root / "server.json", "{}\n");
+    files.write(files.root / "fixed.sv", "module stable; endmodule\n");
+    files.write(files.root / "extras/a.sv", "`define SHARED_VALUE 7\n"
+                                           "package shared_pkg; endpackage\n");
+    const auto text = [](int value) {
+        return "module top; stable inst(); localparam int V=`SHARED_VALUE+" +
+               std::to_string(value) + "; endmodule\n";
+    };
+    files.write(files.root / "user.sv", text(0));
+    files.write(files.root / "design.f", "extras/*.sv\nfixed.sv\nuser.sv\n");
+    Indexer indexer;
+    ClientHarness client;
+    auto driver = server::ServerDriver::createFromFileLists(
+        indexer, client, config, {"design.f"}, files.root.string(), nullptr, true);
+    REQUIRE(driver);
+    auto status = [&] { return rfl::json::write(driver->scopeLibraryStatus()); };
+    REQUIRE(status().find("\"prepared\":true") != std::string::npos);
+    const auto uri = URI::fromFile(files.root / "user.sv");
+    driver->openDocument(uri, text(0), 1, true);
+    auto edit = [&](int value) {
+        driver->onDocDidChange({.textDocument = {.version = value + 1, .uri = uri},
+            .contentChanges = {lsp::TextDocumentContentChangeWholeDocument{.text = text(value)}}});
+    };
+    auto verify = [&](int expected) {
+        auto compilation = driver->getDocument(uri)->getAnalysis()->getCompilation();
+        REQUIRE(compilation->getRoot().topInstances.size() == 1);
+        auto value = compilation->getRoot().topInstances.front()->body.find("V");
+        REQUIRE(value);
+        CHECK(value->as<ast::ParameterSymbol>().getValue().integer().as<int>() == expected);
+        CHECK(compilation->getSemanticDiagnostics().empty());
+    };
+    edit(1);
+    verify(8);
+    REQUIRE(status().find("\"pendingRoots\":2") != std::string::npos);
+    edit(2);
+    lsp::RequestContext cancelled("test/independent-syntax-prefix", lsp::ID_t{1});
+    cancelled.setCheckpointObserverForTesting([&](std::string_view where) {
+        if (where == "before syntax prefix cache commit")
+            cancelled.cancel();
+    });
+    CHECK_THROWS_AS(driver->getDocument(uri)->getAnalysis(cancelled), lsp::RequestCancelled);
+    CHECK(status().find("\"cachedRoots\":0") != std::string::npos);
+    CHECK(status().find("\"pendingRoots\":2") != std::string::npos);
+    verify(9);
+    REQUIRE(status().find("\"cachedRoots\":2") != std::string::npos);
+    REQUIRE(status().find("\"hits\":1") != std::string::npos);
+    if (newGlobMatch)
+        files.write(files.root / "extras/b.sv", "package newly_matched; endpackage\n");
+    else
+        files.write(files.root / "server.json", "{\"flags\": \"--top top\"}\n");
+    edit(3);
+    CHECK_THROWS_AS(driver->getDocument(uri)->getAnalysis(), lsp::RequestFailed);
+    CHECK(driver->hasStaleSyntaxPrefixInputs());
+    CHECK(status().find("\"cachedRoots\":0") != std::string::npos);
+    CHECK(driver->getDocument(uri)->getText().starts_with(text(3)));
+}
+
 TEST_CASE("Syntax prefix witness failures refuse stale native inputs and preserve editor recovery",
           "[scope-semantic][syntax-prefix-input-change]") {
     const int mode = GENERATE(0, 1, 2); // changed bytes, same-byte alias, new negative lookup
@@ -7965,6 +8036,9 @@ TEST_CASE("Constant dependencies use the same closed semantic rule before and af
 
 TEST_CASE("Mutable module binds invalidate their effect closure while safe siblings reuse",
           "[scope-semantic][scope-body-bind-effects]") {
+    const bool importFirst = GENERATE(false, true);
+    const bool hierarchical = GENERATE(false, true);
+    CAPTURE(importFirst, hierarchical);
     LibraryWorkspace files;
     Config config;
     config.experimentalScopeSemanticCache = true;
@@ -7980,13 +8054,16 @@ module fixed_parent(input int a, output int y,z);
   affected changed_i(a,z);
 endmodule
 )");
-    auto source = [](int edit) {
+    auto source = [hierarchical](int edit) {
+        const std::string target = hierarchical
+            ? (edit == 2 ? "top.dut.safe_i" : "top.dut.changed_i")
+            : (edit == 2 ? "clean" : "affected");
         return fmt::format(
             "module observer #(parameter int N={}); {} endmodule\n"
             "bind {} observer #(.N({})) observation();\n"
             "module top; int a,y,z; fixed_parent dut(a,y,z); endmodule\n",
             edit+1, edit == 3 ? "initial missing_bind_symbol=1;" : "",
-            edit == 2 ? "clean" : "affected", edit+2);
+            target, edit+2);
     };
     files.write(files.root / "consumer.sv", source(0));
     files.write(files.root / "design.f", "fixed.sv\nconsumer.sv\n");
@@ -8004,23 +8081,44 @@ endmodule
         auto options = driver->options;
         options.set(server::ScopeBodyImport{cache});
         auto compilation = std::make_shared<ast::Compilation>(options);
+        if (importFirst) {
+            REQUIRE(server::importTrustedUvm(*compilation, driver->sm, options));
+            CHECK(compilation->isInstanceBodyBindContextCompatible());
+        }
         compilation->addSyntaxTree(syntax::SyntaxTree::fromText(
             source(edit), driver->sm, "bind-effect-user.sv", "", options));
         // A query before imports must not leave a stale positive result once
         // those definitions become fixed bind targets.
-        CHECK(compilation->isInstanceBodyBindContextCompatible());
-        REQUIRE(server::importTrustedUvm(*compilation, driver->sm, options));
+        if (!importFirst) {
+            CHECK(compilation->isInstanceBodyBindContextCompatible() == !hierarchical);
+            REQUIRE(server::importTrustedUvm(*compilation, driver->sm, options));
+        }
         CHECK_FALSE(compilation->isInstanceBodyBindContextCompatible());
+        if (edit == 4) {
+            // A second target added after a cached conflict must also enter
+            // every later subtree proof.
+            compilation->addSyntaxTree(syntax::SyntaxTree::fromText(
+                "bind clean observer observation_two();\n", driver->sm, "extra-bind.sv", "", options));
+            CHECK_FALSE(compilation->isInstanceBodyBindContextCompatible());
+        }
+        if (edit == 5 || edit == 6) {
+            compilation->addSyntaxTree(syntax::SyntaxTree::fromText(
+                edit == 5 ? "bind top.missing observer unresolved();\n"
+                          : "bind affected : top.dut.changed_i, top.missing "
+                            "observer observation_two();\n",
+                driver->sm, "unresolved-bind.sv", "", options));
+            CHECK_FALSE(compilation->isInstanceBodyBindContextCompatible());
+        }
         if (native)
             compilation->setInstanceBodyReuseHooks({}, {});
         const auto& diagnostics = compilation->getSemanticDiagnostics();
         INFO(DiagnosticEngine::reportAll(driver->sm, diagnostics));
         CHECK(std::ranges::any_of(diagnostics, [](const auto& d) { return d.isError(); }) ==
-              (edit == 3));
+              (edit == 3 || edit == 5 || edit == 6));
         return compilation;
     };
     bool published = false;
-    for (int edit : {0, 1, 2, 3, 0}) {
+    for (int edit : {0, 1, 2, 3, 4, 5, 6, 0}) {
         INFO(edit);
         auto current = make(edit, false), native = make(edit, true);
         const auto& dut = current->getRoot().topInstances.front()->body.find("dut")
@@ -8028,9 +8126,21 @@ endmodule
         const auto& safe = dut.find("safe_i")->as<ast::InstanceSymbol>().body;
         const auto& changed = dut.find("changed_i")->as<ast::InstanceSymbol>().body;
         CHECK_FALSE(current->isImportedInstanceBody(dut));
-        CHECK(current->isImportedInstanceBody(safe) == (published && edit != 2));
+        CHECK(current->isImportedInstanceBody(safe) ==
+              (published && edit != 2 && edit != 4 && edit != 5 &&
+               (!hierarchical || edit != 6)));
         CHECK((safe.find("observation") != nullptr) == (edit == 2));
+        CHECK((safe.find("observation_two") != nullptr) == (edit == 4));
         CHECK((changed.find("observation") != nullptr) == (edit != 2));
+        CHECK((changed.find("observation_two") != nullptr) == (edit == 6));
+        if (hierarchical) {
+            const auto& nativeSafe = native->getRoot().topInstances.front()->body.find("dut")
+                                         ->as<ast::InstanceSymbol>().body.find("safe_i")
+                                         ->as<ast::InstanceSymbol>().body;
+            CHECK_FALSE(native->isInstanceBodyBindContextCompatible(&nativeSafe));
+            CHECK(native->isInstanceBodyBindContextCompatible(&nativeSafe, &nativeSafe) ==
+                  (edit != 2 && edit != 4 && edit != 5 && edit != 6));
+        }
         const auto& monitor = (edit == 2 ? safe : changed).find("observation")
                                   ->as<ast::InstanceSymbol>().body;
         CHECK(monitor.find("N")->as<ast::ParameterSymbol>().getValue().integer().as<int>() == edit+2);
@@ -8048,6 +8158,88 @@ endmodule
         published = true;
     }
     CHECK(cache->status().hits >= 3);
+}
+
+TEST_CASE("Resolved definition binds retain an unchanged closed hierarchy",
+          "[scope-semantic][scope-definition-bind-equivalence]") {
+    LibraryWorkspace files;
+    files.write(files.root / "fixed.sv", R"(
+module observer #(parameter int N=0); endmodule
+module affected; endmodule
+module stable;
+  affected child();
+  observer keeper();
+  function automatic int increment(input int value);
+    return value+1;
+  endfunction
+  int result;
+  assign result=increment(1);
+endmodule
+)");
+    const auto consumer = files.root / "consumer.sv";
+    auto source = [](int edit) {
+        std::string bind = "bind affected observer #(.N(2)) observation();\n";
+        if (edit == 2)
+            bind.replace(bind.find("N(2)"), 4, "N(3)");
+        else if (edit == 3)
+            bind.clear();
+        else if (edit == 4)
+            bind.insert(0, "\n");
+        return bind + fmt::format("module top; stable dut(); stable peer(); "
+                                  "localparam int EDIT={}; endmodule\n", edit);
+    };
+    files.write(consumer, source(0));
+    files.write(files.root / "design.f", "fixed.sv\nconsumer.sv\n");
+    Config config;
+    config.experimentalScopeSemanticCache = true;
+    config.semanticCacheUnlimited = true;
+    config.frozenSources = Config::FrozenSourcesConfig{
+        .instances = std::vector<std::string>{"top.dut", "top.peer"}};
+    config.flagsByFile = std::vector<Config::FlagSource>{
+        {(files.root / "server.json").string(), "--single-unit --threads 1 --top top"}};
+    Indexer indexer;
+    ClientHarness client;
+    auto driver = server::ServerDriver::createFromFileLists(
+        indexer, client, config, {"design.f"}, files.root.string(), nullptr, true);
+    REQUIRE(driver);
+    const auto setting = driver->options.get<server::ScopeBodyImport>();
+    REQUIRE(setting);
+    auto cache = setting->cache.lock();
+    REQUIRE(cache);
+    const std::vector<std::string> selectedRoots{"top.dut", "top.peer"};
+    CHECK(cache->status().retainedRoots == selectedRoots);
+    CHECK(cache->status().owners == 1);
+    auto make = [&](int edit, bool native) {
+        auto compilation = std::make_shared<ast::Compilation>(driver->options);
+        REQUIRE(server::importTrustedUvm(*compilation, driver->sm, driver->options));
+        if (native)
+            compilation->setInstanceBodyReuseHooks({}, {});
+        auto buffer = driver->sm.assignQueryText(consumer.string(), source(edit));
+        compilation->addSyntaxTree(syntax::SyntaxTree::fromBuffer(buffer, driver->sm,
+                                                                 driver->options));
+        (void)compilation->getSemanticDiagnostics();
+        return compilation;
+    };
+    for (int edit : {1, 2, 3, 4, 5}) {
+        CAPTURE(edit);
+        auto current = make(edit, false), native = make(edit, true);
+        const auto paths = current->getImportedInstanceBodyPaths();
+        CHECK(paths == (edit == 1 || edit == 5 ? selectedRoots : std::vector<std::string>{}));
+        // Both roots use the same resolved overlay pair, including edits
+        // where the proof finds a changed definition.
+        if (edit != 3)
+            CHECK(current->getBodyReuseIndexStats().definitionBindListsCompared == 1);
+        const auto& dut = current->getRoot().topInstances.front()->body.find("dut")
+                              ->as<ast::InstanceSymbol>().body;
+        auto monitor = dut.find("child")->as<ast::InstanceSymbol>().body.find("observation");
+        CHECK((monitor != nullptr) == (edit != 3));
+        if (monitor)
+            CHECK(monitor->as<ast::InstanceSymbol>().body.find("N")
+                      ->as<ast::ParameterSymbol>().getValue().integer().as<int>() ==
+                  (edit == 2 ? 3 : 2));
+        CHECK(diagnosticMessages(driver->sm, current->getSemanticDiagnostics()) ==
+              diagnosticMessages(driver->sm, native->getSemanticDiagnostics()));
+    }
 }
 
 TEST_CASE("Aggregate projection ownership follows the base rather than shared field declarations",
@@ -8578,6 +8770,131 @@ TEST_CASE("Isolated native member views reject recovery and retain directive wit
     const syntax::MemberSyntax* both[] = {intact, broken};
     CHECK_THROWS_AS(syntax::SyntaxTree::selectCompilationUnitMembers(owner, both, true),
                     std::invalid_argument);
+}
+
+TEST_CASE("A recovered prefix preserves independently closed fixed declarations",
+          "[scope-semantic][scope-recovered-prefix]") {
+    LibraryWorkspace files;
+    files.write(files.root / "broken.sv", "module unrelated; localparam int BAD=; endmodule\n");
+    files.write(files.root / "fixed.sv", R"(
+package stable_pkg;
+    parameter int VALUE=1;
+endpackage
+module stable(output wire y);
+    assign y = stable_pkg::VALUE;
+endmodule
+)");
+    files.write(files.root / "consumer.sv", "module top; wire y; stable u(y); endmodule\n");
+    files.write(files.root / "design.f", "broken.sv\nfixed.sv\nconsumer.sv\n");
+    struct Harness : ServerHarness {
+        using server::SlangServer::m_driver;
+        using ServerHarness::ServerHarness;
+    };
+    std::string nativeDiagnostics;
+    for (bool enabled : {false, true}) {
+        Config config;
+        config.build = "design.f";
+        config.flags = "--single-unit --threads 1 --top top";
+        config.experimentalScopeSemanticCache = enabled;
+        config.semanticCacheUnlimited = true;
+        config.frozenSources = Config::FrozenSourcesConfig{
+            .packages = std::vector<std::string>{"stable_pkg"},
+            .instances = std::vector<std::string>{"top.u"}};
+        files.write(files.root / ".slang/server.json", rfl::json::write(config));
+        Harness server(lsp::InitializeParams{
+            .capabilities = {},
+            .workspaceFolders = {{lsp::WorkspaceFolder{.uri = URI::fromFile(files.root),
+                                                       .name = "scope-recovered-prefix"}}}});
+        if (enabled) {
+            auto setting = server.m_driver->options.get<server::TrustedUvmImport>();
+            INFO(rfl::json::write(server.m_driver->scopeLibraryStatus()));
+            REQUIRE(setting);
+            CHECK(setting->library->projectedDefinitions);
+            CHECK_FALSE(setting->library->files.contains((files.root / "broken.sv").generic_string()));
+        }
+        auto doc = server.openFile("consumer.sv");
+        server.m_driver->runPendingDiagnostics();
+        doc.replaceAll("module top; wire y; stable u(y); localparam int EDIT=1; endmodule\n");
+        doc.publishChanges();
+        const auto& instances = server.m_driver->comp->getInstancesOfModule("stable");
+        REQUIRE(instances.size() == 1);
+        const auto& body = instances.front()->body;
+        auto& compilation = body.getCompilation();
+        const auto& diagnostics = compilation.getAllDiagnostics();
+        CHECK(std::ranges::any_of(diagnostics, [](const auto& diagnostic) {
+            return diagnostic.isError();
+        }));
+        auto formatted = DiagnosticEngine::reportAll(server.m_driver->sm, diagnostics);
+        if (enabled) {
+            CHECK(compilation.isImportedInstanceBody(body));
+            CHECK(formatted == nativeDiagnostics);
+        }
+        else
+            nativeDiagnostics = std::move(formatted);
+    }
+}
+
+TEST_CASE("Private package imports do not enter a compilation-unit wildcard namespace",
+          "[scope-semantic][scope-wildcard-visibility]") {
+    const bool reexport = GENERATE(false, true);
+    const bool retainWrapper = GENERATE(false, true);
+    CAPTURE(reexport, retainWrapper);
+    LibraryWorkspace files;
+    auto packages = [](bool exports) {
+        return "package hidden; typedef logic [7:0] shared_t; endpackage\n"
+               "package wrapper; import hidden::*; typedef shared_t wrapped_t; " +
+               std::string(exports ? "export hidden::*; " : "") + "endpackage\n";
+    };
+    files.write(files.root / "packages.sv", packages(reexport));
+    files.write(files.root / "native.sv",
+                "import wrapper::*;\nmodule unrelated; localparam int BAD=; endmodule\n");
+    files.write(files.root / "fixed.sv", R"(
+package stable_pkg;
+    function int read();
+        int shared_t=1;
+        return shared_t;
+    endfunction
+endpackage
+module stable; endmodule
+)");
+    files.write(files.root / "consumer.sv", "module top; stable u(); endmodule\n");
+    files.write(files.root / "design.f", "packages.sv\nnative.sv\nfixed.sv\nconsumer.sv\n");
+    Config config;
+    config.experimentalScopeSemanticCache = true;
+    config.semanticCacheUnlimited = true;
+    config.flagsByFile = std::vector<Config::FlagSource>{
+        {(files.root / "server.json").string(), "--single-unit --threads 1 --top top"}};
+    config.frozenSources = Config::FrozenSourcesConfig{
+        .packages = retainWrapper ? std::vector<std::string>{"stable_pkg", "wrapper"}
+                                  : std::vector<std::string>{"stable_pkg"},
+        .modules = std::vector<std::string>{"stable"}};
+    Indexer indexer;
+    ClientHarness client;
+    auto driver = server::ServerDriver::createFromFileLists(indexer, client, config, {"design.f"},
+                                                            files.root.string(), nullptr, true);
+    REQUIRE(driver);
+    INFO(rfl::json::write(driver->scopeLibraryStatus()));
+    auto setting = driver->options.get<server::TrustedUvmImport>();
+    if (reexport) {
+        CHECK_FALSE(setting);
+    }
+    else {
+        REQUIRE(setting);
+        CHECK(setting->library->projectedDefinitions);
+        CHECK_FALSE(setting->library->files.contains((files.root / "native.sv").generic_string()));
+        CHECK(driver->hasCompatibleTrustedNamespace());
+        if (!retainWrapper) {
+            CHECK_FALSE(setting->library->files.contains((files.root / "packages.sv").generic_string()));
+            const auto uri = URI::fromFile(files.root / "packages.sv");
+            driver->openDocument(uri, packages(false), 0, true);
+            for (int version = 1; version <= 2; ++version) {
+                driver->onDocDidChange({.textDocument = {.version = version, .uri = uri},
+                    .contentChanges = {lsp::TextDocumentContentChangeWholeDocument{
+                        .text = packages(version == 1)}}});
+                CHECK(driver->hasCompatibleTrustedNamespace() == (version == 2));
+            }
+        }
+    }
 }
 
 TEST_CASE("Declaration semantic errors preserve independent siblings and reject dependent parents",
@@ -10116,6 +10433,117 @@ endmodule
     CHECK(cache->status().capacitySkips==0);
 }
 
+TEST_CASE("Declaration and formal labels do not freeze unrelated global definitions",
+          "[scope-semantic][scope-namespace-name-roles]") {
+    LibraryWorkspace files;
+    files.write(files.root / "unrelated.sv", "module unrelated; endmodule\n");
+    files.write(files.root / "fixed.sv", R"(
+module leaf #(parameter int unrelated=1)(input logic data, output wire y);
+    assign y = data;
+endmodule
+module stable(input logic data, output wire y);
+    leaf #(.unrelated(2)) unrelated(.data(data), .y(y));
+endmodule
+)");
+    files.write(files.root / "consumer.sv", "module top; wire y; stable u(1'b0,y); endmodule\n");
+    files.write(files.root / "design.f", "unrelated.sv\nfixed.sv\nconsumer.sv\n");
+    Config config;
+    config.build = "design.f";
+    config.flags = "--single-unit --threads 1 --top top";
+    config.experimentalScopeSemanticCache = true;
+    config.semanticCacheUnlimited = true;
+    config.frozenSources = Config::FrozenSourcesConfig{
+        .modules = std::vector<std::string>{"stable"}};
+    files.write(files.root / ".slang/server.json", rfl::json::write(config));
+    struct Harness : ServerHarness {
+        using server::SlangServer::m_driver;
+        using ServerHarness::ServerHarness;
+    };
+    Harness server(lsp::InitializeParams{
+        .capabilities = {},
+        .workspaceFolders = {{lsp::WorkspaceFolder{.uri = URI::fromFile(files.root),
+                                                   .name = "namespace-name-roles"}}}});
+    auto setting = server.m_driver->options.get<server::TrustedUvmImport>();
+    INFO(rfl::json::write(server.m_driver->scopeLibraryStatus()));
+    REQUIRE(setting);
+    CHECK(setting->library->projectedDefinitions);
+    CHECK_FALSE(setting->library->files.contains((files.root / "unrelated.sv").generic_string()));
+    CHECK(std::ranges::find(setting->library->definitions, "unrelated") ==
+          setting->library->definitions.end());
+
+    auto doc = server.openFile("consumer.sv");
+    server.m_driver->runPendingDiagnostics();
+    doc.replaceAll("module top; wire y; stable u(1'b1,y); endmodule\n");
+    doc.publishChanges();
+    const auto& instances = server.m_driver->comp->getInstancesOfModule("stable");
+    REQUIRE(instances.size() == 1);
+    const auto& body = instances.front()->body;
+    CHECK(body.getCompilation().isImportedInstanceBody(body));
+}
+
+TEST_CASE("Bound package locals can coexist with a native design unit of the same name",
+          "[scope-semantic][scope-namespace-local-binding]") {
+    const bool deferredInstance = GENERATE(false, true);
+    CAPTURE(deferredInstance);
+    LibraryWorkspace files;
+    files.write(files.root / "fixed.sv", std::string(R"(
+package stable_pkg;
+    class Word;
+        extern function bit low(input logic [7:0] data);
+    endclass
+    function bit Word::low(input logic [7:0] data);
+        logic [7:0] shadow;
+        shadow = data;
+        return shadow[0];
+    endfunction
+endpackage
+module stable(input logic data, output wire y);
+    assign y = data;
+)") + (deferredInstance ? "if (1'b0) shadow skipped();\n" : "") + "endmodule\n");
+    files.write(files.root / "native.sv", deferredInstance
+        ? "interface channel; endinterface\nmodule shadow(channel port); endmodule\n"
+        : "module shadow; endmodule\n");
+    const std::string original = "module top; wire y; stable u(1'b0,y); endmodule\n";
+    files.write(files.root / "consumer.sv", original);
+    files.write(files.root / "fixed.f", "fixed.sv\n");
+    files.write(files.root / "design.f", "-C fixed.f\nnative.sv\nconsumer.sv\n");
+    Config config;
+    config.build = "design.f";
+    config.flags = "--threads 1 --top top";
+    config.experimentalScopeSemanticCache = true;
+    config.semanticCacheUnlimited = true;
+    config.frozenSources = Config::FrozenSourcesConfig{
+        .packages = std::vector<std::string>{"stable_pkg"},
+        .modules = std::vector<std::string>{"stable"}};
+    files.write(files.root / ".slang/server.json", rfl::json::write(config));
+    struct Harness : ServerHarness {
+        using server::SlangServer::m_driver;
+        using ServerHarness::ServerHarness;
+    };
+    Harness server(lsp::InitializeParams{
+        .capabilities = {},
+        .workspaceFolders = {{lsp::WorkspaceFolder{.uri = URI::fromFile(files.root),
+                                                   .name = "namespace-local-binding"}}}});
+    auto doc = server.openFile("consumer.sv");
+    INFO(rfl::json::write(server.m_driver->scopeLibraryStatus()));
+    auto setting = server.m_driver->options.get<server::TrustedUvmImport>();
+    REQUIRE(setting);
+    REQUIRE(setting->library->projectedDefinitions);
+    CHECK(server.m_driver->hasCompatibleTrustedNamespace());
+    server.m_driver->runPendingDiagnostics();
+
+    doc.replaceAll(original + "package shadow; endpackage\n");
+    doc.publishChanges();
+    CHECK_FALSE(server.m_driver->hasCompatibleTrustedNamespace());
+    doc.replaceAll(original);
+    doc.publishChanges();
+    CHECK(server.m_driver->hasCompatibleTrustedNamespace());
+    const auto& instances = server.m_driver->comp->getInstancesOfModule("stable");
+    REQUIRE(instances.size() == 1);
+    const auto& body = instances.front()->body;
+    CHECK(body.getCompilation().isImportedInstanceBody(body));
+}
+
 TEST_CASE("Deferred instance names cannot hide other lookups from repeated macro arguments",
           "[scope-semantic][scope-deferred-instance-namespace]") {
     const bool eagerUse=GENERATE(false,true);
@@ -10152,6 +10580,92 @@ TEST_CASE("Deferred instance names cannot hide other lookups from repeated macro
     std::string_view refusal;
     CHECK(server::trustedLibraryNamespaceMatches(*library,driver->sm,current,&refusal)==!eagerUse);
     if (eagerUse) CHECK(refusal=="unclosed-global-name");
+}
+
+TEST_CASE("An unproven definition lookup leaves an independent RTL child reusable",
+          "[scope-semantic][scope-selective-namespace]") {
+    const bool eagerUse = GENERATE(false, true);
+    CAPTURE(eagerUse);
+    LibraryWorkspace files;
+    files.write(files.root / "native.sv", R"(
+localparam int outside=7;
+module vendor; localparam int VALUE=$unit::outside; endmodule
+task bad_helper(); endtask
+task bad_caller(); bad_helper(1); endtask
+)");
+    files.write(files.root / "types.sv",
+                "package stable_types; function int vendor(); return 7; endfunction endpackage\n");
+    files.write(files.root / "leaf.sv", R"(
+module stable_leaf(input logic data, output wire y);
+    assign y = data;
+endmodule
+)");
+    files.write(files.root / "parent.sv", std::string(R"(
+module parent(input logic data, output wire y);
+    stable_leaf leaf(data, y);
+    if (1'b0) vendor skipped();
+)") + (eagerUse ? R"(
+    class Deferred #(type T);
+        static function int value(); return vendor.VALUE; endfunction
+    endclass
+)" : "") + "endmodule\n");
+    const std::string edited = "module top; wire y; parent u(1'b1,y); endmodule\n";
+    files.write(files.root / "consumer.sv",
+                "module top; wire y; parent u(1'b0,y); endmodule\n");
+    files.write(files.root / "design.f", "native.sv\ntypes.sv\nleaf.sv\nparent.sv\nconsumer.sv\n");
+    Config config;
+    config.build = "design.f";
+    config.flags = "--single-unit --threads 1 --top top";
+    config.experimentalScopeSemanticCache = true;
+    config.semanticCacheUnlimited = true;
+    config.frozenSources = Config::FrozenSourcesConfig{
+        .packages = std::vector<std::string>{"stable_types"},
+        .modules = std::vector<std::string>{"parent"}};
+    files.write(files.root / ".slang/server.json", rfl::json::write(config));
+    struct Harness : ServerHarness {
+        using server::SlangServer::m_driver;
+        using ServerHarness::ServerHarness;
+    };
+    Harness server(lsp::InitializeParams{
+        .capabilities = {},
+        .workspaceFolders = {{lsp::WorkspaceFolder{.uri = URI::fromFile(files.root),
+                                                   .name = "selective-namespace"}}}});
+    auto doc = server.openFile("consumer.sv");
+    INFO(rfl::json::write(server.m_driver->scopeLibraryStatus()));
+    auto setting = server.m_driver->options.get<server::TrustedUvmImport>();
+    REQUIRE(setting);
+    const auto expectedDefinitions = eagerUse ? std::vector<std::string>{"stable_leaf"}
+        : std::vector<std::string>{"stable_leaf", "parent"};
+    CHECK(setting->library->definitions == expectedDefinitions);
+    CHECK(server.m_driver->hasCompatibleTrustedNamespace());
+    server.m_driver->runPendingDiagnostics();
+    doc.replaceAll(edited);
+    doc.publishChanges();
+    auto parent = server.m_driver->comp->getInstancesOfModule("parent");
+    auto leaf = server.m_driver->comp->getInstancesOfModule("stable_leaf");
+    REQUIRE(parent.size() == 1);
+    REQUIRE(leaf.size() == 1);
+    CHECK(parent.front()->body.getCompilation().isImportedInstanceBody(parent.front()->body) ==
+          !eagerUse);
+    // Import views belong to the current compilation. A child retained under
+    // an imported parent still reports its original semantic owner.
+    CHECK(parent.front()->body.getCompilation().isImportedInstanceBody(leaf.front()->body));
+    CHECK(&parent.front()->body.find("leaf")->as<ast::InstanceSymbol>().body == &leaf.front()->body);
+
+    files.write(files.root / "consumer.sv", edited);
+    config.experimentalScopeSemanticCache = false;
+    Indexer indexer;
+    ClientHarness client;
+    auto native = server::ServerDriver::createFromFileLists(
+        indexer, client, config, {"design.f"}, files.root.string(), nullptr, true);
+    REQUIRE(native);
+    const auto nativeParents = native->comp->getInstancesOfModule("parent");
+    REQUIRE(nativeParents.size() == 1);
+    const auto expected = DiagnosticEngine::reportAll(
+        native->sm, nativeParents.front()->body.getCompilation().getSemanticDiagnostics());
+    CHECK(expected.find("too many arguments") != std::string::npos);
+    CHECK(DiagnosticEngine::reportAll(
+        server.m_driver->sm, parent.front()->body.getCompilation().getSemanticDiagnostics()) == expected);
 }
 
 TEST_CASE("Fixed RTL closes included compilation-unit class and enum type providers",
@@ -10653,8 +11167,10 @@ TEST_CASE("Namespace witnesses reuse exact live inputs and release retired sourc
 
 TEST_CASE("Fragmented frozen hierarchies plan one forest and preserve exact refusal contexts",
           "[scope-semantic][scope-forest-startup]") {
+    const int leafCount = GENERATE(8, 32, 128);
+    CAPTURE(leafCount);
     LibraryWorkspace files;
-    files.write(files.root / "fixed.sv", R"(
+    files.write(files.root / "fixed.sv", fmt::format(R"(
 module leaf #(parameter int N=0)(input int a, output int y);
   int unused_value;
   wire [31:0] internal_value;
@@ -10670,20 +11186,20 @@ module leaf #(parameter int N=0)(input int a, output int y);
   assign y=internal_value;
 endmodule
 module stable #(parameter bit ASSERT_FORMALS=1)(input logic clk, input int a,
-                                                output wire [31:0] y[12]);
+                                                output wire [31:0] y[{}]);
   if (ASSERT_FORMALS) begin:unsupported
     sequence s(bit b); b; endsequence
     assert property(@(posedge clk) s(a[0]));
   end
-  for (genvar i=0;i<12;i++) begin:children
+  for (genvar i=0;i<{};i++) begin:children
     leaf #(.N(i)) u(.a(a),.y(y[i]));
   end
 endmodule
-)");
-    auto source = [](bool formals, int edit) {
-        return fmt::format("module top; logic clk; int a; wire [31:0] y[12]; "
+)", leafCount, leafCount));
+    auto source = [leafCount](bool formals, int edit) {
+        return fmt::format("module top; logic clk; int a; wire [31:0] y[{}]; "
                            "stable #(.ASSERT_FORMALS({})) dut(.*); localparam int EDIT={}; "
-                           "endmodule\n", formals ? 1 : 0, edit);
+                           "endmodule\n", leafCount, formals ? 1 : 0, edit);
     };
     files.write(files.root / "consumer.sv", source(true, 0));
     files.write(files.root / "design.f", "fixed.sv\nconsumer.sv\n");
@@ -10703,7 +11219,7 @@ endmodule
     REQUIRE(cache);
     CHECK(cache->status().ownerBuilds == 0);
     CHECK(cache->status().compactPublications == 0);
-    CHECK(cache->status().retainedRoots.size() == 12);
+    CHECK(cache->status().retainedRoots.size() == size_t(leafCount));
     REQUIRE(cache->status().admissionRecords > 0);
     auto make = [&](bool formals, int edit, bool native) {
         auto result = std::make_shared<ast::Compilation>(driver->options);
@@ -10717,7 +11233,7 @@ endmodule
     };
     for (int edit=0;edit<4;++edit) {
         auto current=make(true,edit,false), native=make(true,edit,true);
-        CHECK(current->getImportedInstanceBodyPaths().size() == 12);
+        CHECK(current->getImportedInstanceBodyPaths().size() == size_t(leafCount));
         CHECK(diagnosticMessages(driver->sm,current->getSemanticDiagnostics()) ==
               diagnosticMessages(driver->sm,native->getSemanticDiagnostics()));
         analysis::AnalysisOptions opts{.flags=analysis::AnalysisFlags::CheckUnused |
@@ -10742,6 +11258,112 @@ endmodule
     CHECK(reused->getImportedInstanceBodyPaths() == std::vector<std::string>{"top.dut"});
     CHECK(diagnosticMessages(driver->sm,reused->getSemanticDiagnostics()) ==
           diagnosticMessages(driver->sm,native->getSemanticDiagnostics()));
+
+    // With no initial owner, the full publication compares every independently
+    // closed root against a different native forest. Unrelated instances must
+    // add one path construction each, rather than another scan per root.
+    auto indexedCache = std::make_shared<server::ScopeBodyCache>(
+        driver->options.get<server::TrustedUvmImport>()->library,
+        std::numeric_limits<size_t>::max(), std::vector<std::string>{},
+        std::vector<std::string>{"top.dut"});
+    auto indexedOptions = driver->options;
+    indexedOptions.set(server::ScopeBodyImport{indexedCache});
+    auto indexed = std::make_shared<ast::Compilation>(indexedOptions);
+    REQUIRE(server::importTrustedUvm(*indexed, driver->sm, indexedOptions));
+    indexed->addSyntaxTree(syntax::SyntaxTree::fromText(
+        source(true, 6), driver->sm, "forest-consumer.sv", "", indexedOptions));
+    auto expected = make(true, 6, true);
+    CHECK(diagnosticMessages(driver->sm, indexed->getSemanticDiagnostics()) ==
+          diagnosticMessages(driver->sm, expected->getSemanticDiagnostics()));
+    indexed->offerInstanceBodies(indexed);
+    const auto work = indexedCache->status();
+    CHECK(work.ownerBuilds == 1);
+    CHECK(work.retainedRoots.size() == size_t(leafCount));
+    CHECK(work.publicationPathsIndexed == size_t(leafCount + 2));
+    CHECK(work.publicationPathLookups == size_t(leafCount));
+    fmt::print("SCOPE_PUBLICATION_INDEX roots={} pathsIndexed={} pathLookups={} owners={}\n",
+               leafCount, work.publicationPathsIndexed, work.publicationPathLookups, work.owners);
+}
+
+TEST_CASE("Initial publication retains children that match the current bind context",
+          "[scope-semantic][scope-publication-bind-frontier]") {
+    LibraryWorkspace files;
+    files.write(files.root / "fixed.sv", R"(
+module leaf(input int a, output int y); assign y=a+1; endmodule
+module call_wrapper(input int a, output int y);
+  int middle;
+  leaf inner(a,middle);
+  function automatic int add_one(input int value);
+    return value+1;
+  endfunction
+  assign y=add_one(middle);
+endmodule
+module affected; endmodule
+module stable(input int a, output int y);
+  call_wrapper wrapped(a,y);
+  affected changed();
+endmodule
+)");
+    auto source = [](bool withBind, int edit) {
+        return fmt::format("module observer; endmodule\n"
+                           "module top; int a,y; stable dut(a,y); "
+                           "localparam int EDIT={}; endmodule\n{}",
+                           edit, withBind ? "bind top.dut.changed observer bound_observer();\n" : "");
+    };
+    files.write(files.root / "consumer.sv", source(true, 0));
+    files.write(files.root / "design.f", "fixed.sv\nconsumer.sv\n");
+    Config config;
+    config.experimentalScopeSemanticCache = true;
+    config.semanticCacheUnlimited = true;
+    config.frozenSources = Config::FrozenSourcesConfig{
+        .instances = std::vector<std::string>{"top.dut"}};
+    config.flagsByFile = std::vector<Config::FlagSource>{
+        {(files.root / "server.json").string(), "--single-unit --threads 1 --top top"}};
+    Indexer indexer;
+    ClientHarness client;
+    auto driver = server::ServerDriver::createFromFileLists(
+        indexer, client, config, {"design.f"}, files.root.string(), nullptr, true);
+    REQUIRE(driver);
+    const auto setting = driver->options.get<server::ScopeBodyImport>();
+    REQUIRE(setting);
+    auto cache = setting->cache.lock();
+    REQUIRE(cache);
+    const auto initial = cache->status();
+    const std::vector<std::string> closedChild{"top.dut.wrapped.inner"};
+    CHECK(initial.retainedRoots == closedChild);
+    CHECK(initial.owners == 1);
+    CHECK(initial.ownerBuilds == 0);
+    auto make = [&](bool withBind, int edit, bool native) {
+        auto compilation = std::make_shared<ast::Compilation>(driver->options);
+        REQUIRE(server::importTrustedUvm(*compilation, driver->sm, driver->options));
+        if (native)
+            compilation->setInstanceBodyReuseHooks({}, {});
+        compilation->addSyntaxTree(syntax::SyntaxTree::fromText(
+            source(withBind, edit), driver->sm, "frontier-consumer.sv", "", driver->options));
+        (void)compilation->getSemanticDiagnostics();
+        return compilation;
+    };
+    for (int edit : {1, 2}) {
+        CAPTURE(edit);
+        auto current = make(true, edit, false), native = make(true, edit, true);
+        CHECK(current->getImportedInstanceBodyPaths() == closedChild);
+        const auto& dut = current->getRoot().topInstances.front()->body.find("dut")
+                              ->as<ast::InstanceSymbol>().body;
+        CHECK(dut.find("changed")->as<ast::InstanceSymbol>().body.find("bound_observer"));
+        CHECK(diagnosticMessages(driver->sm, current->getSemanticDiagnostics()) ==
+              diagnosticMessages(driver->sm, native->getSemanticDiagnostics()));
+        current->offerInstanceBodies(current);
+        CHECK(cache->status().ownerBuilds == initial.ownerBuilds);
+        CHECK(cache->status().ownerBytes == initial.ownerBytes);
+    }
+    // A genuine change to the bind context still allows promotion of a new
+    // valid parent. The old refusal is not remembered across this change.
+    auto changed = make(false, 3, false);
+    changed->offerInstanceBodies(changed);
+    auto reused = make(false, 4, false), native = make(false, 4, true);
+    CHECK(reused->getImportedInstanceBodyPaths() == std::vector<std::string>{"top.dut"});
+    CHECK(diagnosticMessages(driver->sm, reused->getSemanticDiagnostics()) ==
+          diagnosticMessages(driver->sm, native->getSemanticDiagnostics()));
 }
 
 TEST_CASE("Native closed type contexts retain their forest and reject mismatched callers",

@@ -16,13 +16,26 @@
 #include "slang/ast/symbols/MemberSymbols.h"
 #include "slang/ast/symbols/ParameterSymbols.h"
 #include "slang/ast/ASTContext.h"
+#include "slang/ast/ASTVisitor.h"
 #include "slang/ast/Lookup.h"
 #include "slang/parsing/Preprocessor.h"
 #include "slang/parsing/ParserMetadata.h"
 #include "slang/syntax/AllSyntax.h"
+#include "slang/util/OS.h"
 
 namespace server {
 namespace {
+struct LocalDefinitionNameProof {
+    std::vector<std::string_view> names, packages;
+    std::map<const syntax::SyntaxNode*, std::string_view> unprovenDeclarations;
+};
+
+struct NativeWildcardSurface {
+    // The projected view of this unit retains the original declaration arena.
+    const syntax::ModuleDeclarationSyntax* declaration = nullptr;
+    std::set<std::string> names;
+};
+
 struct PackageClosure {
     std::shared_ptr<ast::Compilation> compilation;
     std::shared_ptr<syntax::SyntaxTree> tree;
@@ -32,7 +45,252 @@ struct PackageClosure {
     std::shared_ptr<ScopePreparationReport> report;
     std::unordered_set<std::string> nativeRemainderFiles;
     bool deferInstanceEdges = false;
+    std::vector<NativeWildcardSurface> nativeWildcardSurfaces;
+    LocalDefinitionNameProof localDefinitionProof;
 };
+
+// A native package can provide a negative wildcard witness when its exported
+// name surface is structural. Re-exports and declarations that can generate
+// new names through binding need a semantic namespace and stay conservative.
+bool collectStructuralWildcardNames(const syntax::ModuleDeclarationSyntax& package,
+                                    std::set<std::string>& names) {
+    using K = syntax::SyntaxKind;
+    auto add = [&](parsing::Token token) {
+        if (token && token.kind == parsing::TokenKind::Identifier)
+            names.emplace(token.valueText());
+    };
+    auto addTokens = [&](auto&& self, const syntax::SyntaxNode& node) -> void {
+        for (size_t i = 0; i < node.getChildCount(); ++i) {
+            if (auto child = node.childNode(i))
+                self(self, *child);
+            else
+                add(node.childToken(i));
+        }
+    };
+    for (const auto* member : package.members) {
+        switch (member->kind) {
+            case K::PackageImportDeclaration:
+            case K::TimeUnitsDeclaration:
+            case K::EmptyMember:
+                break;
+            case K::DataDeclaration:
+                for (auto declarator : member->as<syntax::DataDeclarationSyntax>().declarators)
+                    add(declarator->name);
+                break;
+            case K::TypedefDeclaration:
+                add(member->as<syntax::TypedefDeclarationSyntax>().name);
+                break;
+            case K::ForwardTypedefDeclaration:
+                add(member->as<syntax::ForwardTypedefDeclarationSyntax>().name);
+                break;
+            case K::FunctionDeclaration:
+            case K::TaskDeclaration:
+                addTokens(addTokens, *member->as<syntax::FunctionDeclarationSyntax>().prototype->name);
+                break;
+            case K::ClassDeclaration:
+                add(member->as<syntax::ClassDeclarationSyntax>().name);
+                break;
+            case K::ParameterDeclarationStatement:
+            case K::NetTypeDeclaration:
+            case K::DPIImport:
+            case K::DPIExport:
+            case K::SequenceDeclaration:
+            case K::PropertyDeclaration:
+            case K::LetDeclaration:
+            case K::CheckerDeclaration:
+            case K::CovergroupDeclaration:
+                // Include possible introduction tokens even if the native
+                // declaration has an error and lacks its resulting symbol.
+                addTokens(addTokens, *member);
+                break;
+            default:
+                return false;
+        }
+    }
+    auto structural = [&](auto&& self, const syntax::SyntaxNode& node) -> bool {
+        if (node.kind == K::EnumType)
+            for (auto member : node.as<syntax::EnumTypeSyntax>().members) {
+                if (!member->dimensions.empty())
+                    return false;
+                add(member->name);
+            }
+        for (size_t i = 0; i < node.getChildCount(); ++i) {
+            if (auto child = node.childNode(i)) {
+                if (!self(self, *child))
+                    return false;
+            }
+            else if (auto token = node.childToken(i); token && token.isMissing() &&
+                     token.kind != parsing::TokenKind::Placeholder) {
+                return false;
+            }
+        }
+        return true;
+    };
+    return structural(structural, package);
+}
+
+// Classify only the direct identifier token. Initializers, dimensions, types,
+// and explicit connection expressions are separate child nodes and still need
+// their lookup witnesses. Unclassified positions remain dependencies, including
+// unresolved names in generic bodies and repeated macro expansions.
+bool isNamespaceLookupIdentifier(const syntax::SyntaxNode& node, parsing::Token token) {
+    if (!token || token.kind != parsing::TokenKind::Identifier)
+        return false;
+    using K = syntax::SyntaxKind;
+    switch (node.kind) {
+        case K::ClassDeclaration:
+        case K::Declarator:
+        case K::ForwardTypedefDeclaration:
+        case K::InstanceName:
+        case K::InterfaceHeader:
+        case K::ModuleHeader:
+        case K::NamedArgument:
+        case K::NamedParamAssignment:
+        case K::PackageHeader:
+        case K::ProgramHeader:
+        case K::TypeAssignment:
+        case K::TypedefDeclaration:
+            return false;
+        case K::NamedPortConnection:
+            // A shorthand .port also performs a lookup in the caller.
+            return !node.as<syntax::NamedPortConnectionSyntax>().openParen;
+        default:
+            return true;
+    }
+}
+
+// Only names that collide with an existing omitted design unit need this
+// proof. Match each potential lookup to a unique bound value occurrence in
+// the same ordinary package routine. A missing or ambiguous occurrence keeps
+// the conservative name dependency, even when another use of the name is local.
+LocalDefinitionNameProof proveLocalDefinitionNames(
+    const ast::Compilation& compilation, const std::set<std::string_view>& candidates,
+    bool deferInstanceEdges) {
+    if (candidates.empty())
+        return {};
+    using K = syntax::SyntaxKind;
+    struct Use {
+        parsing::Token token;
+        const syntax::SyntaxNode* routine;
+        const syntax::SyntaxNode* declaration;
+        const ast::PackageSymbol* package;
+        bool proven = false;
+    };
+    LocalDefinitionNameProof result;
+    std::map<SourceLocation, Use> uses;
+    std::set<std::string_view> blocked, packages;
+    std::set<std::pair<std::string_view, std::string_view>> packageShadows;
+    std::set<const syntax::SyntaxNode*> routines;
+    auto reject = [&](const syntax::SyntaxNode* declaration, std::string_view name) {
+        result.unprovenDeclarations.try_emplace(declaration, name);
+        blocked.insert(name);
+    };
+    auto collect = [&](auto&& self, const syntax::SyntaxNode& node,
+                       const syntax::SyntaxNode* declaration, const ast::PackageSymbol* package,
+                       const syntax::SyntaxNode* routine) -> void {
+        if (node.kind == K::FunctionDeclaration || node.kind == K::TaskDeclaration)
+            routine = &node;
+        if (node.kind == K::ScopedName &&
+            node.as<syntax::ScopedNameSyntax>().left->kind == K::UnitScope)
+            package = nullptr;
+        for (size_t i = 0; i < node.getChildCount(); ++i) {
+            if (auto child = node.childNode(i))
+                self(self, *child, declaration, package, routine);
+            else if (auto token = node.childToken(i); isNamespaceLookupIdentifier(node, token) &&
+                     candidates.contains(token.valueText())) {
+                if (package && package->getNameMap().contains(token.valueText())) {
+                    packageShadows.emplace(token.valueText(), package->name);
+                    continue; // The package's direct binding shadows the unit name.
+                }
+                // A projected definition binds its instance type in the current
+                // model. Another use of the same spelling may still be a
+                // lexical dependency and must independently prove its binding.
+                if (deferInstanceEdges && node.kind == K::HierarchyInstantiation)
+                    continue;
+                if (!routine || !package ||
+                    (node.kind != K::IdentifierName && node.kind != K::IdentifierSelectName) ||
+                    (node.parent && node.parent->kind == K::ScopedName)) {
+                    reject(declaration, token.valueText());
+                    continue;
+                }
+                auto [it, unique] = uses.try_emplace(token.location(),
+                                                    Use{token, routine, declaration, package});
+                if (!unique) {
+                    reject(it->second.declaration, it->second.token.valueText());
+                    reject(declaration, token.valueText());
+                }
+                routines.insert(routine);
+                packages.insert(package->name);
+            }
+        }
+    };
+    for (const auto& tree : compilation.getSyntaxTrees())
+        for (const auto* member : tree->root().as<syntax::CompilationUnitSyntax>().members) {
+            auto package = member->kind == K::PackageDeclaration ? compilation.getPackage(
+                member->as<syntax::ModuleDeclarationSyntax>().header->name.valueText()) : nullptr;
+            collect(collect, *member, member, package, nullptr);
+        }
+
+    auto visitor = ast::makeVisitor([&](auto& self, const auto& node) {
+        using T = std::remove_cvref_t<decltype(node)>;
+        if constexpr (std::same_as<T, ast::SubroutineSymbol>) {
+            if (!routines.contains(node.getSyntax()) || &node.getCompilation() != &compilation)
+                return;
+            for (auto scope = node.getParentScope(); scope; scope = scope->asSymbol().getParentScope())
+                if (auto cls = scope->asSymbol().template as_if<ast::ClassType>();
+                    cls && (cls->genericClass || !cls->hasCompletedSemanticAnalysis()))
+                    return;
+            auto body = ast::makeVisitor([&](auto& visit, const auto& child) {
+                if constexpr (std::same_as<std::remove_cvref_t<decltype(child)>, ast::NamedValueExpression>) {
+                    auto use = uses.find(child.sourceRange.start());
+                    if (use == uses.end() || use->second.routine != node.getSyntax() ||
+                        use->second.token.range() != child.sourceRange ||
+                        use->second.token.valueText() != child.symbol.name)
+                        return;
+                    for (auto scope = child.symbol.getParentScope(); scope;
+                         scope = scope->asSymbol().getParentScope()) {
+                        if (scope == &node) {
+                            use->second.proven = true;
+                            break;
+                        }
+                    }
+                }
+                else
+                    visit.visitDefault(child);
+            });
+            node.getBody().visit(body);
+        }
+        else if constexpr (!std::same_as<T, ast::GenericClassDefSymbol> &&
+                           !std::same_as<T, ast::InstanceSymbol> &&
+                           !std::same_as<T, ast::CheckerInstanceSymbol>) {
+            self.visitDefault(node);
+        }
+    });
+    for (auto name : packages)
+        if (auto package = compilation.getPackage(name))
+            package->visit(visitor);
+
+    for (const auto& [_, use] : uses)
+        if (!use.proven)
+            reject(use.declaration, use.token.valueText());
+    for (const auto& [_, use] : uses)
+        if (!blocked.contains(use.token.valueText())) {
+            result.names.push_back(use.token.valueText());
+            result.packages.push_back(use.package->name);
+        }
+    for (const auto& [name, package] : packageShadows)
+        if (!blocked.contains(name)) {
+            result.names.push_back(name);
+            result.packages.push_back(package);
+        }
+    auto unique = [](auto& values) {
+        std::ranges::sort(values);
+        values.erase(std::unique(values.begin(), values.end()), values.end());
+    };
+    unique(result.names);
+    unique(result.packages);
+    return result;
+}
 
 // Pure RTL declaration closure: retain the selected definitions and their global
 // child definitions in native input order, without making intervening roots fixed.
@@ -47,13 +305,14 @@ std::optional<PackageClosure> rtlDeclarationClosure(
         return std::nullopt;
     const auto& unit = owner->root().as<syntax::CompilationUnitSyntax>();
     std::map<std::string, std::vector<const syntax::MemberSyntax*>> candidates;
-    std::set<std::string> globalNames;
+    std::set<std::string> globalNames, ordinaryNames;
     for (auto member : unit.members) {
         if (member->kind == K::EmptyMember || member->kind == K::BindDirective)
             continue;
         if (member->kind == K::PackageDeclaration) {
-            globalNames.emplace(member->as<syntax::ModuleDeclarationSyntax>()
-                                    .header->name.valueText());
+            auto name = member->as<syntax::ModuleDeclarationSyntax>().header->name.valueText();
+            globalNames.emplace(name);
+            ordinaryNames.emplace(name);
             continue;
         }
         if (member->kind == K::PackageImportDeclaration) {
@@ -61,6 +320,7 @@ std::optional<PackageClosure> rtlDeclarationClosure(
                 if (item->item.kind == parsing::TokenKind::Star)
                     return std::nullopt;
                 globalNames.emplace(item->item.valueText());
+                ordinaryNames.emplace(item->item.valueText());
             }
             continue; // Explicit imports are irrelevant only if no selected name uses them.
         }
@@ -122,7 +382,8 @@ std::optional<PackageClosure> rtlDeclarationClosure(
             else if (auto token = node.childToken(i);
                      token && token.kind == parsing::TokenKind::Identifier) {
                 const auto name = std::string(token.valueText());
-                if (globalNames.contains(name) && !wanted.contains(name))
+                if (globalNames.contains(name) && !wanted.contains(name) &&
+                    (ordinaryNames.contains(name) || isNamespaceLookupIdentifier(node, token)))
                     globalConflict = true;
             }
         }
@@ -205,6 +466,7 @@ std::optional<PackageClosure> rtlSubsetClosure(
         bool eligible;
         std::string_view refusal, refusalBinding = {};
         bool unitType = false, unitSubroutine = false;
+        std::set<std::string> definitionLookups;
         void reject(std::string_view category, std::string_view binding = {}) {
             if (eligible) { eligible = false; refusal = category; refusalBinding = binding; }
         }
@@ -219,6 +481,7 @@ std::optional<PackageClosure> rtlSubsetClosure(
         bool valid = true;
     };
     std::vector<UnitImport> unitImports;
+    std::map<std::pair<size_t, std::string_view>, NativeWildcardSurface> wildcardSurfaces;
     std::map<std::string, std::set<size_t>> rootUnits;
     std::map<std::string, std::set<std::string>> inputContexts;
     std::map<std::string, std::vector<const syntax::MemberSyntax*>> rootMembers;
@@ -285,14 +548,26 @@ std::optional<PackageClosure> rtlSubsetClosure(
                 return false;
             if (!visitedImports.insert(package).second)
                 return true;
+            // A wildcard import exposes package members and re-exports.
+            // Private imports cannot add names to the importing unit. Keep
+            // the recursive superset for packages with export declarations:
+            // their exact wildcard exports can require lazy native binding.
+            auto declaration = package->getSyntax();
+            const bool mayReexport = !declaration || package->hasExportAll ||
+                std::ranges::any_of(declaration->as<syntax::ModuleDeclarationSyntax>().members,
+                                    [](const auto* member) {
+                    return member->kind == K::PackageExportDeclaration ||
+                           member->kind == K::PackageExportAllDeclaration;
+                });
             for (const auto& symbol : package->members())
-                if (!symbol.name.empty())
+                if (!symbol.name.empty() && (mayReexport || symbol.kind != ast::SymbolKind::ExplicitImport))
                     globals.emplace(symbol.name), opaqueGlobals.emplace(symbol.name),
                         exports.emplace(symbol.name);
-            if (auto data = package->getWildcardImportData())
-                for (auto import : data->wildcardImports)
-                    if (!self(self, import->getPackage(), exports))
-                        return false;
+            if (mayReexport)
+                if (auto data = package->getWildcardImportData())
+                    for (auto import : data->wildcardImports)
+                        if (!self(self, import->getPackage(), exports))
+                            return false;
             return true;
         };
         for (auto member : members) {
@@ -304,9 +579,22 @@ std::optional<PackageClosure> rtlSubsetClosure(
                     entry.packages.emplace(item->package.valueText());
                     if (item->item.kind == parsing::TokenKind::Star) {
                         visitedImports.clear();
-                        if (namespaceProbe && collectImportedNames(collectImportedNames,
-                                namespaceProbe->getPackage(item->package.valueText()), entry.exports))
+                        auto package = namespaceProbe
+                            ? namespaceProbe->getPackage(item->package.valueText()) : nullptr;
+                        std::set<std::string> names;
+                        if (collectImportedNames(collectImportedNames, package, names)) {
+                            entry.exports.insert(names.begin(), names.end());
+                            if (auto declaration = package->getSyntax(); declaration &&
+                                declaration->kind == K::PackageDeclaration &&
+                                std::ranges::find(members, declaration) != members.end()) {
+                                const auto& packageDecl = declaration->as<syntax::ModuleDeclarationSyntax>();
+                                if (collectStructuralWildcardNames(packageDecl, names))
+                                    wildcardSurfaces.try_emplace(
+                                        std::pair{u, item->package.valueText()},
+                                        NativeWildcardSurface{&packageDecl, std::move(names)});
+                            }
                             continue;
+                        }
                         entry.valid = false;
                         if (unitEligible) unitReason = "unit-wildcard-import";
                         unitEligible = false;
@@ -458,8 +746,11 @@ std::optional<PackageClosure> rtlSubsetClosure(
                     if (auto child = syntax.childNode(i))
                         self(self, *child);
                     else if (auto token = syntax.childToken(i);
-                             token && token.kind == parsing::TokenKind::Identifier)
+                             token && token.kind == parsing::TokenKind::Identifier) {
                         node.identifiers.emplace(token.valueText());
+                        if (isNamespaceLookupIdentifier(syntax, token))
+                            node.definitionLookups.emplace(token.valueText());
+                    }
                 }
             };
             inspect(inspect, *member);
@@ -612,6 +903,13 @@ std::optional<PackageClosure> rtlSubsetClosure(
                 for (const auto& name : node.identifiers) {
                     if (!globals.contains(name) || node.localNames.contains(name)) continue;
                     const auto found = names.find(name);
+                    if (!node.definitionLookups.contains(name) && !opaqueGlobals.contains(name) &&
+                        found != names.end() && std::ranges::all_of(found->second, [&](auto i) {
+                            const auto kind = nodes[i].syntax->kind;
+                            return kind == K::ModuleDeclaration || kind == K::InterfaceDeclaration ||
+                                   kind == K::ProgramDeclaration;
+                        }))
+                        continue;
                     if (node.instanceDependencies.contains(name) && !node.dependencies.contains(name) &&
                         !opaqueGlobals.contains(name))
                         continue; // Prove actual child bindings in the parameterized body, not syntax.
@@ -816,6 +1114,46 @@ std::optional<PackageClosure> rtlSubsetClosure(
             }
         }
         if (!errors) {
+            if (isolateNamedUnitDeclarations) {
+                // A type token of a deferred instance can share a spelling
+                // with a lexical lookup. Attribute unproven lexical uses to
+                // their declaring nodes before certifying the projection.
+                const std::set<std::string_view> retainedDefinitions(result.definitions.begin(),
+                                                                     result.definitions.end());
+                std::set<std::string_view> collisions;
+                for (const auto& [name, declarations] : names)
+                    if (!retainedDefinitions.contains(name) &&
+                        std::ranges::any_of(declarations, [&](auto candidate) {
+                            const auto kind = nodes[candidate].syntax->kind;
+                            return kind == K::ModuleDeclaration || kind == K::InterfaceDeclaration ||
+                                   kind == K::ProgramDeclaration;
+                        }))
+                        collisions.insert(name);
+                auto proof = proveLocalDefinitionNames(*compilation, collisions, true);
+                if (!proof.unprovenDeclarations.empty()) {
+                    bool changed = false;
+                    for (auto i : wanted) {
+                        auto& node = nodes[i];
+                        if (!node.eligible)
+                            continue;
+                        auto blocked = proof.unprovenDeclarations.find(node.syntax);
+                        if (blocked == proof.unprovenDeclarations.end())
+                            for (auto import : node.imports) {
+                                blocked = proof.unprovenDeclarations.find(unitImports[import].syntax);
+                                if (blocked != proof.unprovenDeclarations.end())
+                                    break;
+                            }
+                        if (blocked != proof.unprovenDeclarations.end()) {
+                            node.reject("unclosed-global-name", blocked->second);
+                            changed = true;
+                        }
+                    }
+                    if (!changed)
+                        return decline("unattributed-namespace-lookup");
+                    continue;
+                }
+                result.localDefinitionProof = std::move(proof);
+            }
             // Native class lookup can speculatively try a package of the same
             // name before resolving a type parameter or class. Unknown guesses
             // are not dependency edges; actual errors were handled above.
@@ -825,6 +1163,9 @@ std::optional<PackageClosure> rtlSubsetClosure(
                 }))
                 return decline("unclosed-package-dependency");
             result.report = std::make_shared<ScopePreparationReport>();
+            for (auto& [key, surface] : wildcardSurfaces)
+                if (retainedUnits.contains(key.first))
+                    result.nativeWildcardSurfaces.push_back(std::move(surface));
             result.report->candidateDeclarations = wanted.size();
             for (auto i:wanted)
                 if (nodes[i].eligible && nodes[i].unitType) ++result.report->preparedUnitTypes;
@@ -1076,6 +1417,9 @@ bool trustedLibraryNamespaceMatches(const TrustedUvmLibrary& library, const Sour
     };
     std::set<std::string_view> seenDefinitions;
     std::set<const syntax::SyntaxNode*> seenUnitImports;
+    std::map<std::string_view, const syntax::SyntaxNode*> currentBindingPackages;
+    std::map<std::string_view, bool> nativeWildcardWitnesses;
+    bool usedLocalBindingProof = false;
     std::map<const syntax::SyntaxTree*, const syntax::SyntaxTree*> unitCorrespondence;
     const syntax::SyntaxTree* currentTree = nullptr;
     auto bindUnit = [&](const syntax::SyntaxTree* provider) {
@@ -1089,6 +1433,35 @@ bool trustedLibraryNamespaceMatches(const TrustedUvmLibrary& library, const Sour
                                     [&](const auto* member) { return member == node; }))
                 return tree.get();
         return nullptr;
+    };
+    auto matchesNativeWildcard = [&](std::string_view name) {
+        auto [witness, inserted] = nativeWildcardWitnesses.try_emplace(name, false);
+        if (!inserted)
+            return witness->second;
+        auto original = std::ranges::lower_bound(library.nativeWildcardPackages, name, {},
+            [](const auto* declaration) { return declaration->header->name.valueText(); });
+        if (original == library.nativeWildcardPackages.end() ||
+            (*original)->header->name.valueText() != name)
+            return false;
+        const syntax::ModuleDeclarationSyntax* current = nullptr;
+        for (const auto& tree : trees) {
+            if (tree->root().kind != syntax::SyntaxKind::CompilationUnit)
+                continue;
+            for (auto member : tree->root().as<syntax::CompilationUnitSyntax>().members) {
+                if (member->kind != syntax::SyntaxKind::PackageDeclaration)
+                    continue;
+                const auto& declaration = member->as<syntax::ModuleDeclarationSyntax>();
+                if (declaration.header->name.valueText() == name) {
+                    if (current)
+                        return false; // Native duplicate package resolution can change exports.
+                    current = &declaration;
+                }
+            }
+        }
+        if (current)
+            witness->second = *original == current || sameProjectedSyntax(
+                **original, *current, *library.compilation->getSourceManager(), sources);
+        return witness->second;
     };
     auto compatible = [&](const syntax::SyntaxNode& member) {
         const bool package = member.kind == syntax::SyntaxKind::PackageDeclaration;
@@ -1187,7 +1560,8 @@ bool trustedLibraryNamespaceMatches(const TrustedUvmLibrary& library, const Sour
                     auto name = item->package.valueText();
                     if (item->item.kind == parsing::TokenKind::Star)
                         safe &= std::ranges::find(library.safeUnitWildcardImports, name) !=
-                                library.safeUnitWildcardImports.end();
+                                library.safeUnitWildcardImports.end() ||
+                                (!library.nativeWildcardPackages.empty() && matchesNativeWildcard(name));
                     else
                         safe &= library.compilation->getPackage(name) &&
                                 !std::ranges::binary_search(library.unitLookupNames,
@@ -1206,11 +1580,23 @@ bool trustedLibraryNamespaceMatches(const TrustedUvmLibrary& library, const Sour
         const auto& declaration = member.as<syntax::ModuleDeclarationSyntax>();
         const auto name = declaration.header->name.valueText();
         const auto& names = package ? library.packages : library.definitions;
-        if (std::ranges::find(names, name) == names.end())
-            return (definition && std::ranges::binary_search(library.deferredDefinitionNames,name)) ||
+        if (std::ranges::find(names, name) == names.end()) {
+            if (definition && std::ranges::binary_search(library.locallyBoundDefinitionNames, name)) {
+                usedLocalBindingProof = true;
+                return true;
+            }
+            return (definition &&
+                    (std::ranges::binary_search(library.deferredDefinitionNames, name) ||
+                     std::ranges::binary_search(library.definitionIndependentNames, name))) ||
                    !library.projectedDefinitions ||
                    !std::ranges::binary_search(library.unitLookupNames, name) ||
                    decline("unclosed-global-name");
+        }
+        if (package && std::ranges::binary_search(library.localBindingPackages, name)) {
+            auto [it, inserted] = currentBindingPackages.emplace(name, &member);
+            if (!inserted)
+                it->second = nullptr;
+        }
         const ast::Symbol* original = nullptr;
         if (package)
             original = library.compilation->getPackage(name);
@@ -1288,6 +1674,17 @@ bool trustedLibraryNamespaceMatches(const TrustedUvmLibrary& library, const Sour
                              sources.getFullPath(location.buffer()).string().c_str());
             }
             return false;
+        }
+    }
+    if (usedLocalBindingProof) {
+        const auto& ownerSources = *library.compilation->getSourceManager();
+        for (auto name : library.localBindingPackages) {
+            auto current = currentBindingPackages.find(name);
+            const auto* original = library.compilation->getPackage(name)->getSyntax();
+            if (current == currentBindingPackages.end() || !current->second ||
+                (original != current->second &&
+                 !sameProjectedSyntax(*original, *current->second, ownerSources, sources)))
+                return decline("local-binding-package-context");
         }
     }
     if (library.projectedDefinitions) {
@@ -1401,15 +1798,14 @@ bool ServerDriver::hasCompatibleTrustedNamespace() const {
         if (same)
             return m_trustedNamespaceWitness->compatible;
     }
-    TrustedNamespaceWitness witness{setting->library, {}, true};
+    // The import checks the ordered set of configured units together. A name
+    // collision and the fixed package that proves its local binding may occur
+    // in different units.
+    TrustedNamespaceWitness witness{setting->library, {},
+        cachedTrustedLibraryNamespaceMatches(*setting, sm, trees)};
     witness.units.reserve(trees.size());
-    for (const auto& tree : trees) {
+    for (const auto& tree : trees)
         witness.units.emplace_back(tree);
-        const std::shared_ptr<syntax::SyntaxTree> current[] = {tree};
-        if (witness.compatible &&
-            !cachedTrustedLibraryNamespaceMatches(*setting, sm, current))
-            witness.compatible = false;
-    }
     const bool compatible = witness.compatible;
     m_trustedNamespaceWitness = std::move(witness);
     return compatible;
@@ -1699,6 +2095,17 @@ bool ServerDriver::prepareScopeLibrary() {
     }
     bool projectedRtl = closure.has_value();
     std::shared_ptr<syntax::SyntaxTree> prefix;
+    auto adoptIsolatedSubset = [&] {
+        if (projectedRtl)
+            return false;
+        auto subset = attemptIsolatedSubset();
+        if (!subset)
+            return false;
+        closure = std::move(subset);
+        prefix = closure->tree;
+        projectedRtl = true;
+        return true;
+    };
     try {
         if (projectedRtl)
             prefix = closure->tree;
@@ -1720,14 +2127,22 @@ bool ServerDriver::prepareScopeLibrary() {
             prefix = syntax::SyntaxTree::fromBuffersWithCheckpoint(roots, sm, options);
     }
     catch (const std::exception& error) {
-        return decline(std::string("package preprocessing is not reusable: ") + error.what(), "preprocessing-error");
+        if (!adoptIsolatedSubset())
+            return decline(std::string("package preprocessing is not reusable: ") + error.what(),
+                           "preprocessing-error");
     }
-    if (!projectedRtl && !prefix->isPrefixResumeSafe().value_or(false))
+    if (!projectedRtl && !prefix->isPrefixResumeSafe().value_or(false) && !adoptIsolatedSubset())
         return decline("fixed package prefix has unsupported preprocessing state", "preprocessing-context");
     if (const auto error = std::ranges::find_if(prefix->diagnostics(),
                                                [](const auto& d) { return d.isError(); });
-        error != prefix->diagnostics().end())
+        error != prefix->diagnostics().end() && !adoptIsolatedSubset())
         return declineError("fixed scope prefix has syntax errors", *error);
+    if (!projectedRtl &&
+        !std::ranges::all_of(prefix->root().as<syntax::CompilationUnitSyntax>().members,
+                            supportedPrefixMember) &&
+        !adoptIsolatedSubset())
+        return decline("fixed scope roots contain unsupported compilation-unit declarations",
+                       "unit-declaration-context");
     std::vector<std::string> packages, definitions;
     bool hasUnitDeclarations = false;
     for (const auto* member : prefix->root().as<syntax::CompilationUnitSyntax>().members) {
@@ -1806,15 +2221,8 @@ bool ServerDriver::prepareScopeLibrary() {
                 // declaration. Try the same declaration graph with those named
                 // bindings kept native. Identifier collisions and ambient unit
                 // contexts still refuse; never suppress their native errors.
-                auto subset = attemptIsolatedSubset();
-                if (subset) {
-                    closure = std::move(subset);
-                    projectedRtl = true;
-                    prefix = closure->tree;
-                }
-                else {
+                if (!adoptIsolatedSubset())
                     return declineError("fixed package dependency closure has semantic errors", *error);
-                }
             }
         }
     }
@@ -1860,7 +2268,7 @@ bool ServerDriver::prepareScopeLibrary() {
             for (size_t i=0;i<node.getChildCount();++i) {
                 if (auto child=node.childNode(i)) self(self,*child);
                 else if (auto token=node.childToken(i);
-                    token && token.kind==parsing::TokenKind::Identifier &&
+                    isNamespaceLookupIdentifier(node, token) &&
                     node.kind!=syntax::SyntaxKind::HierarchyInstantiation)
                     eagerNames.insert(token.valueText());
             }
@@ -1871,8 +2279,12 @@ bool ServerDriver::prepareScopeLibrary() {
         for (const auto& tree:compilation->getSyntaxTrees()) collectEager(collectEager,tree->root());
         std::erase_if(deferredDefinitionNames,[&](auto name) {return eagerNames.contains(name);});
     }
-    std::vector<std::string_view> unitLookupNames, safeUnitWildcardImports, unitDpiCNames;
+    std::vector<std::string_view> unitLookupNames, definitionIndependentNames,
+                                  safeUnitWildcardImports, unitDpiCNames;
+    std::vector<const syntax::ModuleDeclarationSyntax*> nativeWildcardPackages;
+    LocalDefinitionNameProof localBindingProof;
     if (!definitions.empty() || hasUnitDeclarations || providerHasUnitDeclarations) {
+        std::vector<std::pair<std::string_view, bool>> namesByLookupRole;
         auto collect = [&](auto&& self, const syntax::SyntaxNode& node,
                            const ast::PackageSymbol* package) -> void {
             if (node.kind == syntax::SyntaxKind::PackageDeclaration)
@@ -1900,7 +2312,7 @@ bool ServerDriver::prepareScopeLibrary() {
                     // independent of declaration order. Keep all other names,
                     // including unresolved generic and wildcard dependencies.
                     if (!package || !package->getNameMap().contains(name))
-                        unitLookupNames.push_back(name);
+                        namesByLookupRole.emplace_back(name, isNamespaceLookupIdentifier(node, token));
                 }
             }
         };
@@ -1909,9 +2321,17 @@ bool ServerDriver::prepareScopeLibrary() {
         std::ranges::sort(unitDpiCNames);
         unitDpiCNames.erase(std::unique(unitDpiCNames.begin(), unitDpiCNames.end()),
                             unitDpiCNames.end());
-        std::ranges::sort(unitLookupNames);
-        auto last = std::unique(unitLookupNames.begin(), unitLookupNames.end());
-        std::vector<std::string_view>(unitLookupNames.begin(), last).swap(unitLookupNames);
+        std::ranges::sort(namesByLookupRole);
+        for (size_t first = 0; first < namesByLookupRole.size();) {
+            const auto name = namesByLookupRole[first].first;
+            size_t end = first + 1;
+            while (end < namesByLookupRole.size() && namesByLookupRole[end].first == name)
+                ++end;
+            unitLookupNames.push_back(name);
+            if (!namesByLookupRole[end - 1].second)
+                definitionIndependentNames.push_back(name);
+            first = end;
+        }
         auto checkPackage = [&](std::string_view name) {
             if (auto package = compilation->getPackage(name))
                 if (std::ranges::none_of(unitLookupNames, [&](auto lookup) {
@@ -1922,6 +2342,37 @@ bool ServerDriver::prepareScopeLibrary() {
         for (const auto& name : packages)
             checkPackage(name);
         checkPackage("std");
+        if (closure) {
+            auto nameOf = [](const auto* declaration) { return declaration->header->name.valueText(); };
+            for (const auto& surface : closure->nativeWildcardSurfaces) {
+                if (std::ranges::find(packages, nameOf(surface.declaration)) != packages.end())
+                    continue;
+                if (std::ranges::none_of(surface.names, [&](const auto& name) {
+                        return std::ranges::binary_search(unitLookupNames, name);
+                    }))
+                    nativeWildcardPackages.push_back(surface.declaration);
+            }
+            std::ranges::sort(nativeWildcardPackages, {}, nameOf);
+        }
+        if (closure && closure->deferInstanceEdges) {
+            localBindingProof = std::move(closure->localDefinitionProof);
+        }
+        else if (projectedRtl && !packages.empty()) {
+            std::set<std::string_view> collisions;
+            for (const auto& tree : driver.syntaxTrees)
+                for (const auto& [declaration, _] : tree->getMetadata().nodeMeta) {
+                    if (declaration->kind == syntax::SyntaxKind::PackageDeclaration)
+                        continue;
+                    auto name = declaration->header->name.valueText();
+                    if (std::ranges::find(definitions, name) == definitions.end() &&
+                        std::ranges::binary_search(unitLookupNames, name) &&
+                        !std::ranges::binary_search(definitionIndependentNames, name) &&
+                        !std::ranges::binary_search(deferredDefinitionNames, name))
+                        collisions.insert(name);
+                }
+            localBindingProof = proveLocalDefinitionNames(
+                *compilation, collisions, closure && closure->deferInstanceEdges);
+        }
     }
     size_t retainedTreeBytes = 0;
     for (const auto& tree : compilation->getSyntaxTrees())
@@ -1955,8 +2406,11 @@ bool ServerDriver::prepareScopeLibrary() {
     const auto charged = compilation->getTotalBytesAllocated() +
                          retainedTreeBytes + sm.getSourceLocationTableBytes() +
                          sm.getMemoryUsage() + report->chargedBytes() + remainderBytes +
+                         nativeWildcardPackages.capacity() * sizeof(nativeWildcardPackages.front()) +
                          (unitLookupNames.capacity() + safeUnitWildcardImports.capacity() +
-                          unitDpiCNames.capacity() + deferredDefinitionNames.capacity()) *
+                          unitDpiCNames.capacity() + deferredDefinitionNames.capacity() +
+                          definitionIndependentNames.capacity() + localBindingProof.names.capacity() +
+                          localBindingProof.packages.capacity()) *
                              sizeof(std::string_view);
     const bool unlimited = m_config.semanticCacheUnlimited.value();
     const auto semanticBudget = unlimited ? std::numeric_limits<size_t>::max()
@@ -1975,8 +2429,12 @@ bool ServerDriver::prepareScopeLibrary() {
     library->hasUnitDeclarations = (hasUnitDeclarations && !closure) || providerHasUnitDeclarations;
     library->projectedDefinitions = projectedRtl;
     library->deferredDefinitionNames = std::move(deferredDefinitionNames);
+    library->definitionIndependentNames = std::move(definitionIndependentNames);
+    library->locallyBoundDefinitionNames = std::move(localBindingProof.names);
+    library->localBindingPackages = std::move(localBindingProof.packages);
     library->unitLookupNames = std::move(unitLookupNames);
     library->safeUnitWildcardImports = std::move(safeUnitWildcardImports);
+    library->nativeWildcardPackages = std::move(nativeWildcardPackages);
     library->unitDpiCNames = std::move(unitDpiCNames);
     library->uvmParseTree = driver.precompiledUvm;
     library->shippedProfile = m_shippedUvmProfile;
@@ -2060,7 +2518,7 @@ std::shared_ptr<syntax::SyntaxTree> ServerDriver::resumeScopeLibrary(
                                  *m_syntaxInputFailure);
     if (m_trustedScopes)
         (void)trustedLibrarySourceContext(URI{});
-    if (!m_trustedScopes || !m_scopePrefix || nativeReplay ||
+    if (!m_trustedScopes || nativeReplay ||
         !std::ranges::equal(paths, m_scopeRoots) || buffers.size() < m_scopeRootCount)
         return {};
     // Dependencies are explicitly fixed. Do not certify file contents per edit.
@@ -2072,7 +2530,12 @@ std::shared_ptr<syntax::SyntaxTree> ServerDriver::resumeScopeLibrary(
     const auto syntaxBudget = uint64_t(m_config.syntaxPrefixCacheMaxMiB.value()) * 1024 * 1024;
     const bool probeEnabled = m_config.experimentalSyntaxPrefixCache.value() &&
                               isCooperativeAnalysisEnabled() && syntaxBudget != 0;
-    const auto baseSyntaxBytes = m_scopePrefix->getRetainedSyntaxBytes();
+    if (!prefix) {
+        const auto pp = parseOptions.get<parsing::PreprocessorOptions>();
+        if (!probeEnabled || (pp && (pp->bufferChangeCB || !pp->keywordMapping.empty())))
+            return {};
+    }
+    const auto baseSyntaxBytes = prefix ? prefix->getRetainedSyntaxBytes() : 0;
     UvmPhaseTrace probe(probeEnabled);
     auto check = [&] {
         if (const auto* pp = parseOptions.get<parsing::PreprocessorOptions>();
@@ -2096,9 +2559,33 @@ std::shared_ptr<syntax::SyntaxTree> ServerDriver::resumeScopeLibrary(
         }
         if (m_syntaxPrefix || m_pendingSyntaxPrefix) {
             std::vector<std::filesystem::path> overlays;
-            for (const auto& uri : m_openDocs)
-                overlays.emplace_back(uri.getPath());
-            if (auto failure = sm.sourceWitnessFailure(overlays, check)) {
+            for (const auto& uri : m_openDocs) {
+                if (auto doc = docs.find(uri); doc != docs.end())
+                    overlays.push_back(sm.getFullPath(doc->second->getBuffer()));
+            }
+            auto failure = sm.sourceWitnessFailure(overlays, check);
+            // An independent prefix can include any ordered source root.
+            // Revalidate the original source-loader selection as well as the
+            // physical source and command-file reads recorded by SourceManager.
+            if (!m_scopePrefix && !failure)
+                failure = driver.sourceLoader.inputWitnessFailure(overlays, check);
+            if (!m_scopePrefix && !failure) {
+                for (const auto& input : m_config.inputSources.value()) {
+                    check();
+                    std::error_code error;
+                    auto status = std::filesystem::status(input.path, error);
+                    if (!input.bytes && error == std::errc::no_such_file_or_directory)
+                        continue;
+                    SmallVector<char> bytes;
+                    if (input.bytes && !error && std::filesystem::is_regular_file(status) &&
+                        !OS::readFile(input.path, bytes) && !bytes.empty() &&
+                        std::string_view(bytes.data(), bytes.size() - 1) == *input.bytes)
+                        continue;
+                    failure = "configuration input changed: " + input.path;
+                    break;
+                }
+            }
+            if (failure) {
                 ++m_syntaxPrefixWitnessFailures;
                 m_syntaxPrefix.reset();
                 m_syntaxPrefixBytes = 0;
@@ -2120,14 +2607,13 @@ std::shared_ptr<syntax::SyntaxTree> ServerDriver::resumeScopeLibrary(
         if (m_pendingSyntaxPrefix) {
             check();
             auto candidate = syntax::SyntaxTree::preparedSourcePrefix(m_pendingSyntaxPrefix);
-            const auto baseBytes = m_scopePrefix->getRetainedSyntaxBytes();
             const auto bytes = candidate ? candidate->getRetainedSyntaxBytes() : 0;
-            if (candidate && candidate->isPrefixResumeSafe().value_or(false) && bytes >= baseBytes &&
-                bytes - baseBytes <= syntaxBudget) {
+            if (candidate && candidate->isPrefixResumeSafe().value_or(false) &&
+                bytes >= baseSyntaxBytes && bytes - baseSyntaxBytes <= syntaxBudget) {
                 ctx.checkpoint("before syntax prefix cache commit");
                 check();
                 m_syntaxPrefix = std::move(candidate);
-                m_syntaxPrefixBytes = bytes - baseBytes;
+                m_syntaxPrefixBytes = bytes - baseSyntaxBytes;
                 m_syntaxPrefixRoots = m_pendingSyntaxRoots;
                 m_syntaxDeclinedInputs.clear();
                 m_syntaxDeclinedRoots = 0;
@@ -2201,19 +2687,33 @@ std::shared_ptr<syntax::SyntaxTree> ServerDriver::resumeScopeLibrary(
                 captureCount = earliest - rootCount;
         }
     }
-    auto suffixOptions = parseOptions;
-    auto pp = suffixOptions.getOrDefault<parsing::PreprocessorOptions>();
-    pp.predefines.clear();
-    pp.undefines.clear();
-    suffixOptions.set(pp);
-    auto suffix = captureCount
-                      ? syntax::SyntaxTree::afterCachedPrefixWithCheckpoint(
-                            prefix, buffers.subspan(rootCount), captureCount, suffixOptions)
-                      : syntax::SyntaxTree::afterCachedPrefix(prefix, buffers.subspan(rootCount),
-                                                             suffixOptions);
-    probe.mark("captured-prefix-required-parse");
-    auto tree = syntax::SyntaxTree::withCachedPrefixOwnedSuffix(prefix, std::move(suffix));
-    probe.mark("captured-prefix-compose");
+    std::shared_ptr<syntax::SyntaxTree> tree;
+    if (prefix) {
+        auto suffixOptions = parseOptions;
+        auto pp = suffixOptions.getOrDefault<parsing::PreprocessorOptions>();
+        pp.predefines.clear();
+        pp.undefines.clear();
+        if (auto compiled = parseOptions.get<syntax::PrecompiledUvmSyntax>();
+            compiled && compiled->forbidSourceParsing)
+            pp.precompiledSourceRoot = compiled->root;
+        suffixOptions.set(pp);
+        auto suffix = captureCount
+                          ? syntax::SyntaxTree::afterCachedPrefixWithCheckpoint(
+                                prefix, buffers.subspan(rootCount), captureCount, suffixOptions)
+                          : syntax::SyntaxTree::afterCachedPrefix(
+                                prefix, buffers.subspan(rootCount), suffixOptions);
+        probe.mark("captured-prefix-required-parse");
+        tree = syntax::SyntaxTree::withCachedPrefixOwnedSuffix(prefix, std::move(suffix));
+        probe.mark("captured-prefix-compose");
+    }
+    else if (captureCount) {
+        tree = syntax::SyntaxTree::fromBuffersWithCheckpoint(buffers, sm, parseOptions,
+                                                            captureCount);
+        probe.mark("captured-prefix-required-parse");
+    }
+    else {
+        return {};
+    }
     if (captureCount) {
         check();
         // This tree is already required by the current analysis. Retain the
@@ -2241,7 +2741,8 @@ std::shared_ptr<syntax::SyntaxTree> ServerDriver::resumeScopeLibrary(
             probe.mark("captured-prefix-budget-refusal");
         }
     }
-    ++m_scopeResumes;
+    if (prefix)
+        ++m_scopeResumes;
     return tree;
 }
 

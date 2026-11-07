@@ -8,6 +8,11 @@
 #include <fstream>
 #include <iterator>
 
+#include "slang/ast/ASTDiagMap.h"
+#include "slang/ast/symbols/ClassSymbols.h"
+#include "slang/ast/symbols/InstanceSymbols.h"
+#include "slang/ast/symbols/MemberSymbols.h"
+#include "slang/ast/types/TypePrinter.h"
 #include "slang/diagnostics/CompilationDiags.h"
 #include "slang/diagnostics/ExpressionsDiags.h"
 #include "slang/diagnostics/LookupDiags.h"
@@ -838,6 +843,80 @@ module top;
         CHECK(type->getCanonicalType().name == fmt::format("C{:02}", i));
         CHECK(std::get<std::string>(diagnostics[i].args.back()) == (i % 2 ? "fail" : "succeed"));
     }
+}
+
+TEST_CASE("Equivalent generic warning occurrences do not depend on binding order",
+          "[generic-diagnostic-parity]") {
+    slang::SourceManager sources;
+    slang::ast::Compilation compilation;
+    compilation.addSyntaxTree(slang::syntax::SyntaxTree::fromText(R"(
+package stable;
+    class Slot #(int W=1);
+        typedef logic [W-1:0] word_t;
+    endclass
+endpackage
+module top;
+    stable::Slot#(32) first;
+    stable::Slot#(64) second;
+endmodule
+)",
+                                                                  sources));
+    REQUIRE(compilation.getAllDiagnostics().empty());
+    auto& body = compilation.getRoot().topInstances.front()->body;
+    auto warning = [&](std::string_view name) {
+        const auto& specialization =
+            body.find(name)->as<slang::ast::VariableSymbol>().getType().as<slang::ast::ClassType>();
+        const auto& type = specialization.find("word_t")->as<slang::ast::Type>();
+        slang::Diagnostic result(specialization, slang::diag::SignCompare,
+                                 specialization.genericClass->location);
+        result << compilation.getIntType() << type;
+        return result;
+    };
+    auto present = [&](bool reverse) {
+        slang::ast::ASTDiagMap map;
+        bool isNew;
+        map.add(warning(reverse ? "second" : "first"), isNew);
+        map.add(warning(reverse ? "first" : "second"), isNew);
+        auto diagnostics = map.coalesce(&sources, &compilation);
+        REQUIRE(diagnostics.size() == 1);
+        CHECK_FALSE(diagnostics.front().coalesceCount);
+        return slang::DiagnosticEngine(sources).formatMessage(diagnostics.front());
+    };
+    CHECK(present(false) == present(true));
+}
+
+TEST_CASE("Generic diagnostics show the concrete typedef through a forwarded type parameter",
+          "[generic-diagnostic-parity]") {
+    auto diagnostic = [](bool forwarded) {
+        slang::SourceManager sources;
+        slang::ast::Compilation compilation;
+        const std::string library = R"(
+package stable;
+    typedef logic [7:0] word_t;
+    class Sequence #(type T=word_t); endclass
+    class Relay #(type K=word_t);
+        typedef Sequence#(K) sequence_t;
+    endclass
+endpackage
+module top;
+)";
+        const std::string declaration = forwarded
+                                            ? "stable::Relay#(stable::word_t)::sequence_t value;"
+                                            : "stable::Sequence#(stable::word_t) value;";
+        compilation.addSyntaxTree(
+            slang::syntax::SyntaxTree::fromText(library + declaration + "\nendmodule\n", sources));
+        REQUIRE(compilation.getAllDiagnostics().empty());
+        const auto& body = compilation.getRoot().topInstances.front()->body;
+        const auto& type =
+            body.find("value")->as<slang::ast::VariableSymbol>().getType().getCanonicalType();
+        REQUIRE(type.kind == slang::ast::SymbolKind::ClassType);
+        slang::Diagnostic result(slang::diag::DynamicCastConst, type.location);
+        result << type << compilation.getIntType() << std::string("fail");
+        return slang::DiagnosticEngine(sources).formatMessage(result);
+    };
+    const auto direct = diagnostic(false);
+    CHECK(direct.find("word_t") != std::string::npos);
+    CHECK(diagnostic(true) == direct);
 }
 
 TEST_CASE("Diagnostic deltas retain every visible field and document version",
