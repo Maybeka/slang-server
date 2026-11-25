@@ -1,0 +1,635 @@
+{
+  "base": "cc75fe1e6fedba2f1d00ace9eb16c4fd8192c117",
+  "candidate": "cda74b554f98ed8fca6b3542874a3e65b0294a1b",
+  "platform": "27.2 arm64",
+  "sdk": "1130e4d42f799d2915b3253dfa9ff429f8cd3e14",
+  "scope": "Nine stdio LSP regressions failed before the change and passed afterwards. Clean acceptance excludes pre-existing local cache-default edits. Paired timings use the same local defaults in both binaries, both semantic and prefix cache budgets unlimited.",
+  "measurement": "Three new processes per arm per version, alternating version order across trials. Native and combined use identical HDL, filelist, indexing and analysis scheduling. Each sequence waits for the edited document version. Startup is launch to initial hover. First and body show edit dispatch to hover and edited-document diagnostics. Body is median of edits 1\u20136. Structural is diagnostics after a declaration change. Peak is the largest sampled lifetime physical footprint for that process. Reported timings are medians of trial summaries, in ms. OS caches may be warm.",
+  "processes": 36,
+  "statesPerProcess": 15,
+  "measuredProcessStates": 540,
+  "arms": {
+    "native": "ordinary full analysis with scope, UVM and method-body cache experiments off",
+    "combined": "scope and UVM semantic reuse as configured for each case, syntax prefix reuse and method-body query/diagnostic certification"
+  },
+  "codeTree": "b151e8b2aa802d6c89e72d9f6e0b5d24663bef53",
+  "sharedLocalCodeOverridesSha256": "4346586c4dd3ce28053a79050ae29086603806f268545c085227a6c6f235fdc3",
+  "testDriver": "tests/large_dv/run.py --scenario real-edit --arms native,combined --repeats 1; three process pairs per case. aggregate filelist digest is SHA256(json.dumps(sorted(filelist content SHA256 values))).",
+  "acceptance": {
+    "cleanCTest": 1109,
+    "workingCTest": 1110,
+    "pythonSystemAndMethodScope": 26,
+    "transport": 43,
+    "editorCasesFailingBeforeAndPassingAfter": 9,
+    "methodPublicOracle": "passed",
+    "methodParserCounts": "passed",
+    "obsoleteDiagnosticPublications": 0
+  },
+  "cases": {
+    "cva6-uvm": {
+      "filelistContentsDigest": "1110a4409fc6e27a504396e962c23a5de34df8cd6cc5673a051c99ba39817e70",
+      "sourceFileSha256": "6c2ecbefd33ef844ecbbe63d7282d37406714d9c18ef52711337e760141668cb",
+      "freeze": {
+        "packages": [
+          "uvm_pkg"
+        ],
+        "instances": [
+          "uvmt_cva6_tb.cva6_dut_wrap.cva6_tb_wrapper_i.i_cva6"
+        ]
+      },
+      "baselineBinarySha256": "93238e5c38d06cd413b1cabbd310b1011fd032b75ca79ae35eda591f931ac18e",
+      "combinedReuseAcross15States": {
+        "prepared": 2,
+        "original-model-local-update": 10,
+        "body-import": 3
+      },
+      "initialDiagnostics": {
+        "errors": 164,
+        "warnings": 23315
+      },
+      "errorDiagnostics": {
+        "errors": 165,
+        "warnings": 23315
+      },
+      "repairDiagnostics": {
+        "errors": 164,
+        "warnings": 23315
+      },
+      "baseline": {
+        "native": {
+          "median": {
+            "startup": 3282.12,
+            "firstHover": 1092.11,
+            "firstDiag": 1689.81,
+            "bodyHover": 1093.55,
+            "bodyDiag": 1680.83,
+            "structuralDiag": 1660.22,
+            "peakMiB": 828.3
+          },
+          "trials": [
+            {
+              "startup": 3445.02,
+              "firstHover": 1081.88,
+              "firstDiag": 1680.72,
+              "bodyHover": 1094.08,
+              "bodyDiag": 1680.83,
+              "structuralDiag": 1660.22,
+              "peakMiB": 849.24
+            },
+            {
+              "startup": 3267.11,
+              "firstHover": 1113.39,
+              "firstDiag": 1717.35,
+              "bodyHover": 1093.55,
+              "bodyDiag": 1691.72,
+              "structuralDiag": 1656.17,
+              "peakMiB": 824.92
+            },
+            {
+              "startup": 3282.12,
+              "firstHover": 1092.11,
+              "firstDiag": 1689.81,
+              "bodyHover": 1087.22,
+              "bodyDiag": 1680.3,
+              "structuralDiag": 1665.44,
+              "peakMiB": 828.3
+            }
+          ]
+        },
+        "combined": {
+          "median": {
+            "startup": 2882.03,
+            "firstHover": 28.64,
+            "firstDiag": 47.28,
+            "bodyHover": 6.49,
+            "bodyDiag": 11.76,
+            "structuralDiag": 892.65,
+            "peakMiB": 1228.58
+          },
+          "trials": [
+            {
+              "startup": 2873.55,
+              "firstHover": 27.73,
+              "firstDiag": 46.82,
+              "bodyHover": 6.49,
+              "bodyDiag": 11.76,
+              "structuralDiag": 892.65,
+              "peakMiB": 1227.85
+            },
+            {
+              "startup": 2918.13,
+              "firstHover": 29.09,
+              "firstDiag": 48.37,
+              "bodyHover": 6.56,
+              "bodyDiag": 11.99,
+              "structuralDiag": 889.81,
+              "peakMiB": 1229.66
+            },
+            {
+              "startup": 2882.03,
+              "firstHover": 28.64,
+              "firstDiag": 47.28,
+              "bodyHover": 6.48,
+              "bodyDiag": 11.71,
+              "structuralDiag": 909.09,
+              "peakMiB": 1228.58
+            }
+          ]
+        }
+      },
+      "candidateBinarySha256": "39e3d69fe4a209e8c4fd6c51a851cd0b6eec4361e7ea76b89363be91e5b9b9ee",
+      "candidate": {
+        "native": {
+          "median": {
+            "startup": 3282.82,
+            "firstHover": 1089.79,
+            "firstDiag": 1687.56,
+            "bodyHover": 1085.71,
+            "bodyDiag": 1667.76,
+            "structuralDiag": 1658.7,
+            "peakMiB": 848.89
+          },
+          "trials": [
+            {
+              "startup": 4132.33,
+              "firstHover": 1089.79,
+              "firstDiag": 1687.32,
+              "bodyHover": 1085.71,
+              "bodyDiag": 1661.37,
+              "structuralDiag": 1665.55,
+              "peakMiB": 848.89
+            },
+            {
+              "startup": 3254.36,
+              "firstHover": 1089.57,
+              "firstDiag": 1687.56,
+              "bodyHover": 1083.4,
+              "bodyDiag": 1667.76,
+              "structuralDiag": 1656.33,
+              "peakMiB": 851.7
+            },
+            {
+              "startup": 3282.82,
+              "firstHover": 1102.91,
+              "firstDiag": 1706.42,
+              "bodyHover": 1088.25,
+              "bodyDiag": 1670.72,
+              "structuralDiag": 1658.7,
+              "peakMiB": 844.39
+            }
+          ]
+        },
+        "combined": {
+          "median": {
+            "startup": 2848.58,
+            "firstHover": 27.24,
+            "firstDiag": 46.16,
+            "bodyHover": 6.45,
+            "bodyDiag": 11.65,
+            "structuralDiag": 887.64,
+            "peakMiB": 1229.58
+          },
+          "trials": [
+            {
+              "startup": 2848.58,
+              "firstHover": 28.38,
+              "firstDiag": 47.17,
+              "bodyHover": 6.5,
+              "bodyDiag": 11.78,
+              "structuralDiag": 887.64,
+              "peakMiB": 1228.99
+            },
+            {
+              "startup": 2881.21,
+              "firstHover": 27.02,
+              "firstDiag": 46.16,
+              "bodyHover": 6.45,
+              "bodyDiag": 11.65,
+              "structuralDiag": 887.59,
+              "peakMiB": 1230.33
+            },
+            {
+              "startup": 2827.88,
+              "firstHover": 27.24,
+              "firstDiag": 46.1,
+              "bodyHover": 6.39,
+              "bodyDiag": 11.61,
+              "structuralDiag": 915.23,
+              "peakMiB": 1229.58
+            }
+          ]
+        }
+      },
+      "verifiedStatesPerProcess": 15,
+      "publicStateSetSha256": "a0a378aa759e49094a33d8c6553d137c46ef973b0abb036d52afcefeafdeef30",
+      "nativePeakMiBByCheckpoint": {
+        "baseline": {
+          "body-6": 599.8,
+          "close-reopen": 599.8,
+          "manual-rebuild": 828.3
+        },
+        "candidate": {
+          "body-6": 602.09,
+          "close-reopen": 602.09,
+          "manual-rebuild": 848.89
+        }
+      }
+    },
+    "opentitan-soc-large": {
+      "filelistContentsDigest": "3a1d3b1f3850ec642b435b43fd145ef90629b7c2c43624b9a8f4141f0ade6364",
+      "sourceFileSha256": "6eb2b0450eb3def9064146425f38d56e4953484ad09853d2bf148ce2472010df",
+      "freeze": {
+        "packages": [
+          "top_pkg",
+          "prim_util_pkg"
+        ]
+      },
+      "baselineBinarySha256": "93238e5c38d06cd413b1cabbd310b1011fd032b75ca79ae35eda591f931ac18e",
+      "combinedReuseAcross15States": {
+        "prepared": 2,
+        "package-import": 13
+      },
+      "initialDiagnostics": {
+        "errors": 2,
+        "warnings": 22394
+      },
+      "errorDiagnostics": {
+        "errors": 3,
+        "warnings": 22394
+      },
+      "repairDiagnostics": {
+        "errors": 2,
+        "warnings": 22394
+      },
+      "baseline": {
+        "native": {
+          "median": {
+            "startup": 2094.05,
+            "firstHover": 694.71,
+            "firstDiag": 1330.43,
+            "bodyHover": 673.13,
+            "bodyDiag": 1297.34,
+            "structuralDiag": 1261.81,
+            "peakMiB": 1540.03
+          },
+          "trials": [
+            {
+              "startup": 2145.32,
+              "firstHover": 699.99,
+              "firstDiag": 1334.6,
+              "bodyHover": 673.13,
+              "bodyDiag": 1297.34,
+              "structuralDiag": 1261.81,
+              "peakMiB": 1543.21
+            },
+            {
+              "startup": 2094.05,
+              "firstHover": 694.38,
+              "firstDiag": 1330.43,
+              "bodyHover": 676.16,
+              "bodyDiag": 1307.38,
+              "structuralDiag": 1256.82,
+              "peakMiB": 1539.86
+            },
+            {
+              "startup": 2090.3,
+              "firstHover": 694.71,
+              "firstDiag": 1324.51,
+              "bodyHover": 669.39,
+              "bodyDiag": 1292.46,
+              "structuralDiag": 1272.0,
+              "peakMiB": 1540.03
+            }
+          ]
+        },
+        "combined": {
+          "median": {
+            "startup": 2158.09,
+            "firstHover": 40.53,
+            "firstDiag": 68.74,
+            "bodyHover": 16.79,
+            "bodyDiag": 31.91,
+            "structuralDiag": 1460.64,
+            "peakMiB": 1575.47
+          },
+          "trials": [
+            {
+              "startup": 2160.29,
+              "firstHover": 40.53,
+              "firstDiag": 67.29,
+              "bodyHover": 16.57,
+              "bodyDiag": 31.65,
+              "structuralDiag": 1460.64,
+              "peakMiB": 1575.05
+            },
+            {
+              "startup": 2158.09,
+              "firstHover": 40.26,
+              "firstDiag": 68.74,
+              "bodyHover": 16.79,
+              "bodyDiag": 32.03,
+              "structuralDiag": 1468.63,
+              "peakMiB": 1575.47
+            },
+            {
+              "startup": 2128.89,
+              "firstHover": 44.32,
+              "firstDiag": 70.31,
+              "bodyHover": 16.82,
+              "bodyDiag": 31.91,
+              "structuralDiag": 1428.4,
+              "peakMiB": 1575.88
+            }
+          ]
+        }
+      },
+      "candidateBinarySha256": "39e3d69fe4a209e8c4fd6c51a851cd0b6eec4361e7ea76b89363be91e5b9b9ee",
+      "candidate": {
+        "native": {
+          "median": {
+            "startup": 2061.24,
+            "firstHover": 700.1,
+            "firstDiag": 1329.2,
+            "bodyHover": 681.57,
+            "bodyDiag": 1304.49,
+            "structuralDiag": 1255.4,
+            "peakMiB": 1540.97
+          },
+          "trials": [
+            {
+              "startup": 2069.77,
+              "firstHover": 700.1,
+              "firstDiag": 1329.2,
+              "bodyHover": 681.57,
+              "bodyDiag": 1304.49,
+              "structuralDiag": 1257.35,
+              "peakMiB": 1540.6
+            },
+            {
+              "startup": 2061.24,
+              "firstHover": 725.98,
+              "firstDiag": 1365.64,
+              "bodyHover": 692.46,
+              "bodyDiag": 1335.89,
+              "structuralDiag": 1251.47,
+              "peakMiB": 1540.97
+            },
+            {
+              "startup": 2042.21,
+              "firstHover": 690.72,
+              "firstDiag": 1318.83,
+              "bodyHover": 668.62,
+              "bodyDiag": 1297.45,
+              "structuralDiag": 1255.4,
+              "peakMiB": 1544.47
+            }
+          ]
+        },
+        "combined": {
+          "median": {
+            "startup": 2127.77,
+            "firstHover": 40.3,
+            "firstDiag": 66.81,
+            "bodyHover": 16.77,
+            "bodyDiag": 31.87,
+            "structuralDiag": 1394.63,
+            "peakMiB": 1577.63
+          },
+          "trials": [
+            {
+              "startup": 2127.77,
+              "firstHover": 45.01,
+              "firstDiag": 71.29,
+              "bodyHover": 16.77,
+              "bodyDiag": 31.87,
+              "structuralDiag": 1392.74,
+              "peakMiB": 1577.63
+            },
+            {
+              "startup": 2104.37,
+              "firstHover": 40.3,
+              "firstDiag": 66.81,
+              "bodyHover": 16.83,
+              "bodyDiag": 31.92,
+              "structuralDiag": 1394.63,
+              "peakMiB": 1577.39
+            },
+            {
+              "startup": 2161.07,
+              "firstHover": 40.11,
+              "firstDiag": 66.68,
+              "bodyHover": 16.74,
+              "bodyDiag": 31.82,
+              "structuralDiag": 1395.2,
+              "peakMiB": 1577.64
+            }
+          ]
+        }
+      },
+      "verifiedStatesPerProcess": 15,
+      "publicStateSetSha256": "29c23b9af944ad892a8c29899512334a5e1f628feb453853351835e9fcc80656"
+    },
+    "opentitan-usbdev": {
+      "filelistContentsDigest": "d2b7822485a21755ab310989856581dad6ccd6e9ae541154eb305d489b7f24b3",
+      "sourceFileSha256": "79a2a475e734cccb8fd00162f171a80b652843d8033abcc7707327da9368f562",
+      "freeze": {
+        "instances": [
+          "tb.dut"
+        ],
+        "packages": [
+          "uvm_pkg"
+        ]
+      },
+      "baselineBinarySha256": "93238e5c38d06cd413b1cabbd310b1011fd032b75ca79ae35eda591f931ac18e",
+      "combinedReuseAcross15States": {
+        "prepared": 2,
+        "original-model-local-update": 10,
+        "body-import": 3
+      },
+      "initialDiagnostics": {
+        "errors": 0,
+        "warnings": 10600
+      },
+      "errorDiagnostics": {
+        "errors": 1,
+        "warnings": 10600
+      },
+      "repairDiagnostics": {
+        "errors": 0,
+        "warnings": 10600
+      },
+      "baseline": {
+        "native": {
+          "median": {
+            "startup": 5293.27,
+            "firstHover": 2325.98,
+            "firstDiag": 2513.42,
+            "bodyHover": 2344.87,
+            "bodyDiag": 2529.52,
+            "structuralDiag": 2517.95,
+            "peakMiB": 579.27
+          },
+          "trials": [
+            {
+              "startup": 5293.27,
+              "firstHover": 2325.98,
+              "firstDiag": 2513.42,
+              "bodyHover": 2321.18,
+              "bodyDiag": 2502.94,
+              "structuralDiag": 2515.58,
+              "peakMiB": 579.06
+            },
+            {
+              "startup": 5308.5,
+              "firstHover": 2325.19,
+              "firstDiag": 2512.87,
+              "bodyHover": 2356.42,
+              "bodyDiag": 2543.85,
+              "structuralDiag": 2517.95,
+              "peakMiB": 579.27
+            },
+            {
+              "startup": 5257.37,
+              "firstHover": 2328.81,
+              "firstDiag": 2517.75,
+              "bodyHover": 2344.87,
+              "bodyDiag": 2529.52,
+              "structuralDiag": 2536.32,
+              "peakMiB": 579.78
+            }
+          ]
+        },
+        "combined": {
+          "median": {
+            "startup": 2678.66,
+            "firstHover": 15.61,
+            "firstDiag": 27.37,
+            "bodyHover": 4.75,
+            "bodyDiag": 8.26,
+            "structuralDiag": 298.64,
+            "peakMiB": 698.55
+          },
+          "trials": [
+            {
+              "startup": 2678.66,
+              "firstHover": 15.61,
+              "firstDiag": 27.18,
+              "bodyHover": 4.67,
+              "bodyDiag": 8.17,
+              "structuralDiag": 298.64,
+              "peakMiB": 698.55
+            },
+            {
+              "startup": 2665.1,
+              "firstHover": 15.83,
+              "firstDiag": 27.45,
+              "bodyHover": 4.75,
+              "bodyDiag": 8.38,
+              "structuralDiag": 299.67,
+              "peakMiB": 699.13
+            },
+            {
+              "startup": 2721.89,
+              "firstHover": 15.6,
+              "firstDiag": 27.37,
+              "bodyHover": 4.75,
+              "bodyDiag": 8.26,
+              "structuralDiag": 298.36,
+              "peakMiB": 697.92
+            }
+          ]
+        }
+      },
+      "candidateBinarySha256": "39e3d69fe4a209e8c4fd6c51a851cd0b6eec4361e7ea76b89363be91e5b9b9ee",
+      "candidate": {
+        "native": {
+          "median": {
+            "startup": 5274.1,
+            "firstHover": 2339.23,
+            "firstDiag": 2528.99,
+            "bodyHover": 2338.93,
+            "bodyDiag": 2528.82,
+            "structuralDiag": 2509.63,
+            "peakMiB": 578.89
+          },
+          "trials": [
+            {
+              "startup": 5266.77,
+              "firstHover": 2339.23,
+              "firstDiag": 2528.99,
+              "bodyHover": 2338.93,
+              "bodyDiag": 2528.82,
+              "structuralDiag": 2518.53,
+              "peakMiB": 578.89
+            },
+            {
+              "startup": 5274.1,
+              "firstHover": 2383.28,
+              "firstDiag": 2572.55,
+              "bodyHover": 2357.66,
+              "bodyDiag": 2544.84,
+              "structuralDiag": 2500.07,
+              "peakMiB": 578.24
+            },
+            {
+              "startup": 5301.63,
+              "firstHover": 2324.37,
+              "firstDiag": 2514.52,
+              "bodyHover": 2320.49,
+              "bodyDiag": 2505.66,
+              "structuralDiag": 2509.63,
+              "peakMiB": 579.75
+            }
+          ]
+        },
+        "combined": {
+          "median": {
+            "startup": 2694.73,
+            "firstHover": 15.95,
+            "firstDiag": 27.64,
+            "bodyHover": 4.69,
+            "bodyDiag": 8.2,
+            "structuralDiag": 300.27,
+            "peakMiB": 697.03
+          },
+          "trials": [
+            {
+              "startup": 2744.14,
+              "firstHover": 15.73,
+              "firstDiag": 27.29,
+              "bodyHover": 4.66,
+              "bodyDiag": 8.15,
+              "structuralDiag": 300.27,
+              "peakMiB": 698.95
+            },
+            {
+              "startup": 2661.12,
+              "firstHover": 16.09,
+              "firstDiag": 28.17,
+              "bodyHover": 4.88,
+              "bodyDiag": 8.48,
+              "structuralDiag": 304.58,
+              "peakMiB": 696.75
+            },
+            {
+              "startup": 2694.73,
+              "firstHover": 15.95,
+              "firstDiag": 27.64,
+              "bodyHover": 4.69,
+              "bodyDiag": 8.2,
+              "structuralDiag": 296.39,
+              "peakMiB": 697.03
+            }
+          ]
+        }
+      },
+      "verifiedStatesPerProcess": 15,
+      "publicStateSetSha256": "ab8e3e3d0b8b9b6a2acc83138d247e96a30e66865ece626aeb9df1cd75ac262a"
+    }
+  },
+  "conclusions": [
+    "All 15 public hover and diagnostic state hashes match across baseline, candidate, repetitions and both arms in each project. Reuse paths also match on every repetition.",
+    "Combined median body-edit hover and versioned diagnostics are stable across all three projects. The largest increase in combined lifetime peak physical footprint is 2.16 MiB (OpenTitan SoC).",
+    "In the native CVA6 control the median lifetime peak rises from 828.30 to 848.89 MiB at manual rebuild. The pre-rebuild edit and reopen checkpoints are recorded separately."
+  ]
+}
