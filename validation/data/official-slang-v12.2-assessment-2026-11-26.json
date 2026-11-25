@@ -1,0 +1,273 @@
+{
+  "date": "2026-11-26",
+  "platform": "macOS arm64",
+  "server_main": "97260665f39f13a5effdc619ede03c8effaf0fc1",
+  "official_base": "31a29606b5fb7a50a68bd07fddef4458abd83f53",
+  "candidate_tag": "v12.2",
+  "candidate_commit": "1130e4d42f799d2915b3253dfa9ff429f8cd3e14",
+  "sha256": {
+    "official_release_archive": "30ff30545de1693a3f1dd756c716f227b1828c7f89c5f2e4b69d7f79e615ab77",
+    "official_release_cli": "e36288db231127ad0844726b3b52fad89f36e2dea3ec99655375faab3cc46d29",
+    "local_cli": "61082a2aa6caf29d1b1cfd86b58cbec281516676e1b5f096ce741f93f258572b",
+    "local_server": "3f5d8012888f51bbc5bac81f2284c6ff2df3dac3f86e956e7ec0f66c052431e6"
+  },
+  "local_server_build": "Existing Mac build including working tree performance defaults.",
+  "patch_trial": {
+    "official_commits": 122,
+    "official_changed_files": 171,
+    "patch_files": 119,
+    "overlapping_paths": 47,
+    "direct_application_rejections": [
+      "bindings/python/TypeBindings.cpp",
+      "include/slang/ast/Compilation.h",
+      "source/CMakeLists.txt",
+      "source/analysis/AnalysisManager.cpp",
+      "source/ast/Compilation.cpp",
+      "source/ast/DefParamResolver.cpp",
+      "source/ast/ElabVisitors.h",
+      "source/ast/Expression.cpp",
+      "source/ast/Scope.cpp",
+      "source/ast/types/Type.cpp",
+      "source/text/SourceManager.cpp",
+      "tests/unittests/FileTests.cpp",
+      "tests/unittests/ast/HierarchyTests.cpp",
+      "tests/unittests/ast/TypeTests.cpp",
+      "tests/unittests/parsing/PreprocessorTests.cpp",
+      "tests/unittests/parsing/VisitorTests.cpp"
+    ],
+    "three_way_conflicts": [
+      "source/analysis/AnalysisManager.cpp",
+      "source/ast/Compilation.cpp",
+      "source/ast/DefParamResolver.cpp",
+      "source/ast/ElabVisitors.h",
+      "source/text/SourceManager.cpp",
+      "tests/unittests/FileTests.cpp",
+      "tests/unittests/ast/HierarchyTests.cpp",
+      "tests/unittests/parsing/PreprocessorTests.cpp",
+      "tests/unittests/parsing/VisitorTests.cpp"
+    ],
+    "three_way_conflict_blocks": 10
+  },
+  "syntax_only": {
+    "candidate_sdk_and_local_server": true,
+    "fully_linked": false,
+    "compiler_option": "-fsyntax-only",
+    "passed": [
+      "sdk/source/analysis/AnalysisManager.cpp",
+      "sdk/source/ast/Compilation.cpp",
+      "sdk/source/ast/DefParamResolver.cpp",
+      "sdk/source/text/SourceManager.cpp",
+      "sdk/source/driver/SourceLoader.cpp",
+      "sdk/source/syntax/SyntaxTree.cpp",
+      "server/src/ServerDriver.cpp",
+      "server/src/document/ShallowAnalysis.cpp",
+      "server/src/ast/ServerCompilation.cpp",
+      "server/src/document/BodyDiagnosticCache.cpp",
+      "server/src/ServerDiagClient.cpp",
+      "server/src/UvmLibrary.cpp"
+    ]
+  },
+  "cli_comparison": {
+    "args": [
+      "--top",
+      "top"
+    ],
+    "cases": {
+      "export_used": {
+        "source": "package a; typedef int T; endpackage\npackage b; import a::T; export a::*; endpackage\npackage c; import b::*; export b::*; function T get(); return 1; endfunction endpackage\nmodule top; c::T value; endmodule\n",
+        "current": {
+          "exit": 1,
+          "messages": [
+            "export_used.sv:4:14: error: no member named 'T' in package 'c'"
+          ]
+        },
+        "release": {
+          "exit": 0,
+          "messages": []
+        }
+      },
+      "generate_param": {
+        "source": "module child; if (1) begin : g parameter WIDTH=8; end endmodule\nmodule top; child d(); defparam d.g.WIDTH=12; initial $display(\"%d\",d.g.WIDTH); endmodule\n",
+        "current": {
+          "exit": 1,
+          "messages": [
+            "generate_param.sv:2:33: error: 'WIDTH' is a localparam and so cannot be the target of a defparam"
+          ]
+        },
+        "release": {
+          "exit": 1,
+          "messages": [
+            "generate_param.sv:2:33: error: 'WIDTH' is a localparam and so cannot be the target of a defparam"
+          ]
+        }
+      },
+      "negative_control": {
+        "source": "module top; typedef enum logic {A,B} t; t x; initial x=1'b1; endmodule\n",
+        "current": {
+          "exit": 1,
+          "messages": [
+            "negative_control.sv:1:55: error: no implicit conversion from 'bit[0:0]' to 't'; explicit conversion exists, are you missing a cast?"
+          ]
+        },
+        "release": {
+          "exit": 1,
+          "messages": [
+            "negative_control.sv:1:55: error: no implicit conversion from 'bit[0:0]' to 't'; explicit conversion exists, are you missing a cast?"
+          ]
+        }
+      },
+      "program_param": {
+        "source": "program env; parameter WIDTH=8; endprogram\nmodule top; env tb(); initial $display(\"%d\",tb.WIDTH); endmodule\n",
+        "current": {
+          "exit": 1,
+          "messages": [
+            "program_param.sv:2:45: error: cannot reference program item from outside of a program"
+          ]
+        },
+        "release": {
+          "exit": 0,
+          "messages": []
+        }
+      },
+      "region_override": {
+        "source": "module dut; generate parameter W=4; endgenerate initial $display(\"%0d\", W); endmodule\nmodule top; dut #(.W(8)) d(); endmodule\n",
+        "current": {
+          "exit": 1,
+          "messages": [
+            "region_override.sv:2:20: error: parameter 'W' does not exist in 'dut' [-Wundefined-param-override]"
+          ]
+        },
+        "release": {
+          "exit": 0,
+          "messages": []
+        }
+      },
+      "region_param": {
+        "source": "module dut; generate parameter W=4; endgenerate endmodule\nmodule top; dut d(); defparam d.W=8; endmodule\n",
+        "current": {
+          "exit": 1,
+          "messages": [
+            "region_param.sv:2:31: error: 'W' is a localparam and so cannot be the target of a defparam"
+          ]
+        },
+        "release": {
+          "exit": 0,
+          "messages": []
+        }
+      },
+      "signed_select": {
+        "source": "module top; typedef logic signed [7:0] byte_s; localparam byte_s VALUE = -1;\n$static_assert((VALUE[7:4] > 0), \"part-select should be unsigned\");\nendmodule\n",
+        "current": {
+          "exit": 1,
+          "messages": [
+            "signed_select.sv:2:1: error: static assertion failed: part-select should be unsigned"
+          ]
+        },
+        "release": {
+          "exit": 0,
+          "messages": []
+        }
+      },
+      "transitive_export": {
+        "source": "package leaf; typedef int payload_t; endpackage\npackage mid; import leaf::*; export leaf::*; endpackage\npackage lib; import mid::*; export mid::*; endpackage\nmodule top; lib::payload_t payload; endmodule\n",
+        "current": {
+          "exit": 1,
+          "messages": [
+            "transitive_export.sv:4:16: error: no member named 'payload_t' in package 'lib'"
+          ]
+        },
+        "release": {
+          "exit": 1,
+          "messages": [
+            "transitive_export.sv:4:16: error: no member named 'payload_t' in package 'lib'"
+          ]
+        }
+      }
+    }
+  },
+  "reference_review": {
+    "last_commit": "1b413a4655877a55b3f8a450c23e4ba6c2bf4267",
+    "commits": 49,
+    "with_test_changes": 39,
+    "without_test_changes": [
+      "d5116cc1ed305ffcd49c2500dc97a48563678f4d",
+      "ee1d88e1c0c013c41c5d78a288ec6630f963ad40",
+      "2ad996ffb7388e4f231736609e9d91f87d9efedb",
+      "a13a247be27b196f113d81940c8f388c8129cd2c",
+      "cdbbfd15f73bb64015467e0a77c6a4d1b5992b62",
+      "71f4dfabaaba941223165ea631cc20fa2f1c094b",
+      "9de96efe0d80103382d3d5c002194826655b6de9",
+      "b93cfb88f80e630091319a10bafda8e14a1aa55f",
+      "1ca3ef76e9c1559fc39cb11d718a3dca0f521743",
+      "ceea37a989d25900e8aced48b276d9bfc40ce980"
+    ],
+    "dispositions": {
+      "适配": 1,
+      "延后": 7,
+      "跳过": 2,
+      "候选": 18,
+      "优先验证": 13,
+      "修复": 3,
+      "只取场景": 4,
+      "可选": 1
+    }
+  },
+  "lsp_probes": {
+    "active_instance_fixture": {
+      "source": "bf2ba0a:tests/data/active_instance_member_access",
+      "observed": {
+        "design.f": {
+          "open": [],
+          "selected": true,
+          "newline": [],
+          "missing": [
+            "no member named 'valid_missing' in 'T' (aka 'item_t')"
+          ],
+          "repair": []
+        },
+        "library.f": {
+          "open": [],
+          "selected": true,
+          "newline": [],
+          "missing": [
+            "no member named 'valid_missing' in 'T' (aka 'item_t')"
+          ],
+          "repair": []
+        },
+        "standalone": {
+          "open": [
+            "invalid member access for type 'T' (aka 'logic')"
+          ],
+          "newline": [
+            "invalid member access for type 'T' (aka 'logic')"
+          ],
+          "missing": [
+            "invalid member access for type 'T' (aka 'logic')"
+          ],
+          "repair": [
+            "invalid member access for type 'T' (aka 'logic')"
+          ]
+        }
+      }
+    },
+    "editor": {
+      "unknown_request_observation": "Two successful later requests with a 250 ms interval.",
+      "observed": {
+        "inside": 2,
+        "edge": 0,
+        "space": 0,
+        "unknownRequestReplies": [],
+        "indexedTop": [
+          "top"
+        ],
+        "valid_config_control": [
+          "valid_config_control"
+        ],
+        "during_failed_reload": [],
+        "afterRepair": [
+          "during_failed_reload"
+        ]
+      }
+    }
+  }
+}

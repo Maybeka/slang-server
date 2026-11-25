@@ -6,6 +6,8 @@ The compiler comes directly from the official MikePopoloski/slang repository, pi
 
 The first feature candidates from the November review are recovery after source deletion and recreation, processing source events while the build configuration is invalid, stable document iteration during analysis, and diagnostics for active instance parameter overrides. Each starts with an editor-visible reproduction. The existing cross-file macro and save tests define this project's single-compilation-unit behavior.
 
+The [official slang v12.2 migration](official-slang-v12.2-assessment.md) records the diagnostic capture contract, patch adaptations and acceptance results. The [November 2026 reference implementation review](reference-feature-review-2026-11-26.md) records the decisions and test evidence for 49 updates.
+
 ## Version sources
 
 | Component | Project source |
