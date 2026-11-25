@@ -135,6 +135,51 @@ endmodule
     CHECK(compilation.prepareInstanceBodyReuse(a));
 }
 
+TEST_CASE("Captured diagnostics stay out of retained RTL and the next edit",
+          "[scope-semantic][certification-index]") {
+    AdmissionProvider provider("module child; logic value; endmodule");
+    SourceManager sources;
+    sources.inheritImmutablePrefix(provider.prefix);
+    auto owner = std::make_shared<Compilation>();
+    owner->enableInstanceBodyReferenceTracking(true);
+    owner->importDefinition(provider.compilation, "child", sources);
+    owner->addSyntaxTree(syntax::SyntaxTree::fromText(
+        "module top; child seed(); child dut(); endmodule", sources));
+    REQUIRE(owner->getAllDiagnostics().empty());
+    const auto& top = owner->getRoot().topInstances.front()->body;
+    REQUIRE(owner->prepareInstanceBodyReuse(top.find("seed")->as<InstanceSymbol>().body));
+    const auto& dut = top.find("dut")->as<InstanceSymbol>().body;
+    const auto indexed = owner->getBodyReuseIndexStats().diagnosticsIndexed;
+    Compilation::DiagnosticCapture outer(*owner);
+    {
+        Compilation::DiagnosticCapture inner(*owner);
+        dut.addDiag(diag::UndeclaredIdentifier, dut.location) << std::string_view("discarded");
+        // Leaving the scope without finish() must restore the outer capture.
+    }
+    dut.addDiag(diag::UndeclaredIdentifier, dut.location) << std::string_view("captured");
+    const auto captured = outer.finish();
+    REQUIRE(captured.size() == 1);
+    CHECK(std::get<std::string>(captured[0].args.front()) == "captured");
+    CHECK(owner->getIssuedErrorCount() == 0);
+    CHECK(owner->getBodyReuseIndexStats().diagnosticsIndexed == indexed);
+    REQUIRE(owner->prepareInstanceBodyReuse(dut));
+
+    Compilation edited;
+    edited.importDefinition(provider.compilation, "child", sources);
+    bool imported = false;
+    edited.setInstanceBodyReuseHooks([&](Compilation& current, InstanceBodySymbol& body) {
+        if (body.getDefinition().name == "child")
+            imported = current.tryImportInstanceBody(owner, dut, body);
+    }, {});
+    edited.addSyntaxTree(syntax::SyntaxTree::fromText("module top; child dut(); endmodule", sources));
+    CHECK(edited.getSemanticDiagnostics().empty());
+    REQUIRE(imported);
+
+    dut.addDiag(diag::UndeclaredIdentifier, dut.location) << std::string_view("ordinary");
+    CHECK(owner->getIssuedErrorCount() == 1);
+    CHECK(owner->getBodyReuseIndexStats().diagnosticsIndexed == indexed + 1);
+}
+
 TEST_CASE("Immutable origin lookup scales with projected entries and retains exact provenance",
           "[source-namespace][certification-index]") {
     const size_t count = GENERATE(16u, 256u, 2048u);

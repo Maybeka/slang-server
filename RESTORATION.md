@@ -1,15 +1,15 @@
 # Prepare the project-maintained slang SDK
 
-The `external/slang` gitlink pins commit `31a29606b5fb7a50a68bd07fddef4458abd83f53` in [the official slang repository](https://github.com/MikePopoloski/slang/commit/31a29606b5fb7a50a68bd07fddef4458abd83f53). The project maintains its compiler and editor integration in `restoration/slang.patch`. A fresh checkout needs the official repository and this project patch.
+The `external/slang` gitlink pins official release **v12.2** at `1130e4d42f799d2915b3253dfa9ff429f8cd3e14` in [the official slang repository](https://github.com/MikePopoloski/slang/commit/1130e4d42f799d2915b3253dfa9ff429f8cd3e14). The project maintains its compiler and editor integration in `restoration/slang.patch`. A fresh checkout needs the official repository and this project patch.
 
 ```sh
 git submodule update --init
 python3 restoration/prepare-main-sdk.py --apply
 ```
 
-For a previously prepared checkout, keep any local SDK work and use a fresh checkout for migration. The helper verifies the base, the patch hash and all 709 resulting SDK files. CI, local builds and UVM preparse use the same source. The [build guide](docs/start/building.md) covers offline dependencies.
+For a previously prepared checkout, keep any local SDK work and use a fresh checkout for migration. The helper verifies the base, the patch hash and all 742 resulting SDK files. CI, local builds and UVM preparse use the same source. The [build guide](docs/start/building.md) covers offline dependencies.
 
-The initial official pin is the common ancestor of the previous editor SDK. The combined patch retains Andrew Nolte's original 16 changes from `ab7f6ae08` through `151a801ce` along with this project's work. These provide source buffer updates and line mappings, parser metadata for ports and virtual interfaces, instance and type overrides, analysis queries and diagnostic recovery. This project now maintains those interfaces and their tests. The original copyrights and licenses remain with their sources.
+The initial official pin, `31a29606b`, was the common ancestor of the previous editor SDK. The combined patch retains Andrew Nolte's original 16 changes from `ab7f6ae08` through `151a801ce` along with this project's work. These provide source buffer updates and line mappings, parser metadata for ports and virtual interfaces, instance and type overrides, analysis queries and diagnostic recovery. This project now maintains those interfaces and their tests. The original copyrights and licenses remain with their sources.
 
 ## Maintain the patch
 

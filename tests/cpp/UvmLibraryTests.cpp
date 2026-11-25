@@ -7178,8 +7178,9 @@ TEST_CASE("Fixed string parameters preserve escaped bytes and detach current cal
     fixed += "assign y=NAME.len()+ITEMS[0].len()+ITEMS[1].len(); endmodule\n";
     files.write(files.root / "fixed.sv", fixed);
     const std::vector<std::string> names{"", "same", "sAme", "quotes\"\\\n\t", "\303\251",
-                                        "same", std::string(1, '\0')};
+                                        "same", ""};
     auto source = [&](int variant) {
+        // The SV string result drops a zero byte, so this override equals the empty literal.
         const auto value = variant == 6 ? "$sformatf(\"%c\",0)" : quoteSVString(names[variant]);
         return "module top; localparam string CURRENT=" + value +
                "; wire[31:0] y; stable #(.NAME(CURRENT),.ITEMS('{CURRENT," +
@@ -7219,11 +7220,14 @@ TEST_CASE("Fixed string parameters preserve escaped bytes and detach current cal
         CHECK((std::ranges::find(imported, "top.u") != imported.end()) ==
               current->isImportedInstanceBody(body));
         const auto& value = body.find("NAME")->as<ast::ParameterSymbol>();
+        const auto& nativeBody = native->getRoot().topInstances.front()->body.find("u")
+                                     ->as<ast::InstanceSymbol>().body;
+        CHECK(nativeBody.find("NAME")->as<ast::ParameterSymbol>().getValue().str() == names[variant]);
         CHECK(value.getValue().str() == names[variant]);
         CHECK(body.find("ITEMS")->as<ast::ParameterSymbol>().getValue().elements()[1].str() ==
               (variant == 5 ? "TAIL" : "tail"));
         if (previous == variant)
-            CHECK(current->isImportedInstanceBody(body) == (variant != 6));
+            CHECK(current->isImportedInstanceBody(body));
         if (current->isImportedInstanceBody(body)) {
             REQUIRE(value.getInitializer());
             CHECK_FALSE(value.getDeclaredType()->getInitializerSyntax());
