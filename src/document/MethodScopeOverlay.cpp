@@ -1139,7 +1139,7 @@ bool MethodScopeOverlay::apply(const lsp::DidChangeTextDocumentParams& p, const 
         freshSites.push_back({map(use->location().offset()), map(use->range().end().offset()),
                               map(decl->location().offset()), map(decl->range().end().offset()),
                               kind,
-                              analysis->syntaxes.getWordTokenAt(use->range().end()) != nullptr});
+                              analysis->syntaxes.getNavigationTokenAt(use->range().end()) == use});
     });
     for (auto& member : fn.members())
         if (member.kind == ast::SymbolKind::Variable && &member != fn.thisVar &&

@@ -133,6 +133,18 @@ CompletionContext CompletionContext::fromLocation(SlangDoc& doc, SourceLocation 
     for (auto* node = ctx.syntax; node; node = node->parent) {
         auto kind = node->kind;
 
+        if (auto* ref = node->as_if<TypeReferenceSyntax>();
+            ref && ref->openParen.range().end() <= loc && loc <= ref->closeParen.location()) {
+            ctx.kind = CompletionContextKind::Expression;
+            return ctx;
+        }
+        if (auto* decl = node->as_if<TypedefDeclarationSyntax>();
+            decl && decl->typedefKeyword.range().end() <= loc &&
+            loc <= decl->type->sourceRange().end()) {
+            ctx.kind = CompletionContextKind::Type;
+            return ctx;
+        }
+
         // Check for expression contexts
         if (SyntaxFacts::isAssignmentOperator(kind) || isExpressionContext(kind)) {
             ctx.kind = CompletionContextKind::Expression;

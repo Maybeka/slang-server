@@ -182,8 +182,7 @@ std::unique_ptr<CompletionQuery> CompletionQuery::fromLocation(
     }
     if (site.tokenBefore && site.tokenBefore->kind == TokenKind::Dot) {
         return completions::MemberCompletionQuery::createMemberAccess(
-            std::move(site.replacementRange),
-            analysis->syntaxes.getTokenBefore(site.tokenBefore->location()), followedByCall);
+            std::move(site.replacementRange), site.tokenBefore, followedByCall);
     }
     if (!site.targetToken && site.tokenBefore && site.tokenBefore->kind == TokenKind::Hash) {
         return completions::InstanceCompletionQuery::create(std::move(site.replacementRange),

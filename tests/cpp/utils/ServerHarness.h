@@ -380,6 +380,11 @@ protected:
     }
 };
 
+bool checkDefinitionAtWordEnd(DocumentHandle& doc, lsp::uint offset,
+                              const std::optional<server::DefinitionInfo>& info);
+bool checkReferencesAtWordEnd(ServerHarness& server, DocumentHandle& doc, lsp::uint offset,
+                              const std::optional<std::vector<lsp::Location>>& refs);
+
 class SymbolRefScanner : public DocumentScanner<server::DefinitionInfo> {
 public:
     explicit SymbolRefScanner(std::vector<lsp::uint> selectedOffsets = {}) :
@@ -391,6 +396,8 @@ protected:
     std::optional<server::DefinitionInfo> getElementAt(DocumentHandle* hdl,
                                                        lsp::uint offset) override {
         auto info = hdl->getDefinitionInfoAt(offset);
+        if (checkDefinitionAtWordEnd(*hdl, offset, info))
+            return {};
         if (!info || selectedOffsets.empty())
             return info;
 
@@ -514,6 +521,9 @@ protected:
             .textDocument = {.uri = hdl->m_uri},
             .position = *pos,
         });
+
+        if (checkReferencesAtWordEnd(m_server, *hdl, offset, refs))
+            return {};
 
         if (!refs.has_value() || refs->empty()) {
             return std::nullopt;

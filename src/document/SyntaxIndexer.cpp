@@ -254,7 +254,6 @@ int SyntaxIndexer::tokenIndexBefore(slang::SourceLocation loc) const {
 }
 
 bool SyntaxIndexer::editorContains(slang::SourceRange range, slang::SourceLocation loc) const {
-    // TODO: change this to <= since curors are typically between characters (on vscode)
     return range.start() <= loc && loc < range.end();
 }
 
@@ -281,6 +280,13 @@ const slang::parsing::Token* SyntaxIndexer::getWordTokenAt(slang::SourceLocation
         return collected[atInd - 1];
     }
     return nullptr;
+}
+
+const parsing::Token* SyntaxIndexer::getNavigationTokenAt(SourceLocation loc) const {
+    if (auto* token = getWordTokenAt(loc))
+        return token;
+    auto* left = getTokenBefore(loc);
+    return left && isIdToken(left->kind) && left->range().end() == loc ? left : nullptr;
 }
 
 const slang::parsing::Token* SyntaxIndexer::getTokenAt(slang::SourceLocation loc) const {

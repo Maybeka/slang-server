@@ -1266,12 +1266,16 @@ class G #(type T);
       ^ Sym G : GenericClassDef
 
     extern function T foo;
+                    ^ Ref -> **TypeAlias** `T` in `G`  \n\\n\\n\---\n\\n\`type T`
+                      ^^^ Sym foo : MethodPrototype
 
 endclass
 
 
 
 function G::T G::foo;
+            ^ Ref -> **TypeAlias** `T` in `G`  \n\\n\\n\---\n\\n\`type T`
+                 ^^^ Sym foo : Subroutine
 
     return 0;
 
@@ -1281,15 +1285,17 @@ endfunction
 
 class H #(int p);
       ^ Sym H : GenericClassDef
-              ^ Ref -> **Program** `p`  \n\\n\\n\---\n\\n\`program p(a, b);`
+              ^ Ref -> **Parameter** `p` in `H`  \n\Type: `int`  \n\\n\\n\---\n\\n\`int p`
 
     extern function int foo;
+                        ^^^ Sym foo : MethodPrototype
 
 endclass
 
 
 
 function int H::foo;
+                ^^^ Sym foo : Subroutine
 
 endfunction
 

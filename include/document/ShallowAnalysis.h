@@ -73,6 +73,9 @@ public:
     /// @return Vector of LSP document links to included files
     std::vector<lsp::DocumentLink> getDocLinks(const lsp::RequestContext& ctx = {}) const;
 
+    slang::BufferID getIncludeTarget(const slang::syntax::IncludeDirectiveSyntax& directive,
+                                     const lsp::RequestContext& ctx) const;
+
     /// @brief Gets hover information for a symbol at an LSP position
     /// @param position The LSP position to query
     /// @return Optional hover information, or nullopt if none available
@@ -94,6 +97,9 @@ public:
     // @param loc The source location to query
     // @return *Pointer* to the referenced symbol, or nullptr if not found
     const slang::ast::Symbol* getSymbolAt(slang::SourceLocation loc) const;
+
+    /// The receiver's type at a written dot following a macro expansion.
+    const slang::ast::Type* getMacroReceiverType(const slang::parsing::Token& dot) const;
 
     /// @brief Gets the AST scope at a specific source location
     /// @param loc The source location to query
@@ -242,7 +248,15 @@ private:
     SymbolTreeVisitor m_symbolTreeVisitor;
 
     /// Symbol indexer for syntax->symbol mappings of definitions; Used for lookups
-    SymbolIndexer m_symbolIndexer;
+    mutable SymbolIndexer m_symbolIndexer;
+    mutable slang::flat_hash_map<const slang::parsing::Token*, const slang::ast::Type*>
+        m_macroReceiverTypes;
+
+    struct IncludeTargets {
+        slang::flat_hash_map<slang::SourceLocation, slang::BufferID> byDirective;
+        bool checkedSkipped = false;
+    };
+    mutable std::optional<IncludeTargets> m_includeTargets;
 
     struct GenvarElaboration {
         const slang::ast::GenvarSymbol* source = nullptr;

@@ -1113,6 +1113,23 @@ std::vector<lsp::LocationLink> DefinitionInfo::SystemSubroutineTarget::getDefini
     return {};
 }
 
+markup::Document DefinitionInfo::IncludeTarget::getHover(const SourceManager& sm, BufferID docBuffer,
+                                                         const Config::HoverConfig&) const {
+    markup::Document md;
+    const auto& path = sm.getFullPath(header);
+    auto relative = path.lexically_relative(sm.getFullPath(docBuffer).parent_path());
+    md.addParagraph().appendText("Included file ").appendCode(
+        (relative.empty() ? path : relative).string());
+    return md;
+}
+
+std::vector<lsp::LocationLink> DefinitionInfo::IncludeTarget::getDefinition(
+    const SourceManager& sm) const {
+    return {lsp::LocationLink{.targetUri = URI::fromFile(sm.getFullPath(header)),
+                              .targetRange = {},
+                              .targetSelectionRange = {}}};
+}
+
 lsp::MarkupContent DefinitionInfo::getHover(BufferID docBuffer,
                                             const Config::HoverConfig& hovers) const {
     const auto& sm = sourceManager.get();

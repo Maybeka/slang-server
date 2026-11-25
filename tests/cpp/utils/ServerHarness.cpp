@@ -176,7 +176,7 @@ std::optional<std::vector<lsp::Location>> ServerHarness::getDocReferences(
     auto srcLoc = srcDoc->getLocation(params.position);
     REQUIRE(srcLoc.has_value());
 
-    auto srcTok = srcDoc->getWordTokenAt(*srcLoc);
+    auto srcTok = srcDoc->getAnalysis()->syntaxes.getNavigationTokenAt(*srcLoc);
     REQUIRE(srcTok);
 
     auto expectedText = std::string(srcTok->valueText());
@@ -577,4 +577,44 @@ std::ostream& operator<<(std::ostream& os, const struct ExpectedStart& start) {
     os << start.name << " U " << start.uri << " L " << start.start.line << " C "
        << start.start.character;
     return os;
+}
+
+// Corpus annotations mark source bytes. Check the editor's trailing-caret
+// behavior separately at each word boundary before drawing the next byte.
+static bool isTrailingWordBoundary(DocumentHandle& handle, lsp::uint offset) {
+    auto& doc = *handle.doc;
+    auto loc = slang::SourceLocation(doc.getBuffer(), offset);
+    return offset && !doc.getWordTokenAt(loc) && doc.getWordTokenAt(loc - 1);
+}
+
+bool checkDefinitionAtWordEnd(DocumentHandle& doc, lsp::uint offset,
+                              const std::optional<server::DefinitionInfo>& info) {
+    if (!isTrailingWordBoundary(doc, offset))
+        return false;
+    auto previous = doc.getDefinitionInfoAt(offset - 1);
+    CAPTURE(offset, doc.doc->getWordTokenAt(*doc.getLocation(offset - 1))->valueText());
+    REQUIRE(info.has_value() == previous.has_value());
+    if (info) {
+        CHECK(rfl::json::write(info->getDefinitionLspLinks()) ==
+              rfl::json::write(previous->getDefinitionLspLinks()));
+    }
+    return true;
+}
+
+bool checkReferencesAtWordEnd(ServerHarness& server, DocumentHandle& doc, lsp::uint offset,
+                              const std::optional<std::vector<lsp::Location>>& refs) {
+    if (!isTrailingWordBoundary(doc, offset))
+        return false;
+    auto previous = server.getDocReferences(lsp::ReferenceParams{
+        .context = {.includeDeclaration = true},
+        .textDocument = {.uri = doc.m_uri},
+        .position = *doc.getLspLocation(offset - 1),
+    });
+    REQUIRE(refs.has_value() == previous.has_value());
+    if (refs) {
+        CHECK(std::ranges::equal(*refs, *previous, [](const auto& lhs, const auto& rhs) {
+            return lhs.uri == rhs.uri && lhs.range == rhs.range;
+        }));
+    }
+    return true;
 }

@@ -15,6 +15,7 @@
 #include "slang/ast/Compilation.h"
 #include "slang/ast/Scope.h"
 #include "slang/ast/Symbol.h"
+#include "slang/ast/symbols/ClassSymbols.h"
 #include "slang/ast/symbols/CompilationUnitSymbols.h"
 #include "slang/ast/symbols/InstanceSymbols.h"
 #include "slang/ast/symbols/PortSymbols.h"
@@ -94,20 +95,26 @@ void SymbolIndexer::addSymbol(const slang::syntax::SyntaxNode* syntax,
         symbols.push_back(&symbol);
 }
 
-const slang::ast::Scope* SymbolIndexer::getScopeForSyntax(
-    const slang::syntax::SyntaxNode& syntax) const {
-
-    auto scopes = getScopesForSyntax(syntax);
-    return scopes.empty() ? nullptr : scopes.back();
-}
-
 slang::SmallVector<const slang::ast::Scope*, 2> SymbolIndexer::getScopesForSyntax(
-    const slang::syntax::SyntaxNode& syntax) const {
+    const slang::syntax::SyntaxNode& syntax, const ast::Compilation* query) {
 
     const slang::syntax::SyntaxNode* current = &syntax;
     while (current != nullptr) {
         auto it = syntex.find(current);
         if (it != syntex.end()) {
+            if (query && current->kind == syntax::SyntaxKind::ClassDeclaration &&
+                it->second.size() == 1) {
+                auto* generic = it->second.front()->as_if<ast::GenericClassDefSymbol>();
+                if (generic && &generic->getParentScope()->getCompilation() == query) {
+                    auto* type = generic->getDefaultSpecialization(*generic->getParentScope());
+                    if (!type)
+                        type = &generic->getInvalidSpecialization();
+                    if (type->isClass()) {
+                        type->visit(*this);
+                        return getScopesForSyntax(syntax);
+                    }
+                }
+            }
             slang::SmallVector<const slang::ast::Scope*, 2> result;
             for (const auto* symbol : it->second) {
                 const slang::ast::Scope* scope = nullptr;

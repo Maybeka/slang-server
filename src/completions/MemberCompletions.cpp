@@ -91,6 +91,57 @@ const ast::Symbol& unwrapCompletionMember(const ast::Symbol& symbol) {
     return *result;
 }
 
+bool visibleInContext(const ast::Symbol& symbol, CompletionContextKind context) {
+    if (context == CompletionContextKind::Type || context == CompletionContextKind::ModuleMember ||
+        context == CompletionContextKind::PortList)
+        return symbol.isType() || symbol.kind == ast::SymbolKind::GenericClassDef ||
+               symbol.kind == ast::SymbolKind::TypeParameter;
+    return context != CompletionContextKind::Expression ||
+           (symbol.kind != ast::SymbolKind::ClassType &&
+            symbol.kind != ast::SymbolKind::GenericClassDef);
+}
+
+// Candidates come from declarations and actual imports. slang decides which names
+// may be imported from this package, including re-exports across package chains.
+template<typename Emit>
+void forEachPublicMember(const ast::PackageSymbol& package, ast::Compilation& consumer, Emit emit) {
+    std::unordered_set<std::string_view> seen;
+    auto candidate = [&](std::string_view name) {
+        if (!name.empty() && seen.insert(name).second) {
+            if (auto* symbol = package.findForImport(name))
+                emit(*symbol);
+        }
+    };
+    for (const auto& member : package.members())
+        candidate(member.name);
+
+    auto* imports = package.getWildcardImportData();
+    if (!imports)
+        return;
+    bool wildcardExports = package.hasExportAll;
+    if (auto syntax = package.getSyntax()) {
+        for (auto member : syntax->as<syntax::ModuleDeclarationSyntax>().members) {
+            if (member->kind != syntax::SyntaxKind::PackageExportDeclaration)
+                continue;
+            for (auto item : member->as<syntax::PackageExportDeclarationSyntax>().items) {
+                if (item->item.kind == parsing::TokenKind::Star)
+                    wildcardExports = true;
+                else
+                    candidate(item->item.valueText());
+            }
+        }
+    }
+    if (wildcardExports) {
+        package.resolveExports();
+        consumer.forceElaborateForWildcardLookup(package);
+        SmallVector<std::string_view, 8> importedNames;
+        for (const auto& [name, _] : imports->importedSymbols)
+            importedNames.push_back(name);
+        for (auto name : importedNames)
+            candidate(name);
+    }
+}
+
 bool hasSourceLocation(const ast::Symbol& symbol) {
     return symbol.location && symbol.location != SourceLocation::NoLocation;
 }
@@ -216,22 +267,24 @@ public:
 
 class MemberAccessCompletionQuery final : public MemberCompletionQuery {
 public:
-    MemberAccessCompletionQuery(lsp::Range replacementRange, const parsing::Token* receiverToken,
+    MemberAccessCompletionQuery(lsp::Range replacementRange, const parsing::Token* dot,
                                 bool followedByCall) :
-        MemberCompletionQuery(std::move(replacementRange), followedByCall),
-        receiverToken(receiverToken) {}
+        MemberCompletionQuery(std::move(replacementRange), followedByCall), dot(dot) {}
 
     CompletionQueryKind kind() const final { return CompletionQueryKind::MemberAccess; }
 
     void getCompletions(std::vector<lsp::CompletionItem>& results, CompletionDispatch& dispatch,
                         const std::shared_ptr<SlangDoc>& doc,
                         const CompletionContext& context) const final {
-        if (!receiverToken) {
-            WARN("No expression token found before '.'");
+        if (!dot)
             return;
-        }
-
-        auto* symbol = context.analysis->getSymbolAtToken(receiverToken);
+        const ast::Symbol* symbol = context.analysis->getMacroReceiverType(*dot);
+        auto* receiverToken = symbol ? dot
+                                     : context.analysis->syntaxes.getTokenBefore(dot->location());
+        if (!receiverToken)
+            return;
+        if (!symbol)
+            symbol = context.analysis->getSymbolAtToken(receiverToken);
         if (!symbol) {
             WARN("No symbol found for token {}, checking index.", receiverToken->valueText());
             auto symbolLoc = getIndexer(dispatch).getNearestSymbolLoc(receiverToken->valueText(),
@@ -339,7 +392,7 @@ public:
     }
 
 private:
-    const parsing::Token* receiverToken;
+    const parsing::Token* dot;
 };
 
 class ScopedAccessCompletionQuery final : public MemberCompletionQuery {
@@ -374,6 +427,12 @@ public:
         }
 
         INFO("Looking for scoped members in {}", targetScope->asSymbol().getHierarchicalPath());
+        if (auto* package = targetScope->asSymbol().as_if<ast::PackageSymbol>()) {
+            addPackageCompletions(results, *package, CompletionContextKind::Unknown, context.scope,
+                                  doc->getURI().str(), followedByCall,
+                                  resolvesCompletionEdits(dispatch));
+            return;
+        }
         addCompletions(results, targetScope, CompletionContextKind::Expression, context.scope,
                        doc->getURI().str(), followedByCall, resolvesCompletionEdits(dispatch));
     }
@@ -391,9 +450,8 @@ std::unique_ptr<CompletionQuery> MemberCompletionQuery::createLexical(
 }
 
 std::unique_ptr<CompletionQuery> MemberCompletionQuery::createMemberAccess(
-    lsp::Range replacementRange, const parsing::Token* receiverToken, bool followedByCall) {
-    return std::make_unique<MemberAccessCompletionQuery>(replacementRange, receiverToken,
-                                                         followedByCall);
+    lsp::Range replacementRange, const parsing::Token* dot, bool followedByCall) {
+    return std::make_unique<MemberAccessCompletionQuery>(replacementRange, dot, followedByCall);
 }
 
 std::unique_ptr<CompletionQuery> MemberCompletionQuery::createScopedAccess(
@@ -776,15 +834,29 @@ void MemberCompletionQuery::resolve(const slang::ast::Symbol& rawSymbol, lsp::Co
     }
 }
 
+void MemberCompletionQuery::addPackageCompletions(std::vector<lsp::CompletionItem>& results,
+                                                  const ast::PackageSymbol& package,
+                                                  CompletionContextKind kind,
+                                                  const ast::Scope* originalScope,
+                                                  std::string_view documentUri, bool labelOnly,
+                                                  bool deferCallableEdit) {
+    auto& consumer = originalScope ? originalScope->getCompilation() : package.getCompilation();
+    forEachPublicMember(package, consumer, [&](const ast::Symbol& symbol) {
+        if (visibleInContext(symbol, kind))
+            results.push_back(
+                getCompletion(symbol, originalScope, documentUri, labelOnly, deferCallableEdit));
+    });
+}
+
 /// Get completions for members in a scope, including the enclosing compilation unit
 void MemberCompletionQuery::addCompletions(std::vector<lsp::CompletionItem>& results,
                                            const slang::ast::Scope* scope,
                                            CompletionContextKind contextKind,
                                            const slang::ast::Scope* originalScope,
                                            std::string_view documentUri, bool labelOnly,
-                                           bool deferCallableEdit, bool isOriginalCall) {
+                                           bool deferCallableEdit, bool includeImports) {
 
-    if (isOriginalCall && contextKind == CompletionContextKind::ModuleMember) {
+    if (includeImports && contextKind == CompletionContextKind::ModuleMember) {
         addKeywordCompletions(results);
     }
 
@@ -792,11 +864,6 @@ void MemberCompletionQuery::addCompletions(std::vector<lsp::CompletionItem>& res
         ERROR("No scope for member completion");
         return;
     }
-
-    // Only show types (not signals/variables) when at the top level of a module body
-    // or in a port list — these are declaration positions.
-    bool typesOnly = (contextKind == CompletionContextKind::ModuleMember ||
-                      contextKind == CompletionContextKind::PortList);
 
     // Walk up through the compilation unit, but don't include the root's design hierarchy.
     const slang::ast::Scope* currentScope = scope;
@@ -826,16 +893,9 @@ void MemberCompletionQuery::addCompletions(std::vector<lsp::CompletionItem>& res
                 member.kind == ast::SymbolKind::ExplicitImport &&
                 !sourceImportVisible(member, *prevSym))
                 continue;
-            if (contextKind == CompletionContextKind::Expression &&
-                (member.kind == slang::ast::SymbolKind::ClassType ||
-                 member.kind == slang::ast::SymbolKind::GenericClassDef)) {
+            if (!visibleInContext(unwrapCompletionMember(member), contextKind) &&
+                member.kind != ast::SymbolKind::ExplicitImport)
                 continue;
-            }
-            if (typesOnly && !slang::ast::Type::isKind(member.kind) &&
-                member.kind != slang::ast::SymbolKind::GenericClassDef &&
-                member.kind != slang::ast::SymbolKind::TypeParameter) {
-                continue;
-            }
 
             // ports are in there twice as value symbols and port symbols, so skip the value
             if ((member.kind == slang::ast::SymbolKind::Variable ||
@@ -852,7 +912,7 @@ void MemberCompletionQuery::addCompletions(std::vector<lsp::CompletionItem>& res
             }
             else if (slang::ast::ExplicitImportSymbol::isKind(member.kind)) {
                 auto importSym = member.as<slang::ast::ExplicitImportSymbol>().importedSymbol();
-                if (importSym) {
+                if (importSym && visibleInContext(*importSym, contextKind)) {
                     results.push_back(getCompletion(*importSym, originalScope, documentUri,
                                                     labelOnly, deferCallableEdit));
                 }
@@ -864,22 +924,19 @@ void MemberCompletionQuery::addCompletions(std::vector<lsp::CompletionItem>& res
         }
 
         // Add wildcard imports
-        if (isOriginalCall) {
-            if (auto importData = currentScope->getWildcardImportData()) {
-                for (auto import : importData->wildcardImports) {
-                    // A retained definition can share a full compilation unit.
-                    // Use native declaration lookup positions rather than expose
-                    // wildcard imports outside that definition's visible prefix.
-                    if (prevSym &&
-                        currentScope->asSymbol().kind == ast::SymbolKind::CompilationUnit &&
-                        !sourceImportVisible(*import, *prevSym))
-                        continue;
-                    auto package = import->getPackage();
-                    if (package != nullptr) {
-                        INFO("Adding wildcard imports from package {}", package->name);
-                        addCompletions(results, package, contextKind, originalScope, documentUri,
-                                       labelOnly, deferCallableEdit, false);
-                    }
+        if (auto importData = currentScope->getWildcardImportData(); includeImports && importData) {
+            for (auto import : importData->wildcardImports) {
+                // A retained definition can share a full compilation unit.
+                // Use native declaration lookup positions rather than expose
+                // wildcard imports outside that definition's visible prefix.
+                if (prevSym && currentScope->asSymbol().kind == ast::SymbolKind::CompilationUnit &&
+                    !sourceImportVisible(*import, *prevSym))
+                    continue;
+                auto package = import->getPackage();
+                if (package != nullptr) {
+                    INFO("Adding wildcard imports from package {}", package->name);
+                    addPackageCompletions(results, *package, contextKind, originalScope,
+                                          documentUri, labelOnly, deferCallableEdit);
                 }
             }
         }
@@ -996,7 +1053,9 @@ void MemberCompletionQuery::resolve(CompletionDispatch& dispatch, lsp::Completio
             return;
         auto* token = analysis->syntaxes.getTokenAt(
             SourceLocation(analysis->getBuffer(), *data->receiverOffset));
-        auto* receiver = analysis->getSymbolAtToken(token);
+        const ast::Symbol* receiver = token && token->kind == parsing::TokenKind::Dot
+                                          ? analysis->getMacroReceiverType(*token)
+                                          : analysis->getSymbolAtToken(token);
         auto* scope = analysis->getScopeFromSym(receiver);
         symbol = scope ? scope->find(data->symbolName) : nullptr;
         if (symbol)

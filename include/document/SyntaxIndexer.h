@@ -63,8 +63,10 @@ public:
     /// An explicit buffer selects one included file within a shared syntax tree.
     SyntaxIndexer(const slang::syntax::SyntaxTree& tree, slang::BufferID buffer = {});
 
-    /// Get the word token (identifier, system identifier, directive, macro usage, etc) at the given
-    /// location, or nullptr if none
+    /// Select a word under the caret or ending exactly at the caret.
+    const slang::parsing::Token* getNavigationTokenAt(slang::SourceLocation loc) const;
+
+    /// Select the word containing this source byte (half-open token range).
     const slang::parsing::Token* getWordTokenAt(slang::SourceLocation loc) const;
 
     /// Get the token at the given location, or nullptr if none

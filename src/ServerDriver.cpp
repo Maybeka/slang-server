@@ -2364,14 +2364,18 @@ std::optional<DefinitionInfo> ServerDriver::getDefinitionInfoAt(
     if (!loc) {
         return {};
     }
-    const parsing::Token* declTok = analysis->syntaxes.getWordTokenAt(loc.value());
-    if (!declTok) {
+    const parsing::Token* declTok = analysis->syntaxes.getNavigationTokenAt(*loc);
+    const auto* declSyntax = declTok ? analysis->syntaxes.getTokenParent(declTok)
+                                     : analysis->syntaxes.getSyntaxAt(*loc);
+    if (!declSyntax)
+        return {};
+    if (auto* directive = declSyntax->as_if<syntax::IncludeDirectiveSyntax>()) {
+        if (auto header = analysis->getIncludeTarget(*directive, ctx); header.valid())
+            return DefinitionInfo{sm, DefinitionInfo::IncludeTarget{directive->directive, header}};
         return {};
     }
-    const syntax::SyntaxNode* declSyntax = analysis->syntaxes.getTokenParent(declTok);
-    if (!declSyntax) {
+    if (!declTok)
         return {};
-    }
 
     auto isMacroRef = [&]() {
         // Normal macro usage (`FOO) or usage inside a `define body
@@ -2722,7 +2726,7 @@ std::optional<std::string> ServerDriver::getDesignInstancePathAt(const URI& uri,
     auto loc = toSourceLocation(analysis->getBuffer(), position, sm);
     if (!loc)
         return {};
-    return analysis->getDesignInstancePathAtToken(analysis->syntaxes.getWordTokenAt(*loc));
+    return analysis->getDesignInstancePathAtToken(analysis->syntaxes.getNavigationTokenAt(*loc));
 }
 
 std::optional<lsp::Hover> ServerDriver::getDocHover(
@@ -2795,7 +2799,7 @@ std::optional<std::vector<lsp::DocumentHighlight>> ServerDriver::getDocDocumentH
     if (!loc) {
         return std::nullopt;
     }
-    auto declTok = analysis->syntaxes.getWordTokenAt(loc.value());
+    auto declTok = analysis->syntaxes.getNavigationTokenAt(*loc);
     if (!declTok) {
         return std::nullopt;
     }
@@ -2913,7 +2917,7 @@ std::optional<std::vector<lsp::Location>> ServerDriver::getDocReferences(
         return std::nullopt;
     }
 
-    const parsing::Token* declTok = analysis->syntaxes.getWordTokenAt(loc.value());
+    const parsing::Token* declTok = analysis->syntaxes.getNavigationTokenAt(*loc);
     if (!declTok) {
         return std::nullopt;
     }
@@ -2935,6 +2939,10 @@ std::optional<std::vector<lsp::Location>> ServerDriver::getDocReferences(
             symbol = &symbol->as<ast::InstanceBodySymbol>().getDefinition();
 
         auto symbolLocation = sm.getFullyOriginalLoc(symbol->location);
+        // Built-in members such as coverpoint option.weight have no source declaration.
+        if (!symbolLocation || symbolLocation == SourceLocation::NoLocation ||
+            sm.getFullPath(symbolLocation.buffer()).empty())
+            return;
         auto duplicate = std::ranges::any_of(targetSymbols, [&](const ReferenceTarget& existing) {
             return existing.symbol == symbol ||
                    (existing.symbol->kind == symbol->kind &&

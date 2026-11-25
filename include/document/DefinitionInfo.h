@@ -172,8 +172,23 @@ struct DefinitionInfo {
         std::vector<lsp::LocationLink> getDefinition(const slang::SourceManager& sm) const;
     };
 
-    using Target =
-        std::variant<SymbolTarget, PortConnectionTarget, MacroTarget, SystemSubroutineTarget>;
+    struct IncludeTarget {
+        slang::parsing::Token directive;
+        slang::BufferID header;
+
+        const slang::parsing::Token& nameToken() const { return directive; }
+
+        bool operator==(const IncludeTarget& other) const {
+            return directive == other.directive && header == other.header;
+        }
+
+        markup::Document getHover(const slang::SourceManager& sm, slang::BufferID docBuffer,
+                                  const Config::HoverConfig& hovers) const;
+        std::vector<lsp::LocationLink> getDefinition(const slang::SourceManager& sm) const;
+    };
+
+    using Target = std::variant<SymbolTarget, PortConnectionTarget, MacroTarget,
+                                SystemSubroutineTarget, IncludeTarget>;
 
     // The things this token resolves to, in semantic / elaboration order.
     std::vector<Target> targets;

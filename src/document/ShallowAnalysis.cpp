@@ -979,7 +979,7 @@ slang::SmallVector<const ast::Symbol*, 2> ShallowAnalysis::getSymbolsAtToken(
         }
     }
 
-    auto scopes = m_symbolIndexer.getScopesForSyntax(*syntax);
+    auto scopes = m_symbolIndexer.getScopesForSyntax(*syntax, getCompilation().get());
 
     if (syntax->kind == syntax::SyntaxKind::LoopGenerate &&
         syntax->as<syntax::LoopGenerateSyntax>().identifier == *declTok) {
@@ -1018,7 +1018,12 @@ slang::SmallVector<const ast::Symbol*, 2> ShallowAnalysis::getSymbolsAtToken(
 
         ast::ASTContext context(*scope, ast::LookupLocation::max);
         ast::LookupResult result;
-        ast::Lookup::name(*nameSyntax, context, ast::LookupFlags::None, result);
+        auto* call = nameSyntax->parent->as_if<syntax::InvocationExpressionSyntax>();
+        auto flags = call && call->left == nameSyntax && call->arguments
+                         ? ast::LookupFlags::AllowDeclaredAfter |
+                               ast::LookupFlags::AlwaysAllowUpward
+                         : bitmask<ast::LookupFlags>{};
+        ast::Lookup::name(*nameSyntax, context, flags, result);
         if (result.found) {
             if (isOverSelector(declTok, result)) {
                 const slang::ast::Symbol* cur = result.found;
@@ -1178,12 +1183,35 @@ const ast::Symbol* ShallowAnalysis::getSymbolAt(SourceLocation loc) const {
     return getSymbolAtToken(node);
 }
 
+const ast::Type* ShallowAnalysis::getMacroReceiverType(const parsing::Token& dot) const {
+    auto* parent = syntaxes.getTokenParent(&dot);
+    if (!parent)
+        return nullptr;
+    const syntax::ExpressionSyntax* receiver = nullptr;
+    if (auto* scoped = parent->as_if<syntax::ScopedNameSyntax>())
+        receiver = scoped->left;
+    else if (auto* member = parent->as_if<syntax::MemberAccessExpressionSyntax>())
+        receiver = member->left;
+    if (!receiver || !m_sourceManager.isMacroLoc(receiver->getLastToken().location()))
+        return nullptr;
+
+    if (auto it = m_macroReceiverTypes.find(&dot); it != m_macroReceiverTypes.end())
+        return it->second;
+    auto* scope = getScopeAt(dot.location());
+    if (!scope)
+        return nullptr;
+    auto& expression = ast::Expression::bind(*receiver,
+                                             ast::ASTContext(*scope, ast::LookupLocation::max));
+    return m_macroReceiverTypes.emplace(&dot, expression.type).first->second;
+}
+
 const ast::Scope* ShallowAnalysis::getScopeAt(SourceLocation loc) const {
     auto syntax = syntaxes.getSyntaxAt(loc);
     if (!syntax) {
         return nullptr;
     }
-    return m_symbolIndexer.getScopeForSyntax(*syntax);
+    auto scopes = m_symbolIndexer.getScopesForSyntax(*syntax, getCompilation().get());
+    return scopes.empty() ? nullptr : scopes.back();
 }
 
 std::vector<lsp::InlayHint> ShallowAnalysis::getInlayHints(lsp::Range range,
@@ -1248,6 +1276,39 @@ void ShallowAnalysis::addLocalReferences(std::vector<lsp::Location>& references,
             .range = toRange(token->range(), m_sourceManager),
         });
     }
+}
+
+BufferID ShallowAnalysis::getIncludeTarget(const syntax::IncludeDirectiveSyntax& directive,
+                                           const lsp::RequestContext& ctx) const {
+    if (!m_includeTargets) {
+        IncludeTargets targets;
+        for (const auto& inc : getSyntaxTree()->getIncludeDirectives()) {
+            ctx.checkpoint("index document include targets");
+            auto site = inc.syntax->directive.location();
+            if (site.buffer() == m_buffer)
+                targets.byDirective.emplace(site, inc.buffer.id);
+        }
+        m_includeTargets.emplace(std::move(targets));
+    }
+    auto& targets = *m_includeTargets;
+    auto it = targets.byDirective.find(directive.directive.location());
+    if (it == targets.byDirective.end())
+        return {};
+    if (!it->second.valid() && !targets.checkedSkipped) {
+        // A guard can skip entering a header. Its existing buffer still identifies
+        // the exact include occurrence, including the active library and search path.
+        for (auto id : m_sourceManager.getAllBuffers()) {
+            ctx.checkpoint("resolve skipped include targets");
+            auto site = m_sourceManager.getIncludedFrom(id);
+            if (site.buffer() == m_buffer) {
+                auto match = targets.byDirective.find(site);
+                if (match != targets.byDirective.end() && !match->second.valid())
+                    match->second = id;
+            }
+        }
+        targets.checkedSkipped = true;
+    }
+    return it->second;
 }
 
 std::vector<lsp::DocumentLink> ShallowAnalysis::getDocLinks(const lsp::RequestContext& ctx) const {

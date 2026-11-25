@@ -2234,32 +2234,29 @@ void SlangServer::onWorkspaceDidChangeWatchedFiles(const lsp::DidChangeWatchedFi
         }
         return false;
     };
-    // Check if any config or active build files changed
     bool needsReload = m_configReloadPending;
+    lsp::DidChangeWatchedFilesParams sourceChanges;
     for (const auto& change : params.changes) {
-        const auto changedPath = normalizeWatchedPath(fs::path(change.uri.getPath()));
-        auto isConfigPath = [&](const fs::path& root) {
-            return changedPath == normalizeWatchedPath(root / ".slang" / "server.json") ||
-                   changedPath == normalizeWatchedPath(root / ".slang" / "local" / "server.json");
+        const auto path = normalizeWatchedPath(fs::path(change.uri.getPath()));
+        const auto workspaceConfig = [&](const fs::path& root) {
+            return path == normalizeWatchedPath(root / ".slang" / "server.json") ||
+                   path == normalizeWatchedPath(root / ".slang" / "local" / "server.json");
         };
-        if (m_workspaceFolder && isConfigPath(fs::path(m_workspaceFolder->uri.getPath())))
+        const char* home = std::getenv("HOME");
+        if ((m_workspaceFolder && workspaceConfig(fs::path(m_workspaceFolder->uri.getPath()))) ||
+            (home && !std::getenv("SLANG_SERVER_TESTS") &&
+             path == normalizeWatchedPath(fs::path(home) / ".slang" / "server.json")) ||
+            std::ranges::any_of(m_driver->driver.getCommandFileMetadata(), [&](const auto& entry) {
+                return normalizeWatchedPath(entry.first) == path;
+            })) {
             needsReload = true;
-        if (const char* home = std::getenv("HOME"); home && !std::getenv("SLANG_SERVER_TESTS"))
-            needsReload |= changedPath ==
-                           normalizeWatchedPath(fs::path(home) / ".slang" / "server.json");
-        if (!m_driver->isTrustedUvmSource(changedPath) &&
-            m_driver->isUvmConfigurationInput(changedPath) && !openOverlay(change.uri, changedPath))
-            needsReload = true;
-        if (needsReload)
-            break;
-        for (const auto& [commandPath, _] : m_driver->driver.getCommandFileMetadata()) {
-            if (normalizeWatchedPath(commandPath) == changedPath) {
-                needsReload = true;
-                break;
-            }
+            continue;
         }
-        if (needsReload)
-            break;
+        if (m_driver->isTrustedUvmSource(path) || openOverlay(change.uri, path))
+            continue;
+        if (m_driver->isUvmConfigurationInput(path))
+            needsReload = true;
+        sourceChanges.changes.push_back(change);
     }
 
     if (needsReload) {
@@ -2272,18 +2269,8 @@ void SlangServer::onWorkspaceDidChangeWatchedFiles(const lsp::DidChangeWatchedFi
         }
         m_configReloadPending = true;
         WARN("Keeping the current configuration; retrying on the next file change");
-        return;
     }
 
-    // Disk events never supersede an open editor buffer. Filter before deciding
-    // to rebuild the SourceManager, and use canonical paths as clients can report
-    // another URI spelling for the same file (including deletion notifications).
-    lsp::DidChangeWatchedFilesParams sourceChanges;
-    for (const auto& change : params.changes) {
-        const auto changedPath = normalizeWatchedPath(fs::path(change.uri.getPath()));
-        if (!m_driver->isTrustedUvmSource(changedPath) && !openOverlay(change.uri, changedPath))
-            sourceChanges.changes.push_back(change);
-    }
     if (sourceChanges.changes.empty())
         return;
 

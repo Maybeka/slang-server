@@ -369,7 +369,8 @@ protected:
         auto it = requests.find(request.method);
         if (it == requests.end()) {
             server::logging::warn("<-/- {} (not found)", request.method);
-            return std::nullopt;
+            return RpcError{.code = static_cast<int>(ErrorCodes::MethodNotFound),
+                            .message = "Method not found: " + request.method};
         }
 
         MessageLog messageLog(ctx, logStart);

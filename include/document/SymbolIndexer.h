@@ -60,10 +60,9 @@ public:
 
     std::span<const slang::ast::Symbol* const> getSymbols(const slang::parsing::Token* node) const;
 
-    const slang::ast::Scope* getScopeForSyntax(const slang::syntax::SyntaxNode& syntax) const;
-
+    /// With a query compilation, materialize an uninstantiated containing generic on demand.
     slang::SmallVector<const slang::ast::Scope*, 2> getScopesForSyntax(
-        const slang::syntax::SyntaxNode& syntax) const;
+        const slang::syntax::SyntaxNode& syntax, const slang::ast::Compilation* query = nullptr);
 
     // These are not in the buffer, but should be visited
     void handle(const slang::ast::RootSymbol& sym);

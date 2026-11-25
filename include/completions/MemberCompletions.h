@@ -19,6 +19,10 @@
 
 #include "slang/ast/Symbol.h"
 
+namespace slang::ast {
+class PackageSymbol;
+}
+
 namespace slang::parsing {
 class Token;
 }
@@ -32,9 +36,9 @@ public:
                                                           bool followedByCall,
                                                           bool followedByInstantiation);
 
-    static std::unique_ptr<CompletionQuery> createMemberAccess(
-        lsp::Range replacementRange, const slang::parsing::Token* receiverToken,
-        bool followedByCall);
+    static std::unique_ptr<CompletionQuery> createMemberAccess(lsp::Range replacementRange,
+                                                               const slang::parsing::Token* dot,
+                                                               bool followedByCall);
 
     static std::unique_ptr<CompletionQuery> createScopedAccess(
         lsp::Range replacementRange, const slang::parsing::Token* receiverToken,
@@ -61,7 +65,14 @@ protected:
                                const slang::ast::Scope* scope, CompletionContextKind contextKind,
                                const slang::ast::Scope* originalScope, std::string_view documentUri,
                                bool labelOnly = false, bool deferCallableEdit = false,
-                               bool isOriginalCall = true);
+                               bool includeImports = true);
+
+    static void addPackageCompletions(std::vector<lsp::CompletionItem>& results,
+                                      const slang::ast::PackageSymbol& package,
+                                      CompletionContextKind kind,
+                                      const slang::ast::Scope* originalScope,
+                                      std::string_view documentUri, bool labelOnly,
+                                      bool deferCallableEdit);
 
     static lsp::CompletionItem getHierarchicalCompletion(
         const slang::ast::Symbol& parentSymbol, const slang::ast::Symbol& symbol,

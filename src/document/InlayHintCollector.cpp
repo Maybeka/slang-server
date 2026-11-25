@@ -147,7 +147,6 @@ void InlayHintCollector::handle(const HierarchyInstantiationSyntax& syntax) {
         std::vector<lsp::InlayHint> namedPortHints;
         size_t maxLabelLen = 0;
         size_t portIndex = 0;
-        size_t lastPortLine = -1;
         for (auto portSyntax : hierInstSyntax.connections) {
             m_ctx.checkpoint("during inlay hint collection");
             switch (portSyntax->kind) {
@@ -207,11 +206,6 @@ void InlayHintCollector::handle(const HierarchyInstantiationSyntax& syntax) {
                         .paddingRight = true,
                     });
 
-                    // Don't show ports if types if theyr'e all on the same line
-                    if (pos.line == lastPortLine) {
-                        return;
-                    }
-                    lastPortLine = pos.line;
                 } break;
                 case SyntaxKind::WildcardPortConnection: {
                     if (!m_wildcardNames) {
@@ -282,7 +276,12 @@ void InlayHintCollector::handle(const HierarchyInstantiationSyntax& syntax) {
         }
 
         // align named port hints
-        for (auto& hint : namedPortHints) {
+        for (size_t i = 0; i < namedPortHints.size(); ++i) {
+            auto& hint = namedPortHints[i];
+            auto line = hint.position.line;
+            if ((i && namedPortHints[i - 1].position.line == line) ||
+                (i + 1 < namedPortHints.size() && namedPortHints[i + 1].position.line == line))
+                continue;
             m_ctx.checkpoint("during inlay hint collection");
             auto labelStr = rfl::get<std::string>(hint.label);
             hint.label = labelStr + std::string(maxLabelLen - labelStr.size(), ' ');
