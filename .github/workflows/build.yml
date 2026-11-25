@@ -277,7 +277,7 @@ jobs:
           4. Keep resources/ beside the binary to use optional uvm.useBundled
 
           For more information, visit:
-          https://github.com/hudson-trading/slang-server
+          https://github.com/${{ github.repository }}
 
           Platform: ${{ env.SLANG_SERVER_ARTIFACT_NAME }}
           Build date: $(date -u +%Y-%m-%d)

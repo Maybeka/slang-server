@@ -28,7 +28,7 @@ When Git is available, auto-configure adds ignored folders to the matching works
 
 ## Config Options
 
-All configuration options are optional and have sensible defaults. In VSCode, there are completions and hovers for `server.json` files. For other editors, you may be able to associate the [config schema](https://github.com/hudson-trading/slang-server/blob/main/clients/vscode/resources/config.schema.json) with these config files to get these features.
+All configuration options are optional and have sensible defaults. In VSCode, there are completions and hovers for `server.json` files. For other editors, you may be able to associate the [config schema](https://github.com/Maybeka/slang-server/blob/main/clients/vscode/resources/config.schema.json) with these config files to get these features.
 
 ---
 

@@ -2,37 +2,32 @@
 
 ## Quick Start
 
-On installation, the extension will ask if you would like it to auto-install the server from the [releases](https://github.com/hudson-trading/slang-server/releases) page.
-
-Alternatively, you can
-[build from source](https://hudson-trading.github.io/slang-server/start/building/) and set `slang.path` to your binary in your `settings.json`.
-
-See [the docs](https://hudson-trading.github.io/slang-server) for more detailed instructions on [installing](https://hudson-trading.github.io/slang-server/start/installing/) and [configuring](https://hudson-trading.github.io/slang-server/start/config/).
+Set `slang.path` to the [local build](../../docs/start/building.md), or select the managed installation when a platform archive is available in [this project's releases](https://github.com/Maybeka/slang-server/releases). See the [editor installation](../../docs/start/installing.md) and [workspace configuration](../../docs/start/config.md) guides.
 
 ## Features
 
 Quick, high quality lint messages on from [Slang](https://github.com/MikePopoloski/slang) on every keystroke, with links to the [Slang warning reference](https://sv-lang.com/warning-ref.html).
 
-![Lints](https://github.com/hudson-trading/slang-server/blob/main/docs/assets/images/lints.gif?raw=true)
+![Lints](../../docs/assets/images/lints.gif)
 
 Informative hovers and gotos on nearly every symbol across your workspace and libraries.
 
-![Hovers](https://github.com/hudson-trading/slang-server/blob/main/docs/assets/images/hovers.gif?raw=true)
+![Hovers](../../docs/assets/images/hovers.gif)
 
 Find references across your entire workspace.
 
-![Go to References](https://github.com/hudson-trading/slang-server/blob/main/docs/assets/images/gotorefs.gif?raw=true)
+![Go to References](../../docs/assets/images/gotorefs.gif)
 
 Configurable inlay hints that provide useful information.
 
-![Inlays](https://github.com/hudson-trading/slang-server/blob/main/docs/assets/images/all_inlays.png?raw=true)
+![Inlays](../../docs/assets/images/all_inlays.png)
 
 Intuitive completions for module instances and macros, as well as scope members of packages, modules, structs, and more.
 
-![Completions](https://github.com/hudson-trading/slang-server/blob/main/docs/assets/images/completions.gif?raw=true)
+![Completions](../../docs/assets/images/completions.gif)
 
 HDL-specific features that allow you to set a filelist or top level, browse the elaborated hierarchy, select the active instance of each module, inspect instance-specific values, and interact with waveform viewers.
 
-![HDL Features](https://github.com/hudson-trading/slang-server/blob/main/docs/assets/images/hdl.gif?raw=true)
+![HDL Features](../../docs/assets/images/hdl.gif)
 
-For more detailed feature info, see [the docs](https://hudson-trading.github.io/slang-server/features/features/).
+For more detailed feature info, see [the docs](../../docs/features/features.md).

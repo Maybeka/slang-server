@@ -33,6 +33,8 @@ concurrency:
 
 jobs:
   sync:
+    # The external plugin mirror belongs to the original project.
+    if: github.repository == 'hudson-trading/slang-server'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source repository

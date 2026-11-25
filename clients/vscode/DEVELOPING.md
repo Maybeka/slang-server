@@ -3,7 +3,7 @@
 Install nvm (Node Version Manager), or install Node 20
 
 ```
-git clone git@github.com:hudson-trading/slang-server.git
+git clone git@github.com:Maybeka/slang-server.git
 code .
 cd slang-server/clients/vscode
 nvm use 20

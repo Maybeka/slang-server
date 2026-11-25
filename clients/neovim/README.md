@@ -1,6 +1,6 @@
 # slang-server.nvim
 
-A Neovim plugin to support non-LSP features of [Slang Server](https://github.com/hudson-trading/slang-server).
+A Neovim plugin to support non-LSP features of [Slang Server](../../README.md).
 
 ## Features
 
@@ -14,11 +14,11 @@ This plugin provides features which extend the standard LSP interface, such as:
   hierarchy views.
 * Open waveforms and add signals to them (experimental).
 
-More information on plugin features can be [found here](https://hudson-trading.github.io/slang-server/features/hdl/neovim/).
+See the [Neovim feature guide](../../docs/features/hdl/neovim.md).
 
 Code-lens support is required to select active instances or generate-loop
 iterations in the source; see
-[installation guide](https://hudson-trading.github.io/slang-server/start/installing/#code-lenses)
+[installation guide](../../docs/start/installing.md#code-lenses)
 for an example configuration.
 
 ## Requirements
@@ -40,12 +40,14 @@ otherwise, a slightly degraded two-step search is provided by native
 
 ## Installation
 
-You can use your favorite Neovim plugin manager to download and install the plugin. If you happen to use lazy.nvim you can install the plugin by adding, e.g., `~/.config/nvim/lua/plugins/slang-server.lua`:
+For lazy.nvim, point the plugin at your project checkout in `~/.config/nvim/lua/plugins/slang-server.lua`:
 
 ```lua
 return {
   {
-    "hudson-trading/slang-server.nvim",
+    name = "slang-server.nvim",
+    dir = "/absolute/path/to/slang-server/clients/neovim",
+    lazy = false,
   },
 }
 ```
@@ -105,10 +107,6 @@ Each result item contains `name`, `path`, `kind`, and optional `description` and
 `containerName` fields. The custom picker should pass the original item to
 `ctx.select(item)` so the plugin can reveal its path.
 
-## GitHub Repos
+## Project
 
-This plugin lives in two repos:
-
-The code is maintained in [Slang Server](https://github.com/hudson-trading/slang-server).  All issues, PRs, etc. should be directed there.
-
-The [slang-server.nvim](https://github.com/hudson-trading/slang-server.nvim) repo is synced from the Neovim client code in the Slang Server repo.  It exists solely as a convenience for plugin managers which require a specific directory structure at the root of the repo.
+The plugin and server are maintained together in [Maybeka/slang-server](https://github.com/Maybeka/slang-server).

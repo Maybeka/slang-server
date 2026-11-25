@@ -2,9 +2,9 @@
 
 `slang-server` is a [Language Server](https://microsoft.github.io/language-server-protocol/) for SystemVerilog based on the [Slang](https://github.com/MikePopoloski/slang) library, providing useful language features for editors like VS Code and Neovim.
 
-Read about [getting started](https://hudson-trading.github.io/slang-server/start/installing/), [configuring your repo](https://hudson-trading.github.io/slang-server/start/config/), and [learn more about the features](https://hudson-trading.github.io/slang-server/features/features/).
+Maybeka/slang-server is independently maintained. Reports from the original language server are evaluated as individual features, correctness fixes or performance opportunities. The compiler dependency is the official slang repository with a project-maintained patch. See the [maintenance policy](docs/development/versioning.md) and [SDK preparation instructions](RESTORATION.md).
 
-Install on the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=Hudson-River-Trading.vscode-slang), the [OpenVSX Marketplace](https://open-vsx.org/extension/Hudson-River-Trading/vscode-slang), in [Neovim](https://hudson-trading.github.io/slang-server/start/installing/#neovim), or [other editors](https://hudson-trading.github.io/slang-server/start/installing/#other-editors).
+[Build the server](docs/start/building.md), [select it in your editor](docs/start/installing.md), and [configure a workspace](docs/start/config.md).
 
 Contributions are welcome! See [DEVELOPING.md](DEVELOPING.md)
 
@@ -34,7 +34,7 @@ HDL-specific features that allow you to set a filelist or top level, browse the 
 
 ![](docs/assets/images/hdl.gif)
 
-For more detailed feature info, see [the docs](https://hudson-trading.github.io/slang-server/features/features/).
+For more detailed feature info, see [the docs](docs/features/features.md).
 
 
 ### Opt-in fast CWD snapshot checks

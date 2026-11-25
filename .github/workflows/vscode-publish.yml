@@ -29,6 +29,8 @@ permissions:
   contents: write
 jobs:
   deploy:
+    # This inherited workflow publishes under the original marketplace identity.
+    if: github.repository == 'hudson-trading/slang-server'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

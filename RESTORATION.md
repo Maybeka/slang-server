@@ -1,17 +1,25 @@
-# SDK preparation for integrated main
+# Prepare the project-maintained slang SDK
 
-The server now integrates the recovered changes with main's shared analysis and
-indexing changes. A fresh checkout must initialize submodules and run:
+The `external/slang` gitlink pins commit `31a29606b5fb7a50a68bd07fddef4458abd83f53` in [the official slang repository](https://github.com/MikePopoloski/slang/commit/31a29606b5fb7a50a68bd07fddef4458abd83f53). The project maintains its compiler and editor integration in `restoration/slang.patch`. A fresh checkout needs the official repository and this project patch.
 
 ```sh
+git submodule update --init
 python3 restoration/prepare-main-sdk.py --apply
 ```
 
-This verifies all 709 SDK files at main's SDK pin
-`151a801ceaf6faf23d79a42d210ff67e50eb4660` plus the restored patch. The
-historical whole-server inventory below does **not** describe this integrated
-server tree. Keep the SDK patch applied when building; the gitlink alone is
-insufficient. The helper performs no build or runtime validation.
+For a previously prepared checkout, keep any local SDK work and use a fresh checkout for migration. The helper verifies the base, the patch hash and all 709 resulting SDK files. CI, local builds and UVM preparse use the same source. The [build guide](docs/start/building.md) covers offline dependencies.
+
+The initial official pin is the common ancestor of the previous editor SDK. The combined patch retains Andrew Nolte's original 16 changes from `ab7f6ae08` through `151a801ce` along with this project's work. These provide source buffer updates and line mappings, parser metadata for ports and virtual interfaces, instance and type overrides, analysis queries and diagnostic recovery. This project now maintains those interfaces and their tests. The original copyrights and licenses remain with their sources.
+
+## Maintain the patch
+
+Use a disposable SDK checkout at the official pin. Apply the current patch, make the SDK changes, stage the complete intended SDK tree including new source and test files, and inspect the staged diff. From the server repository run:
+
+```sh
+python3 restoration/record-sdk-patch.py /path/to/staged-sdk
+```
+
+The recorder reads the SDK index and regenerates the patch and file hashes together. For an official SDK upgrade, stage the new `external/slang` gitlink first. Verify the regenerated pair by applying it in a clean checkout, then build the server, regenerate the bundled UVM artifact and run the acceptance suites. Commit the gitlink, patch and manifest together.
 
 # Historical recovered Linux source baseline
 

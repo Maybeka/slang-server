@@ -3,8 +3,10 @@ package = "slang-server.nvim"
 -- NB: this rockspec is for CI purposes only and is not intended to control
 --     versioning or to be released on luarocks
 version = "scm-1"
+description = { license = "MIT" }
 source = {
-   url = "git+https://github.com/hudson-trading/slang-server.nvim",
+   url = "git+https://github.com/Maybeka/slang-server",
+   dir = "slang-server/clients/neovim",
 }
 dependencies = {
    -- Add runtime dependencies here

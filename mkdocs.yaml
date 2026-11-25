@@ -2,8 +2,7 @@
 
 site_name: 'slang-server'
 strict: false
-site_url: https://hudson-trading.github.io/slang-server/
-site_author: Hudson River Trading
+site_author: Maybeka/slang-server contributors
 site_description: >-
   A Language Server for SystemVerilog
 
@@ -52,18 +51,14 @@ theme:
   # logo: assets/images/rfl-favicon.png
   # favicon: assets/images/rfl-favicon-square.png
 
-repo_name: hudson-trading/slang-server
-repo_url: https://github.com/hudson-trading/slang-server
+repo_name: Maybeka/slang-server
+repo_url: https://github.com/Maybeka/slang-server
 edit_uri: edit/main/docs/
 
 extra:
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/hudson-trading/slang-server
-    - icon: fontawesome/brands/youtube
-      link: https://www.youtube.com/@Hudson-River-Trading
-    - icon: fontawesome/brands/linkedin
-      link: https://www.linkedin.com/company/hudson-river-trading/
+      link: https://github.com/Maybeka/slang-server
 
 validation:
   omitted_files: warn

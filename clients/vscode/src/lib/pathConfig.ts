@@ -156,7 +156,7 @@ export class PathConfigObject extends ConfigObject<string> {
 
     // 3. Check if already installed in extension storage
     if (config) {
-      const storagePath = context.globalStorageUri.fsPath
+      const storagePath = path.join(context.globalStorageUri.fsPath, config.githubRepo)
       const installBase = path.join(storagePath, 'install')
 
       await fsPromises.mkdir(installBase, { recursive: true })
@@ -209,7 +209,7 @@ export class PathConfigObject extends ConfigObject<string> {
     }
 
     const toolName = this.platformDefaults[getPlatform()]
-    const storagePath = context.globalStorageUri.fsPath
+    const storagePath = path.join(context.globalStorageUri.fsPath, config.githubRepo)
     try {
       const binaryPath = await vscode.window.withProgress(
         {

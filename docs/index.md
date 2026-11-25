@@ -23,13 +23,13 @@ Check out the [installation guide](start/installing.md) and learn how to [config
 
 ## Project Status
 
-`slang-server` is actively developed by the hardware team at Hudson River Trading and welcomes community contributions. The project aims to be the most comprehensive and performant SystemVerilog language server.
+This project maintains its language server independently and builds on official slang sources with a project-owned compiler patch. The [maintenance policy](development/versioning.md) explains how language features and performance changes are selected.
 
 ## Support & Contributing
 
-- **Bug Reports**: Open an issue on [GitHub](https://github.com/hudson-trading/slang-server)
-- **Contributing**: Pull requests are welcome! See our [contributing guidelines](https://github.com/hudson-trading/slang-server/blob/main/CONTRIBUTING.md).
+- **Bug Reports**: Open an issue on [GitHub](https://github.com/Maybeka/slang-server)
+- **Contributing**: Pull requests are welcome! See our [contributing guidelines](https://github.com/Maybeka/slang-server/blob/main/CONTRIBUTING.md).
 
 ## License
 
-slang-server is licensed under the MIT License. See the [full license](https://github.com/hudson-trading/slang-server/blob/main/LICENSE) for details.
+slang-server is licensed under the MIT License. See the [full license](https://github.com/Maybeka/slang-server/blob/main/LICENSE) for details.

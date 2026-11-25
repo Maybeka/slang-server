@@ -1,5 +1,5 @@
 {
-  "base_commit": "151a801ceaf6faf23d79a42d210ff67e50eb4660",
+  "base_commit": "31a29606b5fb7a50a68bd07fddef4458abd83f53",
   "files": {
     ".clang-format": "02261c0a49db9cbd73538c715993625b77502e67db0969dee7190a7db1c9b201",
     ".clang-tidy": "cf8e7e68fa781775843f067e2523216b4e2b6b196bfba2563eb4c0cd003f95e1",
@@ -712,5 +712,5 @@
     "tools/tidy/tests/XilinxDoNotCareValuesTest.cpp": "ca43761c0273045d9b6815c78e253c51decf7216c316fa2baaefcf65079e446b"
   },
   "format": 1,
-  "patch_sha256": "dfc4823cc7f6067646bc1612e75f6f6a1a0ac7e937418f33f4efe3eab7c83440"
+  "patch_sha256": "cf6af7ed96bee7e661fe446f82e68d58a4201c558b736a6d2f4e4345d7150509"
 }

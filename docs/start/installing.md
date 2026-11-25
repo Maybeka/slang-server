@@ -1,24 +1,12 @@
 # Installing
 
-### Vscode
+### VS Code and compatible editors
 
-Install the extension [here](https://marketplace.visualstudio.com/items?itemName=Hudson-River-Trading.vscode-slang). Then, it will prompt you to allow the extension to autoinstall the server binary from the [releases](https://github.com/hudson-trading/slang-server/releases) page. Alternatively, you can [build slang-server](https://hudson-trading.github.io/slang-server/start/building/) and set `slang.path` to that binary.
-
-### Vscode Forks (Cursor, Antigravity, VSCodium, etc.)
-
-Install from your editor, or download from the [OpenVSX Marketplace](https://open-vsx.org/extension/Hudson-River-Trading/vscode-slang)
+Set `slang.path` to the absolute path of the [locally built server](building.md). The extension built from this repository also supports managed downloads from [this project's releases](https://github.com/Maybeka/slang-server/releases) when a matching platform asset is available. Its managed binaries are stored under the release repository name. An existing Marketplace client can use the local server through the same explicit setting.
 
 ### Neovim
 
-For this fork's reviewed binary, use the explicit
-[LazyVim fork configuration](../editors/lazyvim-fork.md). The generic Mason
-installation below obtains the upstream package and does not select this fork.
-
-`slang-server` is available in [nvim-lspconfig](https://github.com/neovim/nvim-lspconfig) as `slang_server` (note the underscore) and in the [mason.nvim](https://github.com/mason-org/mason.nvim) package registry as `slang-server`, so no additional configuration is required in most cases. The default configuration shipped with nvim-lspconfig can be found [here](https://github.com/neovim/nvim-lspconfig/blob/master/lsp/slang_server.lua).
-
-Install the binary via `:MasonInstall slang-server` (or otherwise place it on `PATH`), then enable the server with `vim.lsp.enable("slang_server")`, or follow your own Neovim configuration's convention for enabling servers.
-
-Restart and run `:LspInfo` to make sure the LSP was correctly installed.
+For LazyVim, use the [project configuration](../editors/lazyvim-fork.md) and set `SLANG_SERVER_FORK_BIN` to this project's executable. For other Neovim setups, point the `slang_server` LSP command at that executable. Check the running command with `:LspInfo`.
 
 #### Code lenses
 
@@ -61,7 +49,7 @@ the current line.
 
 #### Enhanced features
 
-Once the language server is installed, it is recommended to install the [slang-server.nvim](https://github.com/hudson-trading/slang-server.nvim) plugin; this provides enhanced HDL specific features such as design hierarchy view and waveform integration.
+The optional [Neovim plugin in this repository](https://github.com/Maybeka/slang-server/tree/main/clients/neovim) provides the design hierarchy and waveform integration. Load that directory as a local plugin to use the matching revision.
 
 ### Other editors
 

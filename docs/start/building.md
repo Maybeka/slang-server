@@ -73,13 +73,9 @@ all 1,296 dependency file hashes are in `restoration/offline-dependencies.json`:
 | Boost.Regex | `2b3ac0834f31086c6e3c0e0ceb8516e427d5c39d` |
 | toml++ | `30172438cee64926dc41fdd9c11fb3ba5b2ba9de` |
 
-The SDK pin is `151a801ceaf6faf23d79a42d210ff67e50eb4660` plus
-`restoration/slang.patch` (SHA256
-`96550dbfbfd65a0a986c0e6e2769a3f96857b0d70ec6bb728eeb612b41da4bbe`).
-Its expected modified state must remain after preparation. Do not reset it.
+The SDK comes from the official slang repository at the revision recorded by the `external/slang` gitlink. [SDK preparation](https://github.com/Maybeka/slang-server/blob/main/RESTORATION.md) applies the project patch and checks its digest and resulting sources against [the manifest](https://github.com/Maybeka/slang-server/blob/main/restoration/main-sdk.json).
 
-Keep the tested commit, tool versions, CMake cache, complete logs, raw oracle
-and timing JSON, and binary/source hashes with every run. Test-only binaries
+Keep the tested commit, tool versions, settings, compact test results, performance data and binary/source hashes. Test-only binaries
 `slang_server_counted` and `diagnostic_test_server` are excluded from editor
 deployment and timing. GCC 13 and Linux arm64 remain unverified until their own
 complete build and acceptance run. The current Linux evidence uses GCC 14.2.0.

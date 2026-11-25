@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Apply and verify the restored SDK patch on the integrated main SDK pin.
+"""Prepare the project's SDK from the pinned official slang source and local patch.
 
 This verifies SDK bytes only. Legacy restore.py verifies the historical archive,
 not the current server tree. No downloads or builds are performed here.
@@ -57,7 +57,7 @@ def main():
     if failed:
         raise SystemExit("SDK byte verification failed:\n" + "\n".join(failed))
     print(
-        f"Verified {len(inventory['files'])} SDK files at {inventory['base_commit']} plus restored patch"
+        f"Verified {len(inventory['files'])} SDK files at {inventory['base_commit']} plus project patch"
     )
     if args.deps_root:
         dependencies = json.loads((HERE / "offline-dependencies.json").read_text())
