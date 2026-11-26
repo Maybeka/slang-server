@@ -5,6 +5,162 @@
 
 using namespace slang;
 
+TEST_CASE("Virtual interface type tokens resolve in their own declaration context") {
+    ServerHarness server("virtual_interface");
+    auto iface = server.openFile("bus_if.sv");
+    auto doc = server.openFile("virtual_type_navigation.sv", R"(
+class base #(type T);
+    T link;
+endclass
+class client extends base #(.T(virtual interface bus_if #(.INITIAL(7)).monitor));
+    function int read(); return int'(link.value); endfunction
+endclass
+class broken extends base #(.T(virtual missing_bus));
+endclass
+)");
+
+    for (auto [use, declaration] : {
+             std::pair{"virtual interface", "bus_if #"},
+             std::pair{"interface bus_if", "bus_if #"},
+             std::pair{"bus_if #", "bus_if #"},
+             std::pair{"INITIAL(7)", "INITIAL ="},
+             std::pair{"monitor));", "monitor("},
+         }) {
+        CAPTURE(use);
+        auto cursor = doc.before(use);
+        auto links = cursor.getDefinitions();
+        REQUIRE(links.size() == 1);
+        CHECK(links.front().targetUri == iface.m_uri);
+        CHECK(links.front().targetSelectionRange.start == iface.before(declaration).getPosition());
+        CHECK(doc.getHoverAt(cursor.m_offset));
+    }
+    auto missing = doc.before("missing_bus");
+    CHECK(missing.getDefinitions().empty());
+    CHECK_FALSE(doc.getHoverAt(missing.m_offset));
+    CHECK(doc.after("link.").getDefinitions().size() == 2);
+}
+
+TEST_CASE("Array members remain queryable with unknown declaration bounds") {
+    for (std::string_view params : {"parameter int COUNT, parameter int WIDTH = 3",
+                                    "parameter int COUNT = 2, parameter int WIDTH",
+                                    "parameter int COUNT = 2, parameter int WIDTH = 3"}) {
+        CAPTURE(params);
+        ServerHarness server;
+        auto doc = server.openFile("array_bounds_navigation.sv",
+                                   std::string("module top #(") + std::string(params) + R"();
+    typedef struct packed { logic [WIDTH-1:0] payload; int field; } word_t;
+    word_t words[COUNT][COUNT];
+    word_t [COUNT-1:0] packed_words;
+    typedef struct packed { word_t [COUNT-1:0] items; } group_t;
+    group_t group;
+    int result, index;
+    always_comb begin
+        result = words[index][0].field;
+        result = packed_words[index].field;
+        result = group.items[index].field;
+    end
+endmodule
+)");
+        for (auto prefix : {"words[index][0].", "packed_words[index].", "group.items[index]."}) {
+            CAPTURE(prefix);
+            auto cursor = doc.after(prefix);
+            auto links = cursor.getDefinitions();
+            REQUIRE(links.size() == 1);
+            CHECK(links.front().targetSelectionRange.start == doc.before("field;").getPosition());
+            CHECK(doc.getHoverAt(cursor.m_offset));
+            auto completions = cursor.getCompletions(".");
+            CHECK(std::ranges::any_of(completions, [](const auto& completion) {
+                return completion.m_item.label == "field";
+            }));
+        }
+    }
+}
+
+TEST_CASE("Function return names navigate to the enclosing function") {
+    for (bool inClass : {false, true}) {
+        CAPTURE(inClass);
+        ServerHarness server;
+        auto text = std::string(inClass ? "class worker;" : "module top;") + R"(
+    typedef struct packed { int field; } result_t;
+    function automatic int compute(int value);
+        begin : body
+            compute = value ? compute(value - 1) : 0;
+        end
+    endfunction
+    function automatic result_t assemble(int value);
+        assemble.field = value;
+    endfunction
+)" + (inClass ? "endclass" : "endmodule");
+        auto doc = server.openFile("return_names.sv", text);
+        for (auto [use, declaration] : {
+                 std::pair{"compute =", "compute(int"},
+                 std::pair{"compute(value", "compute(int"},
+                 std::pair{"assemble.field", "assemble(int"},
+                 std::pair{"field = value", "field;"},
+             }) {
+            CAPTURE(use);
+            auto cursor = doc.before(use);
+            auto links = cursor.getDefinitions();
+            REQUIRE(links.size() == 1);
+            CHECK(links.front().targetSelectionRange.start ==
+                  doc.before(declaration).getPosition());
+            CHECK(doc.getHoverAt(cursor.m_offset));
+        }
+    }
+}
+
+TEST_CASE("Interface array access recovers known element members across unknown bounds") {
+    ServerHarness server;
+    auto doc = server.openFile("interface_array_navigation.sv", R"(
+typedef struct packed { bit present; } payload_t;
+interface channel #(parameter type T = logic);
+    T payload;
+    bit ready, private_signal;
+    modport sink(input ready, payload);
+endinterface
+module top #(parameter int COUNT)(channel.sink inputs[COUNT]);
+    $static_assert(type(inputs[0].T) == type(payload_t));
+    channel #(payload_t) channels[2][COUNT]();
+    localparam int i = 0;
+    wire a = channels[1][i].payload.present;
+    wire b = inputs[i].ready;
+    wire from_port = inputs[i].payload.present;
+    wire c = channels[2][i].ready;
+    wire d = channels[i].ready;
+    wire e = channels[1][i][i].ready;
+    wire f = channels[1][i:i].ready;
+endmodule
+)");
+    for (auto [prefix, declaration] : {
+             std::pair{"channels[1][i].payload.", "present;"},
+             std::pair{"inputs[i].", "ready, private_signal"},
+             std::pair{"inputs[i].payload.", "present;"},
+         }) {
+        CAPTURE(prefix);
+        auto cursor = doc.after(prefix);
+        auto links = cursor.getDefinitions();
+        CHECK(std::ranges::any_of(links, [&](const auto& link) {
+            return link.targetSelectionRange.start == doc.before(declaration).getPosition();
+        }));
+        CHECK(doc.getHoverAt(cursor.m_offset));
+        auto items = cursor.getCompletions(".");
+        const auto label = std::string_view(prefix) == "inputs[i]." ? "ready" : "present";
+        CHECK(std::ranges::any_of(items,
+                                  [&](const auto& item) { return item.m_item.label == label; }));
+        CHECK(std::ranges::none_of(items, [](const auto& item) {
+            return item.m_item.label == "private_signal";
+        }));
+    }
+    for (auto prefix :
+         {"channels[2][i].", "channels[i].", "channels[1][i][i].", "channels[1][i:i]."}) {
+        CAPTURE(prefix);
+        auto cursor = doc.after(prefix);
+        CHECK(cursor.getDefinitions().empty());
+        CHECK(std::ranges::none_of(cursor.getCompletions("."),
+                                   [](const auto& item) { return item.m_item.label == "ready"; }));
+    }
+}
+
 TEST_CASE("FindSyntax") {
     /// Find the syntax at each location in the file
     ServerHarness server("");

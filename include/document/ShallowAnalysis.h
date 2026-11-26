@@ -268,6 +268,8 @@ private:
 
     mutable slang::flat_hash_map<const slang::ast::DefinitionSymbol*, const slang::ast::Scope*>
         m_interfaceFallbackScopes;
+    mutable slang::flat_hash_map<const slang::ast::Symbol*, const slang::ast::InstanceSymbol*>
+        m_interfaceArrayQueryElements;
 
     const GenvarElaboration* getGenvarElaborationAtToken(const slang::parsing::Token* node) const;
 

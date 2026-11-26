@@ -142,7 +142,7 @@
     "include/slang/ast/symbols/ClassSymbols.h": "8a90ba8a536ada04115a364fcd4ef5a592c7d0b0e236df16504ac283cd759db4",
     "include/slang/ast/symbols/CompilationUnitSymbols.h": "bb39e311ad4b79c5f9b94d61f82e475319a9cbdfa084248b35605fe4bc56f12b",
     "include/slang/ast/symbols/CoverSymbols.h": "226bf261ec2a01542a4ad26317b36dcfb6f03a2361ffc525e9132c4edbc9c218",
-    "include/slang/ast/symbols/InstanceSymbols.h": "c80ebb5d6a270c35af2cde7f5b983ef0a929ed60b2979498542b68994d54f587",
+    "include/slang/ast/symbols/InstanceSymbols.h": "126c0694cf123271bac6a97b9732436fdf2ca9d31429e6fb4596ad83c5333344",
     "include/slang/ast/symbols/MemberSymbols.h": "c37bbb25b3ea80891abd668157151ce279c745b3d75bd16cbece1fb71629b52a",
     "include/slang/ast/symbols/ParameterSymbols.h": "56b707d8a99695cdd5ee21d46509dbeeea7697d105c3891abe6ac9ab2a7b24d5",
     "include/slang/ast/symbols/PortSymbols.h": "18af8eaa43c48f92aad779d282729fe4202c2b04284709c959fbf5f8b8577cad",
@@ -151,7 +151,7 @@
     "include/slang/ast/symbols/SymbolBuilders.h": "6435eac87a44472bdae8e73f662e7c3d48ed334b9239449906856c49097b0f1b",
     "include/slang/ast/symbols/ValueSymbol.h": "0a447420bf090a0a1c513e473828ed8e1e2741ed546998ff25cee94d16f35921",
     "include/slang/ast/symbols/VariableSymbols.h": "f97860201bac04ca084bc458f9e401c967dc31dd3b52c5043630ca6b819a5454",
-    "include/slang/ast/types/AllTypes.h": "26506ab40aaf33bde67fa85094e60189dd823608181c11fac3aaed943df56d72",
+    "include/slang/ast/types/AllTypes.h": "2f76ea38cce4fcb8ba4b82cc0ca0c6e4ef96d5f682f9f94411a79930d5c7e4fb",
     "include/slang/ast/types/DeclaredType.h": "895d471efd6f2145ecc99e0bc49227c070a9088ab2503ecdf9e59e95667a8a16",
     "include/slang/ast/types/NetType.h": "289abd2f6253483bddc680f3de8b332ac2e1a5fba80d0cea5e7626f3010236ec",
     "include/slang/ast/types/Type.h": "7730319fc591c7e2aaa56519a82a040cbe90bc1c3bbca2bfa4b10e9f57ec7049",
@@ -347,7 +347,7 @@
     "source/ast/symbols/ClassSymbols.cpp": "daf8a758508687440c2526100912becc41745249fc562a54b5df5f4b12eab63e",
     "source/ast/symbols/CompilationUnitSymbols.cpp": "db5f4d92ef6b60582fb5c4fd5ca8ef1c52535491408806e4e11528fe45dedc8a",
     "source/ast/symbols/CoverSymbols.cpp": "1966bd24c5e5e5ed08fa211fd5895830d27e8222e20b100e49d1842c7dc28c17",
-    "source/ast/symbols/InstanceSymbols.cpp": "ac6bb29a6900ba7c03b155582d2f1528d96810c5c05a7be035d561755c553284",
+    "source/ast/symbols/InstanceSymbols.cpp": "daf0dda2142bca7482c1ea6a9df2253f9905380456f8b8a475d77feaf1abe960",
     "source/ast/symbols/MemberSymbols.cpp": "0f05bd4fd47bf5a7c0596457da4c4240bb1c230f2c49a9708ca57fc9444f7ba6",
     "source/ast/symbols/ParameterBuilder.cpp": "5c143a291c25d896c8254941363977406c1458859110a95313af17d1845e0b65",
     "source/ast/symbols/ParameterBuilder.h": "0947f663d88a68f42ff178f7524b8f68c4b19899ad992004293d68b7f02ab3d6",
@@ -358,10 +358,10 @@
     "source/ast/symbols/SymbolBuilders.cpp": "22350cb9d564211c7157966309464ea8f12cb2fad88487a7d93bea8cebb37b6c",
     "source/ast/symbols/ValueSymbol.cpp": "efabc4bf92d88067d2c7ffb1e47655d610f59fcfbbca71bb6bd27313256f9183",
     "source/ast/symbols/VariableSymbols.cpp": "474465ae3fe986ef3569fe82d157a71d1af6a491233ceff1f8fb48bf55ae2289",
-    "source/ast/types/AllTypes.cpp": "8742c47a8c0bdfdf8a85708c71443bfc7985b0fb700a1bc3f9bb063105ec3ae0",
+    "source/ast/types/AllTypes.cpp": "52bcdc699afd4a9ced73dd521119c78112b81e25aff84d85dd162088f0e7e33d",
     "source/ast/types/DeclaredType.cpp": "8119ef566780176ab23c26b1e9a900105075d2a42c1e7859656e4c7673edf083",
     "source/ast/types/NetType.cpp": "e2a43e7835bb573a48377eb76fb650bb0de348540f0a7c7dfd4b47e7b7c15006",
-    "source/ast/types/Type.cpp": "6d8ebac9e831425e8913e9e12341af5e001c0d674edaeebf5ace15946dc55dd8",
+    "source/ast/types/Type.cpp": "12289844afda183eaf96f9662a7f77c10e7f979276bc12ce531a85134388de36",
     "source/ast/types/TypePrinter.cpp": "ce77f5852376558ba3a74fc40c7e6c371e02175472c13052fe388a9c302a65d1",
     "source/diagnostics/DiagnosticClient.cpp": "cbd79510c21fab9ffbceaa3ecd98cf889a8eb3e6282a5c3f4e5ffc60e2295688",
     "source/diagnostics/DiagnosticEngine.cpp": "9a0e813eddac3f9c1e251a088b1c70bde2d2f86fac2c5b9ce83866887c2a4edf",
@@ -745,5 +745,5 @@
     "tools/tidy/tests/XilinxDoNotCareValuesTest.cpp": "ca43761c0273045d9b6815c78e253c51decf7216c316fa2baaefcf65079e446b"
   },
   "format": 1,
-  "patch_sha256": "88a1eabbe5fc314a0af677b3ed82f25db03a554f71d50fa6368c952f8a894d65"
+  "patch_sha256": "54d456db18014934c88a11b45eee6244f4151be7ed69e8beecb00a49b607d2b4"
 }

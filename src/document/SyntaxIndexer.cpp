@@ -285,6 +285,13 @@ const slang::parsing::Token* SyntaxIndexer::getWordTokenAt(slang::SourceLocation
 const parsing::Token* SyntaxIndexer::getNavigationTokenAt(SourceLocation loc) const {
     if (auto* token = getWordTokenAt(loc))
         return token;
+    if (auto* token = getTokenAt(loc);
+        token && (token->kind == parsing::TokenKind::VirtualKeyword ||
+                  token->kind == parsing::TokenKind::InterfaceKeyword)) {
+        auto* parent = getTokenParent(token);
+        if (parent && parent->kind == syntax::SyntaxKind::VirtualInterfaceType)
+            return token;
+    }
     auto* left = getTokenBefore(loc);
     return left && isIdToken(left->kind) && left->range().end() == loc ? left : nullptr;
 }

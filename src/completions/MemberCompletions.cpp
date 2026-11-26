@@ -632,14 +632,18 @@ lsp::CompletionItem MemberCompletionQuery::getHierarchicalCompletion(
                                               : nullptr;
         bool specializedClass = (receiverClass && receiverClass->genericClass) ||
                                 (declaringClass && declaringClass->genericClass);
-        if (receiver && receiverType && item.data &&
-            (unwrapErrorType(*receiverType).kind == ast::SymbolKind::VirtualInterfaceType ||
-             specializedClass)) {
-            // A bound virtual interface is not necessarily reachable by a root
-            // hierarchy path. Retain the caller's receiver so resolve uses this
-            // exact parameterized instance and modport, not a default instance.
-            // Class specializations likewise need the receiver: their inherited
-            // methods can share a logical path but have different argument types.
+        auto* port = parentSymbol.as_if<ast::InterfacePortSymbol>();
+        auto* connection = port && port->interfaceDef ? port->getConnection().first : nullptr;
+        auto* array = connection ? connection->as_if<ast::InstanceArraySymbol>() : nullptr;
+        bool recoveredPort = array && array->elements.empty();
+        bool virtualInterface = receiverType &&
+                                unwrapErrorType(*receiverType).kind ==
+                                    ast::SymbolKind::VirtualInterfaceType;
+        if (receiver && item.data && (virtualInterface || recoveredPort ||
+                                      (receiverType && specializedClass))) {
+            // Virtual and recovered interface receivers can be absent from the
+            // hierarchy. Class specializations can share a path with a different
+            // signature. Reuse the receiver selected by this completion.
             auto data = rfl::from_generic<CompletionData, rfl::UnderlyingEnums>(*item.data);
             if (data) {
                 data->receiverBufferId = receiver->location().buffer().getId();

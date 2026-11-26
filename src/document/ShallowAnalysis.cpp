@@ -533,14 +533,25 @@ const ast::Scope* ShallowAnalysis::getScopeFromSym(const ast::Symbol* symbol) co
             if (!parentScope)
                 return nullptr;
 
-            auto [it, inserted] = m_interfaceFallbackScopes.try_emplace(port.interfaceDef, nullptr);
-            if (inserted) {
-                auto& fallback = ast::InstanceSymbol::createDefault(parentScope->getCompilation(),
-                                                                    *port.interfaceDef);
-                fallback.name = "";
-                it->second = &fallback.body;
+            if (instanceArray && !port.getDeclaredRange()) {
+                auto it = m_interfaceArrayQueryElements.find(&port);
+                if (it == m_interfaceArrayQueryElements.end()) {
+                    auto& element = ast::InstanceSymbol::createInterfacePortQueryElement(port);
+                    it = m_interfaceArrayQueryElements.emplace(&port, &element).first;
+                }
+                scope = &it->second->body;
             }
-            scope = it->second;
+            else {
+                auto [it, inserted] =
+                    m_interfaceFallbackScopes.try_emplace(port.interfaceDef, nullptr);
+                if (inserted) {
+                    auto& fallback = ast::InstanceSymbol::createDefault(
+                        parentScope->getCompilation(), *port.interfaceDef);
+                    fallback.name = "";
+                    it->second = &fallback.body;
+                }
+                scope = it->second;
+            }
             if (!port.modport.empty()) {
                 auto fallbackModport = scope->find(port.modport);
                 if (fallbackModport && fallbackModport->kind == ast::SymbolKind::Modport)
@@ -876,6 +887,52 @@ slang::SmallVector<const ast::Symbol*, 2> ShallowAnalysis::getSymbolsAtToken(
         return symbols;
     }
 
+    auto* virtualType = syntax->as_if<syntax::VirtualInterfaceTypeSyntax>();
+    const bool interfaceName =
+        virtualType && (*declTok == virtualType->name || *declTok == virtualType->virtualKeyword ||
+                        *declTok == virtualType->interfaceKeyword);
+    if (!virtualType && syntax->parent) {
+        auto* parent = syntax->parent.get();
+        if (auto* modport = syntax->as_if<syntax::DotMemberClauseSyntax>();
+            modport && *declTok == modport->member) {
+            virtualType = parent->as_if<syntax::VirtualInterfaceTypeSyntax>();
+        }
+        else if (auto* parameter = syntax->as_if<syntax::NamedParamAssignmentSyntax>();
+                 parameter && *declTok == parameter->name && parent->parent) {
+            virtualType = parent->parent->as_if<syntax::VirtualInterfaceTypeSyntax>();
+        }
+    }
+    if (virtualType && (interfaceName || syntax != virtualType)) {
+        auto compilation = getCompilation();
+        auto scopes = m_symbolIndexer.getScopesForSyntax(*virtualType, compilation.get());
+        if (scopes.empty())
+            scopes.push_back(&compilation->getRoot().as<ast::Scope>());
+        for (auto* scope : scopes) {
+            auto resolved = compilation->tryGetDefinition(virtualType->name.valueText(), *scope);
+            auto* def = resolved.definition ? resolved.definition->as_if<ast::DefinitionSymbol>()
+                                            : nullptr;
+            if (!def || def->definitionKind != ast::DefinitionKind::Interface)
+                continue;
+            if (interfaceName) {
+                addSymbol(def);
+                continue;
+            }
+            // Only the declaration is needed here, independent of parameter overrides
+            // on the particular virtual interface value.
+            auto [it, inserted] = m_interfaceFallbackScopes.try_emplace(def, nullptr);
+            if (inserted)
+                it->second = &ast::InstanceSymbol::createDefault(*compilation, *def).body;
+            auto* member = it->second->find(declTok->valueText());
+            if (member && (syntax->kind == syntax::SyntaxKind::DotMemberClause
+                               ? member->kind == ast::SymbolKind::Modport
+                               : member->kind == ast::SymbolKind::Parameter ||
+                                     member->kind == ast::SymbolKind::TypeParameter)) {
+                addSymbol(member);
+            }
+        }
+        return symbols;
+    }
+
     // Handle macro args
     std::shared_ptr<syntax::SyntaxTree> tokTree; // syntax needs to live for this function
     if (syntax->kind == syntax::SyntaxKind::MacroActualArgument) {
@@ -1089,12 +1146,20 @@ slang::SmallVector<const ast::Symbol*, 2> ShallowAnalysis::getSymbolsAtToken(
                             type = &cur->as<ast::ValueSymbol>().getType();
                         }
 
-                        if (type && type->isArray()) {
-                            cur = type->getArrayElementType();
-                        }
-                        else {
+                        if (!type)
                             return nullptr;
+                        auto* shape = &type->getCanonicalType();
+                        if (auto* error = shape->as_if<ast::ErrorType>()) {
+                            auto* select = std::get<const syntax::ElementSelectSyntax*>(sel);
+                            if (!select->selector ||
+                                select->selector->kind != syntax::SyntaxKind::BitSelect ||
+                                !error->queryArrayShape)
+                                return nullptr;
+                            shape = error->queryArrayShape;
                         }
+                        cur = shape->getArrayElementType();
+                        if (!cur)
+                            return nullptr;
                         hasInterfaceDimensions = false;
                     }
                     if (!cur) {
@@ -1125,6 +1190,63 @@ slang::SmallVector<const ast::Symbol*, 2> ShallowAnalysis::getSymbolsAtToken(
         // Try scoped name lookup with the same flags
         if (auto scopedResult = handleScopedNameLookup(nameSyntax, context)) {
             return scopedResult;
+        }
+
+        // An interface array can have no elaborated children if a declaration
+        // bound is unknown. Recover the element's interface specialization for
+        // member queries without adding a child to the design hierarchy.
+        if (auto* selected = nameSyntax->as_if<syntax::IdentifierSelectNameSyntax>();
+            selected && !result.path.empty()) {
+            auto* array = result.path.back().symbol->as_if<ast::InstanceArraySymbol>();
+            auto* inst = array && array->getSyntax()
+                             ? array->getSyntax()->as_if<syntax::HierarchicalInstanceSyntax>()
+                             : nullptr;
+            auto* declaration = inst && inst->parent
+                                    ? inst->parent->as_if<syntax::HierarchyInstantiationSyntax>()
+                                    : nullptr;
+            if (!declaration || !array->elements.empty())
+                return nullptr;
+            if (*declTok == selected->identifier)
+                return result.path.front().symbol.get();
+            auto& dimensions = inst->decl->dimensions;
+            if (selected->selectors.size() != dimensions.size() ||
+                declTok->location() != selected->getLastToken().location())
+                return nullptr;
+
+            auto* parent = array->getParentScope();
+            auto& compilation = parent->getCompilation();
+            auto def = compilation.tryGetDefinition(declaration->type.valueText(), *parent);
+            if (!def.definition || def.definition->as<ast::DefinitionSymbol>().definitionKind !=
+                                       ast::DefinitionKind::Interface)
+                return nullptr;
+
+            ast::ASTContext dimensionContext(*parent, ast::LookupLocation::before(*array));
+            bool unknown = false;
+            for (size_t i = 0; i < dimensions.size(); ++i) {
+                auto* selector = selected->selectors[i]->selector;
+                auto* bit = selector ? selector->as_if<syntax::BitSelectSyntax>() : nullptr;
+                if (!bit || bit->expr->getFirstToken().isMissing())
+                    return nullptr;
+                auto dim = dimensionContext.evalDimension(*dimensions[i], true, false);
+                if (!dim.isRange()) {
+                    unknown = true;
+                    continue;
+                }
+                auto index = context.evalInteger(*bit->expr);
+                if (!index || !dim.range.containsPoint(*index))
+                    return nullptr;
+            }
+            if (!unknown)
+                return nullptr;
+
+            if (auto it = m_interfaceArrayQueryElements.find(array);
+                it != m_interfaceArrayQueryElements.end())
+                return it->second;
+            auto& element = ast::InstanceSymbol::createVirtual(
+                dimensionContext, array->location, def.definition->as<ast::DefinitionSymbol>(),
+                declaration->parameters);
+            m_interfaceArrayQueryElements.emplace(array, &element);
+            return &element;
         }
 
         if (declTok->kind != parsing::TokenKind::Identifier ||

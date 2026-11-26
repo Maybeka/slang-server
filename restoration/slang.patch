@@ -1510,10 +1510,17 @@ index bb4820890a4166ae55d670833b6ed5dd60b65a91..d15cabcaaa711a557cca8a3d176a3dc7
      /// Gets the number of specializations that have been made for this generic class.
      size_t numSpecializations() const { return specMap.size(); }
 diff --git a/include/slang/ast/symbols/InstanceSymbols.h b/include/slang/ast/symbols/InstanceSymbols.h
-index c80a0daa666d7a50d99211ea38b0c6ba61a7d608..a2569cf3ceb963bf07ffe41d1d63a60c06f39bf3 100644
+index c80a0daa666d7a50d99211ea38b0c6ba61a7d608..b1ec5386544c3ec00c69c44687fef9da168e178c 100644
 --- a/include/slang/ast/symbols/InstanceSymbols.h
 +++ b/include/slang/ast/symbols/InstanceSymbols.h
-@@ -156,10 +156,12 @@ public:
+@@ -152,14 +152,19 @@ public:
+         const ASTContext& context, SourceLocation loc, const DefinitionSymbol& definition,
+         const syntax::ParameterValueAssignmentSyntax* paramAssignments);
+ 
++    /// Creates an element view for queries on a declared interface port with unevaluated bounds.
++    static const InstanceSymbol& createInterfacePortQueryElement(const InterfacePortSymbol& port);
++
+     /// Creates a default-instantiated instance of a nested definition in the provided scope.
      static Symbol& createDefaultNested(const Scope& scope,
                                         const syntax::ModuleDeclarationSyntax& syntax);
  
@@ -1530,7 +1537,7 @@ index c80a0daa666d7a50d99211ea38b0c6ba61a7d608..a2569cf3ceb963bf07ffe41d1d63a60c
  
      static bool isKind(SymbolKind kind) { return kind == SymbolKind::Instance; }
  
-@@ -202,6 +204,10 @@ public:
+@@ -202,6 +207,10 @@ public:
          return portList;
      }
  
@@ -1541,7 +1548,7 @@ index c80a0daa666d7a50d99211ea38b0c6ba61a7d608..a2569cf3ceb963bf07ffe41d1d63a60c
      const Symbol* findPort(std::string_view name) const;
  
      const DefinitionSymbol& getDefinition() const { return definition; }
-@@ -225,6 +231,7 @@ public:
+@@ -225,6 +234,7 @@ public:
  
  private:
      friend class Scope;
@@ -1549,7 +1556,7 @@ index c80a0daa666d7a50d99211ea38b0c6ba61a7d608..a2569cf3ceb963bf07ffe41d1d63a60c
  
      void setPorts(std::span<const Symbol* const> ports) const { portList = ports; }
      void finishElaboration(function_ref<void(const Symbol&)> insertCB) const;
-@@ -232,6 +239,7 @@ private:
+@@ -232,6 +242,7 @@ private:
      const DefinitionSymbol& definition;
      mutable std::span<const Symbol* const> portList;
      std::span<const ParameterSymbolBase* const> parameters;
@@ -1629,10 +1636,10 @@ index aadb0e766a90d9721d3df73260e389e5ccc50d10..f233808f63809f9828cbaf4fd9edd892
      VariableLifetime defaultLifetime;
      SubroutineKind subroutineKind;
 diff --git a/include/slang/ast/types/AllTypes.h b/include/slang/ast/types/AllTypes.h
-index b3e3c7f10ae7f7bb6e7c32c6f2a06a0cd2185ef7..7496599087c8660cc0f59140ac83859e4670b493 100644
+index b3e3c7f10ae7f7bb6e7c32c6f2a06a0cd2185ef7..fe4519fee528ca088ac38fd522205fcf3429207c 100644
 --- a/include/slang/ast/types/AllTypes.h
 +++ b/include/slang/ast/types/AllTypes.h
-@@ -610,14 +610,18 @@ private:
+@@ -610,14 +610,26 @@ private:
      mutable const ForwardingTypedefSymbol* firstForward = nullptr;
  };
  
@@ -1646,8 +1653,16 @@ index b3e3c7f10ae7f7bb6e7c32c6f2a06a0cd2185ef7..7496599087c8660cc0f59140ac83859e
 +    /// A wrapped child type that is considered invalid.
 +    const Type* child;
 +
-+    explicit ErrorType(const Type* child = nullptr) :
-+        Type(SymbolKind::ErrorType, "", SourceLocation()), child(child) {}
++    /// Array structure retained for editor queries when bounds could not be evaluated.
++    /// This is not a bound type and must not participate in semantic analysis.
++    const Type* queryArrayShape;
++
++    explicit ErrorType(const Type* child = nullptr, const Type* queryArrayShape = nullptr) :
++        Type(SymbolKind::ErrorType, "", SourceLocation()), child(child),
++        queryArrayShape(queryArrayShape) {}
++
++    static const ErrorType& withArrayShape(Compilation& comp, const Type& elementType,
++                                          bool packed);
  
      ConstantValue getDefaultValueImpl() const { return nullptr; }
 -    void serializeTo(ASTSerializer&) const {}
@@ -13021,7 +13036,7 @@ index b9c2ca02f8378449d7e288cbf86448c366f95a69..3a7e7fb36f843d1e87a2cee49de94311
          return false;
      }
 diff --git a/source/ast/symbols/InstanceSymbols.cpp b/source/ast/symbols/InstanceSymbols.cpp
-index 93fb2347c8a59b1a413e64ad3d9dd2db8d8b6857..0ff3cbc904ec7809647e54d2230637fe4e9d3062 100644
+index 93fb2347c8a59b1a413e64ad3d9dd2db8d8b6857..5346b24706859b543d0b63b778e9d716ee591ace 100644
 --- a/source/ast/symbols/InstanceSymbols.cpp
 +++ b/source/ast/symbols/InstanceSymbols.cpp
 @@ -457,12 +457,12 @@ Symbol& InstanceSymbol::createDefaultNested(const Scope& scope,
@@ -13050,7 +13065,96 @@ index 93fb2347c8a59b1a413e64ad3d9dd2db8d8b6857..0ff3cbc904ec7809647e54d2230637fe
  
          if (inChecker) {
              addDiag(diag::InvalidInstanceForParent)
-@@ -1162,6 +1162,16 @@ void InstanceSymbol::connectDefaultIfacePorts() const {
+@@ -993,7 +993,8 @@ using IfaceParamAssignmentMap =
+ // Scan direct-body `$static_assert`s once and collect the parameter assignments they imply for
+ // each interface port. Asserts nested in generate blocks are skipped because their constraints are
+ // conditional, but parameter assignments must be applied before elaborating generate branches.
+-static IfaceParamAssignmentMap collectIfaceParamAssignments(const InstanceBodySymbol& body) {
++static IfaceParamAssignmentMap collectIfaceParamAssignments(
++    const InstanceBodySymbol& body, const InterfacePortSymbol* queryPort = nullptr) {
+     auto bodySyntax = body.getSyntax() ? body.getSyntax()->as_if<ModuleDeclarationSyntax>()
+                                        : nullptr;
+     if (!bodySyntax)
+@@ -1038,7 +1039,7 @@ static IfaceParamAssignmentMap collectIfaceParamAssignments(const InstanceBodySy
+             continue;
+ 
+         auto match = matchIfaceParamConstraint(*simpleSeq.expr, ifacePorts);
+-        if (!match)
++        if (!match || (queryPort && match->port != queryPort))
+             continue;
+ 
+         // Only override parameters the interface actually declares, and require the constraint
+@@ -1052,23 +1053,37 @@ static IfaceParamAssignmentMap collectIfaceParamAssignments(const InstanceBodySy
+         }
+ 
+         auto dims = match->port->getDeclaredRange();
+-        if (!dims || dims->size() != match->elementSelectors.size())
++        auto* portSyntax = match->port->getSyntax();
++        auto* declarator = portSyntax ? portSyntax->as_if<DeclaratorSyntax>() : nullptr;
++        if ((!dims && (!queryPort || !declarator)) ||
++            (dims ? dims->size() : declarator->dimensions.size()) !=
++                match->elementSelectors.size())
+             continue;
+ 
+         // An interface instance array has one shared parameterization. The selectors identify a
+         // valid element whose parameter can appear in the assertion; the inferred assignment is
+         // applied to every element below.
+         bool validPath = true;
+-        for (size_t i = 0; i < dims->size(); i++) {
++        for (size_t i = 0; i < match->elementSelectors.size(); i++) {
+             auto& selectorExpr = Expression::bind(*match->elementSelectors[i], context);
+             auto selectorValue = context.tryEval(selectorExpr);
+             auto index = selectorValue.isInteger() ? selectorValue.integer().as<int32_t>()
+                                                    : std::optional<int32_t>{};
+-            if (selectorExpr.hasHierarchicalReference() || !index ||
+-                !(*dims)[i].containsPoint(*index)) {
++            if (selectorExpr.hasHierarchicalReference() || !index) {
+                 validPath = false;
+                 break;
+             }
++            if (dims) {
++                validPath &= (*dims)[i].containsPoint(*index);
++            }
++            else {
++                ASTContext dimContext(body, LookupLocation::before(*queryPort),
++                                      ASTFlags::NonProcedural);
++                auto dim = dimContext.evalDimension(*declarator->dimensions[i], true, false);
++                validPath &= !dim.isRange() || dim.range.containsPoint(*index);
++            }
++            if (!validPath)
++                break;
+         }
+         if (!validPath)
+             continue;
+@@ -1094,6 +1109,27 @@ static IfaceParamAssignmentMap collectIfaceParamAssignments(const InstanceBodySy
+     return result;
+ }
+ 
++const InstanceSymbol& InstanceSymbol::createInterfacePortQueryElement(
++    const InterfacePortSymbol& port) {
++    auto& consumer = port.getParentScope()->asSymbol().as<InstanceBodySymbol>();
++    auto& comp = consumer.getCompilation();
++    auto& def = *port.interfaceDef;
++    ASTContext context(consumer, LookupLocation::max);
++    ParameterBuilder builder(*def.getParentScope(), def.name, def.parameters);
++    builder.setInstanceContext(context);
++    builder.setSuppressErrors(true);
++    auto assignments = collectIfaceParamAssignments(consumer, &port);
++    if (auto it = assignments.find(&port); it != assignments.end()) {
++        for (auto& assignment : it->second)
++            builder.addAssignment(assignment.paramName, *assignment.constraintExpr);
++    }
++    auto& element = InstanceBodySymbol::fromDefinition(comp, def, port.location, builder,
++                                                       InstanceFlags::None);
++    auto& view = *comp.emplace<InstanceSymbol>(port.name, port.location, element, 0u);
++    view.setParent(*port.getParentScope());
++    return view;
++}
++
+ static Symbol* recurseDefaultIfaceInst(Compilation& comp, const InterfacePortSymbol& port,
+                                        const InstanceSymbol*& firstInst,
+                                        ParameterBuilder& paramBuilder,
+@@ -1162,6 +1198,16 @@ void InstanceSymbol::connectDefaultIfacePorts() const {
                      }
                  }
  
@@ -13067,7 +13171,7 @@ index 93fb2347c8a59b1a413e64ad3d9dd2db8d8b6857..0ff3cbc904ec7809647e54d2230637fe
                  Symbol* inst;
                  const ModportSymbol* modport = nullptr;
                  if (auto dims = ifacePort.getDeclaredRange()) {
-@@ -1249,6 +1259,7 @@ InstanceBodySymbol& InstanceBodySymbol::fromDefinition(Compilation& comp,
+@@ -1249,6 +1295,7 @@ InstanceBodySymbol& InstanceBodySymbol::fromDefinition(Compilation& comp,
                                                         bitmask<InstanceFlags> flags) {
      auto overrideNode = paramBuilder.getOverrides();
      auto result = comp.emplace<InstanceBodySymbol>(comp, definition, overrideNode, flags);
@@ -13075,7 +13179,7 @@ index 93fb2347c8a59b1a413e64ad3d9dd2db8d8b6857..0ff3cbc904ec7809647e54d2230637fe
  
      auto& declSyntax = definition.getSyntax()->as<ModuleDeclarationSyntax>();
      result->setSyntax(declSyntax);
-@@ -1323,7 +1334,7 @@ InstanceBodySymbol& InstanceBodySymbol::fromDefinition(Compilation& comp,
+@@ -1323,7 +1370,7 @@ InstanceBodySymbol& InstanceBodySymbol::fromDefinition(Compilation& comp,
                  if (def) {
                      // const_cast is ok; we just created this definition in an addMembers call
                      // above.
@@ -13084,7 +13188,7 @@ index 93fb2347c8a59b1a413e64ad3d9dd2db8d8b6857..0ff3cbc904ec7809647e54d2230637fe
                  }
              }
              else {
-@@ -1333,13 +1344,14 @@ InstanceBodySymbol& InstanceBodySymbol::fromDefinition(Compilation& comp,
+@@ -1333,13 +1380,14 @@ InstanceBodySymbol& InstanceBodySymbol::fromDefinition(Compilation& comp,
          }
      }
  
@@ -13100,7 +13204,7 @@ index 93fb2347c8a59b1a413e64ad3d9dd2db8d8b6857..0ff3cbc904ec7809647e54d2230637fe
      return *result;
  }
  
-@@ -1396,7 +1408,7 @@ void InstanceBodySymbol::finishElaboration(function_ref<void(const Symbol&)> ins
+@@ -1396,7 +1444,7 @@ void InstanceBodySymbol::finishElaboration(function_ref<void(const Symbol&)> ins
              }
          }
  
@@ -13431,13 +13535,20 @@ index 79e4e7b240f4a03b7cb125425cbe8f100c9d1545..a74002d6d3a9159bef37f5943e2843b1
      defaultVal = EvaluatingPlaceholder;
      defaultVal = &Expression::bindArgument(getType(), direction, flags, *defaultValSyntax, context);
 diff --git a/source/ast/types/AllTypes.cpp b/source/ast/types/AllTypes.cpp
-index ae7736e027364278be067af9bd50eee2bdafc7f5..918c997fda4ac6c1d380ddab25255f94b0e00470 100644
+index ae7736e027364278be067af9bd50eee2bdafc7f5..e66310cb92a1c7d207fc418a2ec8ba032bd41fc5 100644
 --- a/source/ast/types/AllTypes.cpp
 +++ b/source/ast/types/AllTypes.cpp
-@@ -122,6 +122,11 @@ using namespace syntax;
+@@ -122,6 +122,18 @@ using namespace syntax;
  
  const ErrorType ErrorType::Instance;
  
++const ErrorType& ErrorType::withArrayShape(Compilation& comp, const Type& elementType,
++                                          bool packed) {
++    auto* error = elementType.getCanonicalType().as_if<ErrorType>();
++    auto* shape = comp.emplace<DPIOpenArrayType>(elementType, packed);
++    return *comp.emplace<ErrorType>(error ? error->child : nullptr, shape);
++}
++
 +void ErrorType::serializeTo(ASTSerializer& serializer) const {
 +    if (child)
 +        serializer.write("child", *child);
@@ -13446,7 +13557,7 @@ index ae7736e027364278be067af9bd50eee2bdafc7f5..918c997fda4ac6c1d380ddab25255f94
  IntegralType::IntegralType(SymbolKind kind, std::string_view name, SourceLocation loc,
                             bitwidth_t bitWidth_, bool isSigned_, bool isFourState_) :
      Type(kind, name, loc), bitWidth(bitWidth_), isSigned(isSigned_), isFourState(isFourState_) {
-@@ -355,7 +360,9 @@ const Type& EnumType::fromSyntax(Compilation& comp, const EnumTypeSyntax& syntax
+@@ -355,7 +367,9 @@ const Type& EnumType::fromSyntax(Compilation& comp, const EnumTypeSyntax& syntax
      if (syntax.parent && syntax.parent->kind == SyntaxKind::TypedefDeclaration)
          enumType->name = syntax.parent->as<TypedefDeclarationSyntax>().name.valueText();
  
@@ -13457,7 +13568,7 @@ index ae7736e027364278be067af9bd50eee2bdafc7f5..918c997fda4ac6c1d380ddab25255f94
  
      // Enum values must be unique; this set and lambda are used to check that.
      SmallMap<SVInt, SourceLocation, 8> usedValues;
-@@ -607,7 +614,11 @@ const Type& EnumType::findDefinition(Compilation& comp, const EnumTypeSyntax& sy
+@@ -607,7 +621,11 @@ const Type& EnumType::findDefinition(Compilation& comp, const EnumTypeSyntax& sy
      auto symbol = context.scope->find(name);
      if (symbol && symbol->kind == SymbolKind::EnumValue) {
          auto& type = symbol->as<EnumValueSymbol>().getType().getCanonicalType();
@@ -13470,7 +13581,33 @@ index ae7736e027364278be067af9bd50eee2bdafc7f5..918c997fda4ac6c1d380ddab25255f94
              return createPackedDims(context, &type, syntax.dimensions);
      }
  
-@@ -909,6 +920,7 @@ const Type& PackedStructType::fromSyntax(Compilation& comp, const StructUnionTyp
+@@ -704,8 +722,12 @@ const Type& PackedArrayType::fromSyntax(const ASTContext& context, const Type& e
+                                         const EvaluatedDimension& dimension,
+                                         const SyntaxNode& syntax) {
+     auto& comp = context.getCompilation();
+-    if (elementType.isError())
+-        return elementType;
++    if (elementType.isError()) {
++        auto& error = elementType.getCanonicalType().as<ErrorType>();
++        if (!error.child && !error.queryArrayShape)
++            return elementType;
++        return ErrorType::withArrayShape(comp, elementType, true);
++    }
+ 
+     if (!elementType.isIntegral()) {
+         if (elementType.getCanonicalType().kind == SymbolKind::DPIOpenArrayType)
+@@ -716,6 +738,10 @@ const Type& PackedArrayType::fromSyntax(const ASTContext& context, const Type& e
+     }
+ 
+     if (!dimension.isRange()) {
++        if (dimension.kind == DimensionKind::Unknown) {
++            // Keep the element type for source queries while leaving the bound type invalid.
++            return ErrorType::withArrayShape(comp, elementType, true);
++        }
+         if (dimension.kind == DimensionKind::DPIOpenArray) {
+             if (elementType.isPackedArray()) {
+                 context.addDiag(diag::MultiplePackedOpenArrays, syntax.sourceRange());
+@@ -909,6 +935,7 @@ const Type& PackedStructType::fromSyntax(Compilation& comp, const StructUnionTyp
          for (auto decl : member->declarators) {
              auto field = comp.emplace<FieldSymbol>(decl->name.valueText(), decl->name.location(),
                                                     0u, (uint32_t)members.size());
@@ -13478,7 +13615,7 @@ index ae7736e027364278be067af9bd50eee2bdafc7f5..918c997fda4ac6c1d380ddab25255f94
              field->setType(type);
              field->setSyntax(*decl);
              field->setAttributes(*context.scope, member->attributes);
-@@ -929,7 +941,7 @@ const Type& PackedStructType::fromSyntax(Compilation& comp, const StructUnionTyp
+@@ -929,7 +956,7 @@ const Type& PackedStructType::fromSyntax(Compilation& comp, const StructUnionTyp
              if (!issuedError && structType->bitWidth > (uint32_t)SVInt::MAX_BITS) {
                  context.addDiag(diag::PackedTypeTooLarge, syntax.sourceRange())
                      << structType->bitWidth << (uint32_t)SVInt::MAX_BITS;
@@ -13487,7 +13624,7 @@ index ae7736e027364278be067af9bd50eee2bdafc7f5..918c997fda4ac6c1d380ddab25255f94
              }
  
              if (decl->initializer) {
-@@ -941,7 +953,7 @@ const Type& PackedStructType::fromSyntax(Compilation& comp, const StructUnionTyp
+@@ -941,7 +968,7 @@ const Type& PackedStructType::fromSyntax(Compilation& comp, const StructUnionTyp
      }
  
      if (!structType->bitWidth || issuedError)
@@ -13496,7 +13633,7 @@ index ae7736e027364278be067af9bd50eee2bdafc7f5..918c997fda4ac6c1d380ddab25255f94
  
      // We added the fields in reverse order, so compute their actual
      // offsets in the right order now.
-@@ -1088,6 +1100,7 @@ const Type& PackedUnionType::fromSyntax(Compilation& comp, const StructUnionType
+@@ -1088,6 +1115,7 @@ const Type& PackedUnionType::fromSyntax(Compilation& comp, const StructUnionType
              auto name = decl->name;
              auto field = comp.emplace<FieldSymbol>(name.valueText(), name.location(), 0u,
                                                     fieldIndex++);
@@ -13504,7 +13641,7 @@ index ae7736e027364278be067af9bd50eee2bdafc7f5..918c997fda4ac6c1d380ddab25255f94
              field->setType(type);
              field->setSyntax(*decl);
              field->setAttributes(*context.scope, member->attributes);
-@@ -1132,7 +1145,7 @@ const Type& PackedUnionType::fromSyntax(Compilation& comp, const StructUnionType
+@@ -1132,7 +1160,7 @@ const Type& PackedUnionType::fromSyntax(Compilation& comp, const StructUnionType
      }
  
      if (!unionType->bitWidth || issuedError)
@@ -13574,7 +13711,7 @@ index 5ab46d2b7ae7775620351fd7c9789d274711ef18..d6ee038cee3b3c602c8d8a398ea064c2
      return initializer == NoInitializer ? nullptr : initializer;
  }
 diff --git a/source/ast/types/Type.cpp b/source/ast/types/Type.cpp
-index 2a98afc81c2e48bb5f7ab18908df118e3659aff6..bb1ecbc5805ba51b03bfaa9ad05e1a7eefa6d520 100644
+index 2a98afc81c2e48bb5f7ab18908df118e3659aff6..5d793ccb8791b7b4ff82c51c06e394855f648218 100644
 --- a/source/ast/types/Type.cpp
 +++ b/source/ast/types/Type.cpp
 @@ -437,6 +437,20 @@ bool Type::isMatching(const Type& rhs) const {
@@ -13610,6 +13747,31 @@ index 2a98afc81c2e48bb5f7ab18908df118e3659aff6..bb1ecbc5805ba51b03bfaa9ad05e1a7e
  
              if (!expr.bad()) {
                  if (expr.hasHierarchicalReference() &&
+@@ -1346,15 +1365,21 @@ const Type& Type::fromSyntax(Compilation& comp, const Type& elementType,
+     const Type* result = &elementType;
+     size_t count = dimensions.size();
+     for (size_t i = 0; i < count; i++) {
+-        if (result->isError())
+-            return *result;
++        if (result->isError()) {
++            auto& error = result->getCanonicalType().as<ErrorType>();
++            if (!error.child && !error.queryArrayShape)
++                return *result;
++            result = &ErrorType::withArrayShape(comp, *result, false);
++            continue;
++        }
+ 
+         auto& syntax = *dimensions[count - i - 1];
+         auto dim = context.evalDimension(syntax, /* requireRange */ false, /* isPacked */ false);
+ 
+         switch (dim.kind) {
+             case DimensionKind::Unknown:
+-                return comp.getErrorType();
++                result = &ErrorType::withArrayShape(comp, *result, false);
++                break;
+             case DimensionKind::Range:
+             case DimensionKind::AbbreviatedRange:
+                 result = &FixedSizeUnpackedArrayType::fromDim(comp, context, *result, dim.range,
 diff --git a/source/ast/types/TypePrinter.cpp b/source/ast/types/TypePrinter.cpp
 index 564400042647b1326c5dd44c3a59b9e599ead247..be4bdf73e6f923a61856e478b090b5d9c0274612 100644
 --- a/source/ast/types/TypePrinter.cpp

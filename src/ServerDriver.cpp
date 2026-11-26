@@ -49,6 +49,7 @@
 #include "slang/ast/symbols/CompilationUnitSymbols.h"
 #include "slang/ast/symbols/InstanceSymbols.h"
 #include "slang/ast/symbols/ParameterSymbols.h"
+#include "slang/ast/symbols/SubroutineSymbols.h"
 #include "slang/ast/symbols/ValueSymbol.h"
 #include "slang/ast/types/AllTypes.h"
 #include "slang/ast/types/Type.h"
@@ -2473,6 +2474,12 @@ std::optional<DefinitionInfo> ServerDriver::getDefinitionInfoAt(
 
     auto localSymbols = analysis->getSymbolsAtToken(declTok);
     for (auto* symbol : localSymbols) {
+        if (symbol->kind == ast::SymbolKind::Variable) {
+            auto* scope = symbol->getParentScope();
+            auto* function = scope ? scope->asSymbol().as_if<ast::SubroutineSymbol>() : nullptr;
+            if (function && function->returnValVar == symbol)
+                symbol = function;
+        }
         addSymbol(symbol, analysis);
         if (auto* port = symbol->as_if<ast::InterfacePortSymbol>()) {
             if (auto* connection = analysis->getActiveInterfaceConnection(*port)) {
