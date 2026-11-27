@@ -369,6 +369,6 @@ worker-local UVM prefix; idle workers are released after five seconds. Retiremen
 can add a query latency spike;
 memory and total latency benefits depend on the workload. See the
 [eligibility and ownership rules](../features/uvm-prefix-cache.md) and the
-[Mac performance acceptance](../../validation/macos-uvm-prefix-2026-10-19.md) and
-[worker/retirement follow-up](../../validation/macos-uvm-followup-2026-10-19.md).
+Mac performance acceptance and
+worker/retirement follow-up.
 It remains disabled by default.

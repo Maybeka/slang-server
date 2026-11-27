@@ -149,7 +149,7 @@ jobs:
         run: |
           mkdir -p release-assets
           if [ -d artifacts ]; then
-            find artifacts -type f \( -name "*.tar.gz" -o -name "*.zip" \) -exec cp {} release-assets/ \; 2>/dev/null || true
+            find artifacts -type f -name "*.tar.gz" -exec cp {} release-assets/ \; 2>/dev/null || true
           fi
           if [ -z "$(ls -A release-assets 2>/dev/null)" ]; then
             echo "Warning: No release artifacts found"

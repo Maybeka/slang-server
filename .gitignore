@@ -4,6 +4,8 @@
 venv/
 .cache/
 .slang/cache/
+.slang/local/
+/untracked/
 .DS_Store
 __pycache__/
 *.pyc

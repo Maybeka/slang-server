@@ -60,16 +60,11 @@ void SlangServer::maybeRetireParsedContext(const lsp::RequestContext* retirement
         m_contextRetry.reset();
         return;
     }
-    auto epoch = m_driver->completions.getCompletionEpoch();
+    const auto epoch = m_driver->completions.getCompletionEpoch();
     auto table = m_driver->sm.getSourceLocationTableBytes();
     auto bytes = table + m_driver->sm.getMemoryUsage();
-    if (m_contextEpoch != epoch) {
-        m_contextEpoch = epoch;
+    if (m_contextEpoch != epoch)
         resetSourceHistoryBudget(bytes);
-        m_contextEdits = 0;
-        m_contextRetirement.clearRequest();
-        m_contextRetry.reset();
-    }
     uint64_t forced = 0;
     if (auto* value = std::getenv("SLANG_UVM_GENERATION_EDIT_LIMIT"))
         forced = std::strtoull(value, nullptr, 10);

@@ -118,6 +118,7 @@ plugins:
   - search
   - meta
   - htmlproofer:
+      validate_external_urls: !ENV [ENABLED_HTMLPROOFER, false]
       raise_error_after_finish: True
       raise_error_excludes:
         403: ['*']

@@ -85,7 +85,7 @@ not a production UVM validation or a historical benchmark replica.
 The independent `9dfd335` checkout was fully built and tested using this pinned
 configuration, reusing installed tools and verified dependency sources but no
 previous product objects. Exact execution and recovery limits are recorded in
-[the clean-checkout report](https://github.com/Maybeka/slang-server/blob/main/validation/clean-checkout-2026-10-18.json).
+local record `clean-checkout-2026-10-18.json`.
 
 See [the fork's LazyVim setup](../editors/lazyvim-fork.md) for editor checks.
 

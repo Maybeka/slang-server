@@ -123,17 +123,17 @@ information; diagnostics that share an expanded location and code can appear in
 a different array order because physical source IDs differ. Related-information
 ordering and completion/definition/resolve ordering are unchanged.
 
-See the [worker and retirement follow-up report](../../validation/macos-uvm-followup-2026-10-19.md)
-and the [initial Mac acceptance and performance report](../../validation/macos-uvm-prefix-2026-10-19.md)
+See the worker and retirement follow-up report
+and the initial Mac acceptance and performance report
 for measured first-query, continuous-edit, full-resolve, fallback and memory
 tradeoffs, including negative results. The setting remains opt-in.
 
-The [current Mac class-session comparison](../../validation/macos-native-idle-class-sessions-2026-10-20.md)
+The current Mac class-session comparison
 also compares the dedicated route with generic package freezing on real
 SPI/PSS/UBUS. Generic freezing remains slower than dedicated UVM in ordinary
 class editing and macro-fallback sessions. Retain the dedicated route for those
 workloads rather than assuming that the more general implementation is faster.
-The current [RTL comparison](../../validation/macos-native-idle-rtl-2026-10-20.md)
+The current RTL comparison
 describes the separate hierarchy workload where generic instance-value reuse
 helps. These are workload-specific measurements, not an automatic route selector
 or evidence that enabling both switches combines their benefits.
@@ -178,5 +178,5 @@ remain live.
 
 Release archives keep the executable at their root and carry
 `resources/uvm/1.2` beside it for existing editor installers. Keep that folder
-when moving a release. See the [Mac packaging validation](../../validation/macos-bundled-uvm-2026-10-20.md)
+when moving a release. See the Mac packaging validation
 for relocation, missing-resource and compatibility checks.

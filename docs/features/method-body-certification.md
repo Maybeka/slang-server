@@ -117,7 +117,7 @@ can qualify. Changed package/static/task/constructor call references still requi
 analysis; all other driver, timing, initializer, specialization and fatal-stream checks remain.
 Without a qualifying fixed provider, external usage changes retain native fallback. This does not
 provide a general reference dependency ledger. See the
-[fixed-provider evaluation](../development/fixed-provider-reference-evaluation.md).
+[fixed-provider evaluation](../development/performance-roadmap-status.md).
 
 
 Line-count changes can reuse retained diagnostics for later methods in the same class when a
@@ -145,7 +145,7 @@ from the same document version. Cancellation during the proof
 leaves the previous complete diagnostic publication intact and permits retry. The proof is
 lazy and belongs to one original diagnostic owner, without a chain of edited semantic owners.
 
-See the [later-macro evaluation](../development/later-macro-line-evaluation.md) for the
+See the [later-macro evaluation](../development/performance-roadmap-status.md) for the
 original multiline CVA6 measurements, current Native documentation checks and remaining limits.
 
 
@@ -157,7 +157,7 @@ bytes/buffer counts and still-pinned replaced bytes; source-location table stora
 is separate. Names and BufferIDs remain valid within the source manager, and ordinary
 files / immutable prefixes are never released by this private-query path. Source-location
 history and repeated canceled retirement still require further work. See the
-[source storage evaluation](../development/source-storage-evaluation.md).
+[source storage evaluation](../development/performance-roadmap-status.md).
 
 
 Cooperative retirement retries use the actual cost of a canceled candidate with an
@@ -167,7 +167,7 @@ input/configuration recovery and asynchronous result wakes bypass it. The existi
 hard source highwater still forces retirement, and idle retry runs without another
 user message. Already-started full model/semantic work can still contain atomic
 segments. This adds no fixed input or diagnostic debounce. See the
-[maintenance retry evaluation](../development/maintenance-retry-evaluation.md).
+[maintenance retry evaluation](../development/performance-roadmap-status.md).
 
 
 Current requests also reach disposable owner, configured/hinted package and dependency
@@ -177,7 +177,7 @@ propagates instead of becoming a persistent context error. Hint/interface metada
 caches publish only complete collections and weak hint ownership does not pin old text.
 Completed syntax can remain reusable when its caller is canceled. Full model refresh,
 semantic binding and already-committed selection updates still have separate cancellation
-boundaries. See the [owner cancellation evaluation](../development/owner-cancellation-evaluation.md).
+boundaries. See the [owner cancellation evaluation](../development/performance-roadmap-status.md).
 
 ## Source history allowance and accounting
 
@@ -312,9 +312,9 @@ require their own large-project performance acceptance before a speedup is claim
 
 完整宏入口日志也可用于回放跨多次宏调用生成的方法体，先核对原生展开token，再验证编辑后的展开。只允许已完成原生分析证明为普通非静态实例void函数的signed int输入实参的运行时行号变化；类型、常量、预处理状态和语法恢复等未证明情形保留完整分析。
 
-泛型方法不必已存在于查询索引：在证明原生声明就是查询树中的同一节点后，按声明保护已有和后续实例，并按声明登记外部求值或体作用域依赖，供后续请求失效。嵌套保护不能覆盖外层保护。原生行号证据对所有已分析实例取交集；int/byte等不一致实参类型不会因其中一个实例合格而获准复用。该扩展不等于一般多上下文、虚拟接口或调用/初始化影响闭包完成。首次语法身份查找及宏证明成本仍需优化；详见[泛型宏方法实测](../development/generic-macro-context-evaluation.md)。
+泛型方法不必已存在于查询索引：在证明原生声明就是查询树中的同一节点后，按声明保护已有和后续实例，并按声明登记外部求值或体作用域依赖，供后续请求失效。嵌套保护不能覆盖外层保护。原生行号证据对所有已分析实例取交集；int/byte等不一致实参类型不会因其中一个实例合格而获准复用。该扩展不等于一般多上下文、虚拟接口或调用/初始化影响闭包完成。首次语法身份查找及宏证明成本仍需优化；详见[泛型宏方法实测](../development/performance-roadmap-status.md)。
 
-宏证明的遍历范围可按物理源端点及真实include祖先缩小。声明端点未知、跨文件等不能排除时保留完整遍历；原生token比对仍必须通过。多个缺失查询上下文的声明合并一次核对，其静态身份只在保留的原始CST生命周期内复用；依赖文件的输入认证不复用成功结果。首次增行实测已改善，但外围排队和诊断延迟门限尚未通过，详见[范围限定实测](../development/scoped-macro-evidence-evaluation.md)。
+宏证明的遍历范围可按物理源端点及真实include祖先缩小。声明端点未知、跨文件等不能排除时保留完整遍历；原生token比对仍必须通过。多个缺失查询上下文的声明合并一次核对，其静态身份只在保留的原始CST生命周期内复用；依赖文件的输入认证不复用成功结果。首次增行实测已改善，但外围排队和诊断延迟门限尚未通过，详见[范围限定实测](../development/performance-roadmap-status.md)。
 
 Private diagnostic dataflow now accepts an optional cancellation callback. Experimental body-analysis consumers check it at procedure entry/exit and every256 concrete flow visits or loop-discovery steps, including the loop lint prepass. Default analysis has no callback. A cancelled private pass is discarded; completed public analysis and published diagnostics remain available, and a fresh request can retry. This bounds traversal steps between checks, not elapsed time: individual constant evaluation, decision-DAG operations and shared binding still include atomic work. It does not reduce the current full caller-effect replay to an affected procedure cone.
 
@@ -353,7 +353,7 @@ Experimental private caller-effect replay now retains native intrinsic procedure
 
 局部 typedef/struct/enum/localparam 参与泛型实参已解除名字保护，按实际类型和值绑定私有类特化并完成语义及引用闭包。值参数的推断类型也参与特化缓存键，不能将数值相等但位宽/符号性不同的参数混为一类；推断类型相同仍保持复用。新类型与特化的所有权、先查询后诊断、连续修改/无效/恢复和取消重试由独立Native对照检查。合法局部let的端口及默认模板（包括未使用模板）现在完整绑定，引用归属于词法函数体，后续替换可撤销旧使用；只触及私有方法，不启用借用设计实例的展开。过程checker/普通并发assert的函数/task嵌套形式由Native拒绝，task的显式时钟expect property及函数内立即assert已有合法性/局部路径检查。整体性能验收尚未完成。新增同类泛型单测精确比较 Native 诊断；该位置的非实验 Native 悬停返回空值，因此单独检查实验悬停的当前变量与类型，不能宣称这组悬停获得了 Native 等值证明。真实 CVA6 悬停和完整诊断仍使用逐版本 Native 对照。所有实验选项继续默认关闭。
 
-原生编译自身已完成的占位实例检查可能与真实实例同时存在；局部视图保留这些原生检查，不能套用导入库占位检查的全局撤销规则。类型查询在语义分析完成后才创建的缓存项，也不等于已完成语义使用。引用查找穿过固定 import 作用域时，临时来源记录归查询调用方持有；显式诊断事务的路由优先。完整回归和CVA6验证包含先悬停再诊断、下一次输入释放旧查询的顺序。深二元表达式与参数初始化检查用显式操作数队列，仍检查所有子表达式和不安全调用。相关正确性证据见[泛型闭包评估](../development/generic-specialization-closure-evaluation.md)，不代表剩余A类或性能验收完成。
+原生编译自身已完成的占位实例检查可能与真实实例同时存在；局部视图保留这些原生检查，不能套用导入库占位检查的全局撤销规则。类型查询在语义分析完成后才创建的缓存项，也不等于已完成语义使用。引用查找穿过固定 import 作用域时，临时来源记录归查询调用方持有；显式诊断事务的路由优先。完整回归和CVA6验证包含先悬停再诊断、下一次输入释放旧查询的顺序。深二元表达式与参数初始化检查用显式操作数队列，仍检查所有子表达式和不安全调用。相关正确性证据见[泛型闭包评估](../development/performance-roadmap-status.md)，不代表剩余A类或性能验收完成。
 
 ### 完整模型回退的明确边界
 
@@ -484,5 +484,5 @@ not inside a binder. Native instance keys avoid warming redundant RTL instances;
 they do not replace Native context, side-effect or canonicalization checks. The
 normal complete semantic pass remains required, and fatal baselines fall back.
 A single binding can still take time. This introduces no new default-on option.
-See the [new-project qualification](../../validation/new-project-query-view-2026-10-29.md)
+See the new-project qualification
 for measured responsiveness, diagnostic and memory tradeoffs and coverage limits.

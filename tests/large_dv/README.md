@@ -93,30 +93,14 @@ Labels cannot overwrite a previous result. Preserve failed results and diagnose
 them before selecting any follow-up experiment. Remove ended stderr/build logs
 after recording the conclusion, input/code identities and useful measurements.
 
-## Newly exposed concerns
+## Regression coverage
 
-The six profiles exercise configurations of the same pinned OpenTitan codebase.
-The original quality evaluation recorded these cases:
-
-- Chip DV exposed generated command-line macro buffers in diagnostic links. A
-  small `[generated-macro-note]` C++ test now checks both retained/replayed
-  generated locations and real macro-definition locations.
-- DMA exposed a warning representative difference between 32-bit and 64-bit
-  generic class specializations. OTBN exposed a forwarding type-alias spelling
-  difference in a `dynamic-cast-const` warning. The semantic reuse work fixes
-  representative selection and diagnostic type rendering, with exact payload
-  comparisons for both profiles.
-- The chip profile can report a Native `$fatal` during constant evaluation.
-  Declaration projection and closed-child admission can preserve reuse beside
-  that diagnostic. The status separates reused descendants from the enclosing
-  design and from structural edits that need native analysis.
-- SPI host/device exposed `unclosed-global-name` dependencies. The fixed
-  namespace witness now admits independently proven closures and reports
-  remaining refusals. Both SPI profiles, DMA, OTBN and USB device pass the
-  strict background-edit lifecycle with actual RTL imports and local updates.
-
-See the [semantic reuse plan](../../docs/development/semantic-reuse-completion-plan.md)
-for the ownership contract and release qualification.
+The profiles exercise different configurations of the same pinned OpenTitan
+repository. Keep the native diagnostic payload as the comparison oracle, including
+any existing design errors. Record the admitted scope, actual semantic imports,
+and native fallback separately. See the
+[performance roadmap](../../docs/development/performance-roadmap-status.md)
+for the project's comparison criteria.
 
 These additional corpora remain outside the routine test suite. Reduce concrete
 new lifecycle or language failures to independent regression tests as they are

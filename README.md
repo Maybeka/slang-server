@@ -30,7 +30,7 @@ Intuitive completions for module instances and macros, as well as scope members 
 
 ![](docs/assets/images/completions.gif)
 
-HDL-specific features that allow you to set a filelist or top level, browse the elaborated hierarchy, select the active instance of each module, inspect instance-specific values, and go back and forth with a waveform viewer.
+HDL-specific features that allow you to set a filelist or top level, browse the elaborated hierarchy, select the active instance of each module, and inspect instance-specific values. The existing waveform viewer integration is available for compatibility.
 
 ![](docs/assets/images/hdl.gif)
 

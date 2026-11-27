@@ -89,31 +89,6 @@ is not a confidence interval or a production tail guarantee. Measurements from a
 validation. This experiment does not establish general responsiveness gains or
 UVM support.
 
-The 2026-10-17 Linux rebuild passed its recorded correctness checks, but its
-synthetic timing medians were slower at every measured step for both query
-kinds. See [the validation record](https://github.com/Maybeka/slang-server/blob/main/validation/linux-2026-10-17.json). The
-experiment remains default off.
-
-The 2026-10-18 extension certifies multi-include contexts and adds declaration
-rename / actual method-selection oracle cases. Its new class/package fixture
-showed lower medians for accepted edits 2–8 and higher medians for first-edit
-certification and ninth-edit fallback (n=6 per arm per step). This is a separate
-synthetic experiment, not a historical F1/F2 reproduction or UVM result. See
-[the current validation record](https://github.com/Maybeka/slang-server/blob/main/validation/linux-2026-10-18.json).
-
-
-The 2026-10-19 macOS follow-up removes the per-item repeated scope scan and
-shares immutable completion DTO values across accepted edits. Its 5,000- and
-10,000-class fixtures use 100 samples per arm/query/step, balanced by block.
-Nine-response median sums (including first certification and ninth fallback)
-are 13–20% lower; first responses and fallback remain slower than native.
-The 5,000-class diagnostic-including sequence is essentially unchanged; the
-10,000-class sequence improves about 2%. Separate one-observation-per-case RSS
-measurements are higher in the method arm. The small 500-class fixture still
-has no net response-sum gain. See [the Mac report](../../validation/macos-2026-10-19.json)
-for empirical p95, paired mean intervals, exact hashes and platform limits.
-This remains a restricted synthetic result and the experiment stays default off.
-
 ### External real-project measurements
 
 `tests/method_scope/project_benchmark.py` consumes an existing workspace and a
@@ -139,14 +114,6 @@ flags or macro/inheritance environment falls outside the certificate contract.
 Their ninth edit is another fallback observation, not evidence that the eight-edit
 reuse limit was reached. Keep this evidence separate from accepted local-method
 measurements and do not interpret an unchanged fallback as a UVM speedup.
-
-The subsequent [real-UVM and sparse-value Mac report](../../validation/macos-uvm-2026-10-19.json)
-interleaves previous and new binaries in complete randomized blocks, separates
-first query from first edit, and records repeated process peak-RSS observations.
-It measures a modest further first-certificate reduction and tests the sparse
-replacement implementation against the same large synthetic fixture. The actual
-SPI UVM laboratory still takes full native fallback; it establishes no UVM
-local-edit speedup. Both experiments remain default off.
 
 ## Body-only queries with semantic libraries
 
@@ -232,7 +199,7 @@ publishes only a complete analysis candidate. A canceled candidate is discarded
 and its compilation is unfrozen before foreground queries resume. Native parsing,
 semantic elaboration and some large individual procedures remain indivisible.
 These changes reduce queue amplification; they do not establish a hard response
-latency bound. See [continuous input measurements](../development/body-edit-responsiveness.md).
+latency bound. See [continuous input measurements](../development/performance-roadmap-status.md).
 
 Run `tests/method_scope/general_queries.py --binary <server> --output <report.json>`
 for broad body edits with large neighboring packages and an inherited UVM arm. It
@@ -251,7 +218,7 @@ For actual parser scope, run `body_counts.py` with the separate
 `slang_server_counted` executable. It observes counters in the same queued
 foreground batch and records later diagnostic parsing separately. Never use the
 counted binary for latency measurements. See the
-[Mac evaluation](../development/general-method-body-query-evaluation.md) for measured
+[Mac evaluation](../development/performance-roadmap-status.md) for measured
 first-edit cost, continuous-query gains, diagnostic and memory tradeoffs, and
 real CVA6 fallback coverage.
 
@@ -308,7 +275,7 @@ removing an existing state-changing directive or macro cannot retain its old suf
 There is no fixed debounce. First baseline preparation has a visible cost;
 unprimed typing and native fallbacks can still take around a second in CVA6.
 Hover can use the local path described below. See the
-[Mac diagnostic evaluation](../development/method-body-diagnostic-evaluation.md)
+[Mac diagnostic evaluation](../development/performance-roadmap-status.md)
 for measured costs, complete diagnostic oracles, memory and limitations.
 
 
@@ -337,6 +304,6 @@ lifetime; automatic module-task locals can use the local path.
 
 Mutable inputs are still validated for each request. This has a visible cost even
 for a repeated hover; an idle native context can answer faster than a local view.
-The [CVA6 hover evaluation](../development/method-body-hover-evaluation.md) separates
+The [CVA6 hover evaluation](../development/performance-roadmap-status.md) separates
 first certification, warm edits, repeated idle requests, retirement and fallback,
 and compares complete public results against native analysis.
