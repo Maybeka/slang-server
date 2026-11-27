@@ -17,6 +17,7 @@
 #include "slang/ast/Symbol.h"
 #include "slang/ast/symbols/ClassSymbols.h"
 #include "slang/ast/symbols/CompilationUnitSymbols.h"
+#include "slang/ast/symbols/CoverSymbols.h"
 #include "slang/ast/symbols/InstanceSymbols.h"
 #include "slang/ast/symbols/PortSymbols.h"
 #include "slang/ast/types/AllTypes.h"
@@ -99,6 +100,7 @@ slang::SmallVector<const slang::ast::Scope*, 2> SymbolIndexer::getScopesForSynta
     const slang::syntax::SyntaxNode& syntax, const ast::Compilation* query) {
 
     const slang::syntax::SyntaxNode* current = &syntax;
+    const slang::syntax::SyntaxNode* child = nullptr;
     while (current != nullptr) {
         auto it = syntex.find(current);
         if (it != syntex.end()) {
@@ -115,10 +117,57 @@ slang::SmallVector<const slang::ast::Scope*, 2> SymbolIndexer::getScopesForSynta
                     }
                 }
             }
+            if (auto* loop = current->as_if<syntax::LoopGenerateSyntax>();
+                query && loop && child == loop->block.get()) {
+                auto arrays = it->second;
+                bool recovered = false;
+                for (auto* symbol : arrays) {
+                    auto* array = symbol->as_if<ast::GenerateBlockArraySymbol>();
+                    if (!array || array->valid || !array->entries.empty() ||
+                        &array->getCompilation() != query || m_queryGenerateBodies.contains(array))
+                        continue;
+                    auto& block = *array->getCompilation().emplace<ast::GenerateBlockSymbol>(
+                        array->getCompilation(), "", array->location, array->constructIndex, true);
+                    block.setSyntax(*loop->block);
+                    block.setParent(*array, ast::LookupLocation::max.getIndex());
+                    block.branchKind = ast::GenerateBranchKind::LoopIteration;
+                    m_queryGenerateBodies.emplace(array, &block);
+                    if (!loop->identifier.isMissing()) {
+                        auto name = loop->identifier.valueText();
+                        auto* genvar = array->find(name);
+                        if (!genvar && array->getParentScope())
+                            genvar = array->getParentScope()->lookupName(name);
+                        if (genvar && genvar->kind == ast::SymbolKind::Genvar)
+                            block.addMember(
+                                *array->getCompilation().emplace<ast::TransparentMemberSymbol>(
+                                    *genvar));
+                    }
+                    if (auto* list = loop->block->as_if<syntax::GenerateBlockSyntax>()) {
+                        for (auto* member : list->members)
+                            block.addMembers(*member);
+                    }
+                    else {
+                        block.addMembers(*loop->block);
+                    }
+                    // Record a lexical view for editor lookups without publishing a hierarchy
+                    // entry.
+                    block.visit(*this);
+                    recovered = true;
+                }
+                if (recovered)
+                    return getScopesForSyntax(syntax, query);
+                it = syntex.find(current);
+            }
             slang::SmallVector<const slang::ast::Scope*, 2> result;
             for (const auto* symbol : it->second) {
                 const slang::ast::Scope* scope = nullptr;
-                if (symbol->isScope()) {
+                if (auto* covergroup = symbol->as_if<ast::CovergroupType>();
+                    covergroup && child &&
+                    current->kind == syntax::SyntaxKind::CovergroupDeclaration &&
+                    syntax::MemberSyntax::isKind(child->kind)) {
+                    scope = &covergroup->getBody();
+                }
+                else if (symbol->isScope()) {
                     scope = &symbol->as<slang::ast::Scope>();
                 }
                 else
@@ -130,6 +179,7 @@ slang::SmallVector<const slang::ast::Scope*, 2> SymbolIndexer::getScopesForSynta
             if (!result.empty())
                 return result;
         }
+        child = current;
         current = current->parent;
     }
 

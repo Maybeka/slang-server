@@ -602,7 +602,12 @@ void renderSymbolHeader(markup::Paragraph& infoPg, const ast::Symbol& symbol,
     // <Kind/Type> <Name> in <Scope>
     renderSymbolHeaderName(infoPg, symbol, kindOverride);
 
-    auto& parentSym = symbol.getParentScope()->asSymbol();
+    auto* parent = symbol.getParentScope();
+    if (!parent) {
+        infoPg.newLine();
+        return;
+    }
+    auto& parentSym = parent->asSymbol();
     auto lexicalPath = bodyQueryLexicalPath(parentSym, sm);
     if (parentSym.isType()) {
         const auto& type = parentSym.as<ast::Type>();
@@ -701,8 +706,10 @@ RenderedSymbolHover renderSymbolHover(const DefinitionInfo::SymbolTarget& target
     }
     renderSymbolValue(result.value, *target.symbol, sm);
     renderSymbolSyntaxes(result.syntaxes, target, sm, hovers);
-    renderDrivers(result.drivers, getDriverSymbol(target), *target.analysis, sm, hovers,
-                  target.renderInputPortDriver, followPortDriver);
+    if (!target.syntaxes.empty() && target.symbol->kind != ast::SymbolKind::Iterator) {
+        renderDrivers(result.drivers, getDriverSymbol(target), *target.analysis, sm, hovers,
+                      target.renderInputPortDriver, followPortDriver);
+    }
     return result;
 }
 

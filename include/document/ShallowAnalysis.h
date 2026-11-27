@@ -216,6 +216,10 @@ public:
     /// Gets the target struct scope at a possible assignment pattern key completion site.
     const slang::ast::Scope* getAssignmentPatternCompletionScope(slang::SourceLocation loc) const;
 
+    /// Number of items required by an assignment pattern with a fixed array target.
+    std::optional<size_t> getAssignmentPatternArraySize(
+        const slang::syntax::AssignmentPatternExpressionSyntax& pattern) const;
+
     std::vector<lsp::InlayHint> getInlayHints(lsp::Range range,
                                               const struct Config::InlayHints& config,
                                               const lsp::RequestContext& ctx = {});
@@ -270,6 +274,15 @@ private:
         m_interfaceFallbackScopes;
     mutable slang::flat_hash_map<const slang::ast::Symbol*, const slang::ast::InstanceSymbol*>
         m_interfaceArrayQueryElements;
+    struct ArrayIteratorScope {
+        slang::SourceRange expression;
+        const slang::ast::Scope* scope;
+        slang::SourceLocation declaration;
+    };
+    mutable slang::flat_hash_map<const slang::syntax::SyntaxNode*, std::vector<ArrayIteratorScope>>
+        m_arrayIteratorScopes;
+    const slang::ast::Scope* getArrayIteratorScope(const slang::syntax::SyntaxNode& syntax,
+                                                   slang::SourceLocation loc) const;
 
     const GenvarElaboration* getGenvarElaborationAtToken(const slang::parsing::Token* node) const;
 

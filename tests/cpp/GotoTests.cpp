@@ -5,6 +5,278 @@
 
 using namespace slang;
 
+TEST_CASE("Nested assignment pattern keys resolve against contextual element types") {
+    ServerHarness server;
+    auto doc = server.openFile("nested_pattern_navigation.sv", R"(
+typedef struct packed { int code; bit enabled; } entry_t;
+typedef struct { entry_t entries[1]; } batch_t;
+module sink #(parameter type T = int)(input T value); endmodule
+module top;
+    int code = 7;
+    entry_t array_value[2] = '{'{code: code, enabled: 1}, '{code: code, enabled: 1}};
+    entry_t replicated[2] = '{2{'{code: code, enabled: 1}}};
+    function automatic batch_t make(int code);
+        return '{entries: '{'{code: code, enabled: 1}}};
+    endfunction
+    sink #(entry_t) named(.value('{code: code, enabled: 1}));
+    sink #(entry_t) ordered('{code: code, enabled: 1});
+endmodule
+)");
+    for (auto prefix : {"array_value[2] = '{'{", "replicated[2] = '{2{'{", "return '{entries: '{'{",
+                        "named(.value('{", "ordered('{"}) {
+        CAPTURE(prefix);
+        auto key = doc.after(prefix);
+        auto links = key.getDefinitions();
+        REQUIRE(links.size() == 1);
+        CHECK(links.front().targetSelectionRange.start == doc.before("code;").getPosition());
+        auto hover = doc.getHoverAt(key.m_offset);
+        REQUIRE(hover);
+        CHECK(rfl::get<lsp::MarkupContent>(hover->contents).value.find("**Field** `code`") !=
+              std::string::npos);
+        auto items = key.getCompletions();
+        CHECK(std::ranges::any_of(items, [](const auto& item) {
+            return item.m_item.label == "code" &&
+                   item.m_item.kind == lsp::CompletionItemKind::Field;
+        }));
+        auto value = doc.after(std::string(prefix) + "code: ").getDefinitions();
+        REQUIRE(value.size() == 1);
+        auto declaration = std::string_view(prefix).starts_with("return") ? "code);" : "code =";
+        CHECK(value.front().targetSelectionRange.start == doc.before(declaration).getPosition());
+    }
+}
+
+TEST_CASE("Unfinished return assignment pattern offers the returned structure fields") {
+    ServerHarness server;
+    auto doc = server.openFile("unfinished_pattern_return.sv", R"(
+package p;
+    typedef struct { int code; bit enabled; } entry_t;
+    function automatic entry_t make();
+        return '{)");
+    auto items = doc.after("return '{").getCompletions("{");
+    REQUIRE(items.size() == 1);
+    CHECK(items.front().m_item.label == "'{code, enabled}");
+    CHECK(items.front().m_item.insertText == "\n\tcode: $1,\n\tenabled: $2\n\\};");
+}
+
+TEST_CASE("Incomplete nested array patterns complete only unused keys") {
+    ServerHarness server;
+    auto doc = server.openFile("unfinished_array_pattern.sv", R"(
+package p;
+    typedef struct { int code; bit enabled; } entry_t;
+    entry_t empty[1] = '{'{}};
+    entry_t partial[1] = '{'{co}};
+    entry_t next[1] = '{'{code: 7, }};
+    entry_t existing[1] = '{'{code: 7, en: 1}};
+endpackage
+)");
+    auto all = doc.after("empty[1] = '{'{").getCompletions("{");
+    REQUIRE(all.size() == 1);
+    CHECK(all.front().m_item.label == "'{code, enabled}");
+    for (std::string_view closing : {"", "}"}) {
+        auto draft = server.openFile("unfinished_nested_elements.sv", std::string(R"(
+package draft;
+    typedef struct { int code; bit enabled; } entry_t;
+    entry_t entries[2] = '{'{)") + std::string(closing));
+        auto items = draft.after("entries[2] = '{'{").getCompletions("{");
+        REQUIRE(items.size() == 1);
+        const auto& snippet = items.front().m_item;
+        const std::string expected = "\n\tcode: $1,\n\tenabled: $2\n";
+        if (closing.empty()) {
+            CHECK(snippet.insertText == expected + "\\},");
+        }
+        else {
+            CHECK(snippet.insertText == expected);
+            REQUIRE(snippet.additionalTextEdits);
+            REQUIRE(snippet.additionalTextEdits->size() == 1);
+            CHECK(snippet.additionalTextEdits->front().newText == ",");
+        }
+        draft.close();
+    }
+    for (auto [prefix, expected, edit] : {
+             std::tuple{"partial[1] = '{'{co", "code", "code: $1"},
+             std::tuple{"next[1] = '{'{code: 7, ", "enabled", "enabled: $1"},
+             std::tuple{"existing[1] = '{'{code: 7, en", "enabled", "enabled"},
+         }) {
+        CAPTURE(prefix);
+        auto items = doc.after(prefix).getCompletions();
+        auto field = std::ranges::find_if(items, [&](const auto& item) {
+            return item.m_item.label == expected;
+        });
+        REQUIRE(field != items.end());
+        REQUIRE(field->m_item.textEdit);
+        CHECK(rfl::get<lsp::TextEdit>(*field->m_item.textEdit).newText == edit);
+        if (std::string_view(expected) == "enabled")
+            CHECK(std::ranges::none_of(items, [](const auto& item) {
+                return item.m_item.label == "code";
+            }));
+    }
+}
+
+TEST_CASE("Generate declarations remain queryable when the loop cannot elaborate") {
+    ServerHarness server;
+    auto broken = server.openFile("broken_generate.sv", R"(
+module sample;
+    for ( = 0; i < 2; i++) begin : items
+        int field;
+        initial field = 0;
+    end
+endmodule
+)");
+    auto use = broken.after("initial ");
+    auto links = use.getDefinitions();
+    REQUIRE(links.size() == 1);
+    CHECK(links.front().targetSelectionRange.start == broken.before("field;").getPosition());
+    CHECK(broken.getHoverAt(use.m_offset));
+    CHECK_FALSE(broken.getDiagnostics().empty());
+    CHECK(std::ranges::any_of(use.getCompletions(),
+                              [](const auto& item) { return item.m_item.label == "field"; }));
+
+    auto nested = server.openFile("nested_generate_scope.sv", R"(
+module top #(parameter int COUNT, parameter type T);
+    for (genvar i = 0; i < $bits(T); i++) begin : outer
+        logic [COUNT-1:0] values;
+        for (genvar j = 0; j < COUNT; j++) begin : inner
+            always_comb values[j] = i;
+        end
+    end
+endmodule
+)");
+    for (auto [prefix, label, declaration] : {
+             std::tuple{"j = 0; ", "j", "j = 0"},
+             std::tuple{"always_comb ", "values", "values;"},
+             std::tuple{"values[", "j", "j = 0"},
+             std::tuple{"values[j] = ", "i", "i = 0"},
+         }) {
+        CAPTURE(prefix);
+        auto cursor = nested.after(prefix);
+        auto defs = cursor.getDefinitions();
+        REQUIRE(defs.size() == 1);
+        CHECK(defs.front().targetSelectionRange.start == nested.before(declaration).getPosition());
+        CHECK(nested.getHoverAt(cursor.m_offset));
+        CHECK(std::ranges::any_of(cursor.getCompletions(),
+                                  [&](const auto& item) { return item.m_item.label == label; }));
+    }
+}
+
+TEST_CASE("Foreach index and array with iterators keep their own types and declaration targets") {
+    ServerHarness server;
+    auto doc = server.openFile("iterator_navigation.sv", R"(
+module top;
+    int values[3];
+    int entries[string];
+    string index, item;
+    int total;
+    initial begin
+        foreach (values[index]) values[index] = index;
+        foreach (entries[key]) entries[key] = key.len();
+        index = "outer";
+        total = values.sum() with (item);
+        total = values.sum(element) with (element);
+        item = "outer";
+    end
+endmodule
+)");
+    for (auto [usage, declaration, type] : {
+             std::tuple{"index] = ", "index])", "int"},
+             std::tuple{"key] = ", "key])", "string"},
+             std::tuple{"with (", "", "int"},
+             std::tuple{"with (element", "element) with", "int"},
+         }) {
+        CAPTURE(usage);
+        auto cursor = std::string_view(usage).starts_with("with")
+                          ? (*declaration ? doc.before("element);") : doc.after("with ("))
+                          : doc.before(usage);
+        auto hover = doc.getHoverAt(cursor.m_offset);
+        REQUIRE(hover);
+        CHECK(rfl::get<lsp::MarkupContent>(hover->contents).value.find(type) != std::string::npos);
+        auto defs = cursor.getDefinitions();
+        if (*declaration) {
+            REQUIRE(defs.size() == 1);
+            CHECK(defs.front().targetSelectionRange.start == doc.before(declaration).getPosition());
+        }
+        else {
+            CHECK(defs.empty());
+        }
+    }
+    auto outer = doc.before("item =");
+    auto outerDefs = outer.getDefinitions();
+    REQUIRE(outerDefs.size() == 1);
+    CHECK(outerDefs.front().targetSelectionRange.start == doc.before("item;").getPosition());
+    auto items = doc.after("with (element").getCompletions();
+    CHECK(std::ranges::any_of(items,
+                              [](const auto& item) { return item.m_item.label == "element"; }));
+}
+
+TEST_CASE("Covergroup options and methods use the covergroup body") {
+    ServerHarness server;
+    auto doc = server.openFile("covergroup_queries.sv", R"(
+module top;
+    covergroup sample_group with function sample(int value);
+        option.per_instance = 1;
+        type_option.merge_instances = 1;
+        point_a: coverpoint value;
+    endgroup
+    sample_group group_h = new;
+    initial begin
+        group_h.set_inst_name("group_h");
+        group_h.sample(1);
+    end
+endmodule
+)");
+    CHECK(doc.getDiagnostics().empty());
+    for (auto [prefix, name] : {
+             std::pair{"        ", "option"},
+             std::pair{"option.", "per_instance"},
+             std::pair{"        ", "type_option"},
+             std::pair{"type_option.", "merge_instances"},
+             std::pair{"group_h.", "set_inst_name"},
+             std::pair{"group_h.", "sample"},
+         }) {
+        CAPTURE(name);
+        auto cursor = doc.before(std::string(prefix) + name);
+        cursor.m_offset += std::string_view(prefix).size();
+        auto hover = doc.getHoverAt(cursor.m_offset);
+        REQUIRE(hover);
+        CHECK(rfl::get<lsp::MarkupContent>(hover->contents).value.find(name) != std::string::npos);
+        CHECK(cursor.getDefinitions().empty());
+        auto items = std::string_view(prefix).ends_with('.') ? cursor.getCompletions(".")
+                                                             : cursor.getCompletions();
+        CHECK(std::ranges::any_of(items,
+                                  [&](const auto& item) { return item.m_item.label == name; }));
+    }
+}
+
+TEST_CASE("Nested array with clauses preserve the enclosing iterator and constraint context") {
+    ServerHarness server;
+    auto doc = server.openFile("nested_iterator_queries.sv", R"(
+class Limits;
+    rand int weights[3];
+    constraint bounded { weights.sum() with (int'(item > 0)) == 1; }
+endclass
+module top;
+    int values[2][3];
+    int total;
+    initial total = values.sum(row) with (row.sum() with (item));
+endmodule
+)");
+    for (auto [use, name] : {
+             std::pair{"item >", "item"},
+             std::pair{"row.sum", "row"},
+             std::pair{"item));", "item"},
+         }) {
+        CAPTURE(use);
+        auto cursor = doc.before(use);
+        auto hover = doc.getHoverAt(cursor.m_offset);
+        REQUIRE(hover);
+        CHECK(rfl::get<lsp::MarkupContent>(hover->contents).value.find("int") != std::string::npos);
+        CHECK(std::ranges::any_of(cursor.getCompletions(),
+                                  [&](const auto& item) { return item.m_item.label == name; }));
+    }
+    auto links = doc.before("row.sum").getDefinitions();
+    REQUIRE(links.size() == 1);
+    CHECK(links.front().targetSelectionRange.start == doc.before("row) with").getPosition());
+}
+
 TEST_CASE("Virtual interface type tokens resolve in their own declaration context") {
     ServerHarness server("virtual_interface");
     auto iface = server.openFile("bus_if.sv");

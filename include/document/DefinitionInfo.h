@@ -79,7 +79,10 @@ struct DefinitionInfo {
         bool renderInputPortDriver = false;
         size_t generatedSignalCount = 1;
 
-        const slang::parsing::Token& nameToken() const { return syntaxes.front().nameToken; }
+        const slang::parsing::Token& nameToken() const {
+            static const slang::parsing::Token noSource;
+            return syntaxes.empty() ? noSource : syntaxes.front().nameToken;
+        }
 
         bool operator==(const SymbolTarget& other) const {
             return syntaxes == other.syntaxes && symbol == other.symbol &&

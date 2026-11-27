@@ -106,6 +106,9 @@ public:
     }
 
 private:
+    std::unordered_map<const slang::ast::GenerateBlockArraySymbol*,
+                       const slang::ast::GenerateBlockSymbol*>
+        m_queryGenerateBodies;
     std::function<void()> m_checkpoint;
     size_t m_visits = 0;
     void checkpoint() {

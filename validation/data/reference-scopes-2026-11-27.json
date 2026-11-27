@@ -1,0 +1,680 @@
+{
+  "date": "2026-11-27",
+  "platform": "Darwin arm64",
+  "parentCommit": "94572b507221d7aac1e2735a307cb010aa04e41c",
+  "isolatedBatchPatchSha256": "0d9c5f8c8b90df869872defb555c129d16dec22bad2d7d8bab96403b08947092",
+  "benchmarkBinaries": {
+    "before": "8d0dd44ab1baed382e46da57cf719ddceb82593155f788b29e38920e8ac9f590",
+    "after": "921dc573af19222e32032c9aa184535fb33b841d05a4f4022333960e2a5c1c8d"
+  },
+  "exactCheckoutBinarySha256": "a99601961f9ba4e351cc48dbe6d8cda4cc0634863adee6fedbaab21adce1e362",
+  "referenceItems": [
+    594,
+    595,
+    620
+  ],
+  "validation": {
+    "isolatedCheckout": {
+      "ctest": 1120,
+      "python": 26,
+      "standaloneDiagnosticTransport": 43
+    },
+    "workspace": {
+      "ctest": 1124,
+      "python": 42
+    },
+    "verifiedOfficialSdkFiles": 742
+  },
+  "comparison": "The benchmark builds share the pre-existing working tree changes. The batch was also tested in a separate clean checkout of its parent with only the batch applied.",
+  "method": "Three serial pairs per project, reversing arm order by trial. Fresh processes for native and combined, 15 states per process. Same CVA6 plus UVM, OpenTitan SoC and USBDEV edit anchors and inputs as the previous navigation acceptance. Compare complete public hover and diagnostics. Record hover and matching edited-document diagnostic receipt delays, and lifetime maximum physical footprint at edit boundaries.",
+  "processes": 36,
+  "states": 540,
+  "projects": {
+    "opentitan-soc-large": {
+      "inputs": {
+        "top": "top_earlgrey",
+        "anchor": "out[4] = in[3] ^ in[7];",
+        "alternate": "out[4] = in[3] ^ in[6];",
+        "hoverAnchor": "function automatic logic [7:0] aes_mul2(logic [7:0] in)",
+        "query": "in",
+        "target": "aes_pkg.sv",
+        "targetSha256": "6eb2b0450eb3def9064146425f38d56e4953484ad09853d2bf148ce2472010df",
+        "filelistSha256": "8ab21900fd079dc390d675dea357575d41d9fba115d3800d9e3e6d74b23d6090",
+        "flags": "--single-unit --threads 1 --timescale 1ns/1ps --top top_earlgrey",
+        "frozenScopes": {
+          "packages": [
+            "top_pkg",
+            "prim_util_pkg"
+          ]
+        }
+      },
+      "native": {
+        "before": [
+          {
+            "startupMs": 2543.447,
+            "firstHoverMs": 665.394,
+            "firstDiagnosticMs": 1294.117,
+            "continuousHoverMs": 624.32,
+            "continuousDiagnosticMs": 1234.872,
+            "structuralDiagnosticMs": 1234.257,
+            "repairDiagnosticMs": 1236.602,
+            "peakPhysicalFootprintMiB": 1536.393
+          },
+          {
+            "startupMs": 2008.261,
+            "firstHoverMs": 686.97,
+            "firstDiagnosticMs": 1319.481,
+            "continuousHoverMs": 633.223,
+            "continuousDiagnosticMs": 1245.248,
+            "structuralDiagnosticMs": 1255.427,
+            "repairDiagnosticMs": 1266.133,
+            "peakPhysicalFootprintMiB": 1539.612
+          },
+          {
+            "startupMs": 2022.575,
+            "firstHoverMs": 703.484,
+            "firstDiagnosticMs": 1334.273,
+            "continuousHoverMs": 642.528,
+            "continuousDiagnosticMs": 1255.13,
+            "structuralDiagnosticMs": 1251.431,
+            "repairDiagnosticMs": 1249.069,
+            "peakPhysicalFootprintMiB": 1537.331
+          }
+        ],
+        "after": [
+          {
+            "startupMs": 1999.53,
+            "firstHoverMs": 677.304,
+            "firstDiagnosticMs": 1303.861,
+            "continuousHoverMs": 629.975,
+            "continuousDiagnosticMs": 1237.055,
+            "structuralDiagnosticMs": 1235.557,
+            "repairDiagnosticMs": 1233.248,
+            "peakPhysicalFootprintMiB": 1542.862
+          },
+          {
+            "startupMs": 2022.982,
+            "firstHoverMs": 689.256,
+            "firstDiagnosticMs": 1324.78,
+            "continuousHoverMs": 635.184,
+            "continuousDiagnosticMs": 1249.319,
+            "structuralDiagnosticMs": 1249.552,
+            "repairDiagnosticMs": 1248.131,
+            "peakPhysicalFootprintMiB": 1542.924
+          },
+          {
+            "startupMs": 2012.366,
+            "firstHoverMs": 685.816,
+            "firstDiagnosticMs": 1320.247,
+            "continuousHoverMs": 633.355,
+            "continuousDiagnosticMs": 1248.684,
+            "structuralDiagnosticMs": 1247.72,
+            "repairDiagnosticMs": 1248.915,
+            "peakPhysicalFootprintMiB": 1540.643
+          }
+        ],
+        "medians": {
+          "before": {
+            "startupMs": 2022.575,
+            "firstHoverMs": 686.97,
+            "firstDiagnosticMs": 1319.481,
+            "continuousHoverMs": 633.223,
+            "continuousDiagnosticMs": 1245.248,
+            "structuralDiagnosticMs": 1251.431,
+            "repairDiagnosticMs": 1249.069,
+            "peakPhysicalFootprintMiB": 1537.331
+          },
+          "after": {
+            "startupMs": 2012.366,
+            "firstHoverMs": 685.816,
+            "firstDiagnosticMs": 1320.247,
+            "continuousHoverMs": 633.355,
+            "continuousDiagnosticMs": 1248.684,
+            "structuralDiagnosticMs": 1247.72,
+            "repairDiagnosticMs": 1248.131,
+            "peakPhysicalFootprintMiB": 1542.862
+          }
+        }
+      },
+      "combined": {
+        "before": [
+          {
+            "startupMs": 2060.55,
+            "firstHoverMs": 39.735,
+            "firstDiagnosticMs": 65.673,
+            "continuousHoverMs": 16.532,
+            "continuousDiagnosticMs": 31.15,
+            "structuralDiagnosticMs": 1366.127,
+            "repairDiagnosticMs": 30.823,
+            "peakPhysicalFootprintMiB": 1584.814
+          },
+          {
+            "startupMs": 2075.122,
+            "firstHoverMs": 45.4,
+            "firstDiagnosticMs": 72.898,
+            "continuousHoverMs": 16.371,
+            "continuousDiagnosticMs": 31.443,
+            "structuralDiagnosticMs": 1395.315,
+            "repairDiagnosticMs": 31.612,
+            "peakPhysicalFootprintMiB": 1584.58
+          },
+          {
+            "startupMs": 2079.368,
+            "firstHoverMs": 45.415,
+            "firstDiagnosticMs": 71.852,
+            "continuousHoverMs": 16.816,
+            "continuousDiagnosticMs": 32.007,
+            "structuralDiagnosticMs": 1382.718,
+            "repairDiagnosticMs": 31.117,
+            "peakPhysicalFootprintMiB": 1584.408
+          }
+        ],
+        "after": [
+          {
+            "startupMs": 2063.051,
+            "firstHoverMs": 39.596,
+            "firstDiagnosticMs": 65.85,
+            "continuousHoverMs": 16.567,
+            "continuousDiagnosticMs": 31.626,
+            "structuralDiagnosticMs": 1371.015,
+            "repairDiagnosticMs": 31.404,
+            "peakPhysicalFootprintMiB": 1584.97
+          },
+          {
+            "startupMs": 2081.824,
+            "firstHoverMs": 41.263,
+            "firstDiagnosticMs": 68.988,
+            "continuousHoverMs": 16.719,
+            "continuousDiagnosticMs": 32.039,
+            "structuralDiagnosticMs": 1398.829,
+            "repairDiagnosticMs": 33.204,
+            "peakPhysicalFootprintMiB": 1585.095
+          },
+          {
+            "startupMs": 2118.577,
+            "firstHoverMs": 47.121,
+            "firstDiagnosticMs": 75.359,
+            "continuousHoverMs": 16.719,
+            "continuousDiagnosticMs": 32.06,
+            "structuralDiagnosticMs": 1386.099,
+            "repairDiagnosticMs": 32.223,
+            "peakPhysicalFootprintMiB": 1584.767
+          }
+        ],
+        "medians": {
+          "before": {
+            "startupMs": 2075.122,
+            "firstHoverMs": 45.4,
+            "firstDiagnosticMs": 71.852,
+            "continuousHoverMs": 16.532,
+            "continuousDiagnosticMs": 31.443,
+            "structuralDiagnosticMs": 1382.718,
+            "repairDiagnosticMs": 31.117,
+            "peakPhysicalFootprintMiB": 1584.58
+          },
+          "after": {
+            "startupMs": 2081.824,
+            "firstHoverMs": 41.263,
+            "firstDiagnosticMs": 68.988,
+            "continuousHoverMs": 16.719,
+            "continuousDiagnosticMs": 32.039,
+            "structuralDiagnosticMs": 1386.099,
+            "repairDiagnosticMs": 32.223,
+            "peakPhysicalFootprintMiB": 1584.97
+          }
+        }
+      },
+      "orderedPublicStateDigests": {
+        "initial": "f6600c6dd40e06597c1e0988edd7bd8be714026fb52e06f6ff8c98fe8fee8401",
+        "body-1": "f6600c6dd40e06597c1e0988edd7bd8be714026fb52e06f6ff8c98fe8fee8401",
+        "body-2": "f6600c6dd40e06597c1e0988edd7bd8be714026fb52e06f6ff8c98fe8fee8401",
+        "body-3": "f6600c6dd40e06597c1e0988edd7bd8be714026fb52e06f6ff8c98fe8fee8401",
+        "body-4": "f6600c6dd40e06597c1e0988edd7bd8be714026fb52e06f6ff8c98fe8fee8401",
+        "body-5": "f6600c6dd40e06597c1e0988edd7bd8be714026fb52e06f6ff8c98fe8fee8401",
+        "body-6": "f6600c6dd40e06597c1e0988edd7bd8be714026fb52e06f6ff8c98fe8fee8401",
+        "newline": "cd2aa0b7fe23779fdf60f72e3df25e99ba673f999eaf52575b2f98908cb82c63",
+        "error": "80f52fb1e694bc3478f7aace05232a25b7f5940a3e6531d877f68dc961d5d2a2",
+        "repair": "f6600c6dd40e06597c1e0988edd7bd8be714026fb52e06f6ff8c98fe8fee8401",
+        "structural": "0bdf37f9c24e90031448b84dcf62d73667165ecbc36614ca812a34eb5ca9a94c",
+        "structural-repair": "f6600c6dd40e06597c1e0988edd7bd8be714026fb52e06f6ff8c98fe8fee8401",
+        "close-reopen": "f6600c6dd40e06597c1e0988edd7bd8be714026fb52e06f6ff8c98fe8fee8401",
+        "manual-rebuild": "f6600c6dd40e06597c1e0988edd7bd8be714026fb52e06f6ff8c98fe8fee8401",
+        "post-rebuild": "f6600c6dd40e06597c1e0988edd7bd8be714026fb52e06f6ff8c98fe8fee8401"
+      }
+    },
+    "cva6-uvm": {
+      "inputs": {
+        "top": "uvmt_cva6_tb",
+        "anchor": "cfg.rvfi_cfg.nret = RTLCVA6Cfg.NrCommitPorts;",
+        "alternate": "cfg.rvfi_cfg.nret = RTLCVA6Cfg.NrCommitPorts + 0;",
+        "hoverAnchor": "cfg.rvfi_cfg.nret",
+        "query": "nret",
+        "target": "uvme_cva6_env.sv",
+        "targetSha256": "6c2ecbefd33ef844ecbbe63d7282d37406714d9c18ef52711337e760141668cb",
+        "filelistSha256": "a54c73dca526cec0eb2a618aa0683f90ad6454fbfe304f56496e015a562b6ff7",
+        "flags": "--single-unit --threads 1 --timescale 1ns/1ps --top uvmt_cva6_tb",
+        "frozenScopes": {
+          "packages": [
+            "uvm_pkg"
+          ],
+          "instances": [
+            "uvmt_cva6_tb.cva6_dut_wrap.cva6_tb_wrapper_i.i_cva6"
+          ]
+        }
+      },
+      "native": {
+        "before": [
+          {
+            "startupMs": 3148.468,
+            "firstHoverMs": 1038.629,
+            "firstDiagnosticMs": 1632.684,
+            "continuousHoverMs": 1032.617,
+            "continuousDiagnosticMs": 1609.087,
+            "structuralDiagnosticMs": 1614.319,
+            "repairDiagnosticMs": 1608.84,
+            "peakPhysicalFootprintMiB": 825.892
+          },
+          {
+            "startupMs": 3130.844,
+            "firstHoverMs": 1038.957,
+            "firstDiagnosticMs": 1634.637,
+            "continuousHoverMs": 1033.824,
+            "continuousDiagnosticMs": 1609.598,
+            "structuralDiagnosticMs": 1612.531,
+            "repairDiagnosticMs": 1612.995,
+            "peakPhysicalFootprintMiB": 834.501
+          },
+          {
+            "startupMs": 3124.14,
+            "firstHoverMs": 1039.27,
+            "firstDiagnosticMs": 1636.962,
+            "continuousHoverMs": 1037.099,
+            "continuousDiagnosticMs": 1613.376,
+            "structuralDiagnosticMs": 1619.709,
+            "repairDiagnosticMs": 1614.247,
+            "peakPhysicalFootprintMiB": 832.814
+          }
+        ],
+        "after": [
+          {
+            "startupMs": 3253.616,
+            "firstHoverMs": 1038.016,
+            "firstDiagnosticMs": 1623.894,
+            "continuousHoverMs": 1033.958,
+            "continuousDiagnosticMs": 1602.209,
+            "structuralDiagnosticMs": 1602.126,
+            "repairDiagnosticMs": 1608.811,
+            "peakPhysicalFootprintMiB": 831.486
+          },
+          {
+            "startupMs": 3150.577,
+            "firstHoverMs": 1038.904,
+            "firstDiagnosticMs": 1638.486,
+            "continuousHoverMs": 1035.329,
+            "continuousDiagnosticMs": 1615.142,
+            "structuralDiagnosticMs": 1613.856,
+            "repairDiagnosticMs": 1611.7,
+            "peakPhysicalFootprintMiB": 855.455
+          },
+          {
+            "startupMs": 3131.831,
+            "firstHoverMs": 1042.791,
+            "firstDiagnosticMs": 1642.616,
+            "continuousHoverMs": 1038.234,
+            "continuousDiagnosticMs": 1609.679,
+            "structuralDiagnosticMs": 1606.997,
+            "repairDiagnosticMs": 1608.551,
+            "peakPhysicalFootprintMiB": 836.595
+          }
+        ],
+        "medians": {
+          "before": {
+            "startupMs": 3130.844,
+            "firstHoverMs": 1038.957,
+            "firstDiagnosticMs": 1634.637,
+            "continuousHoverMs": 1033.824,
+            "continuousDiagnosticMs": 1609.598,
+            "structuralDiagnosticMs": 1614.319,
+            "repairDiagnosticMs": 1612.995,
+            "peakPhysicalFootprintMiB": 832.814
+          },
+          "after": {
+            "startupMs": 3150.577,
+            "firstHoverMs": 1038.904,
+            "firstDiagnosticMs": 1638.486,
+            "continuousHoverMs": 1035.329,
+            "continuousDiagnosticMs": 1609.679,
+            "structuralDiagnosticMs": 1606.997,
+            "repairDiagnosticMs": 1608.811,
+            "peakPhysicalFootprintMiB": 836.595
+          }
+        }
+      },
+      "combined": {
+        "before": [
+          {
+            "startupMs": 2814.621,
+            "firstHoverMs": 26.634,
+            "firstDiagnosticMs": 45.94,
+            "continuousHoverMs": 6.352,
+            "continuousDiagnosticMs": 11.448,
+            "structuralDiagnosticMs": 881.591,
+            "repairDiagnosticMs": 22.842,
+            "peakPhysicalFootprintMiB": 1218.345
+          },
+          {
+            "startupMs": 2822.411,
+            "firstHoverMs": 27.012,
+            "firstDiagnosticMs": 46.175,
+            "continuousHoverMs": 6.439,
+            "continuousDiagnosticMs": 11.57,
+            "structuralDiagnosticMs": 879.159,
+            "repairDiagnosticMs": 21.936,
+            "peakPhysicalFootprintMiB": 1221.439
+          },
+          {
+            "startupMs": 2825.272,
+            "firstHoverMs": 28.479,
+            "firstDiagnosticMs": 47.04,
+            "continuousHoverMs": 6.533,
+            "continuousDiagnosticMs": 11.675,
+            "structuralDiagnosticMs": 883.701,
+            "repairDiagnosticMs": 22.423,
+            "peakPhysicalFootprintMiB": 1221.001
+          }
+        ],
+        "after": [
+          {
+            "startupMs": 2815.129,
+            "firstHoverMs": 25.974,
+            "firstDiagnosticMs": 45.011,
+            "continuousHoverMs": 6.45,
+            "continuousDiagnosticMs": 11.58,
+            "structuralDiagnosticMs": 869.66,
+            "repairDiagnosticMs": 22.412,
+            "peakPhysicalFootprintMiB": 1222.517
+          },
+          {
+            "startupMs": 2826.596,
+            "firstHoverMs": 26.292,
+            "firstDiagnosticMs": 45.326,
+            "continuousHoverMs": 6.461,
+            "continuousDiagnosticMs": 11.541,
+            "structuralDiagnosticMs": 878.316,
+            "repairDiagnosticMs": 23.067,
+            "peakPhysicalFootprintMiB": 1222.111
+          },
+          {
+            "startupMs": 2819.802,
+            "firstHoverMs": 26.807,
+            "firstDiagnosticMs": 45.737,
+            "continuousHoverMs": 6.411,
+            "continuousDiagnosticMs": 11.56,
+            "structuralDiagnosticMs": 882.095,
+            "repairDiagnosticMs": 23.147,
+            "peakPhysicalFootprintMiB": 1223.126
+          }
+        ],
+        "medians": {
+          "before": {
+            "startupMs": 2822.411,
+            "firstHoverMs": 27.012,
+            "firstDiagnosticMs": 46.175,
+            "continuousHoverMs": 6.439,
+            "continuousDiagnosticMs": 11.57,
+            "structuralDiagnosticMs": 881.591,
+            "repairDiagnosticMs": 22.423,
+            "peakPhysicalFootprintMiB": 1221.001
+          },
+          "after": {
+            "startupMs": 2819.802,
+            "firstHoverMs": 26.292,
+            "firstDiagnosticMs": 45.326,
+            "continuousHoverMs": 6.45,
+            "continuousDiagnosticMs": 11.56,
+            "structuralDiagnosticMs": 878.316,
+            "repairDiagnosticMs": 23.067,
+            "peakPhysicalFootprintMiB": 1222.517
+          }
+        }
+      },
+      "orderedPublicStateDigests": {
+        "initial": "55f0e1736eec805f226375492cad84931eaa59128c1d486ecd64facefba746fa",
+        "body-1": "55f0e1736eec805f226375492cad84931eaa59128c1d486ecd64facefba746fa",
+        "body-2": "55f0e1736eec805f226375492cad84931eaa59128c1d486ecd64facefba746fa",
+        "body-3": "55f0e1736eec805f226375492cad84931eaa59128c1d486ecd64facefba746fa",
+        "body-4": "55f0e1736eec805f226375492cad84931eaa59128c1d486ecd64facefba746fa",
+        "body-5": "55f0e1736eec805f226375492cad84931eaa59128c1d486ecd64facefba746fa",
+        "body-6": "55f0e1736eec805f226375492cad84931eaa59128c1d486ecd64facefba746fa",
+        "newline": "d22d82e1a387d6cdfc63fb2bf77cd073a48b9ad0d8f248fd8e7af5b885d06e76",
+        "error": "2edf848ba78aea61e4e27687cc4041b7f53f209f81ac595514ec993d43988980",
+        "repair": "55f0e1736eec805f226375492cad84931eaa59128c1d486ecd64facefba746fa",
+        "structural": "dfe5d391129b37c0bd3197bb5d7c0863cff6ba676e6a38cc05dfc1f3b9666635",
+        "structural-repair": "55f0e1736eec805f226375492cad84931eaa59128c1d486ecd64facefba746fa",
+        "close-reopen": "55f0e1736eec805f226375492cad84931eaa59128c1d486ecd64facefba746fa",
+        "manual-rebuild": "55f0e1736eec805f226375492cad84931eaa59128c1d486ecd64facefba746fa",
+        "post-rebuild": "55f0e1736eec805f226375492cad84931eaa59128c1d486ecd64facefba746fa"
+      }
+    },
+    "opentitan-usbdev": {
+      "inputs": {
+        "top": "tb",
+        "anchor": "max_outstanding_req = 1;",
+        "alternate": "max_outstanding_req = 2;",
+        "hoverAnchor": "m_tl_agent_cfgs[RAL_T::type_name]",
+        "query": "m_tl_agent_cfgs",
+        "target": "usbdev_env_cfg.sv",
+        "targetSha256": "79a2a475e734cccb8fd00162f171a80b652843d8033abcc7707327da9368f562",
+        "filelistSha256": "4268a245ce983b9494a5f17ecfdde1b4a1ef14527c49e3198da21f552c1e0e6a",
+        "flags": "--single-unit --threads 1 --timescale 1ns/1ps --relax-string-conversions --top tb",
+        "frozenScopes": {
+          "instances": [
+            "tb.dut"
+          ],
+          "packages": [
+            "uvm_pkg"
+          ]
+        }
+      },
+      "native": {
+        "before": [
+          {
+            "startupMs": 5044.985,
+            "firstHoverMs": 2219.096,
+            "firstDiagnosticMs": 2407.35,
+            "continuousHoverMs": 2209.431,
+            "continuousDiagnosticMs": 2392.15,
+            "structuralDiagnosticMs": 2382.797,
+            "repairDiagnosticMs": 2377.995,
+            "peakPhysicalFootprintMiB": 577.892
+          },
+          {
+            "startupMs": 5015.816,
+            "firstHoverMs": 2215.997,
+            "firstDiagnosticMs": 2405.816,
+            "continuousHoverMs": 2209.671,
+            "continuousDiagnosticMs": 2391.078,
+            "structuralDiagnosticMs": 2395.079,
+            "repairDiagnosticMs": 2393.275,
+            "peakPhysicalFootprintMiB": 579.407
+          },
+          {
+            "startupMs": 5005.547,
+            "firstHoverMs": 2206.698,
+            "firstDiagnosticMs": 2397.131,
+            "continuousHoverMs": 2202.794,
+            "continuousDiagnosticMs": 2385.076,
+            "structuralDiagnosticMs": 2379.829,
+            "repairDiagnosticMs": 2385.572,
+            "peakPhysicalFootprintMiB": 577.517
+          }
+        ],
+        "after": [
+          {
+            "startupMs": 4990.969,
+            "firstHoverMs": 2204.191,
+            "firstDiagnosticMs": 2393.296,
+            "continuousHoverMs": 2200.523,
+            "continuousDiagnosticMs": 2382.24,
+            "structuralDiagnosticMs": 2408.521,
+            "repairDiagnosticMs": 2387.081,
+            "peakPhysicalFootprintMiB": 577.407
+          },
+          {
+            "startupMs": 5016.828,
+            "firstHoverMs": 2212.673,
+            "firstDiagnosticMs": 2402.425,
+            "continuousHoverMs": 2205.321,
+            "continuousDiagnosticMs": 2387.191,
+            "structuralDiagnosticMs": 2397.583,
+            "repairDiagnosticMs": 2393.209,
+            "peakPhysicalFootprintMiB": 577.017
+          },
+          {
+            "startupMs": 4996.164,
+            "firstHoverMs": 2257.421,
+            "firstDiagnosticMs": 2457.575,
+            "continuousHoverMs": 2209.138,
+            "continuousDiagnosticMs": 2389.49,
+            "structuralDiagnosticMs": 2391.471,
+            "repairDiagnosticMs": 2395.011,
+            "peakPhysicalFootprintMiB": 576.11
+          }
+        ],
+        "medians": {
+          "before": {
+            "startupMs": 5015.816,
+            "firstHoverMs": 2215.997,
+            "firstDiagnosticMs": 2405.816,
+            "continuousHoverMs": 2209.431,
+            "continuousDiagnosticMs": 2391.078,
+            "structuralDiagnosticMs": 2382.797,
+            "repairDiagnosticMs": 2385.572,
+            "peakPhysicalFootprintMiB": 577.892
+          },
+          "after": {
+            "startupMs": 4996.164,
+            "firstHoverMs": 2212.673,
+            "firstDiagnosticMs": 2402.425,
+            "continuousHoverMs": 2205.321,
+            "continuousDiagnosticMs": 2387.191,
+            "structuralDiagnosticMs": 2397.583,
+            "repairDiagnosticMs": 2393.209,
+            "peakPhysicalFootprintMiB": 577.017
+          }
+        }
+      },
+      "combined": {
+        "before": [
+          {
+            "startupMs": 2592.583,
+            "firstHoverMs": 15.611,
+            "firstDiagnosticMs": 27.408,
+            "continuousHoverMs": 4.404,
+            "continuousDiagnosticMs": 7.822,
+            "structuralDiagnosticMs": 296.252,
+            "repairDiagnosticMs": 13.446,
+            "peakPhysicalFootprintMiB": 698.454
+          },
+          {
+            "startupMs": 2601.821,
+            "firstHoverMs": 15.245,
+            "firstDiagnosticMs": 27.214,
+            "continuousHoverMs": 4.482,
+            "continuousDiagnosticMs": 7.967,
+            "structuralDiagnosticMs": 294.192,
+            "repairDiagnosticMs": 13.861,
+            "peakPhysicalFootprintMiB": 697.954
+          },
+          {
+            "startupMs": 2601.703,
+            "firstHoverMs": 15.398,
+            "firstDiagnosticMs": 26.844,
+            "continuousHoverMs": 4.646,
+            "continuousDiagnosticMs": 8.129,
+            "structuralDiagnosticMs": 297.341,
+            "repairDiagnosticMs": 13.774,
+            "peakPhysicalFootprintMiB": 697.095
+          }
+        ],
+        "after": [
+          {
+            "startupMs": 2592.029,
+            "firstHoverMs": 15.826,
+            "firstDiagnosticMs": 27.65,
+            "continuousHoverMs": 4.538,
+            "continuousDiagnosticMs": 8.022,
+            "structuralDiagnosticMs": 297.173,
+            "repairDiagnosticMs": 13.666,
+            "peakPhysicalFootprintMiB": 697.532
+          },
+          {
+            "startupMs": 2600.08,
+            "firstHoverMs": 15.15,
+            "firstDiagnosticMs": 27.183,
+            "continuousHoverMs": 4.507,
+            "continuousDiagnosticMs": 7.971,
+            "structuralDiagnosticMs": 294.389,
+            "repairDiagnosticMs": 13.352,
+            "peakPhysicalFootprintMiB": 695.142
+          },
+          {
+            "startupMs": 2602.747,
+            "firstHoverMs": 15.61,
+            "firstDiagnosticMs": 27.321,
+            "continuousHoverMs": 4.996,
+            "continuousDiagnosticMs": 8.879,
+            "structuralDiagnosticMs": 292.263,
+            "repairDiagnosticMs": 14.884,
+            "peakPhysicalFootprintMiB": 695.688
+          }
+        ],
+        "medians": {
+          "before": {
+            "startupMs": 2601.703,
+            "firstHoverMs": 15.398,
+            "firstDiagnosticMs": 27.214,
+            "continuousHoverMs": 4.482,
+            "continuousDiagnosticMs": 7.967,
+            "structuralDiagnosticMs": 296.252,
+            "repairDiagnosticMs": 13.774,
+            "peakPhysicalFootprintMiB": 697.954
+          },
+          "after": {
+            "startupMs": 2600.08,
+            "firstHoverMs": 15.61,
+            "firstDiagnosticMs": 27.321,
+            "continuousHoverMs": 4.538,
+            "continuousDiagnosticMs": 8.022,
+            "structuralDiagnosticMs": 294.389,
+            "repairDiagnosticMs": 13.666,
+            "peakPhysicalFootprintMiB": 695.688
+          }
+        }
+      },
+      "orderedPublicStateDigests": {
+        "initial": "3a42e281ff4eb20f834df5bf5a0d77e3bed6dd39965a58de33fc5ff780526767",
+        "body-1": "3a42e281ff4eb20f834df5bf5a0d77e3bed6dd39965a58de33fc5ff780526767",
+        "body-2": "3a42e281ff4eb20f834df5bf5a0d77e3bed6dd39965a58de33fc5ff780526767",
+        "body-3": "3a42e281ff4eb20f834df5bf5a0d77e3bed6dd39965a58de33fc5ff780526767",
+        "body-4": "3a42e281ff4eb20f834df5bf5a0d77e3bed6dd39965a58de33fc5ff780526767",
+        "body-5": "3a42e281ff4eb20f834df5bf5a0d77e3bed6dd39965a58de33fc5ff780526767",
+        "body-6": "3a42e281ff4eb20f834df5bf5a0d77e3bed6dd39965a58de33fc5ff780526767",
+        "newline": "fe28a9bc454aa2a2815b45c9ba352bf507b62d80c7f90c3a1f2266961e0225fc",
+        "error": "64ade9728da0459cc575151a3d67b32b33bf4d5c3188a21f7f0a605ec9859e91",
+        "repair": "3a42e281ff4eb20f834df5bf5a0d77e3bed6dd39965a58de33fc5ff780526767",
+        "structural": "fa474841fd99297e47cd0bfccdfd00b2925f99287914b5ebd4c56dfc4a67ce4c",
+        "structural-repair": "3a42e281ff4eb20f834df5bf5a0d77e3bed6dd39965a58de33fc5ff780526767",
+        "close-reopen": "3a42e281ff4eb20f834df5bf5a0d77e3bed6dd39965a58de33fc5ff780526767",
+        "manual-rebuild": "3a42e281ff4eb20f834df5bf5a0d77e3bed6dd39965a58de33fc5ff780526767",
+        "post-rebuild": "3a42e281ff4eb20f834df5bf5a0d77e3bed6dd39965a58de33fc5ff780526767"
+      }
+    }
+  },
+  "observations": [
+    "Complete public hover and diagnostics matched in every state across both versions and both modes.",
+    "With freezing and local analysis enabled, continuous hover medians moved by at most 0.187 ms and continuous diagnostic medians by at most 0.596 ms.",
+    "Without the experimental reuse enabled, the USBDEV structural-edit diagnostic median increased by 14.786 ms (0.62 percent). Across the three pairs its changes were +25.724, +2.504, and +11.642 ms.",
+    "With reuse enabled, SoC structural-edit diagnostics increased by 3.381 ms (0.24 percent) and USBDEV structural-edit diagnostics decreased by 1.863 ms."
+  ]
+}

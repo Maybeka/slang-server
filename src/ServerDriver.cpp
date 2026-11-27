@@ -2633,19 +2633,42 @@ std::optional<DefinitionInfo> ServerDriver::getDefinitionInfoAt(
             bool renderInterfaceConnection = true) -> std::optional<DefinitionInfo::SymbolTarget> {
         if (!symbol)
             return {};
-        auto syntaxTarget = makeSyntaxTarget(symbol);
-        if (!syntaxTarget)
-            return {};
 
         std::vector<DefinitionInfo::SyntaxTarget> syntaxes;
-        syntaxes.push_back(std::move(*syntaxTarget));
+        bool hasBuiltinHover = false;
+        if (!symbol->getSyntax()) {
+            hasBuiltinHover = symbol->kind == ast::SymbolKind::Iterator;
+            if (hasBuiltinHover && symbol->location.buffer() == symbolAnalysis->getBuffer()) {
+                auto& index = symbolAnalysis->syntaxes;
+                auto* token = index.getTokenAt(symbol->location);
+                if (token && token->valueText() == symbol->name)
+                    syntaxes.push_back(DefinitionInfo::SyntaxTarget::fromNode(
+                        index.getTokenParent(token), *token, sm));
+            }
+            for (auto* scope = symbol->getParentScope(); scope;
+                 scope = scope->asSymbol().getParentScope()) {
+                auto kind = scope->asSymbol().kind;
+                if (kind == ast::SymbolKind::CovergroupBody) {
+                    hasBuiltinHover = true;
+                    break;
+                }
+                if (kind != ast::SymbolKind::UnpackedStructType)
+                    break;
+            }
+        }
+        if (!hasBuiltinHover) {
+            auto syntaxTarget = makeSyntaxTarget(symbol);
+            if (!syntaxTarget)
+                return {};
+            syntaxes.push_back(std::move(*syntaxTarget));
+        }
         if (auto* modportPort = symbol->as_if<ast::ModportPortSymbol>()) {
             if (modportPort->internalSymbol) {
                 if (auto internalSyntax = makeSyntaxTarget(modportPort->internalSymbol))
                     syntaxes.push_back(std::move(*internalSyntax));
             }
         }
-        auto* designSymbol = symbolAnalysis->getDesignSymbol(*symbol);
+        auto* designSymbol = hasBuiltinHover ? nullptr : symbolAnalysis->getDesignSymbol(*symbol);
         return DefinitionInfo::SymbolTarget{.syntaxes = std::move(syntaxes),
                                             .symbol = designSymbol ? designSymbol : symbol,
                                             .analysis = symbolAnalysis,

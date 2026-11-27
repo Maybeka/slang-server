@@ -76,10 +76,17 @@ public:
 
         // Preserve delimiters absorbed by the parser while the pattern is incomplete.
         auto needsComma = [&]() {
-            auto* item =
-                patternExpression->parent
-                    ? patternExpression->parent->as_if<syntax::AssignmentPatternItemSyntax>()
-                    : nullptr;
+            auto* parent = patternExpression->parent.get();
+            if (!parent)
+                return false;
+            if (auto* simple = parent->as_if<syntax::SimpleAssignmentPatternSyntax>();
+                simple && simple->closeBrace.isMissing() && simple->parent) {
+                auto* outer = simple->parent->as_if<syntax::AssignmentPatternExpressionSyntax>();
+                auto size = outer ? context.analysis->getAssignmentPatternArraySize(*outer)
+                                  : std::nullopt;
+                return size && *size > simple->items.size();
+            }
+            auto* item = parent->as_if<syntax::AssignmentPatternItemSyntax>();
             auto* outerPattern =
                 item && item->parent
                     ? item->parent->as_if<syntax::StructuredAssignmentPatternSyntax>()
@@ -91,6 +98,8 @@ public:
             auto* parent = patternExpression->parent.get();
             if (!parent)
                 return false;
+            if (auto* statement = parent->as_if<syntax::ReturnStatementSyntax>())
+                return statement->returnValue == patternExpression && statement->semi.isMissing();
             if (auto* assignment = parent->as_if<syntax::BinaryExpressionSyntax>();
                 assignment && assignment->right.get() == patternExpression &&
                 syntax::SyntaxFacts::isAssignmentOperator(assignment->kind)) {

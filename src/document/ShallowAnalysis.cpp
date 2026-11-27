@@ -16,19 +16,23 @@
 #include <algorithm>
 #include <fmt/format.h>
 #include <memory>
+#include <ranges>
 #include <string_view>
 
 #include "slang/ast/ASTContext.h"
 #include "slang/ast/Compilation.h"
+#include "slang/ast/expressions/CallExpression.h"
 #include "slang/ast/symbols/BlockSymbols.h"
 #include "slang/ast/symbols/ClassSymbols.h"
 #include "slang/ast/symbols/CompilationUnitSymbols.h"
+#include "slang/ast/symbols/CoverSymbols.h"
 #include "slang/ast/symbols/InstanceSymbols.h"
 #include "slang/ast/symbols/MemberSymbols.h"
 #include "slang/ast/symbols/ParameterSymbols.h"
 #include "slang/ast/symbols/PortSymbols.h"
 #include "slang/ast/symbols/SubroutineSymbols.h"
 #include "slang/ast/symbols/ValueSymbol.h"
+#include "slang/ast/symbols/VariableSymbols.h"
 #include "slang/ast/types/AllTypes.h"
 #include "slang/ast/types/Type.h"
 #include "slang/parsing/Token.h"
@@ -502,6 +506,8 @@ const ast::Scope* ShallowAnalysis::getScopeFromSym(const ast::Symbol* symbol) co
 
     auto typeScope = [](const ast::Type& original) -> const ast::Scope* {
         auto& type = unwrapErrorType(original);
+        if (auto* covergroup = type.as_if<ast::CovergroupType>())
+            return &covergroup->getBody();
         if (type.isScope())
             return &type.as<ast::Scope>();
         if (auto* virtualInterface = type.as_if<ast::VirtualInterfaceType>()) {
@@ -602,6 +608,50 @@ const ast::Symbol* ShallowAnalysis::getAssignmentPatternTargetSymbol(
             return getSymbolAtToken(&declarator->name);
     }
 
+    if (auto* statement = parent->as_if<syntax::ReturnStatementSyntax>();
+        statement && statement->returnValue == &pattern) {
+        for (auto* scope : m_symbolIndexer.getScopesForSyntax(*statement, getCompilation().get())) {
+            for (; scope; scope = scope->asSymbol().getParentScope()) {
+                if (auto* function = scope->asSymbol().as_if<ast::SubroutineSymbol>())
+                    return &function->getReturnType();
+            }
+        }
+        return nullptr;
+    }
+
+    auto targetType = [](const ast::Symbol* target) -> const ast::Type* {
+        if (!target)
+            return nullptr;
+        if (auto* type = target->as_if<ast::Type>())
+            return &unwrapErrorType(*type);
+        if (auto* value = target->as_if<ast::ValueSymbol>())
+            return &unwrapErrorType(value->getType());
+        return nullptr;
+    };
+    if (auto* outer = parent->parent
+                          ? parent->parent->as_if<syntax::AssignmentPatternExpressionSyntax>()
+                          : nullptr) {
+        if (auto* type = targetType(getAssignmentPatternTargetSymbol(*outer))) {
+            if (auto* element = type->getArrayElementType())
+                return element;
+            if (auto* simple = parent->as_if<syntax::SimpleAssignmentPatternSyntax>();
+                simple && (type->isStruct() || type->isUnion())) {
+                size_t index = 0;
+                for (auto* item : simple->items) {
+                    if (item == &pattern) {
+                        for (auto& member : type->as<ast::Scope>().members()) {
+                            if (member.kind == ast::SymbolKind::Field && index-- == 0)
+                                return &member;
+                        }
+                        break;
+                    }
+                    ++index;
+                }
+            }
+        }
+        return nullptr;
+    }
+
     if (auto* item = parent->as_if<syntax::AssignmentPatternItemSyntax>();
         item && item->expr.get() == &pattern && item->parent && item->parent->parent) {
         auto* outerPattern =
@@ -613,14 +663,8 @@ const ast::Symbol* ShallowAnalysis::getAssignmentPatternTargetSymbol(
         if (!outerTarget)
             return nullptr;
 
-        const ast::Type* outerType = nullptr;
-        if (outerTarget->isType())
-            outerType = &outerTarget->as<ast::Type>();
-        else if (ast::ValueSymbol::isKind(outerTarget->kind))
-            outerType = &outerTarget->as<ast::ValueSymbol>().getType();
-
-        if (outerType) {
-            if (auto* elementType = unwrapErrorType(*outerType).getArrayElementType())
+        if (auto* outerType = targetType(outerTarget)) {
+            if (auto* elementType = outerType->getArrayElementType())
                 return elementType;
         }
 
@@ -639,6 +683,32 @@ const ast::Symbol* ShallowAnalysis::getAssignmentPatternTargetSymbol(
     if (auto* property = node ? node->as_if<syntax::SimplePropertyExprSyntax>() : nullptr;
         property && property->expr.get() == parent) {
         node = property->parent.get();
+    }
+
+    if (auto* named = node ? node->as_if<syntax::NamedPortConnectionSyntax>() : nullptr)
+        return getSymbolAtToken(&named->name);
+    if (auto* ordered = node ? node->as_if<syntax::OrderedPortConnectionSyntax>() : nullptr) {
+        auto* instance = ordered->parent
+                             ? ordered->parent->as_if<syntax::HierarchicalInstanceSyntax>()
+                             : nullptr;
+        if (!instance || !instance->decl)
+            return nullptr;
+        auto* symbol = getSymbolAtToken(&instance->decl->name);
+        while (auto* array = symbol ? symbol->as_if<ast::InstanceArraySymbol>() : nullptr)
+            symbol = array->elements.empty() ? nullptr : array->elements.front();
+        auto* inst = symbol ? symbol->as_if<ast::InstanceSymbol>() : nullptr;
+        if (!inst)
+            return nullptr;
+        auto ports = inst->body.getPortList();
+        for (size_t index = 0; index < instance->connections.size() && index < ports.size();
+             ++index) {
+            if (instance->connections[index] == ordered) {
+                if (auto* port = ports[index]->as_if<ast::PortSymbol>())
+                    return port->internalSymbol ? port->internalSymbol : port;
+                break;
+            }
+        }
+        return nullptr;
     }
 
     auto* argument = node ? node->as_if<syntax::ArgumentSyntax>() : nullptr;
@@ -676,6 +746,24 @@ const ast::Scope* ShallowAnalysis::getAssignmentPatternTargetScope(
     return getScopeFromSym(getAssignmentPatternTargetSymbol(pattern));
 }
 
+std::optional<size_t> ShallowAnalysis::getAssignmentPatternArraySize(
+    const syntax::AssignmentPatternExpressionSyntax& pattern) const {
+    auto* symbol = getAssignmentPatternTargetSymbol(pattern);
+    if (!symbol)
+        return std::nullopt;
+    auto* type = symbol->as_if<ast::Type>();
+    if (auto* value = symbol->as_if<ast::ValueSymbol>())
+        type = &value->getType();
+    if (!type)
+        return std::nullopt;
+    auto& canonical = type->getCanonicalType();
+    if (auto* packed = canonical.as_if<ast::PackedArrayType>())
+        return packed->range.width();
+    if (auto* unpacked = canonical.as_if<ast::FixedSizeUnpackedArrayType>())
+        return unpacked->range.width();
+    return std::nullopt;
+}
+
 const ast::Scope* ShallowAnalysis::getAssignmentPatternKeyScope(SourceLocation loc) const {
     return getAssignmentPatternScopeAt(loc, false);
 }
@@ -687,6 +775,14 @@ const ast::Scope* ShallowAnalysis::getAssignmentPatternCompletionScope(SourceLoc
 const ast::Scope* ShallowAnalysis::getAssignmentPatternScopeAt(SourceLocation loc,
                                                                bool allowIncompleteKey) const {
     auto* syntax = syntaxes.getSyntaxAt(loc);
+    if (allowIncompleteKey) {
+        auto* previous = syntaxes.getTokenBefore(loc);
+        if (previous && previous->kind == parsing::TokenKind::Identifier &&
+            previous->range().end() == loc) {
+            if (auto* parent = syntaxes.getTokenParent(previous))
+                syntax = parent;
+        }
+    }
     if (!syntax) {
         auto* previous = syntaxes.getTokenBefore(loc);
         syntax = syntaxes.getTokenParent(previous);
@@ -770,8 +866,12 @@ const ShallowAnalysis::GenvarElaboration* ShallowAnalysis::getGenvarElaborationA
     if (!syntax)
         return nullptr;
 
-    while (syntax && syntax->kind != syntax::SyntaxKind::LoopGenerate)
+    while (syntax) {
+        if (auto* loop = syntax->as_if<syntax::LoopGenerateSyntax>();
+            loop && loop->identifier.valueText() == declTok->valueText())
+            break;
         syntax = syntax->parent;
+    }
     if (!syntax)
         return nullptr;
 
@@ -1036,7 +1136,10 @@ slang::SmallVector<const ast::Symbol*, 2> ShallowAnalysis::getSymbolsAtToken(
         }
     }
 
-    auto scopes = m_symbolIndexer.getScopesForSyntax(*syntax, getCompilation().get());
+    auto* iteratorScope = getArrayIteratorScope(*syntax, declTok->location());
+    auto scopes = iteratorScope
+                      ? SmallVector<const ast::Scope*, 2>{iteratorScope}
+                      : m_symbolIndexer.getScopesForSyntax(*syntax, getCompilation().get());
 
     if (syntax->kind == syntax::SyntaxKind::LoopGenerate &&
         syntax->as<syntax::LoopGenerateSyntax>().identifier == *declTok) {
@@ -1327,11 +1430,81 @@ const ast::Type* ShallowAnalysis::getMacroReceiverType(const parsing::Token& dot
     return m_macroReceiverTypes.emplace(&dot, expression.type).first->second;
 }
 
+const ast::Scope* ShallowAnalysis::getArrayIteratorScope(const syntax::SyntaxNode& syntax,
+                                                         SourceLocation loc) const {
+    const syntax::ArrayOrRandomizeMethodExpressionSyntax* outer = nullptr;
+    for (auto* node = &syntax; node; node = node->parent) {
+        if (auto* call = node->as_if<syntax::ArrayOrRandomizeMethodExpressionSyntax>();
+            call && call->args) {
+            outer = call;
+        }
+        if (syntax::StatementSyntax::isKind(node->kind) || syntax::MemberSyntax::isKind(node->kind))
+            break;
+    }
+    if (!outer || !outer->parent)
+        return nullptr;
+
+    auto cached = m_arrayIteratorScopes.find(outer);
+    if (cached == m_arrayIteratorScopes.end()) {
+        std::vector<ArrayIteratorScope> entries;
+        auto compilation = getCompilation();
+        auto scopes = m_symbolIndexer.getScopesForSyntax(*outer->parent, compilation.get());
+        if (!scopes.empty() && &scopes.back()->getCompilation() == compilation.get()) {
+            const ast::Scope* current = scopes.back();
+            auto& expression =
+                ast::Expression::bind(*outer, ast::ASTContext(*current, ast::LookupLocation::max));
+            auto collect = ast::makeVisitor([&](auto& visitor, const ast::CallExpression& call) {
+                if (!call.isSystemCall()) {
+                    visitor.visitDefault(call);
+                    return;
+                }
+                auto [body,
+                      variable] = std::get<ast::CallExpression::SystemCallInfo>(call.subroutine)
+                                      .getIteratorInfo();
+                auto* iterator = variable ? variable->as_if<ast::IteratorSymbol>() : nullptr;
+                if (!body || !iterator) {
+                    visitor.visitDefault(call);
+                    return;
+                }
+                for (auto* argument : call.arguments())
+                    argument->visit(visitor);
+                auto& scope = *compilation->emplace<ast::StatementBlockSymbol>(
+                    *compilation, "", SourceLocation::NoLocation,
+                    ast::StatementBlockKind::Sequential, ast::VariableLifetime::Automatic);
+                scope.setParent(*current, ast::LookupLocation::max.getIndex());
+                auto& local = *compilation->emplace<ast::IteratorSymbol>(
+                    iterator->name, iterator->location, iterator->arrayType, iterator->getType());
+                if (iterator->location.valid()) {
+                    auto* token = syntaxes.getTokenAt(iterator->location);
+                    if (auto* declaration = syntaxes.getTokenParent(token))
+                        local.setSyntax(*declaration);
+                }
+                scope.addMember(local);
+                entries.push_back({body->sourceRange, &scope, iterator->location});
+                auto* parent = std::exchange(current, &scope);
+                body->visit(visitor);
+                current = parent;
+            });
+            expression.visit(collect);
+        }
+        cached = m_arrayIteratorScopes.emplace(outer, std::move(entries)).first;
+    }
+    for (auto& entry : std::views::reverse(cached->second)) {
+        if (loc == entry.declaration ||
+            (entry.expression.start().buffer() == loc.buffer() && entry.expression.start() <= loc &&
+             loc <= entry.expression.end()))
+            return entry.scope;
+    }
+    return nullptr;
+}
+
 const ast::Scope* ShallowAnalysis::getScopeAt(SourceLocation loc) const {
     auto syntax = syntaxes.getSyntaxAt(loc);
     if (!syntax) {
         return nullptr;
     }
+    if (auto* iteratorScope = getArrayIteratorScope(*syntax, loc))
+        return iteratorScope;
     auto scopes = m_symbolIndexer.getScopesForSyntax(*syntax, getCompilation().get());
     return scopes.empty() ? nullptr : scopes.back();
 }

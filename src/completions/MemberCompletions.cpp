@@ -770,7 +770,7 @@ lsp::CompletionItem MemberCompletionQuery::getCompletion(const slang::ast::Symbo
              prototype && (!deferCallableEdit || !hasSourceLocation(symbol)))
         setSubroutineCompletionEdit(*prototype, item);
 
-    if (!hasSourceLocation(symbol)) {
+    if (!hasSourceLocation(symbol) || symbol.kind == ast::SymbolKind::Iterator) {
         resolve(symbol, item, true);
         item.data.reset();
     }
@@ -808,6 +808,9 @@ void MemberCompletionQuery::resolve(const slang::ast::Symbol& rawSymbol, lsp::Co
             symSyntax->parent &&
             symSyntax->parent->kind == syntax::SyntaxKind::TypeParameterDeclaration)
             symSyntax = symSyntax->parent;
+    }
+    else if (auto* iterator = symbol.as_if<ast::IteratorSymbol>()) {
+        docStr = fmt::format("{} {}", iterator->getType().toString(), iterator->name);
     }
     else if (slang::ast::ValueSymbol::isKind(symbol.kind) ||
              slang::ast::PortSymbol::isKind(symbol.kind) ||
@@ -872,6 +875,7 @@ void MemberCompletionQuery::addCompletions(std::vector<lsp::CompletionItem>& res
     // Walk up through the compilation unit, but don't include the root's design hierarchy.
     const slang::ast::Scope* currentScope = scope;
     const slang::ast::Symbol* prevSym = nullptr;
+    SmallVector<std::string_view, 2> iteratorNames;
     while (currentScope) {
         // Add members from the current scope
         for (auto& member : currentScope->members()) {
@@ -900,6 +904,11 @@ void MemberCompletionQuery::addCompletions(std::vector<lsp::CompletionItem>& res
             if (!visibleInContext(unwrapCompletionMember(member), contextKind) &&
                 member.kind != ast::SymbolKind::ExplicitImport)
                 continue;
+            if (!iteratorNames.empty() &&
+                std::ranges::find(iteratorNames, member.name) != iteratorNames.end())
+                continue;
+            if (member.kind == ast::SymbolKind::Iterator)
+                iteratorNames.push_back(member.name);
 
             // ports are in there twice as value symbols and port symbols, so skip the value
             if ((member.kind == slang::ast::SymbolKind::Variable ||
