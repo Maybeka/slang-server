@@ -1275,10 +1275,10 @@ index ee13c73b0e6f6466c2b9de28311082c56b9f6ca6..cff26871705ec40cf85c1d5ea31117cb
  public:
      /// The AST context in which the evaluation is occurring.
 diff --git a/include/slang/ast/Lookup.h b/include/slang/ast/Lookup.h
-index f62cf759659c5d4708aeb4efc0c2722d4eb02546..dca10dcc0b8d0c54868a660acc6dbb00aea81aa5 100644
+index f62cf759659c5d4708aeb4efc0c2722d4eb02546..acf9e00c1ce61a1fa8285b99b77744061976d06d 100644
 --- a/include/slang/ast/Lookup.h
 +++ b/include/slang/ast/Lookup.h
-@@ -82,10 +82,14 @@ enum class SLANG_EXPORT LookupFlags {
+@@ -82,10 +82,17 @@ enum class SLANG_EXPORT LookupFlags {
      /// Allow unnamed generate blocks to be looked up by their external name.
      AllowUnnamedGenerate = 1 << 14,
  
@@ -1286,11 +1286,14 @@ index f62cf759659c5d4708aeb4efc0c2722d4eb02546..dca10dcc0b8d0c54868a660acc6dbb00
 +    /// Lazy semantic binding and constant evaluation still record dependencies.
 +    NoBodyScopeDependencies = 1 << 15,
 +
++    /// Editor lookup can explore an unadorned generic class's default specialization.
++    AllowDefaultGenericClassScope = 1 << 16,
++
      /// Treat this lookup as hierarchical even if it's a simple name.
      ForceHierarchical = AllowDeclaredAfter | NoUndeclaredErrorIfUninstantiated
  };
 -SLANG_BITMASK(LookupFlags, AllowUnnamedGenerate)
-+SLANG_BITMASK(LookupFlags, NoBodyScopeDependencies)
++SLANG_BITMASK(LookupFlags, AllowDefaultGenericClassScope)
  
  /// Flags that indicate additional details about the result of a lookup operation.
  enum class SLANG_EXPORT LookupResultFlags : uint8_t {
@@ -1874,7 +1877,7 @@ index bc43d0037063e9e47d7c4fbd85473077d953a4a4..a615af8d1ec98d669140ca8e15bc36cc
  
  } // namespace slang
 diff --git a/include/slang/driver/Driver.h b/include/slang/driver/Driver.h
-index 0f9cff2a3c5865d20a9f6c570e07ab640a1b0f69..eefa8fbf0175adef5dead82da83e856a9238a1a7 100644
+index 0f9cff2a3c5865d20a9f6c570e07ab640a1b0f69..b271426c7ec6cc00f7b003d8c4e450c154978cd7 100644
 --- a/include/slang/driver/Driver.h
 +++ b/include/slang/driver/Driver.h
 @@ -8,6 +8,8 @@
@@ -1894,7 +1897,7 @@ index 0f9cff2a3c5865d20a9f6c570e07ab640a1b0f69..eefa8fbf0175adef5dead82da83e856a
  #include "slang/util/Function.h"
  #include "slang/util/LanguageVersion.h"
  #include "slang/util/OS.h"
-@@ -108,6 +111,8 @@ private:
+@@ -108,14 +111,19 @@ private:
      // such as the DiagnosticEngine, which wants a Compilation to register callbacks
      // for printing symbol paths.
      ast::Compilation defaultComp;
@@ -1903,16 +1906,19 @@ index 0f9cff2a3c5865d20a9f6c570e07ab640a1b0f69..eefa8fbf0175adef5dead82da83e856a
  
  public:
      /// The command line object that will be used to parse
-@@ -115,7 +120,7 @@ public:
+     /// arguments if the @a parseCommandLine method is called.
      CommandLine cmdLine;
  
++    /// Optional environment lookup used while reading nested command files.
++    std::function<std::string(const std::string&)> commandFileEnvironment;
++
      /// The source manager that holds all loaded source files.
 -    SourceManager sourceManager;
 +    SourceManager& sourceManager;
  
      /// The diagnostics engine that will be used to report diagnostics.
      DiagnosticEngine diagEngine;
-@@ -372,12 +377,28 @@ public:
+@@ -372,12 +380,28 @@ public:
  
          /// Returns true if the lintMode option is provided.
          bool lintMode() const;
@@ -1941,7 +1947,7 @@ index 0f9cff2a3c5865d20a9f6c570e07ab640a1b0f69..eefa8fbf0175adef5dead82da83e856a
      /// @brief Adds standard command line arguments to the @a cmdLine object.
      ///
      /// If not called, no arguments will be added by default, though the user
-@@ -391,6 +412,7 @@ public:
+@@ -391,6 +415,7 @@ public:
      template<typename TArgs>
      [[nodiscard]] bool parseCommandLine(int argc, TArgs argv,
                                          const CommandLine::ParseOptions& parseOptions = {}) {
@@ -1949,7 +1955,7 @@ index 0f9cff2a3c5865d20a9f6c570e07ab640a1b0f69..eefa8fbf0175adef5dead82da83e856a
          if (!cmdLine.parse(argc, argv, parseOptions)) {
              issueCommandLineErrors(cmdLine);
              return false;
-@@ -450,10 +472,19 @@ public:
+@@ -450,10 +475,19 @@ public:
      [[nodiscard]] bool parseAllSources(
          function_ref<void(BufferID, bool, bool)> bufferChangeCB = {});
  
@@ -2120,7 +2126,7 @@ index 93edc1fe29576698e2cb269dd0ecb8349facad7c..84e34020a9b16ddb40c683c6bffbdb9c
  
  } // namespace slang::parsing
 diff --git a/include/slang/parsing/Preprocessor.h b/include/slang/parsing/Preprocessor.h
-index e8c2b8bbc0e79f3597122a82c05fc5b2db680489..88e4e64eecc5f51193f7a25be6f6f0f90d4ac75e 100644
+index e8c2b8bbc0e79f3597122a82c05fc5b2db680489..2aa631201214e22d63134d66ffe3b3f529f98967 100644
 --- a/include/slang/parsing/Preprocessor.h
 +++ b/include/slang/parsing/Preprocessor.h
 @@ -7,6 +7,7 @@
@@ -2235,6 +2241,15 @@ index e8c2b8bbc0e79f3597122a82c05fc5b2db680489..88e4e64eecc5f51193f7a25be6f6f0f9
      bool inMacroBody = false;
  
      // Special handling for pulling directives when in an ifdef condition expr.
+@@ -557,6 +604,8 @@ private:
+ 
+     int designElementDepth = 0;
+     uint32_t includeDepth = 0;
++    bool unwindingIncludeLimit = false;
++    std::vector<const char*> failedIncludeBranches;
+     uint32_t protectEncryptDepth = 0;
+     uint32_t protectDecryptDepth = 0;
+     uint32_t protectLineLength = 0;
 diff --git a/include/slang/parsing/PreprocessorMetadata.h b/include/slang/parsing/PreprocessorMetadata.h
 index fc3236bf12bc3f64d131decc19c66be949bda1a4..eb374de03e9b52c32b1702955e4af4c56c0dd1e3 100644
 --- a/include/slang/parsing/PreprocessorMetadata.h
@@ -3569,6 +3584,28 @@ index 46a3155d1c188448262c6c0cf87c8902a6d84407..b9309e1e879b23362fb5c285d8adee1e
      /// Construct a new item using the allocator.
      template<typename... Args>
      T* emplace(Args&&... args) {
+diff --git a/include/slang/util/CommandLine.h b/include/slang/util/CommandLine.h
+index 87f3cb352deeab2b55494e4017b40e7ee7536aa7..216a91c4c3947716a460d0ccd60419ccf92f9fbe 100644
+--- a/include/slang/util/CommandLine.h
++++ b/include/slang/util/CommandLine.h
+@@ -18,6 +18,7 @@
+ 
+ #include "slang/text/SourceLocation.h"
+ #include "slang/util/Enum.h"
++#include "slang/util/Function.h"
+ #include "slang/util/SmallVector.h"
+ #include "slang/util/String.h"
+ #include "slang/util/Util.h"
+@@ -361,6 +362,9 @@ public:
+         /// with the supported forms $VAR, $(VAR), and ${VAR}.
+         bool expandEnvVars = false;
+ 
++        /// Optional environment lookup for this invocation.
++        function_ref<std::string(const std::string&)> environmentLookup;
++
+         /// If set to true, don't issue an error if a duplicate
+         /// argument setter is found.
+         bool ignoreDuplicates = false;
 diff --git a/include/slang/util/CwdCoordinator.h b/include/slang/util/CwdCoordinator.h
 new file mode 100644
 index 0000000000000000000000000000000000000000..2512673c765eb0d38c7dcdaf7656398ea4b9f46f
@@ -3612,6 +3649,28 @@ index 0000000000000000000000000000000000000000..2512673c765eb0d38c7dcdaf7656398e
 +    static thread_local unsigned localAnalyses;
 +};
 +} // namespace slang
+diff --git a/include/slang/util/OS.h b/include/slang/util/OS.h
+index fcafe040a3bd48c3c0266728a33bf5fe68f7b7d7..88df2838ffb7e9240f3031ff8b34a1fe8cd917be 100644
+--- a/include/slang/util/OS.h
++++ b/include/slang/util/OS.h
+@@ -10,6 +10,7 @@
+ #include <filesystem>
+ #include <functional>
+ 
++#include "slang/util/Function.h"
+ #include "slang/util/ScopeGuard.h"
+ #include "slang/util/SmallVector.h"
+ #include "slang/util/TextStyle.h"
+@@ -64,7 +65,8 @@ public:
+     static void printException(std::string_view format, std::string_view what);
+ 
+     static std::string getEnv(const std::string& name);
+-    static std::string parseEnvVar(const char*& ptr, const char* end);
++    using EnvLookup = function_ref<std::string(const std::string&)>;
++    static std::string parseEnvVar(const char*& ptr, const char* end, EnvLookup lookup = {});
+ 
+     static auto captureOutput(
+         std::function<void(std::string_view, bool)> callback = captureOutputStreams) {
 diff --git a/include/slang/util/String.h b/include/slang/util/String.h
 index 85687e23eb3b318fa5d586c80f72a6ee24abb846..28334ae525c2982295f84e90cebba051b6f51212 100644
 --- a/include/slang/util/String.h
@@ -12105,7 +12164,7 @@ index e64292f381b2f2cb6916c903014244456baafb61..038500ffecebba37f356bba80002248a
      }
  
 diff --git a/source/ast/Lookup.cpp b/source/ast/Lookup.cpp
-index 1b5871c0398d16b07c5428788f87576f22b3bab2..48ac35641525f0c2793876d975ad5cb802d10dc7 100644
+index 1b5871c0398d16b07c5428788f87576f22b3bab2..4c7313c2ad74035a4fec4d0aad82fcc575c79316 100644
 --- a/source/ast/Lookup.cpp
 +++ b/source/ast/Lookup.cpp
 @@ -157,7 +157,7 @@ struct NamePlusLoc {
@@ -12128,7 +12187,30 @@ index 1b5871c0398d16b07c5428788f87576f22b3bab2..48ac35641525f0c2793876d975ad5cb8
          symbol = scope.find(name.text);
          if (!symbol) {
              // If we did the lookup in a modport, check to see if the symbol actually
-@@ -870,7 +874,7 @@ bool resolveColonNames(SmallVectorBase<NamePlusLoc>& nameParts, int colonParts,
+@@ -812,11 +816,20 @@ bool resolveColonNames(SmallVectorBase<NamePlusLoc>& nameParts, int colonParts,
+                 // the context of the class itself. If we're within the class, it refers to the
+                 // "current" specialization, not the default specialization.
+                 auto [parent, _] = Lookup::getContainingClass(*context.scope);
+-                if (!parent || parent->genericClass != symbol) {
++                if (parent && parent->genericClass == symbol) {
++                    symbol = parent;
++                }
++                else if (flags.has(LookupFlags::AllowDefaultGenericClassScope)) {
++                    const auto* type = symbol->as<GenericClassDefSymbol>()
++                                           .getDefaultSpecialization(*context.scope);
++                    if (!type || type->isError())
++                        return false;
++                    symbol = type;
++                }
++                else {
+                     result.addDiag(*context.scope, diag::GenericClassScopeResolution, name.range);
+                     return false;
+                 }
+-                symbol = parent;
+             }
+         }
+         else if (name.paramAssignments) {
+@@ -870,7 +883,7 @@ bool resolveColonNames(SmallVectorBase<NamePlusLoc>& nameParts, int colonParts,
  
          if (symbol->isType()) {
              if (symbol->kind == SymbolKind::TypeAlias)
@@ -12137,7 +12219,7 @@ index 1b5871c0398d16b07c5428788f87576f22b3bab2..48ac35641525f0c2793876d975ad5cb8
  
              symbol = &symbol->as<Type>().getCanonicalType();
          }
-@@ -948,13 +952,13 @@ void unwrapResult(const Scope& scope, LookupResult& result, bool unwrapGenericCl
+@@ -948,13 +961,13 @@ void unwrapResult(const Scope& scope, LookupResult& result, bool unwrapGenericCl
  
      // Unwrap type parameters into their target type alias.
      if (result.found->kind == SymbolKind::TypeParameter) {
@@ -12153,7 +12235,7 @@ index 1b5871c0398d16b07c5428788f87576f22b3bab2..48ac35641525f0c2793876d975ad5cb8
      }
  
      // If the found symbol is a generic class, unwrap into
-@@ -1287,9 +1291,19 @@ const Symbol* Lookup::unqualifiedAt(const Scope& scope, std::string_view name,
+@@ -1287,9 +1300,19 @@ const Symbol* Lookup::unqualifiedAt(const Scope& scope, std::string_view name,
      return result.found;
  }
  
@@ -12174,7 +12256,7 @@ index 1b5871c0398d16b07c5428788f87576f22b3bab2..48ac35641525f0c2793876d975ad5cb8
      if (!index)
          return nullptr;
  
-@@ -1340,8 +1354,8 @@ static const Symbol* selectChildRange(const InstanceArraySymbol& array,
+@@ -1340,8 +1363,8 @@ static const Symbol* selectChildRange(const InstanceArraySymbol& array,
          return nullptr;
  
      // Evaluate both sides of the range.
@@ -12185,7 +12267,7 @@ index 1b5871c0398d16b07c5428788f87576f22b3bab2..48ac35641525f0c2793876d975ad5cb8
      if (!left || !right)
          return nullptr;
  
-@@ -2007,7 +2021,7 @@ void Lookup::unqualifiedImpl(const Scope& scope, std::string_view name, LookupLo
+@@ -2007,7 +2030,7 @@ void Lookup::unqualifiedImpl(const Scope& scope, std::string_view name, LookupLo
                  case SymbolKind::ExplicitImport:
                      result.found = symbol->as<ExplicitImportSymbol>().importedSymbol();
                      result.flags |= LookupResultFlags::WasImported;
@@ -12194,7 +12276,7 @@ index 1b5871c0398d16b07c5428788f87576f22b3bab2..48ac35641525f0c2793876d975ad5cb8
                      break;
                  case SymbolKind::ForwardingTypedef:
                      // If we find a forwarding typedef, the actual typedef was never defined.
-@@ -2073,10 +2087,7 @@ void Lookup::unqualifiedImpl(const Scope& scope, std::string_view name, LookupLo
+@@ -2073,10 +2096,7 @@ void Lookup::unqualifiedImpl(const Scope& scope, std::string_view name, LookupLo
              // but we can still reference any symbols that were previously imported
              // that way from some other lookup. In order to be sure we've seen all of
              // those lookups we need to force elaborate the scope first.
@@ -12206,7 +12288,7 @@ index 1b5871c0398d16b07c5428788f87576f22b3bab2..48ac35641525f0c2793876d975ad5cb8
  
              if (auto it = wildcardImportData->importedSymbols.find(name);
                  it != wildcardImportData->importedSymbols.end()) {
-@@ -2139,7 +2150,7 @@ void Lookup::unqualifiedImpl(const Scope& scope, std::string_view name, LookupLo
+@@ -2139,7 +2159,7 @@ void Lookup::unqualifiedImpl(const Scope& scope, std::string_view name, LookupLo
  
                  result.flags |= LookupResultFlags::WasImported;
                  result.found = imports[0].imported;
@@ -12792,6 +12874,20 @@ index f37984aa0ff75332fbd14641e71dd4ded7ae92e2..6946459426526c64dd66d8789924129e
          if (sliceExpr.bad())
              return badResult();
  
+diff --git a/source/ast/statements/LoopStatements.cpp b/source/ast/statements/LoopStatements.cpp
+index 398e67c1b24a333030dbbec050795b439b7a7702..20e3f8a4472422250691d93402fee8caeb80f3b6 100644
+--- a/source/ast/statements/LoopStatements.cpp
++++ b/source/ast/statements/LoopStatements.cpp
+@@ -398,7 +398,8 @@ Statement& ForeachLoopStatement::fromSyntax(Compilation& compilation,
+     auto guard = stmtCtx.enterLoop();
+ 
+     auto& arrayRef = Expression::bind(*syntax.loopList->arrayName, context);
+-    SLANG_ASSERT(!arrayRef.bad());
++    if (arrayRef.bad())
++        return badStmt(compilation, nullptr);
+ 
+     // Loop variables were already built in the containing block when it was elaborated,
+     // so we just have to find them and associate them with the correct dim ranges here.
 diff --git a/source/ast/statements/MiscStatements.cpp b/source/ast/statements/MiscStatements.cpp
 index 5c6210dc92fef7bd22542631e215a3461b076928..a9cfc47cc035a1c271ff5ab2af56133a54bb6223 100644
 --- a/source/ast/statements/MiscStatements.cpp
@@ -12836,10 +12932,24 @@ index c45908e0412daed5ed55bfe24d24bec512ced8a7..1ba7d56906dadb0500f52db078ae7484
      serializer.write("value", getValue());
  }
 diff --git a/source/ast/symbols/BlockSymbols.cpp b/source/ast/symbols/BlockSymbols.cpp
-index 32b432b7a5238699b2021ae9f51e95a25aa953f4..b2aa2ecedf22aacab3991bdefe859a78153f3193 100644
+index 32b432b7a5238699b2021ae9f51e95a25aa953f4..6b762d5cbd36928808674554c0b42640cf955772 100644
 --- a/source/ast/symbols/BlockSymbols.cpp
 +++ b/source/ast/symbols/BlockSymbols.cpp
-@@ -522,6 +522,7 @@ void GenerateBlockSymbol::fromSyntax(Compilation& compilation, const IfGenerateS
+@@ -318,6 +318,13 @@ void StatementBlockSymbol::elaborateVariables(function_ref<void(const Symbol&)>
+         SmallVector<ForeachLoopStatement::LoopDim, 4> dims;
+         ASTContext context(*this, LookupLocation::max);
+ 
++        // Binding the array can elaborate a package export that asks for this
++        // method body again. Its iterator symbols do not exist until binding returns.
++        stmt = &InvalidStatement::Instance;
++        auto clearPending = ScopeGuard([&] {
++            if (stmt == &InvalidStatement::Instance)
++                stmt = nullptr;
++        });
+         if (!ForeachLoopStatement::buildLoopDims(*syntax->as<ForeachLoopStatementSyntax>().loopList,
+                                                  context, dims)) {
+             // If building loop dims failed we don't want to later proceed with trying to
+@@ -522,6 +529,7 @@ void GenerateBlockSymbol::fromSyntax(Compilation& compilation, const IfGenerateS
                                       SmallVectorBase<GenerateBlockSymbol*>& results) {
      std::optional<bool> selector;
      auto& cond = Expression::bind(*syntax.condition, context);
@@ -12847,7 +12957,7 @@ index 32b432b7a5238699b2021ae9f51e95a25aa953f4..b2aa2ecedf22aacab3991bdefe859a78
      ConstantValue cv = context.eval(cond);
      if (cv && context.requireBooleanConvertible(cond) && !isUninstantiated)
          selector = cv.isTrue();
-@@ -569,6 +570,9 @@ void GenerateBlockSymbol::fromSyntax(Compilation& compilation, const CaseGenerat
+@@ -569,6 +577,9 @@ void GenerateBlockSymbol::fromSyntax(Compilation& compilation, const CaseGenerat
          return;
      }
  
@@ -14174,7 +14284,7 @@ index 3fa297e9c399e3143a30eeebacbcd569f3f30159..0eb352284b87411bfd3576392b14b094
      for (auto& [key, formatter] : formatters)
          formatter->startMessage(diag);
 diff --git a/source/driver/Driver.cpp b/source/driver/Driver.cpp
-index d049078b09193791a4dfbc2e7dd89db458bf61f6..aac8868a477986afb6f4ea3ac2e77db90eb8f7cb 100644
+index d049078b09193791a4dfbc2e7dd89db458bf61f6..5ce6f85cb7a846e846db1c9b8986e75d23a7e0fa 100644
 --- a/source/driver/Driver.cpp
 +++ b/source/driver/Driver.cpp
 @@ -26,6 +26,7 @@
@@ -14274,7 +14384,16 @@ index d049078b09193791a4dfbc2e7dd89db458bf61f6..aac8868a477986afb6f4ea3ac2e77db9
          bool result;
          if (separateUnit) {
              result = parseUnitListing(*buffer);
-@@ -593,7 +616,7 @@ bool Driver::processCommandFiles(std::string_view pattern, bool makeRelative, bo
+@@ -585,6 +608,8 @@ bool Driver::processCommandFiles(std::string_view pattern, bool makeRelative, bo
+         else {
+             CommandLine::ParseOptions parseOpts;
+             parseOpts.expandEnvVars = true;
++            if (commandFileEnvironment)
++                parseOpts.environmentLookup = commandFileEnvironment;
+             parseOpts.ignoreProgramName = true;
+             parseOpts.supportComments = true;
+             parseOpts.ignoreDuplicates = true;
+@@ -593,7 +618,7 @@ bool Driver::processCommandFiles(std::string_view pattern, bool makeRelative, bo
          }
  
          if (makeRelative)
@@ -14283,7 +14402,7 @@ index d049078b09193791a4dfbc2e7dd89db458bf61f6..aac8868a477986afb6f4ea3ac2e77db9
  
          activeCommandFiles.erase(path);
  
-@@ -607,6 +630,7 @@ bool Driver::processCommandFiles(std::string_view pattern, bool makeRelative, bo
+@@ -607,6 +632,7 @@ bool Driver::processCommandFiles(std::string_view pattern, bool makeRelative, bo
  }
  
  bool Driver::processOptions(bool checkFiles) {
@@ -14291,7 +14410,7 @@ index d049078b09193791a4dfbc2e7dd89db458bf61f6..aac8868a477986afb6f4ea3ac2e77db9
      if (options.languageVersion.has_value()) {
          if (options.languageVersion == "1364-2005")
              languageVersion = LanguageVersion::v1364_2005;
-@@ -1086,6 +1110,7 @@ static std::string_view bufferKindToStr(SourceManager::BufferKind kind) {
+@@ -1086,6 +1112,7 @@ static std::string_view bufferKindToStr(SourceManager::BufferKind kind) {
  }
  
  bool Driver::parseAllSources(function_ref<void(BufferID, bool, bool)> bufferChangeCB) {
@@ -14299,7 +14418,7 @@ index d049078b09193791a4dfbc2e7dd89db458bf61f6..aac8868a477986afb6f4ea3ac2e77db9
      if (!threadPool) {
          const auto numThreads = options.numThreads.value_or(0u);
          if (numThreads != 1u)
-@@ -1143,6 +1168,7 @@ bool Driver::parseAllSources(function_ref<void(BufferID, bool, bool)> bufferChan
+@@ -1143,6 +1170,7 @@ bool Driver::parseAllSources(function_ref<void(BufferID, bool, bool)> bufferChan
          syntaxTrees = sourceLoader.loadAndParseSources(bag, threadPool.get());
      }
  
@@ -14307,7 +14426,7 @@ index d049078b09193791a4dfbc2e7dd89db458bf61f6..aac8868a477986afb6f4ea3ac2e77db9
      if (!reportLoadErrors())
          return false;
  
-@@ -1156,6 +1182,47 @@ bool Driver::parseAllSources(function_ref<void(BufferID, bool, bool)> bufferChan
+@@ -1156,6 +1184,47 @@ bool Driver::parseAllSources(function_ref<void(BufferID, bool, bool)> bufferChan
      return true;
  }
  
@@ -14355,7 +14474,7 @@ index d049078b09193791a4dfbc2e7dd89db458bf61f6..aac8868a477986afb6f4ea3ac2e77db9
  Bag Driver::createParseOptionBag() const {
      Bag bag;
      addParseOptions(bag);
-@@ -1170,6 +1237,9 @@ Bag Driver::createOptionBag() const {
+@@ -1170,6 +1239,9 @@ Bag Driver::createOptionBag() const {
  }
  
  void Driver::addParseOptions(Bag& bag) const {
@@ -14365,7 +14484,7 @@ index d049078b09193791a4dfbc2e7dd89db458bf61f6..aac8868a477986afb6f4ea3ac2e77db9
      SourceOptions soptions;
      soptions.numThreads = options.numThreads;
      soptions.singleUnit = options.singleUnit == true;
-@@ -1177,6 +1247,12 @@ void Driver::addParseOptions(Bag& bag) const {
+@@ -1177,6 +1249,12 @@ void Driver::addParseOptions(Bag& bag) const {
      soptions.librariesInheritMacros = options.librariesInheritMacros == true;
  
      PreprocessorOptions ppoptions;
@@ -14378,6 +14497,15 @@ index d049078b09193791a4dfbc2e7dd89db458bf61f6..aac8868a477986afb6f4ea3ac2e77db9
      ppoptions.predefines = options.defines;
      ppoptions.undefines = options.undefines;
      ppoptions.predefineSource = "<command-line>";
+@@ -1434,6 +1512,8 @@ bool Driver::parseUnitListing(const SourceBuffer& buffer) {
+ 
+     CommandLine::ParseOptions parseOpts;
+     parseOpts.expandEnvVars = true;
++    if (commandFileEnvironment)
++        parseOpts.environmentLookup = commandFileEnvironment;
+     parseOpts.ignoreProgramName = true;
+     parseOpts.supportComments = true;
+     parseOpts.ignoreDuplicates = true;
 diff --git a/source/driver/SourceLoader.cpp b/source/driver/SourceLoader.cpp
 index 812a6a7b7609aa0c906ae830a7e9c62e24cabd3d..6bd00977b99c1638af1d4657ed6aab57c5fb4fc1 100644
 --- a/source/driver/SourceLoader.cpp
@@ -14852,7 +14980,7 @@ index 9e6727eec2f2e23195477789d1cf4d927fe69203..b3c6803cde4e329f9bf8200e1bd417c1
  
  } // namespace slang::parsing
 diff --git a/source/parsing/Preprocessor.cpp b/source/parsing/Preprocessor.cpp
-index 5601d7e738142d8a7906fef416c07b9f927543d0..c6c8ef6a67854c0f3b1f34f3ec4f2410bd45b0e2 100644
+index 5601d7e738142d8a7906fef416c07b9f927543d0..3508f100e2702d1f12eced0b2d7c4e61a902a47c 100644
 --- a/source/parsing/Preprocessor.cpp
 +++ b/source/parsing/Preprocessor.cpp
 @@ -32,6 +32,8 @@ Preprocessor::Preprocessor(SourceManager& sourceManager, BumpAllocator& alloc,
@@ -14897,7 +15025,21 @@ index 5601d7e738142d8a7906fef416c07b9f927543d0..c6c8ef6a67854c0f3b1f34f3ec4f2410
      metadata.sourceBufferIds.push_back(buffer.id);
  
      if (!options.keywordMapping.empty()) {
-@@ -222,20 +233,30 @@ void Preprocessor::predefine(const std::string& definition, std::string_view nam
+@@ -159,8 +170,12 @@ void Preprocessor::pushSource(SourceBuffer buffer) {
+ 
+ bool Preprocessor::popSource() {
+     auto prevIncludeDepth = includeDepth;
+-    if (includeDepth)
++    if (!includeDepth)
++        failedIncludeBranches.clear();
++    else
+         includeDepth--;
++    if (!includeDepth)
++        unwindingIncludeLimit = false;
+ 
+     if (!keywordVersionStack.empty() &&
+         keywordVersionStack.back().source != KeywordVersionState::Source::Directive) {
+@@ -222,20 +237,30 @@ void Preprocessor::predefine(const std::string& definition, std::string_view nam
          // Nothing to do but keep going.
      }
  
@@ -14929,7 +15071,7 @@ index 5601d7e738142d8a7906fef416c07b9f927543d0..c6c8ef6a67854c0f3b1f34f3ec4f2410
          macros.erase(it);
          return true;
      }
-@@ -243,6 +264,7 @@ bool Preprocessor::undefine(std::string_view name) {
+@@ -243,6 +268,7 @@ bool Preprocessor::undefine(std::string_view name) {
  }
  
  void Preprocessor::undefineAll() {
@@ -14937,7 +15079,7 @@ index 5601d7e738142d8a7906fef416c07b9f927543d0..c6c8ef6a67854c0f3b1f34f3ec4f2410
      macros.clear();
      macros["__FILE__"] = MacroIntrinsic::File;
      macros["__LINE__"] = MacroIntrinsic::Line;
-@@ -285,9 +307,38 @@ void Preprocessor::undefineAll() {
+@@ -285,9 +311,38 @@ void Preprocessor::undefineAll() {
  }
  
  bool Preprocessor::isDefined(std::string_view name) {
@@ -14976,7 +15118,7 @@ index 5601d7e738142d8a7906fef416c07b9f927543d0..c6c8ef6a67854c0f3b1f34f3ec4f2410
  void Preprocessor::setKeywordVersion(KeywordVersion version) {
      keywordVersionStack[0] = version;
  }
-@@ -323,7 +374,20 @@ PreprocessorMetadata&& Preprocessor::getMetadata() {
+@@ -323,7 +378,20 @@ PreprocessorMetadata&& Preprocessor::getMetadata() {
  }
  
  Token Preprocessor::next() {
@@ -14998,7 +15140,7 @@ index 5601d7e738142d8a7906fef416c07b9f927543d0..c6c8ef6a67854c0f3b1f34f3ec4f2410
  }
  
  Token Preprocessor::nextProcessed() {
-@@ -541,6 +605,9 @@ Token Preprocessor::handleDirectives(Token token) {
+@@ -541,6 +609,9 @@ Token Preprocessor::handleDirectives(Token token) {
                  return token.withTrivia(alloc, trivia);
          }
  
@@ -15008,7 +15150,7 @@ index 5601d7e738142d8a7906fef416c07b9f927543d0..c6c8ef6a67854c0f3b1f34f3ec4f2410
          token = nextRaw();
      }
  }
-@@ -551,9 +618,17 @@ Token Preprocessor::nextRaw() {
+@@ -551,9 +622,17 @@ Token Preprocessor::nextRaw() {
          return std::exchange(currentToken, Token());
  
      auto getNext = [&] {
@@ -15027,7 +15169,7 @@ index 5601d7e738142d8a7906fef416c07b9f927543d0..c6c8ef6a67854c0f3b1f34f3ec4f2410
              currentMacroToken++;
              if (currentMacroToken == expandedTokens.end()) {
                  currentMacroToken = nullptr;
-@@ -567,13 +642,15 @@ Token Preprocessor::nextRaw() {
+@@ -567,13 +646,15 @@ Token Preprocessor::nextRaw() {
      };
  
      auto token = getNext();
@@ -15045,7 +15187,7 @@ index 5601d7e738142d8a7906fef416c07b9f927543d0..c6c8ef6a67854c0f3b1f34f3ec4f2410
          expectedEndKind != TokenKind::Unknown) {
          auto result = Token::createMissing(alloc, expectedEndKind, token.location())
                            .withTrivia(alloc, token.trivia());
-@@ -583,7 +660,7 @@ Token Preprocessor::nextRaw() {
+@@ -583,7 +664,7 @@ Token Preprocessor::nextRaw() {
  
      // don't return EndOfFile tokens for included files, fall
      // through to loop to merge trivia
@@ -15054,7 +15196,7 @@ index 5601d7e738142d8a7906fef416c07b9f927543d0..c6c8ef6a67854c0f3b1f34f3ec4f2410
          return token;
  
      // Rare case: we have an EoF from an include file... we don't want to return
-@@ -596,11 +673,17 @@ Token Preprocessor::nextRaw() {
+@@ -596,11 +677,17 @@ Token Preprocessor::nextRaw() {
              trivia.back() = trivia.back().withLocation(alloc, loc);
      };
  
@@ -15074,7 +15216,38 @@ index 5601d7e738142d8a7906fef416c07b9f927543d0..c6c8ef6a67854c0f3b1f34f3ec4f2410
  
      // Ensure EoL at the end of trivia to prevent inlining issues
      if (trivia.empty() || trivia.back().kind != TriviaKind::EndOfLine)
-@@ -841,6 +924,7 @@ Trivia Preprocessor::handleDefineDirective(Token directive) {
+@@ -679,16 +766,28 @@ Trivia Preprocessor::handleIncludeDirective(Token directive) {
+         path = path.substr(1, path.length() - 2);
+ 
+         SourceBuffer sourceBuffer;
+-        if (includeDepth >= options.maxIncludeDepth) {
++        if (includeDepth >= options.maxIncludeDepth && !unwindingIncludeLimit) {
+             addDiag(diag::ExceededMaxIncludeDepth, fileName.range());
++            if (includeDepth) {
++                unwindingIncludeLimit = true;
++                // Abandon this root include while the stack unwinds. Other root
++                // includes can still provide declarations for error recovery.
++                auto branch = lexerStack[lexerStack.size() - includeDepth]->getBufferId();
++                failedIncludeBranches.push_back(sourceManager.getSourceText(branch).data());
++            }
+         }
+-        else {
++        else if (!unwindingIncludeLimit) {
+             auto buffer = sourceManager.readHeader(path, directive.location(), getCurrentLibrary(),
+                                                    isSystem, options.additionalIncludePaths);
+             if (!buffer) {
+                 addDiag(diag::CouldNotOpenIncludeFile, fileName.range())
+                     << path << buffer.error().message();
+             }
++            else if (!includeDepth && !failedIncludeBranches.empty() &&
++                     std::ranges::find(failedIncludeBranches, buffer->data.data()) !=
++                         failedIncludeBranches.end()) {
++                // This branch already exceeded the depth limit in the current root.
++            }
+             else if (auto onceIt = includeOnceHeaders.find(buffer->data.data());
+                      onceIt == includeOnceHeaders.end() ||
+                      (!onceIt->second.empty() && !isDefined(onceIt->second))) {
+@@ -841,6 +940,7 @@ Trivia Preprocessor::handleDefineDirective(Token directive) {
      auto result = alloc.emplace<DefineDirectiveSyntax>(
          directive, name, formalArguments, syntax::TokenList(alloc, scratchTokenBuffer));
  
@@ -15082,7 +15255,7 @@ index 5601d7e738142d8a7906fef416c07b9f927543d0..c6c8ef6a67854c0f3b1f34f3ec4f2410
      if (auto it = macros.find(name.valueText()); it != macros.end()) {
          if (it->second.builtIn) {
              addDiag(diag::InvalidMacroName, name.range());
-@@ -855,13 +939,19 @@ Trivia Preprocessor::handleDefineDirective(Token directive) {
+@@ -855,13 +955,19 @@ Trivia Preprocessor::handleDefineDirective(Token directive) {
          }
      }
  
@@ -15103,7 +15276,7 @@ index 5601d7e738142d8a7906fef416c07b9f927543d0..c6c8ef6a67854c0f3b1f34f3ec4f2410
  
      // delegate to a nested function to simplify the error handling paths
      inMacroBody = true;
-@@ -869,6 +959,8 @@ std::pair<Trivia, Trivia> Preprocessor::handleMacroUsage(Token directive) {
+@@ -869,6 +975,8 @@ std::pair<Trivia, Trivia> Preprocessor::handleMacroUsage(Token directive) {
      inMacroBody = false;
  
      auto usageSyntax = alloc.emplace<MacroUsageSyntax>(directive, actualArgs);
@@ -15112,7 +15285,7 @@ index 5601d7e738142d8a7906fef416c07b9f927543d0..c6c8ef6a67854c0f3b1f34f3ec4f2410
  
      if (macroDef.valid() && !macroDef.isIntrinsic()) {
          metadata.macroRefs.push_back(MacroRefMetadata{
-@@ -1130,7 +1222,7 @@ Trivia Preprocessor::handleLineDirective(Token directive) {
+@@ -1130,7 +1238,7 @@ Trivia Preprocessor::handleLineDirective(Token directive) {
              // We should only notify the source manager about the line directive if it
              // is well formed, to avoid very strange line number issues.
              sourceManager.addLineDirective(directive.location(), *lineNum, fileName.valueText(),
@@ -15121,7 +15294,7 @@ index 5601d7e738142d8a7906fef416c07b9f927543d0..c6c8ef6a67854c0f3b1f34f3ec4f2410
          }
      }
      return Trivia(TriviaKind::Directive, result);
-@@ -1181,6 +1273,7 @@ Trivia Preprocessor::handleUndefDirective(Token directive) {
+@@ -1181,6 +1289,7 @@ Trivia Preprocessor::handleUndefDirective(Token directive) {
  
      if (!nameToken.isMissing()) {
          std::string_view name = nameToken.valueText();
@@ -15129,7 +15302,7 @@ index 5601d7e738142d8a7906fef416c07b9f927543d0..c6c8ef6a67854c0f3b1f34f3ec4f2410
          auto it = macros.find(name);
          if (it != macros.end()) {
              if (!it->second.builtIn) {
-@@ -1188,6 +1281,7 @@ Trivia Preprocessor::handleUndefDirective(Token directive) {
+@@ -1188,6 +1297,7 @@ Trivia Preprocessor::handleUndefDirective(Token directive) {
                      .syntax = result,
                      .definition = it->second.syntax,
                  });
@@ -15137,7 +15310,7 @@ index 5601d7e738142d8a7906fef416c07b9f927543d0..c6c8ef6a67854c0f3b1f34f3ec4f2410
                  macros.erase(it);
              }
              else {
-@@ -1465,7 +1559,7 @@ ConditionalDirectiveExpressionSyntax& Preprocessor::parseConditionalExprTop() {
+@@ -1465,7 +1575,7 @@ ConditionalDirectiveExpressionSyntax& Preprocessor::parseConditionalExprTop() {
  }
  
  bool Preprocessor::evalConditionalExpr(
@@ -15146,7 +15319,7 @@ index 5601d7e738142d8a7906fef416c07b9f927543d0..c6c8ef6a67854c0f3b1f34f3ec4f2410
  
      switch (expr.kind) {
          case SyntaxKind::ParenthesizedConditionalDirectiveExpression:
-@@ -1492,10 +1586,11 @@ bool Preprocessor::evalConditionalExpr(
+@@ -1492,10 +1602,11 @@ bool Preprocessor::evalConditionalExpr(
                      SLANG_UNREACHABLE;
              }
          }
@@ -19518,6 +19691,28 @@ index d1ee53cd2bbcbe5989f2ec3cfebda3721c68c724..5136daae8679e121fc941df9e053aebf
 +    unnamedBufferCount = uint32_t(in.number()) + unnamedBufferCount.load();
 +}
  } // namespace slang
+diff --git a/source/util/CommandLine.cpp b/source/util/CommandLine.cpp
+index 3de116a1bff19b286d38f53db8696c8a19eb1569..b1f6c3261914e42150a815c6faab969af9c5a434 100644
+--- a/source/util/CommandLine.cpp
++++ b/source/util/CommandLine.cpp
+@@ -272,7 +272,7 @@ void CommandLine::tokenize(std::string_view argList, const ParseOptions& options
+ 
+         // Look for environment variables to expand.
+         if (c == '$' && options.expandEnvVars && ptr != end) {
+-            std::string result = OS::parseEnvVar(ptr, end);
++            std::string result = OS::parseEnvVar(ptr, end, options.environmentLookup);
+ 
+             // All tokens expanded from the env variable get
+             // the location of the '$'.
+@@ -322,7 +322,7 @@ void CommandLine::tokenize(std::string_view argList, const ParseOptions& options
+                     c = *ptr++;
+ 
+                 if (c == '$' && options.expandEnvVars && ptr != end)
+-                    builder.append(ptr - 1, OS::parseEnvVar(ptr, end));
++                    builder.append(ptr - 1, OS::parseEnvVar(ptr, end, options.environmentLookup));
+                 else
+                     builder.append(ptr - 1);
+             }
 diff --git a/source/util/CwdCoordinator.cpp b/source/util/CwdCoordinator.cpp
 new file mode 100644
 index 0000000000000000000000000000000000000000..f9e9cae5301841b1a3b0b789846403d702941a4b
@@ -19560,6 +19755,37 @@ index 0000000000000000000000000000000000000000..f9e9cae5301841b1a3b0b789846403d7
 +    std::filesystem::current_path(path, ec);
 +}
 +} // namespace slang
+diff --git a/source/util/OS.cpp b/source/util/OS.cpp
+index f93fcfb7e86d360fc87e5a4feeee11ab2f790175..ac89039940ff6d56c4c17af4d06b7bbb0b35a211 100644
+--- a/source/util/OS.cpp
++++ b/source/util/OS.cpp
+@@ -369,7 +369,7 @@ std::string OS::getEnv(const std::string& name) {
+         return {};
+ }
+ 
+-std::string OS::parseEnvVar(const char*& ptr, const char* end) {
++std::string OS::parseEnvVar(const char*& ptr, const char* end, EnvLookup lookup) {
+     // Three forms for environment variables to try:
+     // $VAR
+     // $(VAR)
+@@ -382,7 +382,7 @@ std::string OS::parseEnvVar(const char*& ptr, const char* end) {
+         while (ptr != end) {
+             c = *ptr++;
+             if (c == endDelim)
+-                return OS::getEnv(varName);
++                return lookup ? lookup(varName) : OS::getEnv(varName);
+ 
+             varName += c;
+         }
+@@ -397,7 +397,7 @@ std::string OS::parseEnvVar(const char*& ptr, const char* end) {
+         while (ptr != end && isValidCIdChar(*ptr))
+             varName += *ptr++;
+ 
+-        return OS::getEnv(varName);
++        return lookup ? lookup(varName) : OS::getEnv(varName);
+     }
+     else {
+         // This is not a possible variable name so just return what we have.
 diff --git a/source/util/String.cpp b/source/util/String.cpp
 index 7e429004ac4bd551a5cbe96329828d85bb7b337c..f1822fe6893f5390cb04754b2c7886c7892c6f2b 100644
 --- a/source/util/String.cpp
@@ -25713,6 +25939,70 @@ index 71035c90685e88856372c26a50825e503d01af7b..e8d168548e0bc762c24d59298d5be3b6
  TEST_CASE("defparams") {
      auto tree = SyntaxTree::fromText(R"(
  module top;
+diff --git a/tests/unittests/ast/StatementTests.cpp b/tests/unittests/ast/StatementTests.cpp
+index 34afc88ed18279d60727433413e0cd33c46c4717..baf1bd0fe12bbfb3336fb47470abb0a32256a2fa 100644
+--- a/tests/unittests/ast/StatementTests.cpp
++++ b/tests/unittests/ast/StatementTests.cpp
+@@ -7,11 +7,14 @@
+ #include "slang/ast/statements/ConditionalStatements.h"
+ #include "slang/ast/statements/MiscStatements.h"
+ #include "slang/ast/symbols/BlockSymbols.h"
++#include "slang/ast/symbols/ClassSymbols.h"
+ #include "slang/ast/symbols/CompilationUnitSymbols.h"
+ #include "slang/ast/symbols/InstanceSymbols.h"
+ #include "slang/ast/symbols/MemberSymbols.h"
+ #include "slang/ast/symbols/ParameterSymbols.h"
++#include "slang/ast/symbols/SubroutineSymbols.h"
+ #include "slang/ast/symbols/VariableSymbols.h"
++#include "slang/ast/types/AllTypes.h"
+ #include "slang/ast/types/Type.h"
+ 
+ TEST_CASE("For loop statements") {
+@@ -2947,3 +2950,44 @@ endmodule
+     CHECK(diags[2].code == diag::UndeclaredIdentifier);
+     CHECK(diags[3].code == diag::UndeclaredIdentifier);
+ }
++
++TEST_CASE("Foreach iterator binding during package export elaboration") {
++    auto tree = SyntaxTree::fromText(R"(
++package payloads;
++    typedef int word_t;
++endpackage
++interface channel;
++    import env::*;
++    word_t data;
++endinterface
++package env;
++    import payloads::*;
++    export *::*;
++    class Base #(type IF = int); endclass
++    class Config #(int N = 4) extends Base #(virtual channel);
++        bit [N-1:0] active;
++    endclass
++    class Reader #(int N = 4);
++        Config #(N) cfg;
++        function void run();
++            foreach (cfg.active[i]) begin end
++        endfunction
++    endclass
++endpackage
++)");
++    Compilation compilation;
++    compilation.addSyntaxTree(tree);
++    auto pkg = compilation.getPackage("env");
++    REQUIRE(pkg);
++    auto& generic = pkg->find<GenericClassDefSymbol>("Reader");
++    auto type = generic.getDefaultSpecialization(*pkg);
++    REQUIRE(type);
++    auto& method = type->as<ClassType>().find<SubroutineSymbol>("run");
++    auto blocks = method.membersOfType<StatementBlockSymbol>();
++    REQUIRE(blocks.begin() != blocks.end());
++    for (auto& block : blocks)
++        (void)block.members();
++    auto& diags = compilation.getAllDiagnostics();
++    REQUIRE(diags.size() == 1);
++    CHECK(diags[0].code == diag::UndeclaredIdentifier);
++}
 diff --git a/tests/unittests/ast/TypeTests.cpp b/tests/unittests/ast/TypeTests.cpp
 index e78fb1ff8c88c0f44297c2cba1e521595bb9da4c..5a29c5f71c39f045cfc2978357385b4f89252de5 100644
 --- a/tests/unittests/ast/TypeTests.cpp

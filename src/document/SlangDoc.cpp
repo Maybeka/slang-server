@@ -307,8 +307,10 @@ void SlangDoc::adoptNativeCompilationUnit(const SlangDoc& unit) {
 }
 
 std::shared_ptr<SlangDoc> SlangDoc::open(ServerDriver& driver, const URI& uri) {
-    auto buffer = driver.sm.readSource(uri.getPath(), nullptr).value();
-    return std::make_shared<SlangDoc>(driver, uri, buffer);
+    auto buffer = driver.sm.readSource(uri.getPath(), nullptr);
+    if (!buffer)
+        return nullptr;
+    return std::make_shared<SlangDoc>(driver, uri, *buffer);
 }
 
 std::optional<std::vector<std::shared_ptr<SlangDoc>>>
@@ -322,7 +324,10 @@ const std::string_view SlangDoc::getText() const {
 }
 
 bool SlangDoc::isMacroOnly() {
-    auto buffer = m_sourceManager.readSource(m_uri.getPath(), nullptr).value();
+    auto current = m_sourceManager.readSource(m_uri.getPath(), nullptr);
+    if (!current)
+        return false;
+    auto buffer = *current;
     if (m_macroOnlyBuffer != buffer.id) {
         auto options = m_driver.options;
         auto ppOptions = options.getOrDefault<parsing::PreprocessorOptions>();
@@ -339,7 +344,8 @@ bool SlangDoc::isMacroOnly() {
     return m_macroOnly;
 }
 
-std::shared_ptr<syntax::SyntaxTree> SlangDoc::getSyntaxTree(const lsp::RequestContext& ctx) {
+std::shared_ptr<syntax::SyntaxTree> SlangDoc::getSyntaxTree(const lsp::RequestContext& ctx,
+                                                            bool syntaxOnly) {
     auto cwdPhase = m_sourceManager.beginFastCwdPhase();
     ctx.throwIfCancelled("before syntax tree");
     if (isNativeCompilationUnit())
@@ -355,6 +361,9 @@ std::shared_ptr<syntax::SyntaxTree> SlangDoc::getSyntaxTree(const lsp::RequestCo
         const auto& path = m_sourceManager.getFullPath(m_buffer.id);
         if (auto contexts = m_driver.getIncludeContexts(path, true, ctx); !contexts.empty()) {
             const auto& context = contexts.front();
+            // Dependency discovery needs the owner CST before its semantics exist.
+            if (syntaxOnly)
+                return context.source->getSyntaxTree(ctx, true);
             auto compilation = context.source->getAnalysis(ctx)->getShallowCompilation();
             auto tree = compilation->getSyntaxTree();
             if (m_includeCompilation != compilation || m_tree != tree ||
@@ -383,10 +392,12 @@ std::shared_ptr<syntax::SyntaxTree> SlangDoc::getSyntaxTree(const lsp::RequestCo
         if (requiresNativeReplay())
             throw std::runtime_error("Native compilation unit requires SourceLoader replay to "
                                      "preserve preprocessing context");
-        if (!m_sourceManager.isLatestData(m_buffer.id))
-            replaceCompletionSourceBuffer(
-                m_buffer, m_sourceManager.readSource(m_uri.getPath(), nullptr).value(),
-                m_completionTextIdentity);
+        if (!m_sourceManager.isLatestData(m_buffer.id)) {
+            auto current = m_sourceManager.readSource(m_uri.getPath(), nullptr);
+            if (!current)
+                throw lsp::RequestFailed(fmt::format("Cannot refresh document {}", m_uri.getPath()));
+            replaceCompletionSourceBuffer(m_buffer, *current, m_completionTextIdentity);
+        }
         ctx.checkpoint("before syntax parsing");
         DisposableParseRequest parseRequest(ctx, m_driver.isCooperativeAnalysisEnabled());
         if (m_nativeCompilationUnit) {
@@ -507,7 +518,7 @@ SlangDoc::AnalysisInputs SlangDoc::getAnalysisInputs(const lsp::RequestContext& 
                         !m_driver.hasSourceContextHints() &&
                         m_driver.getExplorePreincludeBuffers(m_buffer.id).empty() &&
                         !m_driver.isPackageContextDeferred(m_uri);
-    if (legacy) {
+    if (legacy && !(context && context->configuredUnitDeclaration)) {
         auto selected = getSyntaxTree(ctx);
         if (m_includeCompilation)
             context = ServerDriver::PackageIncludeContext{selected, m_buffer.id};
@@ -635,7 +646,8 @@ std::shared_ptr<ShallowAnalysis> SlangDoc::getAnalysis(const lsp::RequestContext
                                                   ctx);
         ctx.checkpoint("after cached owner resolution");
         auto expectedTree = context ? context->tree : getSyntaxTree(ctx);
-        if (!m_driver.hasConfiguredCompilationInputs() && !m_driver.hasSourceContextHints() &&
+        if (!(context && context->configuredUnitDeclaration) &&
+            !m_driver.hasConfiguredCompilationInputs() && !m_driver.hasSourceContextHints() &&
             m_driver.getExplorePreincludeBuffers(m_buffer.id).empty() &&
             !m_driver.isPackageContextDeferred(m_uri))
             expectedTree = getSyntaxTree(ctx);

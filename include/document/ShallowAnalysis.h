@@ -98,8 +98,11 @@ public:
     // @return *Pointer* to the referenced symbol, or nullptr if not found
     const slang::ast::Symbol* getSymbolAt(slang::SourceLocation loc) const;
 
-    /// The receiver's type at a written dot following a macro expansion.
-    const slang::ast::Type* getMacroReceiverType(const slang::parsing::Token& dot) const;
+    const ast::SubroutineSymbol* getArgumentSubroutine(
+        const syntax::ArgumentListSyntax& arguments) const;
+
+    /// Bind the receiver of a written member access when symbol lookup is insufficient.
+    const ast::Type* getMemberReceiverType(const parsing::Token& dot, bool macroOnly) const;
 
     /// @brief Gets the AST scope at a specific source location
     /// @param loc The source location to query
@@ -254,7 +257,7 @@ private:
     /// Symbol indexer for syntax->symbol mappings of definitions; Used for lookups
     mutable SymbolIndexer m_symbolIndexer;
     mutable slang::flat_hash_map<const slang::parsing::Token*, const slang::ast::Type*>
-        m_macroReceiverTypes;
+        m_memberReceiverTypes;
 
     struct IncludeTargets {
         slang::flat_hash_map<slang::SourceLocation, slang::BufferID> byDirective;
@@ -285,6 +288,9 @@ private:
                                                    slang::SourceLocation loc) const;
 
     const GenvarElaboration* getGenvarElaborationAtToken(const slang::parsing::Token* node) const;
+
+    const ast::SubroutineSymbol* getConstructor(
+        const syntax::NewClassExpressionSyntax& expression) const;
 
     const slang::ast::Symbol* getAssignmentPatternTargetSymbol(
         const slang::syntax::AssignmentPatternExpressionSyntax& pattern) const;

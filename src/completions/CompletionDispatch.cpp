@@ -158,7 +158,8 @@ std::unique_ptr<CompletionQuery> CompletionQuery::fromLocation(
     using slang::parsing::TokenKind;
 
     auto site = getCompletionSite(doc, *analysis, cursor);
-    auto followedByCall = site.tokenAfter && site.tokenAfter->kind == TokenKind::OpenParenthesis &&
+    auto followedByCall = site.tokenAfter && !site.tokenAfter->isMissing() &&
+                          site.tokenAfter->kind == TokenKind::OpenParenthesis &&
                           isSeparatedOnlyByWhitespace(*site.tokenAfter);
     auto followedByInstantiation = site.tokenAfter &&
                                    isSeparatedOnlyByWhitespace(*site.tokenAfter) &&
@@ -167,13 +168,21 @@ std::unique_ptr<CompletionQuery> CompletionQuery::fromLocation(
     auto followedByColon = site.tokenAfter && site.tokenAfter->kind == TokenKind::Colon;
 
     if (site.targetToken && site.targetToken->rawText().starts_with('$')) {
+        const auto* parent = analysis->syntaxes.getTokenParent(site.targetToken);
+        if (!parent)
+            parent = analysis->syntaxes.getSyntaxAt(site.targetToken->location());
+        const auto* check = parent ? parent->as_if<slang::syntax::SystemTimingCheckSyntax>()
+                                   : nullptr;
+        const bool timingCheck =
+            (check && check->name.location() == site.targetToken->location()) ||
+            (parent && parent->kind == slang::syntax::SyntaxKind::SpecifyBlock);
         return completions::SystemSubroutineCompletionQuery::create(
-            std::move(site.replacementRange), followedByCall);
+            std::move(site.replacementRange), followedByCall, timingCheck);
     }
     if (site.targetToken && site.targetToken->rawText().starts_with('`')) {
         return completions::MacroCompletionQuery::create(std::move(site.replacementRange),
                                                          std::move(site.typedPrefix),
-                                                         followedByCall);
+                                                         followedByCall, cursor);
     }
     if (site.tokenBefore && site.tokenBefore->kind == TokenKind::DoubleColon) {
         return completions::MemberCompletionQuery::createScopedAccess(
@@ -181,6 +190,10 @@ std::unique_ptr<CompletionQuery> CompletionQuery::fromLocation(
             analysis->syntaxes.getTokenBefore(site.tokenBefore->location()), followedByCall);
     }
     if (site.tokenBefore && site.tokenBefore->kind == TokenKind::Dot) {
+        if (auto* parent = analysis->syntaxes.getTokenParent(site.tokenBefore))
+            if (auto named = completions::InstanceCompletionQuery::createNamed(
+                    site.replacementRange, *parent, *site.tokenBefore, followedByCall))
+                return named;
         return completions::MemberCompletionQuery::createMemberAccess(
             std::move(site.replacementRange), site.tokenBefore, followedByCall);
     }

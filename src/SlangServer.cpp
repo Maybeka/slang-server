@@ -1129,8 +1129,9 @@ bool SlangServer::loadConfig(const Config& config, bool forceIndexing, bool requ
     const auto workspacePath = m_workspaceFolder ? std::optional<std::string_view>(
                                                        m_workspaceFolder->uri.getPath())
                                                  : std::nullopt;
-    auto buildfile = (requireValidConfig || preserveDesign) && m_buildfile ? m_buildfile
-                                                                           : config.build.value();
+    const bool selectedBuild = m_buildfile && m_buildfile != m_config.build.value();
+    auto buildfile = (requireValidConfig || preserveDesign) && selectedBuild ? m_buildfile
+                                                                             : config.build.value();
     std::unique_ptr<ServerDriver> newDriver;
     if (preserveDesign && m_topFile) {
         newDriver = ServerDriver::createFromTop(
@@ -1267,11 +1268,15 @@ bool SlangServer::loadConfig(bool requireValidConfig, bool preserveDesign,
 
     auto config = Config::fromFiles(workspaceConf, userConf, localConf);
     if (!config) {
+        auto error = config.error().what();
         if (requireValidConfig) {
-            WARN("Config reload failed: {}", config.error().what());
+            WARN("Config reload failed: {}", error);
+            if (!m_configReloadPending &&
+                std::string_view(error).starts_with("Unknown environment variable"))
+                m_client.showError(error);
             return false;
         }
-        m_client.showError(config.error().what());
+        m_client.showError(error);
         return m_driver ? false : loadConfig(Config{}, true);
     }
     const bool loaded = loadConfig(*config, true, requireValidConfig, context != nullptr,

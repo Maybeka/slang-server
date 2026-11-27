@@ -150,7 +150,8 @@ public:
     }
 
     /// @brief Get the syntax tree, creating it if necessary
-    std::shared_ptr<slang::syntax::SyntaxTree> getSyntaxTree(const lsp::RequestContext& ctx = {});
+    std::shared_ptr<slang::syntax::SyntaxTree> getSyntaxTree(const lsp::RequestContext& ctx = {},
+                                                             bool syntaxOnly = false);
 
     /// Read-only library artifact; callers must not modify shared syntax.
     std::shared_ptr<slang::syntax::SyntaxTree> getPreparedLibraryPrefix() const {

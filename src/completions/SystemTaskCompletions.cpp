@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "slang/ast/SystemSubroutine.h"
+#include "slang/ast/types/Type.h"
 #include "slang/text/CharInfo.h"
 
 namespace server::completions {
@@ -366,38 +367,10 @@ static std::string getSystemSubroutineSnippet(std::string_view label, const Syst
     return std::string(snippet.getValue());
 }
 
-class SystemSubroutineCompletionQueryImpl final : public SystemSubroutineCompletionQuery {
-public:
-    SystemSubroutineCompletionQueryImpl(lsp::Range replacementRange, bool followedByCall) :
-        SystemSubroutineCompletionQuery(std::move(replacementRange), followedByCall) {}
-
-    CompletionQueryKind kind() const final { return CompletionQueryKind::SystemSubroutine; }
-
-    void getCompletions(std::vector<lsp::CompletionItem>& results, CompletionDispatch&,
-                        const std::shared_ptr<SlangDoc>&,
-                        const CompletionContext& context) const final {
-        if (context.analysis && context.analysis->getCompilation()) {
-            addSystemSubroutineCompletions(results, *context.analysis->getCompilation());
-        }
-    }
-};
-
-} // namespace
-
-std::unique_ptr<CompletionQuery> SystemSubroutineCompletionQuery::create(
-    lsp::Range replacementRange, bool followedByCall) {
-    return std::make_unique<SystemSubroutineCompletionQueryImpl>(std::move(replacementRange),
-                                                                 followedByCall);
-}
-
-lsp::CompletionItem getSystemSubroutineCompletion(parsing::KnownSystemName name,
-                                                  const ast::SystemSubroutine& subroutine) {
-    auto label = std::string(parsing::toString(name));
-
+static lsp::CompletionItem systemCompletion(std::string label, const SystemTaskDoc* doc,
+                                             bool isTask) {
     std::optional<rfl::Variant<std::string, lsp::MarkupContent>> documentation;
-    auto isTask = subroutine.kind == ast::SubroutineKind::Task;
     std::string detail = isTask ? " task" : " function";
-    auto* doc = getSystemTaskDoc(name);
     if (doc) {
         detail = " " + std::string(doc->signature);
         markup::Document md;
@@ -425,6 +398,50 @@ lsp::CompletionItem getSystemSubroutineCompletion(parsing::KnownSystemName name,
     };
 }
 
+class SystemSubroutineCompletionQueryImpl final : public SystemSubroutineCompletionQuery {
+public:
+    SystemSubroutineCompletionQueryImpl(lsp::Range replacementRange, bool followedByCall,
+                                        bool timingCheck) :
+        SystemSubroutineCompletionQuery(std::move(replacementRange), followedByCall),
+        timingCheck(timingCheck) {}
+
+    CompletionQueryKind kind() const final { return CompletionQueryKind::SystemSubroutine; }
+
+    void getCompletions(std::vector<lsp::CompletionItem>& results, CompletionDispatch&,
+                        const std::shared_ptr<SlangDoc>&,
+                        const CompletionContext& context) const final {
+        if (timingCheck) {
+            static const auto items = [] {
+                std::vector<lsp::CompletionItem> result;
+                for (const auto& entry : getTimingCheckDocs())
+                    result.push_back(systemCompletion(std::string(entry.name), &entry.doc, true));
+                return result;
+            }();
+            results.insert(results.end(), items.begin(), items.end());
+        }
+        else if (context.analysis && context.analysis->getCompilation()) {
+            addSystemSubroutineCompletions(results, *context.analysis->getCompilation());
+        }
+    }
+
+private:
+    bool timingCheck;
+};
+
+} // namespace
+
+std::unique_ptr<CompletionQuery> SystemSubroutineCompletionQuery::create(
+    lsp::Range replacementRange, bool followedByCall, bool timingCheck) {
+    return std::make_unique<SystemSubroutineCompletionQueryImpl>(
+        std::move(replacementRange), followedByCall, timingCheck);
+}
+
+lsp::CompletionItem getSystemSubroutineCompletion(parsing::KnownSystemName name,
+                                                  const ast::SystemSubroutine& subroutine) {
+    return systemCompletion(std::string(parsing::toString(name)), getSystemTaskDoc(name),
+                            subroutine.kind == ast::SubroutineKind::Task);
+}
+
 void addSystemSubroutineCompletions(std::vector<lsp::CompletionItem>& results,
                                     const ast::Compilation& compilation) {
     // The built-in system subroutines slang registers are identical across compilations, so
@@ -449,6 +466,21 @@ void addSystemSubroutineCompletions(std::vector<lsp::CompletionItem>& results,
     }();
 
     results.insert(results.end(), cached.begin(), cached.end());
+}
+
+void addBuiltinMethodCompletions(std::vector<lsp::CompletionItem>& results,
+                                 const ast::Compilation& compilation, const ast::Type& type) {
+    if (!type.isUnpackedArray() && !type.isEnum() && !type.isString())
+        return;
+    const auto kind = type.getCanonicalType().kind;
+    for (auto name : parsing::KnownSystemName_traits::values) {
+        auto label = parsing::toString(name);
+        if (label.empty() || label.starts_with('$'))
+            continue;
+        if (auto* method = compilation.getSystemMethod(kind, label);
+            method && method->knownNameId == name)
+            results.push_back(getSystemSubroutineCompletion(name, *method));
+    }
 }
 
 } // namespace server::completions

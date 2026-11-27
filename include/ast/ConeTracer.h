@@ -45,7 +45,7 @@ public:
         return slang::SourceRange(startLoc, startLoc + symbol->name.length());
     }
 
-    bool isParameter() const { return symbol->kind == slang::ast::SymbolKind::Parameter; }
+    bool isSignal() const { return symbol && symbol->kind != slang::ast::SymbolKind::Parameter; }
 
     bool operator<(const ConeLeaf& other) const {
         return std::less<const slang::ast::Symbol*>{}(symbol, other.symbol);
@@ -68,7 +68,7 @@ protected:
     const slang::ast::Symbol* root;
 
     void addLeaf(const ConeLeaf& leaf) {
-        if (!leaf.isParameter()) {
+        if (leaf.isSignal()) {
             leaves.insert(leaf);
         }
     }
@@ -255,15 +255,16 @@ public:
         for (auto const connection : symbol.getPortConnections()) {
             // TODO -- interfaces, etc.
             const auto port = connection->port.as_if<slang::ast::PortSymbol>();
-            if (port) {
+            const auto expr = connection->getExpression();
+            if (port && expr) {
                 if (port->direction == slang::ast::ArgumentDirection::Out &&
                     port->internalSymbol == root) {
                     ScopedReset foundRootScope(foundRoot, true);
-                    connection->getExpression()->visit(*this);
+                    expr->visit(*this);
                 }
                 else if (port->direction == slang::ast::ArgumentDirection::In) {
                     ScopedReset foundRootScope(foundRoot);
-                    connection->getExpression()->visit(*this);
+                    expr->visit(*this);
                     if (foundRoot) {
                         addLeaf(port);
                     }

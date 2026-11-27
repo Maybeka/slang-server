@@ -158,15 +158,17 @@ struct DefinitionInfo {
     };
 
     struct SystemSubroutineTarget {
+        enum class Kind { Function, Task, TimingCheck, Method };
+
         slang::parsing::Token token;
         const SystemTaskDoc* doc;
-        bool isTask;
+        Kind kind;
 
         const slang::parsing::Token& nameToken() const { return token; }
 
         bool operator==(const SystemSubroutineTarget& other) const {
             return token.location() == other.token.location() && doc == other.doc &&
-                   isTask == other.isTask;
+                   kind == other.kind;
         }
 
         markup::Document getHover(const slang::SourceManager& sm, slang::BufferID docBuffer,

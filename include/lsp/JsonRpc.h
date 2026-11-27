@@ -10,6 +10,8 @@
 
 #include "JsonTypes.h"
 #include "rfl/Generic.hpp"
+#include <algorithm>
+#include <charconv>
 #include <iostream>
 #include <optional>
 #include <rfl/json.hpp> // IWYU pragma: keep
@@ -109,16 +111,30 @@ std::optional<T> readJson(std::string& line, std::string& content) {
             continue;
         }
 
-        int contentLength = std::stoi(line.substr(16));
-        content.resize(contentLength);
+        auto field = std::string_view(line).substr(16);
+        if (field.ends_with('\r'))
+            field.remove_suffix(1);
+        size_t remaining = 0;
+        auto [end, error] = std::from_chars(field.data(), field.data() + field.size(), remaining);
+        if (error != std::errc{} || end != field.data() + field.size() || remaining == 0 ||
+            remaining > content.max_size())
+            continue;
 
-        do {
-            // Read maybe charset and empty line. Neovim and Vscode both don't
-            // have this header row.
-            std::getline(std::cin, line);
-        } while (line.size() > 1);
+        while (std::getline(std::cin, line) && !line.empty() && line != "\r") {
+        }
+        if (!std::cin)
+            return std::nullopt;
 
-        std::cin.read(&content[0], contentLength);
+        // Grow with bytes actually received, including when a client closes mid-frame.
+        content.clear();
+        while (remaining) {
+            size_t count = std::min<size_t>(remaining, 16384);
+            auto offset = content.size();
+            content.resize(offset + count);
+            if (!std::cin.read(content.data() + offset, count))
+                return std::nullopt;
+            remaining -= count;
+        }
 
         rfl::Result<T> request = rfl::json::read<T>(content);
         if (!request) {

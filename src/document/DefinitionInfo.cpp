@@ -25,6 +25,7 @@
 #include "slang/ast/symbols/InstanceSymbols.h"
 #include "slang/ast/symbols/ParameterSymbols.h"
 #include "slang/ast/symbols/PortSymbols.h"
+#include "slang/ast/symbols/SubroutineSymbols.h"
 #include "slang/ast/symbols/ValueSymbol.h"
 #include "slang/ast/types/AllTypes.h"
 #include "slang/ast/types/Type.h"
@@ -650,6 +651,29 @@ const ast::Symbol& getDriverSymbol(const DefinitionInfo::SymbolTarget& target) {
 void renderSymbolSyntaxes(markup::Document& doc, const DefinitionInfo::SymbolTarget& target,
                           const SourceManager& sm, const Config::HoverConfig& hovers) {
     appendSyntaxTargets(doc, target.syntaxes, sm, hovers);
+    if (!target.syntaxes.empty())
+        return;
+    const auto* method = target.symbol->as_if<ast::SubroutineSymbol>();
+    if (!method)
+        return;
+
+    auto signature = subroutineString(method->subroutineKind);
+    if (method->subroutineKind == ast::SubroutineKind::Function &&
+        !method->flags.has(ast::MethodFlags::Constructor)) {
+        signature += " " + getTypeString(method->getReturnType());
+    }
+    signature += fmt::format(" {}(", method->name);
+    bool first = true;
+    for (auto* argument : method->getArguments()) {
+        if (!std::exchange(first, false))
+            signature += ", ";
+        signature += fmt::format("{} {} {}", portString(argument->direction),
+                                 getTypeString(argument->getType()), argument->name);
+        if (auto* value = argument->getDefaultValue(); value && value->getConstant())
+            signature += " = " + value->getConstant()->toString();
+    }
+    signature += ")";
+    doc.addParagraph().appendCodeBlock(signature);
 }
 
 struct RenderedSymbolHover {
@@ -677,7 +701,11 @@ RenderedSymbolHover renderSymbolHover(const DefinitionInfo::SymbolTarget& target
     RenderedSymbolHover result;
     if (!label.empty())
         result.header.appendBold(label);
-    renderSymbolHeader(result.header, *target.symbol, sm);
+    const auto kind = target.symbol->kind;
+    const bool stdClass = target.syntaxes.empty() &&
+                          (kind == ast::SymbolKind::GenericClassDef ||
+                           kind == ast::SymbolKind::ClassType);
+    renderSymbolHeader(result.header, *target.symbol, sm, stdClass ? "Built-in class" : "");
 
     // Show design info for iface ports
     if (auto* ifacePort = target.renderInterfaceConnection
@@ -1007,9 +1035,13 @@ markup::Document DefinitionInfo::SystemSubroutineTarget::getHover(
     markup::Document md;
 
     auto& head = md.addParagraph();
-    head.appendBold(isTask ? "System task" : "System function")
-        .appendText(" ")
-        .appendCode(token.valueText());
+    switch (kind) {
+        case Kind::Function: head.appendBold("System function"); break;
+        case Kind::Task: head.appendBold("System task"); break;
+        case Kind::TimingCheck: head.appendBold("System timing check"); break;
+        case Kind::Method: head.appendBold("Built-in method"); break;
+    }
+    head.appendText(" ").appendCode(token.valueText());
     if (!doc->ieeeSection.empty()) {
         head.appendText(" (IEEE 1800 §").appendText(doc->ieeeSection).appendText(")");
     }

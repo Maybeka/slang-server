@@ -193,6 +193,7 @@ public:
     void onWorkspaceDidChangeWatchedFiles(const lsp::DidChangeWatchedFilesParams& params);
 
     std::shared_ptr<SlangDoc> getDocument(const URI& uri);
+    std::shared_ptr<SlangDoc> tryGetDocument(const URI& uri);
 
     /// Record the active instance for the module reached by `instPath`, then invalidate
     /// every open document's cached analysis so subsequent hovers/gotos see the new
@@ -244,6 +245,7 @@ public:
     struct PackageIncludeContext {
         std::shared_ptr<syntax::SyntaxTree> tree;
         BufferID buffer;
+        bool configuredUnitDeclaration = false;
     };
     std::optional<PackageIncludeContext> trustedLibrarySourceContext(const URI& uri) const;
     /// Current configured declarations must not replace a fixed global namespace.

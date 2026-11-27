@@ -23,6 +23,9 @@
 namespace server {
 
 class ServerDriver;
+namespace completions {
+struct MacroIndex;
+}
 
 class CompletionDispatch {
 private:
@@ -33,10 +36,16 @@ private:
     const Indexer& m_indexer;
     SourceManager& m_sourceManager;
     slang::Bag& m_options;
+    std::shared_ptr<completions::MacroIndex> m_macroIndex;
+    std::optional<uint64_t> m_indexedMacroRevision;
+    std::vector<std::string> m_indexedMacroNames;
     struct ParsedLibraryCacheState;
     std::unique_ptr<ParsedLibraryCacheState> m_parsedLibraryCache;
 
 public:
+    const completions::MacroIndex& getMacroIndex(
+        const std::shared_ptr<slang::syntax::SyntaxTree>& tree);
+    std::span<const std::string> findIndexedMacros(std::string_view prefix);
     bool resolveEdits = false;
 
     CompletionDispatch(ServerDriver& driver, const Indexer& indexer, SourceManager& sourceManager,

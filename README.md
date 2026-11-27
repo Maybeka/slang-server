@@ -37,6 +37,19 @@ HDL-specific features that allow you to set a filelist or top level, browse the 
 For more detailed feature info, see [the docs](docs/features/features.md).
 
 
+### Project environment variables
+
+Set `env` in a server configuration to provide variables for this project.
+For example, use `"env": {"RTL_ROOT": "../shared-rtl"}` with
+`"incdirs": ["${RTL_ROOT}/include"]`. Flags and nested filelists can use the
+same variables. Workspace, user and local configuration layers merge
+individual names in that order. Names without an override come from the
+server process environment.
+
+Configured paths expand variables once. Use `$$` for a literal dollar
+sign in a configured path. If a path references a missing variable, a
+configuration reload reports the name and keeps the last usable configuration.
+
 ### Opt-in fast CWD snapshot checks
 
 The default `fastCwdSnapshotChecks: false` retains strict per-lookup checks.

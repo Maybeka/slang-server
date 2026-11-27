@@ -1,0 +1,450 @@
+{
+  "date": "2026-11-26",
+  "platform": "27.2 arm64",
+  "compiler": "Homebrew clang version 23.1.3",
+  "gitBase": "d474d26d9a8b79c8c31cf31b2e720008b08442a2",
+  "sdkOfficial": "1130e4d42f799d2915b3253dfa9ff429f8cd3e14",
+  "sdkPatchSha256": "3b1f46493568c399541fe4bf8168d5f09e97f1919f16c7e88219ac918bea21aa",
+  "trackedCodeAndTestsDiffFromBaseSha256": "6243fb1b019e0d8ed0458fd958c4b8d356c807950ec87f4f7d4197b808f72964",
+  "diffPaths": [
+    "include",
+    "src",
+    "restoration/main-sdk.json",
+    "restoration/slang.patch",
+    "tests"
+  ],
+  "priorMeasurement": "reference-ten-acceptance-2026-11-26.json",
+  "binarySha256": {
+    "before": "98c31b52e85fab5947a65920623c301fe83ddb290612beb6cce03a8bdf40ca1c",
+    "after": "487e5e19746d5f1a1a5ea3fc5abad0f0b12ed0f0577167d4048e2c543f07ac9c"
+  },
+  "change": "Classify ordinary file paths with a vectorizable reduction and append the entire string if all bytes are unreserved ASCII or path delimiters. Other file paths use the escaping encoder. No persistent state or settings.",
+  "tests": {
+    "ctestIncludingSdk": 1113,
+    "python": 42,
+    "standaloneTransport": 43,
+    "filePathComponentByteValuesChecked": 255,
+    "methodQueryOracle": "pass",
+    "parserCounts": "pass",
+    "heldObsoleteDiagnosticPublications": 0,
+    "successfulSyntheticRequests": 216
+  },
+  "largeProjectMethod": "Same existing workloads and data on one Mac, serial processes after tests/builds. Three pairs of versions per project, order reversed in the second pair. Each version runs native and combined with equivalent scheduling and semantic budgets unlimited, six body edits and 15 states. Startup is process launch to first hover; first and continuous latencies are didChange to hover and to matching edited-file diagnostics. Continuous median covers body-2 through body-6. Memory is lifetime maximum physical footprint at sample boundaries. Filesystem caches may be warm. Each run compares complete public diagnostics and hover at every state against native.",
+  "newProcesses": 36,
+  "editStates": 540,
+  "publicResults": "Native and combined at each state compared by the project driver. All runs also matched the archived ordered 15-state hover and full diagnostic digest for their case. Initial, injected-error and repair diagnostics matched. Combined reuse evidence counts matched the previous acceptance.",
+  "fileUriConstruction": {
+    "ordinary": {
+      "paths": 192,
+      "pathListSha256": "712f3cbae6b019e2aeaa709683e246edcb4bd2c9c5e2dd1e3719704f1e41db57",
+      "constructionNs": {
+        "before": 521.3055,
+        "after": 80.07515000000001
+      },
+      "trialsNs": {
+        "before": [
+          642.865,
+          555.592,
+          544.686,
+          497.925,
+          455.91,
+          491.596
+        ],
+        "after": [
+          184.906,
+          108.898,
+          84.1374,
+          76.0129,
+          75.7001,
+          75.1512
+        ]
+      }
+    },
+    "escaped": {
+      "paths": 192,
+      "pathListSha256": "fb96bf90ac2b382ce209d7b95eef6af8ed4ed676fec882dd5be1786a14665c4a",
+      "constructionNs": {
+        "before": 625.7565,
+        "after": 608.815
+      },
+      "trialsNs": {
+        "before": [
+          616.812,
+          621.154,
+          624.975,
+          628.742,
+          628.06,
+          626.538
+        ],
+        "after": [
+          609.46,
+          613.865,
+          607.408,
+          615.783,
+          608.17,
+          607.783
+        ]
+      }
+    }
+  },
+  "fileUriConstructionMethod": "Two standalone Release executables directly link each production URI implementation; construct file URIs from 192 representative paths (64 per real design filelist, 1024 passes per process), or the same paths with a fixed directory containing Unicode, space, percent and hash. Six alternating pairs; elapsed per constructed URI includes path copying and URI lifetime. The two workloads are measured independently.",
+  "projects": {
+    "cva6-uvm": {
+      "sourceSha256": "6c2ecbefd33ef844ecbbe63d7282d37406714d9c18ef52711337e760141668cb",
+      "designFilelistSha256": "a54c73dca526cec0eb2a618aa0683f90ad6454fbfe304f56496e015a562b6ff7",
+      "compilerFlags": "--single-unit --threads 1 --timescale 1ns/1ps --top uvmt_cva6_tb",
+      "selectedScopes": {
+        "packages": [
+          "uvm_pkg"
+        ],
+        "instances": [
+          "uvmt_cva6_tb.cva6_dut_wrap.cva6_tb_wrapper_i.i_cva6"
+        ]
+      },
+      "public15StateSha256": "100662be65c86b206ed058a76863447dff0f1655b22f26ee6cfe20d1e22f3d67",
+      "native": {
+        "median": {
+          "before": {
+            "structuralDiagnosticMs": 1676.876,
+            "firstDiagnosticMs": 1712.439,
+            "firstHoverMs": 1093.715,
+            "continuousDiagnosticMs": 1676.942,
+            "continuousHoverMs": 1086.499,
+            "startupMs": 3187.655,
+            "peakPhysicalFootprintMiB": 822.001
+          },
+          "after": {
+            "structuralDiagnosticMs": 1664.447,
+            "firstDiagnosticMs": 1690.774,
+            "firstHoverMs": 1088.921,
+            "continuousDiagnosticMs": 1665.13,
+            "continuousHoverMs": 1085.427,
+            "startupMs": 3163.56,
+            "peakPhysicalFootprintMiB": 841.595
+          }
+        },
+        "structuralDiagnosticTrialMs": {
+          "before": [
+            1676.876,
+            1683.609,
+            1672.935
+          ],
+          "after": [
+            1664.605,
+            1664.447,
+            1661.856
+          ]
+        }
+      },
+      "combined": {
+        "median": {
+          "before": {
+            "structuralDiagnosticMs": 910.354,
+            "firstDiagnosticMs": 47.009,
+            "firstHoverMs": 27.839,
+            "continuousDiagnosticMs": 11.628,
+            "continuousHoverMs": 6.394,
+            "startupMs": 2210.943,
+            "peakPhysicalFootprintMiB": 1214.001
+          },
+          "after": {
+            "structuralDiagnosticMs": 898.629,
+            "firstDiagnosticMs": 47.345,
+            "firstHoverMs": 28.119,
+            "continuousDiagnosticMs": 11.716,
+            "continuousHoverMs": 6.481,
+            "startupMs": 2199.146,
+            "peakPhysicalFootprintMiB": 1217.033
+          }
+        },
+        "structuralDiagnosticTrialMs": {
+          "before": [
+            902.417,
+            910.71,
+            910.354
+          ],
+          "after": [
+            898.629,
+            919.548,
+            894.401
+          ]
+        }
+      }
+    },
+    "opentitan-soc-large": {
+      "sourceSha256": "6eb2b0450eb3def9064146425f38d56e4953484ad09853d2bf148ce2472010df",
+      "designFilelistSha256": "8ab21900fd079dc390d675dea357575d41d9fba115d3800d9e3e6d74b23d6090",
+      "compilerFlags": "--single-unit --threads 1 --timescale 1ns/1ps --top top_earlgrey",
+      "selectedScopes": {
+        "packages": [
+          "top_pkg",
+          "prim_util_pkg"
+        ]
+      },
+      "public15StateSha256": "b192aeb4f0d9eae88f62f9472492ecf80cc078dc20ed106cf3b6210edf3f292d",
+      "native": {
+        "median": {
+          "before": {
+            "structuralDiagnosticMs": 1273.094,
+            "firstDiagnosticMs": 1350.291,
+            "firstHoverMs": 701.976,
+            "continuousDiagnosticMs": 1273.511,
+            "continuousHoverMs": 645.118,
+            "startupMs": 1949.17,
+            "peakPhysicalFootprintMiB": 1538.081
+          },
+          "after": {
+            "structuralDiagnosticMs": 1261.51,
+            "firstDiagnosticMs": 1334.824,
+            "firstHoverMs": 701.994,
+            "continuousDiagnosticMs": 1257.773,
+            "continuousHoverMs": 644.362,
+            "startupMs": 1940.013,
+            "peakPhysicalFootprintMiB": 1534.268
+          }
+        },
+        "structuralDiagnosticTrialMs": {
+          "before": [
+            1273.094,
+            1275.09,
+            1272.36
+          ],
+          "after": [
+            1261.51,
+            1255.963,
+            1272.397
+          ]
+        }
+      },
+      "combined": {
+        "median": {
+          "before": {
+            "structuralDiagnosticMs": 1415.092,
+            "firstDiagnosticMs": 70.564,
+            "firstHoverMs": 43.208,
+            "continuousDiagnosticMs": 32.223,
+            "continuousHoverMs": 16.895,
+            "startupMs": 2018.384,
+            "peakPhysicalFootprintMiB": 1581.923
+          },
+          "after": {
+            "structuralDiagnosticMs": 1417.199,
+            "firstDiagnosticMs": 70.738,
+            "firstHoverMs": 43.285,
+            "continuousDiagnosticMs": 32.611,
+            "continuousHoverMs": 17.139,
+            "startupMs": 2000.715,
+            "peakPhysicalFootprintMiB": 1582.705
+          }
+        },
+        "structuralDiagnosticTrialMs": {
+          "before": [
+            1430.378,
+            1415.092,
+            1413.61
+          ],
+          "after": [
+            1417.199,
+            1408.303,
+            1434.052
+          ]
+        }
+      }
+    },
+    "opentitan-usbdev": {
+      "sourceSha256": "79a2a475e734cccb8fd00162f171a80b652843d8033abcc7707327da9368f562",
+      "designFilelistSha256": "4268a245ce983b9494a5f17ecfdde1b4a1ef14527c49e3198da21f552c1e0e6a",
+      "compilerFlags": "--single-unit --threads 1 --timescale 1ns/1ps --relax-string-conversions --top tb",
+      "selectedScopes": {
+        "instances": [
+          "tb.dut"
+        ],
+        "packages": [
+          "uvm_pkg"
+        ]
+      },
+      "public15StateSha256": "ecb0339c30bc14db2efb778fe986e2f20a59d4b28f65be28384d456559930796",
+      "native": {
+        "median": {
+          "before": {
+            "structuralDiagnosticMs": 2518.717,
+            "firstDiagnosticMs": 2535.516,
+            "firstHoverMs": 2337.415,
+            "continuousDiagnosticMs": 2517.465,
+            "continuousHoverMs": 2330.743,
+            "startupMs": 5299.589,
+            "peakPhysicalFootprintMiB": 576.954
+          },
+          "after": {
+            "structuralDiagnosticMs": 2507.112,
+            "firstDiagnosticMs": 2520.225,
+            "firstHoverMs": 2328.542,
+            "continuousDiagnosticMs": 2506.874,
+            "continuousHoverMs": 2323.329,
+            "startupMs": 5273.602,
+            "peakPhysicalFootprintMiB": 576.751
+          }
+        },
+        "structuralDiagnosticTrialMs": {
+          "before": [
+            2510.242,
+            2518.717,
+            2529.933
+          ],
+          "after": [
+            2507.305,
+            2503.923,
+            2507.112
+          ]
+        }
+      },
+      "combined": {
+        "median": {
+          "before": {
+            "structuralDiagnosticMs": 310.061,
+            "firstDiagnosticMs": 27.862,
+            "firstHoverMs": 15.851,
+            "continuousDiagnosticMs": 8.205,
+            "continuousHoverMs": 4.72,
+            "startupMs": 2695.726,
+            "peakPhysicalFootprintMiB": 695.876
+          },
+          "after": {
+            "structuralDiagnosticMs": 300.919,
+            "firstDiagnosticMs": 27.694,
+            "firstHoverMs": 15.618,
+            "continuousDiagnosticMs": 8.24,
+            "continuousHoverMs": 4.735,
+            "startupMs": 2679.656,
+            "peakPhysicalFootprintMiB": 695.11
+          }
+        },
+        "structuralDiagnosticTrialMs": {
+          "before": [
+            307.775,
+            310.549,
+            310.061
+          ],
+          "after": [
+            302.472,
+            300.919,
+            300.317
+          ]
+        }
+      }
+    }
+  },
+  "openTitanSocPairedFollowUp": {
+    "method": "Six independent pairs of uninstrumented production binaries in alternating order, combined settings. Replay the acceptance sequence through the first structural edit and repair, then repeat the identical structural edit and repair twice per process. All 16 public states per process matched the native oracle of the primary matrix; each structural edit verified actual package import. Positive paired savings mean faster after the fix. For warm repeats first take each process median of insertions 2 and 3.",
+    "processes": 12,
+    "matchedStates": 192,
+    "structuralEdits": 36,
+    "pairs": [
+      {
+        "order": [
+          "before",
+          "after"
+        ],
+        "beforeMs": [
+          1411.033,
+          1240.417,
+          1230.821
+        ],
+        "afterMs": [
+          1394.918,
+          1221.137,
+          1216.347
+        ]
+      },
+      {
+        "order": [
+          "after",
+          "before"
+        ],
+        "beforeMs": [
+          1404.236,
+          1230.888,
+          1238.062
+        ],
+        "afterMs": [
+          1389.273,
+          1219.416,
+          1220.997
+        ]
+      },
+      {
+        "order": [
+          "before",
+          "after"
+        ],
+        "beforeMs": [
+          1410.233,
+          1239.822,
+          1233.041
+        ],
+        "afterMs": [
+          1401.752,
+          1221.808,
+          1227.385
+        ]
+      },
+      {
+        "order": [
+          "after",
+          "before"
+        ],
+        "beforeMs": [
+          1403.545,
+          1231.707,
+          1250.509
+        ],
+        "afterMs": [
+          1406.539,
+          1224.856,
+          1219.307
+        ]
+      },
+      {
+        "order": [
+          "before",
+          "after"
+        ],
+        "beforeMs": [
+          1413.166,
+          1243.71,
+          1229.191
+        ],
+        "afterMs": [
+          1391.727,
+          1217.818,
+          1229.106
+        ]
+      },
+      {
+        "order": [
+          "after",
+          "before"
+        ],
+        "beforeMs": [
+          1409.816,
+          1259.942,
+          1248.376
+        ],
+        "afterMs": [
+          1399.016,
+          1227.706,
+          1233.091
+        ]
+      }
+    ],
+    "firstStructuralPairedSavingsMs": 12.882,
+    "warmStructuralPairedSavingsMs": 15.573,
+    "firstFasterPairs": 5,
+    "warmFasterPairs": 6
+  },
+  "conclusions": [
+    "Ordinary file URI construction took 80 ns versus 521 ns before in the dedicated real-path benchmark, about 6.5x faster. The escaped-path corpus also preserved its throughput.",
+    "In three full real-project pairs, combined structural diagnostic medians improved by 11.725 ms for CVA6 and 9.142 ms for USBDEV. The OpenTitan SoC full-run median increased by 2.107 ms; paired changes varied from -13.179 to +20.442 ms.",
+    "In the additional six SoC pairs the median within-pair saving was 12.882 ms on the first structural edit and 15.573 ms on subsequent identical structural edits. Full-matrix continuous diagnostic medians differed by less than 0.4 ms for every case."
+  ]
+}

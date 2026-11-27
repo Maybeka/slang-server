@@ -30,4 +30,13 @@ const SystemTaskDoc* getSystemTaskDoc(slang::parsing::KnownSystemName name);
 /// @returns the complete documentation table, indexed by `KnownSystemName`.
 std::span<const SystemTaskDoc> getSystemTaskDocs();
 
+struct TimingCheckDoc {
+    std::string_view name;
+    SystemTaskDoc doc;
+};
+
+/// Timing checks are parsed separately from the compiler's system subroutines.
+std::span<const TimingCheckDoc> getTimingCheckDocs();
+const SystemTaskDoc* getTimingCheckDoc(std::string_view name);
+
 } // namespace server

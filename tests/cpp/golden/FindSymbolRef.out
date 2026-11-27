@@ -1183,16 +1183,20 @@ module m5;
 
             wait( abc.triggered || de.triggered );
                   ^^^ Ref -> **Sequence** `abc` in `m5`  \n\\n\\n\---\n\\n\`sequence abc;\n\    @(posedge clk) a ##1 b ##1 c;\n\endsequence`
+                      ^^^^^^^^^ Sym triggered : SystemName
                                    ^^ Ref -> **Sequence** `de` in `m5`  \n\\n\\n\---\n\\n\`sequence de;\n\    @(negedge clk) d ##[2:5] e;\n\endsequence`
+                                      ^^^^^^^^^ Sym triggered : SystemName
 
             if( abc.triggered )
                 ^^^ Ref -> **Sequence** `abc` in `m5`  \n\\n\\n\---\n\\n\`sequence abc;\n\    @(posedge clk) a ##1 b ##1 c;\n\endsequence`
+                    ^^^^^^^^^ Sym triggered : SystemName
 
                 $display( "abc succeeded" );
                 ^^^^^^^^ Sym $display : SystemName
 
             if( de.triggered )
                 ^^ Ref -> **Sequence** `de` in `m5`  \n\\n\\n\---\n\\n\`sequence de;\n\    @(negedge clk) d ##[2:5] e;\n\endsequence`
+                   ^^^^^^^^^ Sym triggered : SystemName
 
                 $display( "de succeeded" );
                 ^^^^^^^^ Sym $display : SystemName
@@ -1699,12 +1703,14 @@ module m10;
                    ^ Sym G : ConstraintBlock
                        ^^^ Ref -> **ClassProperty** `len` in `m10.Packet`  \n\Type: `int`  \n\Width: `32`  \n\\n\\n\---\n\\n\`int len;`
                                 ^^^^^^^ Ref -> **ClassProperty** `payload` in `m10.Packet`  \n\Type: `byte$[]`  \n\\n\\n\---\n\\n\`byte payload[];`
+                                        ^^^^ Sym size : SystemName
                                                 ^^^ Ref -> **ClassProperty** `len` in `m10.Packet`  \n\Type: `int`  \n\Width: `32`  \n\\n\\n\---\n\\n\`int len;`
 
         function void post_randomize; crc = payload.sum; endfunction
                       ^^^^^^^^^^^^^^ Sym post_randomize : Subroutine
                                       ^^^ Ref -> **ClassProperty** `crc` in `m10.Packet`  \n\Type: `int`  \n\Width: `32`  \n\\n\\n\---\n\\n\`int crc;`
                                             ^^^^^^^ Ref -> **ClassProperty** `payload` in `m10.Packet`  \n\Type: `byte$[]`  \n\\n\\n\---\n\\n\`byte payload[];`
+                                                    ^^^ Sym sum : SystemName
 
     endclass
 

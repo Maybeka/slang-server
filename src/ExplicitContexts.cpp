@@ -31,13 +31,17 @@ bool containsPath(const SourceManager& sm, const syntax::SyntaxTree& tree,
     return false;
 }
 std::vector<BufferID> packageIncludes(const SourceManager& sm, const syntax::SyntaxTree& tree,
-                                      const std::filesystem::path& path) {
+                                      const std::filesystem::path& path,
+                                      BufferID* unitDeclaration = nullptr) {
     std::vector<BufferID> result;
     for (const auto& include : tree.getIncludeDirectives()) {
         if (!include.buffer.id.valid() || sm.getFullPath(include.buffer.id) != path)
             continue;
         bool inPackage = false;
         for (const auto& [node, _] : tree.getMetadata().nodeMeta) {
+            if (unitDeclaration && !unitDeclaration->valid() &&
+                sm.getFullyExpandedLoc(node->header->name.location()).buffer() == include.buffer.id)
+                *unitDeclaration = include.buffer.id;
             if (node->kind != syntax::SyntaxKind::PackageDeclaration)
                 continue;
             auto range = sm.getFullyExpandedRange(node->sourceRange());
@@ -566,9 +570,14 @@ std::optional<ServerDriver::PackageIncludeContext> ServerDriver::getExplicitIncl
                 return {};
             auto target = sm.getFullPath(document->second->getBuffer());
             std::vector<PackageIncludeContext> matches;
-            for (const auto& tree : m_currentConfiguredTrees)
-                for (auto buffer : packageIncludes(sm, *tree, target))
+            std::optional<PackageIncludeContext> firstInclude;
+            for (const auto& tree : m_currentConfiguredTrees) {
+                BufferID included;
+                for (auto buffer : packageIncludes(sm, *tree, target, &included))
                     matches.push_back({tree, buffer});
+                if (!firstInclude && included.valid())
+                    firstInclude = PackageIncludeContext{tree, included, true};
+            }
             if (!matches.empty()) {
                 handled = true;
                 // Preserve full-design source views' first-include ordering for
@@ -576,6 +585,12 @@ std::optional<ServerDriver::PackageIncludeContext> ServerDriver::getExplicitIncl
                 m_packageOnlyContexts.insert(uri);
                 updatePackageContextKind(uri, matches.front().tree);
                 return matches.front();
+            }
+            // An interface or module header also belongs to its configured compilation
+            // unit. Use the actual occurrence so queries retain its preprocessing state.
+            if (firstInclude && !m_includeSelections.contains(target)) {
+                handled = true;
+                return firstInclude;
             }
         }
         return {};

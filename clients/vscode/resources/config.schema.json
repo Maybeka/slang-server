@@ -7,14 +7,24 @@
       "properties": {
         "flags": {
           "type": "string",
-          "description": "Flags to pass to slang"
+          "description": "Flags to pass to slang",
+          "default": ""
+        },
+        "env": {
+          "type": "object",
+          "description": "Project environment overrides used in flags, filelists and configured paths. Unlisted names use the server process environment.",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {}
         },
         "incdirs": {
           "type": "array",
           "description": "Include directories, relative to the workspace root. Searched after directories supplied through flags and build files.",
           "items": {
             "type": "string"
-          }
+          },
+          "default": []
         },
         "compilationFilelist": {
           "description": "Complete compilation filelist for package-first exploration. The path is workspace-relative and uses native -F semantics; nested -f/-F options retain their native meaning. This does not select a full RTL build.",
@@ -25,14 +35,16 @@
             {
               "type": "null"
             }
-          ]
+          ],
+          "default": null
         },
         "explorePreincludeFiles": {
           "type": "array",
           "description": "Ordered files prepended to separately parsed exploration-mode sources. Use real shared macro headers; relative paths are workspace-relative. Full builds retain their own compilation-unit preprocessing.",
           "items": {
             "type": "string"
-          }
+          },
+          "default": []
         },
         "uvm": {
           "description": "Explicit UVM library inputs. No library is injected unless configured. Source loading is independent of experimentalUvmPrefixCache.",
@@ -43,95 +55,123 @@
             {
               "type": "null"
             }
-          ]
+          ],
+          "default": null
         },
         "fastCwdSnapshotChecks": {
           "description": "Opt-in fast snapshot cwd checks (default false = strict). Requires the process working directory and its ancestors not to be moved, deleted or renamed during analysis. Ordinary source edits remain allowed. Checks phase boundaries; transient changes restored between checks are undetected. A changed/unavailable cwd discards the result and requires configuration reload. Filesystem lookup rules are unchanged.",
-          "type": "boolean"
+          "type": "boolean",
+          "default": false
         },
         "experimentalMethodScopeOverlay": {
           "description": "Experimental closed flat int method overlay. Default off. Phase one requires equal-length ASCII edits with fixed line layout and local count; unknown contexts and unsupported queries use the complete native path.",
-          "type": "boolean"
+          "type": "boolean",
+          "default": false
         },
         "experimentalMethodBodyQueries": {
           "description": "Experimental local function/task body queries. Default off. Supports changed local declarations, types, statements, member access, calls and macro expansions in retained class, package and module contexts. Signatures and external dependencies remain fixed; unsafe edits or queries use native analysis. Diagnostics analyze the complete current snapshot.",
-          "type": "boolean"
+          "type": "boolean",
+          "default": false
         },
         "experimentalMethodBodyMacroProof": {
           "description": "Experimental full-unit macro dependency facts for body preprocessing proofs. Default off; requires experimentalMethodBodyQueries. Allows unchanged define/undef effects and proved unused macro names. Unsafe edits retain native analysis; private fragments never supply whole-unit absence proofs.",
-          "type": "boolean"
+          "type": "boolean",
+          "default": false
         },
         "methodBodyMacroProofMaxMiB": {
           "type": "integer",
-          "description": "Macro proof recording / restore budget per compilation unit in MiB, default 16. Zero disables runtime recording and macro proof. This is not an RSS limit; fixed-library artifacts have their own bounded build-time facts."
+          "description": "Macro proof recording / restore budget per compilation unit in MiB, default 16. Zero disables runtime recording and macro proof. This is not an RSS limit; fixed-library artifacts have their own bounded build-time facts.",
+          "default": 16
         },
         "experimentalMethodBodyDiagnostics": {
           "description": "Experimental local method-body diagnostics. Default off. Requires experimentalMethodBodyQueries and a completed full-design diagnostic context. Unsupported dependency changes use full current analysis.",
-          "type": "boolean"
+          "type": "boolean",
+          "default": false
         },
         "experimentalMethodBodyCertificateRenewal": {
           "description": "Experimental renewal of local method-body certificates. Default off. Requires experimentalMethodBodyQueries. Revalidates the existing input witnesses and preserves the lexical owner and diagnostic baseline across 64-edit windows. Unsupported edits and source-storage limits still use native analysis and context retirement.",
-          "type": "boolean"
+          "type": "boolean",
+          "default": false
         },
         "experimentalMethodBodyCertification": {
           "description": "Experimental method-body certification at publication boundaries. Default off. Requires experimentalMethodBodyQueries. Skips redundant preflight disk reads but still verifies complete input contents before returning local results. Retains one completed original diagnostic baseline across superseded edits and certifies its local slice on diagnostic demand.",
-          "type": "boolean"
+          "type": "boolean",
+          "default": false
         },
         "experimentalQueryDiagnosticTransactions": {
           "description": "Obsolete experimental query/diagnostic transaction key; ignored. Queries and background diagnostics certify their inputs independently.",
-          "type": "boolean"
+          "type": "boolean",
+          "default": false
         },
         "methodBodyLineSyntaxCacheKiB": {
           "type": "integer",
-          "description": "Retained unchanged-suffix budget in KiB for the experimental later-macro syntax memo. Default 1024, zero disables; capped at 65536. Requires method-body queries, diagnostics and certification. Keeps one line coordinate, never a history of edits. Semantic dependencies and complete physical publication proofs are still checked each time."
+          "description": "Retained unchanged-suffix budget in KiB for the experimental later-macro syntax memo. Default 1024, zero disables; capped at 65536. Requires method-body queries, diagnostics and certification. Keeps one line coordinate, never a history of edits. Semantic dependencies and complete physical publication proofs are still checked each time.",
+          "default": 1024
         },
         "methodBodyRenderingCacheKiB": {
           "type": "integer",
-          "description": "Charged retained diagnostic display memo budget in KiB. Default 256, zero disables; capped at 16384. Requires experimental method-body queries, diagnostics and certification. Holds one function-end coordinate and pure LSP payloads; no semantic owners or input-proof success is cached. Oversized entries use normal rendering."
+          "description": "Charged retained diagnostic display memo budget in KiB. Default 256, zero disables; capped at 16384. Requires experimental method-body queries, diagnostics and certification. Holds one function-end coordinate and pure LSP payloads; no semantic owners or input-proof success is cached. Oversized entries use normal rendering.",
+          "default": 256
         },
         "methodBodyDirectoryProofCacheKiB": {
           "type": "integer",
-          "description": "Retained negative-input name plan budget in KiB. Default 512, zero disables; capped at 16384. Only experimental method-body certification uses it. At most 64 directories are pinned during each fresh proof; descriptors and successful proofs never survive the invocation. Budget or descriptor exhaustion uses the ordinary complete proof."
+          "description": "Retained negative-input name plan budget in KiB. Default 512, zero disables; capped at 16384. Only experimental method-body certification uses it. At most 64 directories are pinned during each fresh proof; descriptors and successful proofs never survive the invocation. Budget or descriptor exhaustion uses the ordinary complete proof.",
+          "default": 512
         },
         "experimentalCooperativeAnalysis": {
           "description": "Experimental cooperative syntax parsing and background context retirement. Default off. Cancelled syntax candidates are discarded; semantic model construction retains phase-boundary cancellation. Keeps the current query owner until a private replacement is ready; new input cancels replacement parsing. A hard source-storage limit still forces synchronous retirement to bound retained generations.",
-          "type": "boolean"
+          "type": "boolean",
+          "default": false
         },
         "sourceHistoryMaxMiB": {
           "type": "integer",
-          "description": "Additional mutable source-history allowance per generation in MiB (1..4096, default 64). Includes text and source-location tables beyond the initial working set. Experimental context retirement starts at half this allowance and becomes synchronous at the full allowance. Does not enable experiments or cap process RSS, retained fixed providers, or source namespaces still held by live views."
+          "description": "Additional mutable source-history allowance per generation in MiB (1..4096, default 64). Includes text and source-location tables beyond the initial working set. Experimental context retirement starts at half this allowance and becomes synchronous at the full allowance. Does not enable experiments or cap process RSS, retained fixed providers, or source namespaces still held by live views.",
+          "default": 64
         },
         "experimentalUvmPrefixCache": {
           "description": "Experimental immutable UVM prefix reuse. Default off. External macros affecting UVM must come from command-line/configuration flags. Unsupported source changes or preprocessing state use native parsing.",
-          "type": "boolean"
+          "type": "boolean",
+          "default": false
         },
         "experimentalUvmSemanticCache": {
           "description": "Experimental semantic reuse of an explicitly configured, user-trusted immutable UVM library. Default off. Library files and dependencies are assumed unchanged until slang.rebuildUvmLibrary or configuration reload. No automatic dependency freshness is promised. Mutable user types and generic specializations remain per-consumer.",
-          "type": "boolean"
+          "type": "boolean",
+          "default": false
         },
         "experimentalScopeSemanticCache": {
           "description": "Experimental complete semantic reuse of explicitly fixed scopes. Default off. Dependencies are fixed until slang.rebuildScopeLibrary or configuration reload. Uses frozenSources selectors; unsupported boundaries use native analysis.",
-          "type": "boolean"
+          "type": "boolean",
+          "default": false
+        },
+        "semanticCacheUnlimited": {
+          "description": "Disable charged retention budgets for enabled fixed-scope and UVM semantic caches. Does not enable either experiment. Use for unconstrained workload evaluation; actual process memory must be measured separately.",
+          "type": "boolean",
+          "default": false
         },
         "experimentalDiagnosticDeltaPublishing": {
           "description": "Experimental diagnostic delta publication. Default off. Repeated results are compared before serialization; changed document versions, errors, repairs and URI retirements are still published.",
-          "type": "boolean"
+          "type": "boolean",
+          "default": false
         },
         "experimentalParallelDiagnostics": {
           "description": "Experimental bounded parallel full-design flow diagnostics. Default off. Observers or order-sensitive driver reports retain serial analysis.",
-          "type": "boolean"
+          "type": "boolean",
+          "default": false
         },
         "parallelDiagnosticThreads": {
           "type": "integer",
-          "description": "Maximum full diagnostic workers, default2, capped8. Zero or one uses ordinary serial analysis. Does not parallelize local-body updates."
+          "description": "Maximum full diagnostic workers, default2, capped8. Zero or one uses ordinary serial analysis. Does not parallelize local-body updates.",
+          "default": 2
         },
         "experimentalSyntaxPrefixCache": {
           "description": "Experimental authenticated syntax-prefix reuse for configured single-unit inputs. Default off. Requires cooperative analysis and prepared fixed scope semantics. The server checks preceding mutable roots and includes before reusing their syntax. Semantic reuse follows the frozenSources selection.",
-          "type": "boolean"
+          "type": "boolean",
+          "default": false
         },
         "syntaxPrefixCacheMaxMiB": {
           "type": "integer",
-          "description": "Retained mutable syntax-prefix cache budget in MiB, default 256. Zero disables this cache. Charges one pending or reusable CST owner, excluding the already charged fixed prefix. This budget is separate from frozenSources.maxMiB and sourceHistoryMaxMiB; it is not a process RSS limit."
+          "description": "Retained mutable syntax-prefix cache budget in MiB, default 256. Zero disables this cache. Charges one pending or reusable CST owner, excluding the already charged fixed prefix. This budget is separate from frozenSources.maxMiB and sourceHistoryMaxMiB; it is not a process RSS limit.",
+          "default": 256
         },
         "frozenSources": {
           "description": "Frozen source selections and cache budget. Does not enable the experiment.",
@@ -142,11 +182,13 @@
             {
               "type": "null"
             }
-          ]
+          ],
+          "default": null
         },
         "experimentalFrozenSources": {
           "description": "Experimental package/module syntax and instance hierarchy reuse. Default off. Exact source and include lookup certification can cost filesystem I/O; changed inputs rebuild the native context while preserving editor overlays.",
-          "type": "boolean"
+          "type": "boolean",
+          "default": false
         },
         "indexGlobs": {
           "type": "array",
@@ -155,14 +197,16 @@
           "deprecationMessage": "Use 'index' instead.",
           "items": {
             "type": "string"
-          }
+          },
+          "default": []
         },
         "index": {
           "type": "array",
           "description": "Index configurations; by default indexes all .sv, .svh, .v, and .vh files in the workspace. External-only roots supplement this default. A workspace directory or an empty dirs entry replaces the default scan.",
           "items": {
             "$ref": "#/$defs/Config__IndexConfig"
-          }
+          },
+          "default": []
         },
         "excludeDirs": {
           "type": "array",
@@ -171,11 +215,13 @@
           "deprecationMessage": "Use 'index' instead.",
           "items": {
             "type": "string"
-          }
+          },
+          "default": []
         },
         "indexingThreads": {
           "type": "integer",
-          "description": "Thread count to use for indexing"
+          "description": "Thread count to use for indexing",
+          "default": 0
         },
         "build": {
           "description": "Build file to use",
@@ -186,7 +232,8 @@
             {
               "type": "null"
             }
-          ]
+          ],
+          "default": null
         },
         "buildPattern": {
           "description": "Build file glob pattern, e.g. `builds/{}.f`. Used for selecting build files. If omitted and no other build source is configured, defaults to matching all `.f` files in the workspace.",
@@ -197,11 +244,13 @@
             {
               "type": "null"
             }
-          ]
+          ],
+          "default": null
         },
         "buildRelativePaths": {
           "description": "Whether build files use paths relative to that file",
-          "type": "boolean"
+          "type": "boolean",
+          "default": false
         },
         "wavesPattern": {
           "description": "Waveform file glob to open given a build. Name and top variables can be passed with {name}, {top})",
@@ -212,7 +261,8 @@
             {
               "type": "null"
             }
-          ]
+          ],
+          "default": null
         },
         "wcpCommand": {
           "description": "Waveform viewer command ({} will be replaced with the WCP port), used for direct wcp connection with neovim and surfer.",
@@ -223,22 +273,37 @@
             {
               "type": "null"
             }
-          ]
+          ],
+          "default": null
         },
         "hovers": {
           "$ref": "#/$defs/Config__HoverConfig",
-          "description": "Hover behavior settings"
+          "description": "Hover behavior settings",
+          "default": {
+            "macroView": "both",
+            "docCommentFormat": "markdown"
+          }
         },
         "inlayHints": {
           "$ref": "#/$defs/Config__InlayHints",
-          "description": "Inline hints for things like ordered arguments, wildcard ports, and others"
+          "description": "Inline hints for things like ordered arguments, wildcard ports, and others",
+          "default": {
+            "portTypes": false,
+            "assignmentPatternTypes": true,
+            "activeParameterValues": true,
+            "orderedInstanceNames": true,
+            "wildcardNames": true,
+            "funcArgNames": 2,
+            "macroArgNames": 2
+          }
         },
         "builds": {
           "type": "array",
           "description": "Builds for direct .f selection or command-based .f generation",
           "items": {
             "$ref": "#/$defs/Config__Build"
-          }
+          },
+          "default": []
         }
       },
       "required": []
@@ -309,7 +374,8 @@
             "source",
             "expanded",
             "both"
-          ]
+          ],
+          "default": "both"
         },
         "docCommentFormat": {
           "description": "How to render leading doc comments in hovers: 'markdown' renders as markdown, 'plaintext' escapes markdown characters, 'raw' shows the comment text verbatim including comment markers.",
@@ -326,7 +392,8 @@
               "description": "Show the comment text verbatim, including comment markers, in a code block.",
               "const": "raw"
             }
-          ]
+          ],
+          "default": "markdown"
         }
       },
       "required": []
@@ -363,31 +430,38 @@
       "properties": {
         "portTypes": {
           "description": "Hints for port types",
-          "type": "boolean"
+          "type": "boolean",
+          "default": false
         },
         "assignmentPatternTypes": {
           "description": "Hints for inferred assignment pattern types",
-          "type": "boolean"
+          "type": "boolean",
+          "default": true
         },
         "activeParameterValues": {
           "description": "Hints for active instance parameter and localparam values",
-          "type": "boolean"
+          "type": "boolean",
+          "default": true
         },
         "orderedInstanceNames": {
           "description": "Hints for names of ordered ports and params",
-          "type": "boolean"
+          "type": "boolean",
+          "default": true
         },
         "wildcardNames": {
           "description": "Hints for port names in wildcard (.*) ports",
-          "type": "boolean"
+          "type": "boolean",
+          "default": true
         },
         "funcArgNames": {
           "type": "integer",
-          "description": "Function argument hints: 0=off, N=only calls with >=N args"
+          "description": "Function argument hints: 0=off, N=only calls with >=N args",
+          "default": 2
         },
         "macroArgNames": {
           "type": "integer",
-          "description": "Macro argument hints: 0=off, N=only calls with >=N args"
+          "description": "Macro argument hints: 0=off, N=only calls with >=N args",
+          "default": 2
         }
       },
       "required": []

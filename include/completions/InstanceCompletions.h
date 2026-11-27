@@ -29,6 +29,11 @@ public:
     static std::unique_ptr<CompletionQuery> create(lsp::Range replacementRange,
                                                    const slang::parsing::Token* moduleToken);
 
+    static std::unique_ptr<CompletionQuery> createNamed(lsp::Range replacementRange,
+                                                        const slang::syntax::SyntaxNode& site,
+                                                        const slang::parsing::Token& dot,
+                                                        bool followedByCall);
+
     static void addCompletions(std::vector<lsp::CompletionItem>& results, const Indexer& indexer,
                                const CompletionContext& context);
 

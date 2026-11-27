@@ -17,7 +17,8 @@ namespace server::completions {
 class MacroCompletionQuery : public CompletionQuery {
 public:
     static std::unique_ptr<CompletionQuery> create(lsp::Range replacementRange,
-                                                   std::string typedPrefix, bool followedByCall);
+                                                   std::string typedPrefix, bool followedByCall,
+                                                   slang::SourceLocation cursor);
 
     static void resolve(CompletionDispatch& dispatch, lsp::CompletionItem& item);
 

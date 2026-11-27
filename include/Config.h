@@ -9,6 +9,7 @@
 #include "rfl/Deprecated.hpp"
 #include "rfl/Description.hpp"
 #include "rfl/config.hpp"
+#include <map>
 #include <optional>
 #include <rfl/Result.hpp>
 #include <rfl/Skip.hpp>
@@ -21,6 +22,7 @@
 /// Merging rules:
 /// - Array fields (e.g. index, incdirs) are appended across all files.
 /// - Scalar fields are overwritten by later files (local > user > workspace).
+/// - Environment variables merge by name (local > user > workspace).
 /// - `flags` has special precedence: workspace overrides user (only one is used as the base),
 ///   and local flags are always appended on top. This means local flags add to whichever
 ///   of workspace/user flags won, rather than replacing them.
@@ -31,6 +33,11 @@ struct Config {
     /// generate json schema from this by running with --config-schema
     // all fields must be optional
     rfl::Description<"Flags to pass to slang", std::string> flags;
+
+    rfl::Description<"Project environment overrides used in flags, filelists and configured "
+                     "paths. Unlisted names use the server process environment.",
+                     std::map<std::string, std::string>>
+        env;
 
     /// Ordered include directories, relative to the workspace root unless absolute.
     rfl::Description<"Include directories, relative to the workspace root. Searched after "
@@ -404,6 +411,8 @@ struct Config {
     /// Exact bytes consumed by fromFiles, including absent layers. Runtime only:
     /// method certificates must compare against loaded inputs, not a later read.
     rfl::Skip<std::vector<InputSource>> inputSources;
+
+    std::optional<std::string> getEnvironmentVariable(const std::string& name) const;
 };
 
 template<>

@@ -8,6 +8,8 @@
 export interface Config {
   /** Flags to pass to slang */
   flags?: string
+  /** Project environment overrides used in flags, filelists and configured paths. Unlisted names use the server process environment. */
+  env?: Record<string, string>
   /** Include directories, relative to the workspace root. Searched after directories supplied through flags and build files. */
   incdirs?: string[]
   /** Complete compilation filelist for package-first exploration. The path is workspace-relative and uses native -F semantics; nested -f/-F options retain their native meaning. This does not select a full RTL build. */
@@ -22,12 +24,24 @@ export interface Config {
   experimentalMethodScopeOverlay?: boolean
   /** Experimental local function/task body queries. Default off. Supports changed local declarations, types, statements, member access, calls and macro expansions in retained class, package and module contexts. Signatures and external dependencies remain fixed; unsafe edits or queries use native analysis. Diagnostics analyze the complete current snapshot. */
   experimentalMethodBodyQueries?: boolean
+  /** Experimental full-unit macro dependency facts for body preprocessing proofs. Default off; requires experimentalMethodBodyQueries. Allows unchanged define/undef effects and proved unused macro names. Unsafe edits retain native analysis; private fragments never supply whole-unit absence proofs. */
+  experimentalMethodBodyMacroProof?: boolean
+  /** Macro proof recording / restore budget per compilation unit in MiB, default 16. Zero disables runtime recording and macro proof. This is not an RSS limit; fixed-library artifacts have their own bounded build-time facts. */
+  methodBodyMacroProofMaxMiB?: number
   /** Experimental local method-body diagnostics. Default off. Requires experimentalMethodBodyQueries and a completed full-design diagnostic context. Unsupported dependency changes use full current analysis. */
   experimentalMethodBodyDiagnostics?: boolean
   /** Experimental renewal of local method-body certificates. Default off. Requires experimentalMethodBodyQueries. Revalidates the existing input witnesses and preserves the lexical owner and diagnostic baseline across 64-edit windows. Unsupported edits and source-storage limits still use native analysis and context retirement. */
   experimentalMethodBodyCertificateRenewal?: boolean
   /** Experimental method-body certification at publication boundaries. Default off. Requires experimentalMethodBodyQueries. Skips redundant preflight disk reads but still verifies complete input contents before returning local results. Retains one completed original diagnostic baseline across superseded edits and certifies its local slice on diagnostic demand. */
   experimentalMethodBodyCertification?: boolean
+  /** Obsolete experimental query/diagnostic transaction key; ignored. Queries and background diagnostics certify their inputs independently. */
+  experimentalQueryDiagnosticTransactions?: boolean
+  /** Retained unchanged-suffix budget in KiB for the experimental later-macro syntax memo. Default 1024, zero disables; capped at 65536. Requires method-body queries, diagnostics and certification. Keeps one line coordinate, never a history of edits. Semantic dependencies and complete physical publication proofs are still checked each time. */
+  methodBodyLineSyntaxCacheKiB?: number
+  /** Charged retained diagnostic display memo budget in KiB. Default 256, zero disables; capped at 16384. Requires experimental method-body queries, diagnostics and certification. Holds one function-end coordinate and pure LSP payloads; no semantic owners or input-proof success is cached. Oversized entries use normal rendering. */
+  methodBodyRenderingCacheKiB?: number
+  /** Retained negative-input name plan budget in KiB. Default 512, zero disables; capped at 16384. Only experimental method-body certification uses it. At most 64 directories are pinned during each fresh proof; descriptors and successful proofs never survive the invocation. Budget or descriptor exhaustion uses the ordinary complete proof. */
+  methodBodyDirectoryProofCacheKiB?: number
   /** Experimental cooperative syntax parsing and background context retirement. Default off. Cancelled syntax candidates are discarded; semantic model construction retains phase-boundary cancellation. Keeps the current query owner until a private replacement is ready; new input cancels replacement parsing. A hard source-storage limit still forces synchronous retirement to bound retained generations. */
   experimentalCooperativeAnalysis?: boolean
   /** Additional mutable source-history allowance per generation in MiB (1..4096, default 64). Includes text and source-location tables beyond the initial working set. Experimental context retirement starts at half this allowance and becomes synchronous at the full allowance. Does not enable experiments or cap process RSS, retained fixed providers, or source namespaces still held by live views. */
@@ -38,8 +52,18 @@ export interface Config {
   experimentalUvmSemanticCache?: boolean
   /** Experimental complete semantic reuse of explicitly fixed scopes. Default off. Dependencies are fixed until slang.rebuildScopeLibrary or configuration reload. Uses frozenSources selectors; unsupported boundaries use native analysis. */
   experimentalScopeSemanticCache?: boolean
+  /** Disable charged retention budgets for enabled fixed-scope and UVM semantic caches. Does not enable either experiment. Use for unconstrained workload evaluation; actual process memory must be measured separately. */
+  semanticCacheUnlimited?: boolean
   /** Experimental diagnostic delta publication. Default off. Repeated results are compared before serialization; changed document versions, errors, repairs and URI retirements are still published. */
   experimentalDiagnosticDeltaPublishing?: boolean
+  /** Experimental bounded parallel full-design flow diagnostics. Default off. Observers or order-sensitive driver reports retain serial analysis. */
+  experimentalParallelDiagnostics?: boolean
+  /** Maximum full diagnostic workers, default2, capped8. Zero or one uses ordinary serial analysis. Does not parallelize local-body updates. */
+  parallelDiagnosticThreads?: number
+  /** Experimental authenticated syntax-prefix reuse for configured single-unit inputs. Default off. Requires cooperative analysis and prepared fixed scope semantics. The server checks preceding mutable roots and includes before reusing their syntax. Semantic reuse follows the frozenSources selection. */
+  experimentalSyntaxPrefixCache?: boolean
+  /** Retained mutable syntax-prefix cache budget in MiB, default 256. Zero disables this cache. Charges one pending or reusable CST owner, excluding the already charged fixed prefix. This budget is separate from frozenSources.maxMiB and sourceHistoryMaxMiB; it is not a process RSS limit. */
+  syntaxPrefixCacheMaxMiB?: number
   /** Frozen source selections and cache budget. Does not enable the experiment. */
   frozenSources?: Config__FrozenSourcesConfig | null
   /** Experimental package/module syntax and instance hierarchy reuse. Default off. Exact source and include lookup certification can cost filesystem I/O; changed inputs rebuild the native context while preserving editor overlays. */
@@ -88,7 +112,7 @@ export interface Config__Build {
 export interface Config__FrozenSourcesConfig {
   /** Exact package names in configured compilation inputs. The complete ordered roots through each selected package are retained, including preceding dependencies. Missing or ambiguous names are reported in status. */
   packages?: string[]
-  /** Exact module definition names in configured compilation inputs. Retains complete ordered source roots; instance parameterizations are elaborated independently. Does not enable the experiment. */
+  /** Exact module, interface or program definition names in configured inputs. Retains complete ordered source roots; instance parameterizations are elaborated independently. Does not enable the experiment. */
   modules?: string[]
   /** Exact canonical RTL instance paths selecting that instance and its descendants. Behavior follows the enabled frozen-source or fixed-scope experiment. Requires configured hierarchy and does not itself enable caching. */
   instances?: string[]

@@ -16,6 +16,7 @@ class ConstantValue;
 } // namespace slang
 
 namespace slang::ast {
+enum class ArgumentDirection;
 class Type;
 class ValueSymbol;
 } // namespace slang::ast
@@ -101,6 +102,8 @@ enum class TypeStringMode {
 
 // Print the canonical type nicely, if it's a type alias
 std::string getTypeString(const ast::Type& type, TypeStringMode mode = TypeStringMode::Canonical);
+
+std::string portString(ast::ArgumentDirection direction);
 
 // Print a type of a value symbol nicely, including the canonical type and port direction if
 // applicable

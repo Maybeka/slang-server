@@ -11,6 +11,8 @@
 #include "rfl/Result.hpp"
 #include "rfl/from_generic.hpp"
 #include "util/Logging.h"
+#include "slang/util/OS.h"
+#include <cstdlib>
 #include <fstream>
 #include <rfl/DefaultIfMissing.hpp>
 #include <rfl/json.hpp>
@@ -19,6 +21,76 @@
 static int CONFIG_READ_FLAGS = YYJSON_READ_ALLOW_COMMENTS | YYJSON_READ_ALLOW_TRAILING_COMMAS;
 
 namespace fs = std::filesystem;
+
+namespace {
+rfl::Result<rfl::Nothing> expandProjectPaths(Config& config) {
+    std::optional<std::string> missing;
+    auto resolve = [&](const std::string& name) {
+        auto value = config.getEnvironmentVariable(name);
+        if (!value && !missing)
+            missing = name;
+        return value.value_or("");
+    };
+    auto expand = [&](std::string& path) {
+        if (path.find('$') == std::string::npos)
+            return;
+        std::string expanded;
+        const char* cursor = path.data();
+        const char* end = cursor + path.size();
+        while (cursor != end) {
+            char ch = *cursor++;
+            if (ch != '$' || cursor == end)
+                expanded += ch;
+            else if (*cursor == '$') {
+                ++cursor;
+                expanded += '$';
+            }
+            else
+                expanded += slang::OS::parseEnvVar(cursor, end, resolve);
+        }
+        path = std::move(expanded);
+    };
+    auto expandOptional = [&](std::optional<std::string>& path) {
+        if (path)
+            expand(*path);
+    };
+    auto expandList = [&](std::vector<std::string>& list) {
+        for (auto& path : list)
+            expand(path);
+    };
+    expandOptional(config.build.value());
+    expandOptional(config.compilationFilelist.value());
+    expandOptional(config.buildPattern.value());
+    expandList(config.incdirs.value());
+    expandList(config.explorePreincludeFiles.value());
+    expandList(config.indexGlobs.value());
+    expandList(config.excludeDirs.value());
+    for (auto& entry : config.index.value()) {
+        expandList(entry.dirs.value());
+        if (entry.excludeDirs.value())
+            expandList(*entry.excludeDirs.value());
+    }
+    for (auto& entry : config.builds.value())
+        expand(entry.glob.value());
+    if (auto& uvm = config.uvm.value()) {
+        expand(uvm->sourceDirectory.value());
+        expandOptional(uvm->entryFile.value());
+    }
+    if (missing)
+        return rfl::error(fmt::format("Unknown environment variable '{}' in project configuration",
+                                      *missing));
+    return rfl::Nothing{};
+}
+} // namespace
+
+std::optional<std::string> Config::getEnvironmentVariable(const std::string& name) const {
+    auto it = env.value().find(name);
+    if (it != env.value().end())
+        return it->second;
+    if (const char* value = std::getenv(name.c_str()))
+        return std::string(value);
+    return {};
+}
 
 rfl::Result<Config> Config::fromFiles(const std::optional<std::string>& workspaceConf,
                                       const std::optional<std::string>& userConf,
@@ -65,7 +137,14 @@ rfl::Result<Config> Config::fromFiles(const std::optional<std::string>& workspac
         }
 
         for (const auto& [k, v] : *object) {
-            if (auto existingArray = config[k].to_array()) {
+            if (k == "env") {
+                auto values = config[k].to_object().value();
+                const auto layer = v.to_object().value();
+                for (const auto& [name, value] : layer)
+                    values[name] = value;
+                config[k] = std::move(values);
+            }
+            else if (auto existingArray = config[k].to_array()) {
                 auto arr = existingArray.value();
                 auto newArr = v.to_array().value();
                 arr.reserve(arr.size() + newArr.size());
@@ -145,5 +224,7 @@ rfl::Result<Config> Config::fromFiles(const std::optional<std::string>& workspac
     }
     finalConfig->flags = merged;
 
+    if (auto paths = expandProjectPaths(*finalConfig); !paths)
+        return rfl::error(paths.error().what());
     return *finalConfig;
 }

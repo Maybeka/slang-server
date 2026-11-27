@@ -41,7 +41,9 @@ public:
         if (currentUse) {
             const slang::ast::ValueSymbol* instantiatedSymbol = &(symbol.symbol);
             if (const auto modport = instantiatedSymbol->as_if<slang::ast::ModportPortSymbol>()) {
-                instantiatedSymbol = modport->internalSymbol->as_if<slang::ast::ValueSymbol>();
+                instantiatedSymbol = modport->internalSymbol
+                                         ? modport->internalSymbol->as_if<slang::ast::ValueSymbol>()
+                                         : nullptr;
             }
             if (instantiatedSymbol) {
                 symbolToUses[instantiatedSymbol].insert(currentUse);
@@ -66,9 +68,9 @@ public:
         for (const auto connection : symbol.getPortConnections()) {
             const auto port = connection->port.as_if<slang::ast::PortSymbol>();
             if (port) {
-                auto value = port->internalSymbol->as_if<slang::ast::ValueSymbol>();
-                if (value) {
-                    symbolToUses[value].insert(currentUse);
+                if (port->internalSymbol) {
+                    if (auto value = port->internalSymbol->as_if<slang::ast::ValueSymbol>())
+                        symbolToUses[value].insert(currentUse);
                 }
                 auto expr = connection->getExpression();
                 if (expr) {

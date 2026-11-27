@@ -4,11 +4,39 @@
 
 39 项直接修改了参考实现的测试或夹具，10 项没有。表中数字是该项修改的测试路径数，含共用测试工具和预期输出文件；同一路径可出现在多项更新中。依赖指针变更可能另带 SDK 内部测试。仅更新预期输出时，应先解释语义变化，再决定本项目的预期值。
 
-“修复”是排期建议。本次升级只改编译器集成。4 项列入修复、5 项确认存在功能缺口、12 项需要优先验证。其他 28 项包括 13 个候选、4 项只取场景、1 项按本地需求适配、1 个可选保护、7 项延后及 2 个发布编号跳过。
+“修复”是排期建议。本次升级只改编译器集成。4 项列入修复、5 项确认存在功能缺口、最初选出 12 项优先验证。其他 28 项包括 13 个候选、4 项只取场景、1 项按本地需求适配、1 个可选保护、7 项延后及 2 个发布编号跳过。
 
 **后续实施（2026-11-26）** 下表中的 4 项“修复”和 5 项“已确认缺口”已在本项目的 `cda74b5` 中完成。九项协议回归逐项比较了修复前后的行为。代码库中的逐字节扫描还检查了标识符词尾与最后一个字符返回的定义位置和引用是否一致。大型工程验收记录保留了 CVA6、OpenTitan SoC 和 USBDEV 的原生与增量结果。[协议回归](../../tests/system/test_editor_queries.py) · [验收数据](../../validation/data/reference-editor-acceptance-2026-11-26.json)
 
-## 先做哪几件事
+12 项优先验证条目已全部实测。项目范围内的 10 项已通过完整验收，其中 9 项修复了实现，#651 补充了跨文件诊断回归。波形查看器的连接等待（#648）与退出重连（#643）保留历史测量。[逐项评估](reference-priority-validation-2026-11-26.md) · [修复与验收数据](../../validation/data/reference-ten-acceptance-2026-11-26.json)
+
+## 剩余候选的实施进度
+
+| 参考条目 | 本项目进度 |
+| --- | --- |
+| #582、#583、#591 | 虚接口、未知数组边界及函数返回变量导航已在 `94572b5` 落地。 |
+| #594、#595、#620 | 嵌套赋值模式、未展开的 generate 作用域及迭代器和 covergroup 查询已在 `016709d` 落地。 |
+| #619 | 12 类时序检查已支持悬停及 `specify` 项目级补全。协议回归覆盖不完整输入、已有括号、参数内的普通系统函数及块外候选。 |
+| #636 | 生成器从运行时 `Config{}` 投影默认值，接口测试核对嵌套值和随包 schema。 |
+| #581 | 标准类的悬停签名使用实际特化。数组、字符串和枚举的方法从 SDK 的接收者类型查询，覆盖链式和索引后的接收者。内建声明不生成源码跳转。 |
+| #601 | 命名端口、参数和实参候选排除已绑定项，支持构造器和实参跳转。形参类型出现在补全详情，旧式端口声明和模块体内的参数也受覆盖。 |
+| #565 | `env` 按配置层逐键合并，适用于编译参数、嵌套 filelist 与配置路径。替换值只展开一次，原配置保留。缺失路径变量时保留最后可用配置并提示变量名。 |
+| #616 | 默认特化用于编辑器的跳转、悬停和补全。无默认值时不推断特化，原生编译诊断在查询和后续编辑中保持一致。 |
+| #605 | VS Code 专属外部格式化器，范围外。 |
+
+命名补全使五个覆盖率快照删除了 71 条原有 `MissingCompletion` 标记，内建方法识别新增六处覆盖标记。
+本次交付从 `016709d` 隔离构建，同时纳入上述 10 项优先修复与 6 项剩余候选。用于 Mac 验收的
+构建沿用默认关闭的实验选项和官方 slang v12.2，自维护补丁重放后得到 SDK 树
+`f43beca5c6408b0fef2de30519c9cca54f3f28a3`。
+
+`--single-unit` 保存时保留兄弟文件诊断（#654）、活动实例的参数特化（#592）、
+纯宏与内建查询（#633）以及省略补全上下文（#644）均沿用本项目已有实现和对应回归。
+文件监听（#571）沿用配置与构建输入的分流，既有回归覆盖外部包含者、文件删除与恢复，
+新增协议回归覆盖配置无效期间的源码事件并保留未保存缓冲。其余延后或范围外条目见原评审。
+
+同一交付构建通过 1,123 项 CTest、64 项 Python 测试和 43 项诊断传输测试。运行时 schema 确认 15 个实验开关默认关闭。[构建版本和测试数据](../../validation/data/reference-features-functional-2026-11-27.json)
+
+## 原评估的实施顺序
 
 1. **先修配置重载时遗漏的源码事件（#652）。** 通过本机 LSP 新建模块，正常配置下立刻能查到；配置无效时同一操作查不到，修复配置后才出现。验收应同时检查旧设计仍可用、新文件可发现、打开的未保存文本具有优先权。把 #650 的删除/重建和 #651 的分析中新增依赖纳入同组验证。
 2. **修未知请求没有标准应答（#607）和词尾查询（#649）。** 本机先发未知请求，两个后续状态请求均正常返回，间隔约 250 ms，期间未见未知请求的响应。词尾试验对同一信号在词内高亮 2 处，词尾和空格后均为 0；目标为 2、2、0。
@@ -76,8 +104,8 @@
 | --- | --- | --- |
 | [#607](https://github.com/hudson-trading/slang-server/commit/87d3d5e02a8d7b15e3f1f90cc6a8794666e63c7e) 未知请求的应答 · **修复** | 涉及 1 个测试路径。测试请求应得到 MethodNotFound，通知无须应答。本机请求在两次后续正常应答后仍未收到回复。 [参考测试](https://github.com/hudson-trading/slang-server/blob/87d3d5e02a8d7b15e3f1f90cc6a8794666e63c7e/tests/cpp/JsonRpcServerTests.cpp) | 修复。客户端等待某个请求 ID 时需要确定的结束条件。保留通知的单向行为，对未知请求返回同一 ID 和 -32601。 [本地入口](../../include/lsp/JsonRpcServer.h) |
 | [#645](https://github.com/hudson-trading/slang-server/commit/4349e86487d3766b77f156a01fbc695e4854007f) 协议读取健壮性 · **优先验证** | 涉及 1 个测试路径。读取器测试包含输入异常后的正常处理。用本地传输套件验证错误处理、关闭和正常会话。 [参考测试](https://github.com/hudson-trading/slang-server/blob/4349e86487d3766b77f156a01fbc695e4854007f/tests/cpp/JsonRpcServerTests.cpp) | 优先验收传输层的读取和关闭行为。普通消息收发、输入中断时退出以及后续可用性应由协议测试独立覆盖，这与 HDL 语义缓存无关。 [本地入口](../../include/lsp/JsonRpcServer.h) |
-| [#648](https://github.com/hudson-trading/slang-server/commit/1ca3ef76e9c1559fc39cb11d718a3dca0f521743) 波形查看器连接等待 · **优先验证** | 无直接测试。需要在查看器始终未连接时测试超时、并发编辑和查询的响应。 | 建议将它与 #643 提到波形功能首项。当前连接走阻塞 accept；连接等待应允许编辑和查询继续返回，单纯缩短一个阻塞超时仍会影响日常输入。 [本地入口](../../src/ast/WcpClient.cpp) |
-| [#643](https://github.com/hudson-trading/slang-server/commit/b93cfb88f80e630091319a10bafda8e14a1aa55f) 波形客户端退出 · **优先验证** | 无直接测试。需要查看器断开后重新连接、关闭 server、连续替换会话的生命周期测试。 | 建议与 #648 合成一次波形会话生命周期修复。连接结束后需能替换会话、关闭服务；先通过普通连接和断开验证工作线程已结束并释放。 [本地入口](../../src/ast/WcpClient.cpp) |
+| [#648](https://github.com/hudson-trading/slang-server/commit/1ca3ef76e9c1559fc39cb11d718a3dca0f521743) 波形查看器连接等待 · **项目范围外** | 参考提交无配套测试。本机已测量握手期间的编辑查询延迟。 | 历史数据见[逐项实测](reference-priority-validation-2026-11-26.md)。 [本地入口](../../src/ast/WcpClient.cpp) |
+| [#643](https://github.com/hudson-trading/slang-server/commit/b93cfb88f80e630091319a10bafda8e14a1aa55f) 波形客户端退出 · **项目范围外** | 参考提交无配套测试。本机已观测到会话结束时的线程状态。 | 历史数据见[逐项实测](reference-priority-validation-2026-11-26.md)。 [本地入口](../../src/ast/WcpClient.cpp) |
 | [#605](https://github.com/hudson-trading/slang-server/commit/de38d3bea372f986624ed7c4097dc77a26a30db7) 外部格式化器 · **候选** | 涉及 1 个测试路径。测试大输入、取消、清理子进程和失败退出。本地应加格式化过程中继续输入时旧结果不得覆盖新文本。 [参考测试](https://github.com/hudson-trading/slang-server/blob/de38d3bea372f986624ed7c4097dc77a26a30db7/clients/vscode/test/unit/formatProcess.test.ts) | 建议修复插件侧阻塞。当前路径使用 spawnSync，大文件外部格式化会占住扩展宿主。按文档版本回收过时结果，取消子进程，并保留可设的超时。 [本地入口](../../clients/vscode/src/ExternalFormatter.ts) |
 | [#577](https://github.com/hudson-trading/slang-server/commit/a13a247be27b196f113d81940c8f388c8129cd2c) 发现隐藏目录的构建文件 · **延后** | 无直接测试。先用隐藏目录内外的同名 filelist 及排除目录验证选择器。 | 延后到构建选择器迭代。隐藏的项目目录可能有有效 filelist，但无条件枚举 .git 和构建产物会拖慢打开工程。先明确排除范围。 [本地入口](../../clients/vscode/src/sidebar/BuildConfigUtils.ts) |
 | [#578](https://github.com/hudson-trading/slang-server/commit/60857ce8b4a01b6d11443fb1af1eb41c261c702c) 开发者功能扫描 · **延后** | 涉及 4 个测试路径。测试能力声明、构建开关、编辑器与命令行扫描一致性。如果采用，覆盖取消以及正常编辑时不扫描全仓。 [参考测试](https://github.com/hudson-trading/slang-server/blob/60857ce8b4a01b6d11443fb1af1eb41c261c702c/clients/vscode/test/unit/debugScan.test.ts) | 作为可选的开发测试工具有价值，尤其能发现测试项目未覆盖的代码特征。安排在查询正确性之后；扫描结果留给显式调用者，不进入日常编辑诊断。 [本地入口](../../src/SlangServer.cpp) |

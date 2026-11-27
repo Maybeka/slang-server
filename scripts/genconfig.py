@@ -145,6 +145,9 @@ def type_from_schema(s: dict) -> str:
         items_type = type_from_schema(s.get("items", {})) if "items" in s else "unknown"
         return f"{items_type}[]"
 
+    if s.get("type") == "object" and isinstance(s.get("additionalProperties"), dict):
+        return f"Record<string, {type_from_schema(s['additionalProperties'])}>"
+
     if "anyOf" in s:
         return " | ".join(type_from_schema(t) for t in s["anyOf"])
     if "oneOf" in s:

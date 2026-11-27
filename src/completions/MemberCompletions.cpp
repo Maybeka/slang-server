@@ -6,6 +6,7 @@
 // SPDX-License-Identifier: MIT
 //------------------------------------------------------------------------------
 #include "completions/MemberCompletions.h"
+#include "completions/SystemTaskCompletions.h"
 
 #include "Indexer.h"
 #include "ServerDriver.h"
@@ -278,13 +279,19 @@ public:
                         const CompletionContext& context) const final {
         if (!dot)
             return;
-        const ast::Symbol* symbol = context.analysis->getMacroReceiverType(*dot);
+        const ast::Symbol* symbol = context.analysis->getMemberReceiverType(*dot, true);
         auto* receiverToken = symbol ? dot
                                      : context.analysis->syntaxes.getTokenBefore(dot->location());
         if (!receiverToken)
             return;
         if (!symbol)
             symbol = context.analysis->getSymbolAtToken(receiverToken);
+        if (!symbol && (receiverToken->kind == parsing::TokenKind::CloseParenthesis ||
+                        receiverToken->kind == parsing::TokenKind::CloseBracket)) {
+            symbol = context.analysis->getMemberReceiverType(*dot, false);
+            if (symbol)
+                receiverToken = dot;
+        }
         if (!symbol) {
             WARN("No symbol found for token {}, checking index.", receiverToken->valueText());
             auto symbolLoc = getIndexer(dispatch).getNearestSymbolLoc(receiverToken->valueText(),
@@ -318,6 +325,14 @@ public:
 
         auto* targetScope = context.analysis->getScopeFromSym(symbol);
         if (!targetScope) {
+            const auto* type = symbol->as_if<ast::Type>();
+            if (auto* value = symbol->as_if<ast::ValueSymbol>())
+                type = &value->getType();
+            if (type) {
+                addBuiltinMethodCompletions(results, *context.analysis->getCompilation(), *type);
+                if (!results.empty())
+                    return;
+            }
             WARN("No scope found for sym {}: {}", symbol->getHierarchicalPath(),
                  toString(symbol->kind));
             return;
@@ -420,6 +435,13 @@ public:
         auto* receiver = analysis->getSymbolAtToken(receiverToken);
         if (!receiver)
             receiver = analysis->getCompilation()->getPackage(receiverToken->valueText());
+        if (auto* generic = receiver ? receiver->as_if<ast::GenericClassDefSymbol>() : nullptr) {
+            const auto& scope = context.scope ? *context.scope : analysis->getCompilation()->getRoot();
+            auto [current, _] = ast::Lookup::getContainingClass(scope);
+            receiver = current && current->genericClass == generic
+                           ? current
+                           : generic->getDefaultSpecialization(scope);
+        }
         auto* targetScope = analysis->getScopeFromSym(receiver);
         if (!targetScope) {
             WARN("No scoped completion target found for {}", receiverToken->valueText());
@@ -1067,7 +1089,7 @@ void MemberCompletionQuery::resolve(CompletionDispatch& dispatch, lsp::Completio
         auto* token = analysis->syntaxes.getTokenAt(
             SourceLocation(analysis->getBuffer(), *data->receiverOffset));
         const ast::Symbol* receiver = token && token->kind == parsing::TokenKind::Dot
-                                          ? analysis->getMacroReceiverType(*token)
+                                          ? analysis->getMemberReceiverType(*token, false)
                                           : analysis->getSymbolAtToken(token);
         auto* scope = analysis->getScopeFromSym(receiver);
         symbol = scope ? scope->find(data->symbolName) : nullptr;

@@ -1342,3 +1342,23 @@ TEST_CASE("Late completion cannot remove newer reused RPC and edit registrations
     CHECK(server.documentChangeCount()==0);
     CHECK(server.registrationKeyCount()==0);
 }
+
+TEST_CASE("JSON-RPC reader validates frame lengths and handles transport EOF") {
+    const std::string message = R"({"jsonrpc":"2.0","id":2,"method":"success","params":null})";
+    const std::string good =
+        fmt::format("Content-Length: {}\r\nContent-Type: application/vscode-jsonrpc\r\n\r\n{}",
+                    message.size(), message);
+    std::istringstream input("Content-Length: unknown\r\n\r\n" + good +
+                             "Content-Length: 16\r\n\r\n{}");
+    auto state = std::cin.rdstate();
+    auto previous = std::cin.rdbuf(input.rdbuf());
+    slang::ScopeGuard restore([&] {
+        std::cin.rdbuf(previous);
+        std::cin.clear(state);
+    });
+    std::string header, body;
+    auto request = lsp::readJson<lsp::RpcRequest>(header, body);
+    REQUIRE(request);
+    CHECK(request->method == "success");
+    CHECK_FALSE(lsp::readJson<lsp::RpcRequest>(header, body));
+}

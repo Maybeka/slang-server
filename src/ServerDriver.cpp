@@ -284,6 +284,17 @@ bool ServerDriver::parseAndLoadSources(const std::vector<std::string>& buildfile
     parseOpts.ignoreProgramName = true;
     parseOpts.supportComments = true;
     parseOpts.ignoreDuplicates = true;
+    std::optional<std::string> missingEnvironmentVariable;
+    if (!m_config.env.value().empty()) {
+        driver.commandFileEnvironment = [this, &missingEnvironmentVariable](const std::string& name) {
+            auto value = m_config.getEnvironmentVariable(name);
+            if (!value && !missingEnvironmentVariable)
+                missingEnvironmentVariable = name;
+            return value.value_or("");
+        };
+        parseOpts.environmentLookup = driver.commandFileEnvironment;
+    }
+    auto resetEnvironment = ScopeGuard([&] { driver.commandFileEnvironment = {}; });
 
     // Parse each config file's flags separately so -D defines are attributed correctly
     bool ok = true;
@@ -325,6 +336,18 @@ bool ServerDriver::parseAndLoadSources(const std::vector<std::string>& buildfile
         else if (!requireValidConfig) {
             client.showError(fmt::format("Failed to process build file: {}", buildfile));
         }
+    }
+
+    if (missingEnvironmentVariable) {
+        auto message = fmt::format("Unknown environment variable '{}' in build inputs",
+                                   *missingEnvironmentVariable);
+        if (requireValidConfig) {
+            WARN("Config reload failed: {}", message);
+        }
+        else {
+            client.showError(message);
+        }
+        ok = false;
     }
 
     driver.options.errorLimit = 0;
@@ -1096,7 +1119,7 @@ void ServerDriver::openDocument(const URI& uri, const std::string_view text,
     }
     else if (docIter == docs.end() && m_buildSourceUris.contains(uri)) {
         doc = SlangDoc::open(*this, uri);
-        if (doc->textMatches(text)) {
+        if (doc && doc->textMatches(text)) {
             matchesBuildSource = true;
             docs[uri] = doc;
         }
@@ -1199,6 +1222,12 @@ void ServerDriver::openDocument(const URI& uri, const std::string_view text,
 }
 
 std::shared_ptr<SlangDoc> ServerDriver::getDocument(const URI& uri) {
+    if (auto doc = tryGetDocument(uri))
+        return doc;
+    throw lsp::RequestFailed(fmt::format("Cannot read document {}", uri.getPath()));
+}
+
+std::shared_ptr<SlangDoc> ServerDriver::tryGetDocument(const URI& uri) {
     auto it = docs.find(uri);
     if (it != docs.end())
         return it->second;
@@ -1779,8 +1808,10 @@ std::vector<ServerDriver::IncludeContext> ServerDriver::getIncludeContexts(
     if (!m_indexer.hasPotentialIncluders(canonical))
         return {};
     std::error_code ec;
-    if ((!sm.isCached(canonical) && !std::filesystem::is_regular_file(canonical, ec)) ||
-        getDocument(URI::fromFile(canonical))->isMacroOnly())
+    if (!sm.isCached(canonical) && !std::filesystem::is_regular_file(canonical, ec))
+        return {};
+    auto target = tryGetDocument(URI::fromFile(canonical));
+    if (!target || target->isMacroOnly())
         return {};
     std::vector<std::filesystem::path> pending{canonical};
     std::unordered_set<std::filesystem::path> visited;
@@ -1826,7 +1857,7 @@ std::vector<ServerDriver::IncludeContext> ServerDriver::getIncludeContexts(
         std::error_code ec;
         if (!sm.isCached(source) && !std::filesystem::is_regular_file(source, ec))
             continue;
-        auto doc = getDocument(URI::fromFile(source));
+        auto doc = tryGetDocument(URI::fromFile(source));
         if (!doc)
             continue;
         auto tree = doc->getSyntaxTree(ctx);
@@ -2027,10 +2058,10 @@ std::vector<std::shared_ptr<syntax::SyntaxTree>> ServerDriver::getDependentTrees
             }
             if (!processedFiles.insert(filePath).second)
                 return;
-            auto newdoc = dependencyTree ? nullptr : getDocument(URI::fromFile(filePath));
+            auto newdoc = dependencyTree ? nullptr : tryGetDocument(URI::fromFile(filePath));
             if (newdoc || dependencyTree) {
                 if (!dependencyTree)
-                    dependencyTree = newdoc->getSyntaxTree(ctx);
+                    dependencyTree = newdoc->getSyntaxTree(ctx, true);
                 knownProviders.try_emplace(std::string(name), dependencyTree);
                 result.push_back(dependencyTree);
 
@@ -2119,9 +2150,9 @@ std::vector<std::shared_ptr<syntax::SyntaxTree>> ServerDriver::getDependentTrees
             // Reloading it would discard that context and can re-enter this compilation's analysis.
             if (processedFiles.contains(std::filesystem::weakly_canonical(*symbolLoc->uri)))
                 return;
-            auto newdoc = getDocument(URI::fromFile(*symbolLoc->uri));
+            auto newdoc = tryGetDocument(URI::fromFile(*symbolLoc->uri));
             if (newdoc) {
-                auto dependencyTree = newdoc->getSyntaxTree(ctx);
+                auto dependencyTree = newdoc->getSyntaxTree(ctx, true);
                 if (!processedTrees.insert(dependencyTree.get()).second)
                     return;
                 for (auto buffer : dependencyTree->getSourceBufferIds())
@@ -2312,7 +2343,7 @@ std::optional<DefinitionInfo> ServerDriver::getMacroDefinitionInfo(
                     continue;
                 visited.push_back(path);
 
-                auto macroDoc = getDocument(URI::fromFile(path));
+                auto macroDoc = tryGetDocument(URI::fromFile(path));
                 if (!macroDoc)
                     continue;
                 auto macroAnalysis = macroDoc->getAnalysis(ctx);
@@ -2366,6 +2397,16 @@ std::optional<DefinitionInfo> ServerDriver::getDefinitionInfoAt(
         return {};
     }
     const parsing::Token* declTok = analysis->syntaxes.getNavigationTokenAt(*loc);
+    // Constructors have a declaration target but `new` is not a renameable identifier.
+    if (!declTok) {
+        auto* token = analysis->syntaxes.getTokenAt(*loc);
+        if (token && token->kind == parsing::TokenKind::NewKeyword)
+            declTok = token;
+        else if (auto* left = analysis->syntaxes.getTokenBefore(*loc);
+                 left && left->kind == parsing::TokenKind::NewKeyword &&
+                 left->range().end() == *loc)
+            declTok = left;
+    }
     const auto* declSyntax = declTok ? analysis->syntaxes.getTokenParent(declTok)
                                      : analysis->syntaxes.getSyntaxAt(*loc);
     if (!declSyntax)
@@ -2399,6 +2440,14 @@ std::optional<DefinitionInfo> ServerDriver::getDefinitionInfoAt(
         return getMacroDefinitionInfo(*analysis, *declTok, *declSyntax, ctx);
 
     if (declTok->kind == parsing::TokenKind::SystemIdentifier) {
+        if (const auto* timingCheck = declSyntax->as_if<syntax::SystemTimingCheckSyntax>();
+            timingCheck && timingCheck->name.location() == declTok->location()) {
+            if (const auto* doc = getTimingCheckDoc(declTok->valueText()))
+                return DefinitionInfo{sm, DefinitionInfo::SystemSubroutineTarget{
+                                              *declTok, doc,
+                                              DefinitionInfo::SystemSubroutineTarget::Kind::TimingCheck}};
+            return {};
+        }
         auto knownName = declTok->systemName();
         if (knownName == parsing::KnownSystemName::Unknown)
             return {};
@@ -2408,8 +2457,9 @@ std::optional<DefinitionInfo> ServerDriver::getDefinitionInfoAt(
         if (!sub || !sysDoc)
             return {};
 
-        return DefinitionInfo{sm, DefinitionInfo::SystemSubroutineTarget{
-                                      *declTok, sysDoc, sub->kind == ast::SubroutineKind::Task}};
+        using Kind = DefinitionInfo::SystemSubroutineTarget::Kind;
+        auto kind = sub->kind == ast::SubroutineKind::Task ? Kind::Task : Kind::Function;
+        return DefinitionInfo{sm, DefinitionInfo::SystemSubroutineTarget{*declTok, sysDoc, kind}};
     }
     auto symbolsEquivalent = [&](const ast::Symbol* left, const ast::Symbol* right) {
         if (left == right)
@@ -2473,6 +2523,21 @@ std::optional<DefinitionInfo> ServerDriver::getDefinitionInfoAt(
     };
 
     auto localSymbols = analysis->getSymbolsAtToken(declTok);
+    if (localSymbols.empty()) {
+        const auto* dot = analysis->syntaxes.getTokenBefore(declTok->location());
+        if (dot && dot->kind == parsing::TokenKind::Dot) {
+            auto* type = analysis->getMemberReceiverType(*dot, false);
+            if (type) {
+                const auto* method = analysis->getCompilation()->getSystemMethod(
+                    type->getCanonicalType().kind, declTok->valueText());
+                if (auto* doc = method ? getSystemTaskDoc(method->knownNameId) : nullptr) {
+                    using Kind = DefinitionInfo::SystemSubroutineTarget::Kind;
+                    return DefinitionInfo{sm, DefinitionInfo::SystemSubroutineTarget{
+                                                  *declTok, doc, Kind::Method}};
+                }
+            }
+        }
+    }
     for (auto* symbol : localSymbols) {
         if (symbol->kind == ast::SymbolKind::Variable) {
             auto* scope = symbol->getParentScope();
@@ -2568,7 +2633,7 @@ std::optional<DefinitionInfo> ServerDriver::getDefinitionInfoAt(
             });
         }
         for (const auto& entry : nearest) {
-            auto symbolDoc = getDocument(URI::fromFile(*entry.uri));
+            auto symbolDoc = tryGetDocument(URI::fromFile(*entry.uri));
             if (!symbolDoc)
                 continue;
             auto symbolAnalysis = symbolDoc->getAnalysis(ctx);
@@ -2654,6 +2719,19 @@ std::optional<DefinitionInfo> ServerDriver::getDefinitionInfoAt(
                 }
                 if (kind != ast::SymbolKind::UnpackedStructType)
                     break;
+            }
+            if (auto* method = symbol->as_if<ast::SubroutineSymbol>()) {
+                auto* owner = method->getParentScope();
+                auto* package = owner ? owner->asSymbol().getParentScope() : nullptr;
+                hasBuiltinHover |= owner && owner->asSymbol().kind == ast::SymbolKind::ClassType &&
+                                   package && &package->asSymbol() ==
+                                                  &method->getCompilation().getStdPackage();
+            }
+            else if (symbol->kind == ast::SymbolKind::ClassType ||
+                     symbol->kind == ast::SymbolKind::GenericClassDef) {
+                const auto* package = symbol->getParentScope();
+                hasBuiltinHover |= package && &package->asSymbol() ==
+                                                 &package->getCompilation().getStdPackage();
             }
         }
         if (!hasBuiltinHover) {

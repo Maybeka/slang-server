@@ -1050,4 +1050,56 @@ std::span<const SystemTaskDoc> getSystemTaskDocs() {
     return DOCS;
 }
 
+std::span<const TimingCheckDoc> getTimingCheckDocs() {
+    static constexpr TimingCheckDoc docs[] = {
+        {"$setup", {"$setup(data_event, reference_event, limit [, notifier])",
+                    "Checks how long data is stable before the reference event.", {}}},
+        {"$hold", {"$hold(reference_event, data_event, limit [, notifier])",
+                   "Checks how long data is stable after the reference event.", {}}},
+        {"$setuphold",
+         {"$setuphold(reference_event, data_event, setup_limit, hold_limit "
+          "[, notifier [, timestamp_condition [, timecheck_condition "
+          "[, delayed_reference [, delayed_data]]]]])",
+          "Checks setup and hold constraints together.", {}}},
+        {"$recovery", {"$recovery(reference_event, data_event, limit [, notifier])",
+                       "Checks the minimum time between releasing an asynchronous control "
+                       "and a reference clock edge.", {}}},
+        {"$removal", {"$removal(reference_event, data_event, limit [, notifier])",
+                      "Checks how long an asynchronous control stays active after a clock edge.",
+                      {}}},
+        {"$recrem",
+         {"$recrem(reference_event, data_event, recovery_limit, removal_limit "
+          "[, notifier [, timestamp_condition [, timecheck_condition "
+          "[, delayed_reference [, delayed_data]]]]])",
+          "Checks recovery and removal constraints together.", {}}},
+        {"$skew", {"$skew(reference_event, data_event, limit [, notifier])",
+                   "Checks the time between the reference and data events against a skew limit.",
+                   {}}},
+        {"$timeskew",
+         {"$timeskew(reference_event, data_event, limit "
+          "[, notifier [, event_based_flag [, remain_active_flag]]])",
+          "Checks skew with optional event-based behavior.", {}}},
+        {"$fullskew",
+         {"$fullskew(reference_event, data_event, first_limit, second_limit "
+          "[, notifier [, event_based_flag [, remain_active_flag]]])",
+          "Checks skew in both directions.", {}}},
+        {"$period", {"$period(controlled_reference_event, limit [, notifier])",
+                     "Checks the minimum time between successive reference events.", {}}},
+        {"$width", {"$width(controlled_reference_event, limit [, threshold [, notifier]])",
+                    "Checks the minimum width of a pulse.", {}}},
+        {"$nochange",
+         {"$nochange(controlled_reference_event, data_event, start_offset, end_offset "
+          "[, notifier])",
+          "Checks that data stays unchanged in the specified time window.", {}}},
+    };
+    return docs;
+}
+
+const SystemTaskDoc* getTimingCheckDoc(std::string_view name) {
+    for (const auto& entry : getTimingCheckDocs())
+        if (entry.name == name)
+            return &entry.doc;
+    return nullptr;
+}
+
 } // namespace server

@@ -462,7 +462,8 @@ const ast::Symbol* ShallowAnalysis::handleScopedNameLookup(const syntax::NameSyn
         return nullptr;
     }
     ast::LookupResult result;
-    ast::Lookup::name(*scopedParent, context, ast::LookupFlags::None, result);
+    ast::Lookup::name(*scopedParent, context, ast::LookupFlags::AllowDefaultGenericClassScope,
+                      result);
     if (!result.found) {
         return nullptr;
     }
@@ -715,15 +716,10 @@ const ast::Symbol* ShallowAnalysis::getAssignmentPatternTargetSymbol(
     auto* arguments = argument && argument->parent
                           ? argument->parent->as_if<syntax::ArgumentListSyntax>()
                           : nullptr;
-    auto* invocation = arguments && arguments->parent
-                           ? arguments->parent->as_if<syntax::InvocationExpressionSyntax>()
-                           : nullptr;
-    if (!argument || !arguments || !invocation)
+    if (!arguments)
         return nullptr;
 
-    auto* targetToken = invocation->left->getLastTokenPtr();
-    auto* target = getSymbolAtToken(targetToken);
-    auto* subroutine = target ? target->as_if<ast::SubroutineSymbol>() : nullptr;
+    auto* subroutine = getArgumentSubroutine(*arguments);
     if (!subroutine)
         return nullptr;
 
@@ -738,6 +734,41 @@ const ast::Symbol* ShallowAnalysis::getAssignmentPatternTargetSymbol(
         if (arguments->parameters[index] == argument)
             return index < formals.size() ? formals[index] : nullptr;
     }
+    return nullptr;
+}
+
+const ast::SubroutineSymbol* ShallowAnalysis::getConstructor(
+    const syntax::NewClassExpressionSyntax& expression) const {
+    const ast::Symbol* target = nullptr;
+    const auto* parent = expression.parent.get();
+    if (auto* scoped = expression.scopedNew->as_if<syntax::ScopedNameSyntax>()) {
+        target = getSymbolAtToken(scoped->left->getLastTokenPtr());
+    }
+    else if (parent && parent->kind == syntax::SyntaxKind::EqualsValueClause && parent->parent) {
+        if (auto* declarator = parent->parent->as_if<syntax::DeclaratorSyntax>())
+            target = getSymbolAtToken(&declarator->name);
+    }
+    else if (parent && parent->kind == syntax::SyntaxKind::AssignmentExpression) {
+        target = getSymbolAtToken(parent->as<syntax::BinaryExpressionSyntax>()
+                                      .left->getLastTokenPtr());
+    }
+    const auto* type = target ? target->as_if<ast::Type>() : nullptr;
+    if (auto* value = target ? target->as_if<ast::ValueSymbol>() : nullptr)
+        type = &value->getType();
+    const auto* classType = type ? type->getCanonicalType().as_if<ast::ClassType>() : nullptr;
+    return classType ? classType->getConstructor() : nullptr;
+}
+
+const ast::SubroutineSymbol* ShallowAnalysis::getArgumentSubroutine(
+    const syntax::ArgumentListSyntax& arguments) const {
+    if (!arguments.parent)
+        return nullptr;
+    if (auto* call = arguments.parent->as_if<syntax::InvocationExpressionSyntax>()) {
+        auto* target = getSymbolAtToken(call->left->getLastTokenPtr());
+        return target ? target->as_if<ast::SubroutineSymbol>() : nullptr;
+    }
+    if (auto* constructor = arguments.parent->as_if<syntax::NewClassExpressionSyntax>())
+        return getConstructor(*constructor);
     return nullptr;
 }
 
@@ -987,6 +1018,31 @@ slang::SmallVector<const ast::Symbol*, 2> ShallowAnalysis::getSymbolsAtToken(
         return symbols;
     }
 
+    if (auto* named = syntax->as_if<syntax::NamedArgumentSyntax>();
+        named && *declTok == named->name && named->parent) {
+        if (auto* arguments = named->parent->as_if<syntax::ArgumentListSyntax>()) {
+            if (auto* method = getArgumentSubroutine(*arguments)) {
+                auto formals = method->getArguments();
+                auto found = std::ranges::find(formals, named->name.valueText(),
+                                               [](const auto* formal) { return formal->name; });
+                if (found != formals.end())
+                    addSymbol(*found);
+            }
+        }
+        return symbols;
+    }
+    if (declTok->kind == parsing::TokenKind::NewKeyword &&
+        syntax->kind == syntax::SyntaxKind::ConstructorName) {
+        auto* parent = syntax->parent.get();
+        if (parent && parent->kind == syntax::SyntaxKind::ScopedName)
+            parent = parent->parent.get();
+        if (auto* constructor = parent ? parent->as_if<syntax::NewClassExpressionSyntax>()
+                                       : nullptr) {
+            addSymbol(getConstructor(*constructor));
+            return symbols;
+        }
+    }
+
     auto* virtualType = syntax->as_if<syntax::VirtualInterfaceTypeSyntax>();
     const bool interfaceName =
         virtualType && (*declTok == virtualType->name || *declTok == virtualType->virtualKeyword ||
@@ -1183,7 +1239,8 @@ slang::SmallVector<const ast::Symbol*, 2> ShallowAnalysis::getSymbolsAtToken(
                          ? ast::LookupFlags::AllowDeclaredAfter |
                                ast::LookupFlags::AlwaysAllowUpward
                          : bitmask<ast::LookupFlags>{};
-        ast::Lookup::name(*nameSyntax, context, flags, result);
+        ast::Lookup::name(*nameSyntax, context,
+                          flags | ast::LookupFlags::AllowDefaultGenericClassScope, result);
         if (result.found) {
             if (isOverSelector(declTok, result)) {
                 const slang::ast::Symbol* cur = result.found;
@@ -1408,7 +1465,8 @@ const ast::Symbol* ShallowAnalysis::getSymbolAt(SourceLocation loc) const {
     return getSymbolAtToken(node);
 }
 
-const ast::Type* ShallowAnalysis::getMacroReceiverType(const parsing::Token& dot) const {
+const ast::Type* ShallowAnalysis::getMemberReceiverType(const parsing::Token& dot,
+                                                       bool macroOnly) const {
     auto* parent = syntaxes.getTokenParent(&dot);
     if (!parent)
         return nullptr;
@@ -1417,17 +1475,18 @@ const ast::Type* ShallowAnalysis::getMacroReceiverType(const parsing::Token& dot
         receiver = scoped->left;
     else if (auto* member = parent->as_if<syntax::MemberAccessExpressionSyntax>())
         receiver = member->left;
-    if (!receiver || !m_sourceManager.isMacroLoc(receiver->getLastToken().location()))
+    if (!receiver || (macroOnly &&
+                      !m_sourceManager.isMacroLoc(receiver->getLastToken().location())))
         return nullptr;
 
-    if (auto it = m_macroReceiverTypes.find(&dot); it != m_macroReceiverTypes.end())
+    if (auto it = m_memberReceiverTypes.find(&dot); it != m_memberReceiverTypes.end())
         return it->second;
     auto* scope = getScopeAt(dot.location());
     if (!scope)
         return nullptr;
     auto& expression = ast::Expression::bind(*receiver,
                                              ast::ASTContext(*scope, ast::LookupLocation::max));
-    return m_macroReceiverTypes.emplace(&dot, expression.type).first->second;
+    return m_memberReceiverTypes.emplace(&dot, expression.type).first->second;
 }
 
 const ast::Scope* ShallowAnalysis::getArrayIteratorScope(const syntax::SyntaxNode& syntax,

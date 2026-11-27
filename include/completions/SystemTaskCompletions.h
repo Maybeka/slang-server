@@ -21,7 +21,7 @@ namespace server::completions {
 class SystemSubroutineCompletionQuery : public CompletionQuery {
 public:
     static std::unique_ptr<CompletionQuery> create(lsp::Range replacementRange,
-                                                   bool followedByCall);
+                                                   bool followedByCall, bool timingCheck);
 
 protected:
     using CompletionQuery::CompletionQuery;
@@ -32,5 +32,9 @@ lsp::CompletionItem getSystemSubroutineCompletion(slang::parsing::KnownSystemNam
 
 void addSystemSubroutineCompletions(std::vector<lsp::CompletionItem>& results,
                                     const slang::ast::Compilation& compilation);
+
+void addBuiltinMethodCompletions(std::vector<lsp::CompletionItem>& results,
+                                 const slang::ast::Compilation& compilation,
+                                 const slang::ast::Type& type);
 
 } // namespace server::completions
