@@ -134,11 +134,11 @@ std::optional<ServerDriver::DiagnosticSnapshot> ServerDriver::captureDiagnosticS
             auto plan = std::ranges::find_if(m_frozenPlans.units, [&](const auto& candidate) {
                 return candidate.roots == paths;
             });
-            if (config.maxMiB.value() && config.maxMiB.value() <= 512 &&
+            if (config.syntaxBudgetMiB() && config.syntaxBudgetMiB() <= 512 &&
                 plan != m_frozenPlans.units.end() && plan->frozenRootCount) {
                 spec.frozenPrefix =
                     DiagnosticFrozenPrefix{uint32_t(plan->frozenRootCount), plan->packages,
-                                           uint64_t(config.maxMiB.value()) * 1024 * 1024,
+                                           uint64_t(config.syntaxBudgetMiB()) * 1024 * 1024,
                                            m_frozenDeclinedUnits.contains(paths), plan->modules};
             }
         }

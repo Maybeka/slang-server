@@ -248,9 +248,9 @@ mean-saving interval. SPI and UBUS do not establish an additional benefit over
 syntax-only reuse; the dedicated UVM route is faster in those cases. Waiting for
 complete diagnostics after every edit removes the overall benefit against the
 dedicated route in all three projects. Startup is also more expensive. See the
-[current RTL evaluation](../../validation/macos-native-idle-rtl-2026-10-20.md)
+current RTL evaluation
 for first/continuous responses, all controls and negative results. The current
-[three-repeat memory evaluation](../../validation/macos-native-idle-memory-2026-10-20.md)
+three-repeat memory evaluation
 covers short and 1,000-edit exact-instance/package sessions, parent/worker family
 peaks, real retirement and post-error/fallback/refresh transitions. These results
 do not justify enabling the experiment by default.
@@ -385,9 +385,10 @@ canonical identity. This supplements exact content reads and negative lookups.
 ## Fixed-dependency semantic experiment (under development)
 
 `experimentalScopeSemanticCache` is a separate, default-off experiment using the
-same `frozenSources.packages` and `maxMiB` selectors. The default retained-cache
-budget is 256 MiB; set `frozenSources.maxMiB` to change it. An entry that cannot fit
-uses ordinary analysis, without waiting for older consumers to release caches. For supported package-only
+same `frozenSources.packages` selectors. The semantic cache is unlimited by
+default once enabled. Set `frozenSources.maxMiB` for a finite budget. An entry
+that cannot fit uses ordinary analysis without waiting for older consumers to
+release caches. For supported package-only
 inputs, it binds a declaration view and discovers dependency packages through
 actual compiler package lookups, including lookups with suppressed diagnostics.
 It imports the selected packages and their discovered dependencies from one
@@ -476,7 +477,7 @@ the library is available, not that every current analysis imported it. `slang.re
 text. An unsaved fixed-source edit rejects source/consumer analysis with an
 explicit rebuild instruction until that rebuild completes. Charges do not measure
 RSS. The CVA6 and UVM acceptance results, including preparation and memory costs,
-are recorded in the [implementation and acceptance plan](../development/scope-semantic-plan.md).
+are recorded in the [implementation and acceptance plan](../development/performance-roadmap-status.md).
 Passing those workloads does not extend the supported language boundary.
 
 Repeated queries validate a fixed source view against the same provider tree
@@ -747,17 +748,16 @@ currently held by independent owners. A root hit can cover its entire subtree;
 the hit count is not the number of descendant instances skipped. Root retention
 by itself does not guarantee every subsequent parameterization can import it.
 
-Real-workload acceptance tests must set `semanticCacheUnlimited: true`
-and omit numeric semantic cache budgets. Large designs are expected workloads;
-a quota-triggered fallback does not establish the implementation's supported
-scale. Test explicitly configured protective limits separately. This bypasses fixed-scope and dedicated
-UVM semantic retention limits, including registries created when a driver is
-promoted or rebuilt. It does not enable either semantic experiment. Scope and UVM
+Real-workload acceptance tests use unlimited semantic caches. Omit the numeric
+budgets or set `semanticCacheUnlimited: true` to ignore both limits explicitly.
+Set `semanticCacheUnlimited: false` to use a 256 MiB limit for each cache without
+an explicit numeric limit. This policy also applies to registries created when a
+driver is promoted or rebuilt. Scope and UVM
 status expose `budgetUnlimited`; `bodies.budgetBytes` is zero when that flag is
 true, meaning no finite quota rather than a disabled cache. Charged bytes remain
 available as an accounting metric. Measure actual process RSS and physical
 footprint separately; quota-truncated results do not describe full workload
-capability. The semantic experiments and this setting remain disabled by default.
+capability. The semantic experiments remain disabled by default.
 
 An RTL subset can include harmless module / interface / program siblings from
 the already fixed physical roots. The root set comes from the eligible requested
@@ -932,7 +932,7 @@ this publication history to its replacement, avoiding an empty-list / full-list
 burst for unchanged sources. This reduces notification traffic and serialization;
 it does not skip current semantic analysis or suppress warnings.
 
-See the [Mac CVA6 whole-DUT evaluation](../development/cva6-dut-reuse-evaluation.md)
+See the [Mac CVA6 whole-DUT evaluation](../development/performance-roadmap-status.md)
 for measured latency, memory costs and complete acceptance boundaries.
 
 

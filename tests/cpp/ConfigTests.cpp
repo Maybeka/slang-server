@@ -1551,3 +1551,31 @@ TEST_CASE("Source history allowance is configurable without enabling experiments
     CHECK(saturated.soft == maximum);
     CHECK(saturated.hard == maximum);
 }
+
+TEST_CASE("Cache budget defaults preserve explicit project and user limits") {
+    ConfigWorkspace workspace;
+    const auto project = (workspace.root / "server.json").string();
+    const auto local = (workspace.root / "local.json").string();
+    workspace.write("server.json", R"({"uvm":{"useBundled":true},"frozenSources":{}})");
+    auto config = Config::fromFiles(project, std::nullopt, std::nullopt);
+    REQUIRE(config);
+    CHECK_FALSE(config->syntaxPrefixBudgetMiB());
+    CHECK_FALSE(config->scopeSemanticBudgetMiB());
+    CHECK_FALSE(config->uvmSemanticBudgetMiB());
+    CHECK_FALSE(config->experimentalSyntaxPrefixCache.value());
+    CHECK_FALSE(config->experimentalScopeSemanticCache.value());
+    CHECK_FALSE(config->experimentalUvmSemanticCache.value());
+    workspace.write("server.json", R"({"syntaxPrefixCacheMaxMiB":0,"frozenSources":{"maxMiB":32}})");
+    workspace.write("local.json", R"({"uvm":{"useBundled":true,"semanticMaxMiB":128}})");
+    config = Config::fromFiles(project, std::nullopt, local);
+    REQUIRE(config);
+    CHECK(config->syntaxPrefixBudgetMiB() == 0);
+    CHECK(config->scopeSemanticBudgetMiB() == 32);
+    CHECK(config->uvmSemanticBudgetMiB() == 128);
+    workspace.write("local.json", R"({"syntaxPrefixCacheUnlimited":true,"semanticCacheUnlimited":false})");
+    config = Config::fromFiles(project, std::nullopt, local);
+    REQUIRE(config);
+    CHECK_FALSE(config->syntaxPrefixBudgetMiB());
+    CHECK(config->scopeSemanticBudgetMiB() == 32);
+    CHECK(config->uvmSemanticBudgetMiB() == 256);
+}

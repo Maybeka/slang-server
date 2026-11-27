@@ -6816,18 +6816,30 @@ TEST_CASE("Independent nominal captures cannot overwrite a current declaration i
 
 TEST_CASE("Configured syntax replay has an independent budget and invalidates edited prefixes",
           "[scope-semantic][configured-syntax-prefix]") {
-    const int mode = GENERATE(0, 1, 2, 3);
+    // Disabled, zero budget, bounded default, finite refusal, explicit unlimited
+    // over a small or zero budget, and the unlimited default.
+    const int mode = GENERATE(0, 1, 2, 3, 4, 5, 6);
     const bool directRoot = GENERATE(false, true);
     INFO(mode);
-    INFO(directRoot); // disabled, zero budget, reusable, over budget
+    INFO(directRoot);
     LibraryWorkspace files;
     Config config;
     CHECK_FALSE(config.experimentalSyntaxPrefixCache.value());
-    CHECK(config.syntaxPrefixCacheMaxMiB.value() == 256);
+    CHECK_FALSE(config.syntaxPrefixBudgetMiB());
     config.experimentalScopeSemanticCache = true;
     config.experimentalCooperativeAnalysis = true;
     config.experimentalSyntaxPrefixCache = mode != 0;
-    config.syntaxPrefixCacheMaxMiB = mode == 1 ? 0u : mode == 3 ? 1u : 64u;
+    const bool unlimited = mode == 0 || mode >= 4;
+    const bool largePrefix = mode == 3 || mode == 4 || mode == 6;
+    if (mode == 1 || mode == 5)
+        config.syntaxPrefixCacheMaxMiB = 0;
+    if (mode == 3 || mode == 4)
+        config.syntaxPrefixCacheMaxMiB = 1;
+    if (mode == 2 || mode == 4 || mode == 5)
+        config.syntaxPrefixCacheUnlimited = unlimited;
+    const auto limit = config.syntaxPrefixBudgetMiB();
+    CHECK(bool(limit) == !unlimited);
+    CHECK(rfl::json::read<Config>(rfl::json::write(config)).value().syntaxPrefixBudgetMiB() == limit);
     config.frozenSources = Config::FrozenSourcesConfig{
         .packages = std::vector<std::string>{"fixed_pkg"}, .maxMiB = 64};
     config.flagsByFile = std::vector<Config::FlagSource>{
@@ -6835,7 +6847,7 @@ TEST_CASE("Configured syntax replay has an independent budget and invalidates ed
     files.write(files.root / "fixed.sv", "package fixed_pkg; class Base; endclass endpackage\n");
     auto sharedSource = [&](int macro) {
         std::string text = "`pragma protect begin\npackage shared_pkg; class C;\n";
-        if (mode == 3)
+        if (largePrefix)
             for (int i = 0; i < 12000; ++i)
                 text += "int member_" + std::to_string(i) + ";\n";
         text += "endclass endpackage\n`pragma protect end\n`define SHARED_VALUE " +
@@ -6913,9 +6925,18 @@ TEST_CASE("Configured syntax replay has an independent budget and invalidates ed
     verify(4, 2, 9);
     auto status = rfl::json::write(driver->scopeLibraryStatus());
     INFO(status);
-    if (mode == 2) {
+    const auto syntaxReplay = status.find("\"syntaxReplay\":");
+    REQUIRE(syntaxReplay != std::string::npos);
+    const auto syntaxStatus = std::string_view(status).substr(syntaxReplay);
+    CHECK(syntaxStatus.find(unlimited ? "\"budgetUnlimited\":true" : "\"budgetUnlimited\":false") !=
+          std::string_view::npos);
+    const auto budgetBytes = limit.value_or(0) * 1024 * 1024;
+    CHECK(syntaxStatus.find("\"budgetBytes\":" + std::to_string(budgetBytes) + ",") !=
+          std::string_view::npos);
+    if (mode == 2 || mode >= 4) {
         CHECK(status.find("\"cachedRoots\":2") != std::string::npos);
         CHECK(status.find("\"hits\":1") != std::string::npos);
+        CHECK(syntaxStatus.find("\"refusals\":0") != std::string_view::npos);
         driver->prepareForContextRetirement(true);
         const auto retired = rfl::json::write(driver->scopeLibraryStatus());
         CHECK(retired.find("\"cachedRoots\":0") != std::string::npos);
@@ -9237,21 +9258,25 @@ TEST_CASE("Refusal reports own bounded samples without retaining editing models"
 
 TEST_CASE("Unrestricted semantic evaluation bypasses numeric scope and UVM limits",
           "[scope-semantic][semantic-unlimited]") {
-    const bool unlimited = GENERATE(false, true);
+    const int mode = GENERATE(0, 1, 2, 3);
     const bool uvm = GENERATE(false, true);
-    CAPTURE(unlimited, uvm);
+    const bool unlimited = mode == 1 || mode == 3;
+    CAPTURE(mode, uvm);
     LibraryWorkspace files;
     Config config;
     if (uvm) {
         config = files.config();
         config.experimentalUvmSemanticCache = true;
-        config.uvm.value()->semanticMaxMiB = 0;
+        if (mode != 3)
+            config.uvm.value()->semanticMaxMiB = 0;
         files.write(files.root / "design.f", "consumer.sv\n");
     }
     else {
         config.experimentalScopeSemanticCache = true;
         config.frozenSources = Config::FrozenSourcesConfig{
-            .instances = std::vector<std::string>{"top.u"}, .maxMiB = 0};
+            .instances = std::vector<std::string>{"top.u"}};
+        if (mode != 3)
+            config.frozenSources.value()->maxMiB = 0;
         config.flagsByFile = std::vector<Config::FlagSource>{
             {(files.root / "server.json").string(), "--single-unit --threads 1 --top top"}};
         files.write(files.root / "fixed.sv",
@@ -9259,8 +9284,11 @@ TEST_CASE("Unrestricted semantic evaluation bypasses numeric scope and UVM limit
         files.write(files.root / "consumer.sv", "module top; int a,y; stable u(.*); endmodule\n");
         files.write(files.root / "design.f", "fixed.sv\nconsumer.sv\n");
     }
-    config.semanticCacheUnlimited = unlimited;
-    CHECK(rfl::json::read<Config>(rfl::json::write(config)).value().semanticCacheUnlimited.value() == unlimited);
+    if (mode < 2)
+        config.semanticCacheUnlimited = unlimited;
+    const auto roundTrip = rfl::json::read<Config>(rfl::json::write(config)).value();
+    CHECK((uvm ? roundTrip.uvmSemanticBudgetMiB() : roundTrip.scopeSemanticBudgetMiB()) ==
+          (unlimited ? std::nullopt : std::optional<uint32_t>(0)));
     Indexer indexer;
     ClientHarness client;
     auto driver = server::ServerDriver::createFromFileLists(indexer, client, config, {"design.f"},

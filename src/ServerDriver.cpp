@@ -161,8 +161,9 @@ ServerDriver::ServerDriver(Indexer& indexer, SlangLspClient& client, const Confi
             (void)overlays->trustedLibrarySourceContext(URI{});
         m_trustedScopes = overlays->m_trustedScopes;
         m_scopeBodies = overlays->m_scopeBodies;
+        const auto semanticLimit = config.scopeSemanticBudgetMiB();
         if (m_scopeBodies && (borrowInitialLibraries ||
-            config.semanticCacheUnlimited.value() != overlays->m_config.semanticCacheUnlimited.value())) {
+            semanticLimit != overlays->m_config.scopeSemanticBudgetMiB())) {
             // Exploration can leave independently analyzed RTL fragments and
             // rejected-context hints. They must not consume the first complete
             // design's admission budget. Keep fixed nominal semantics, but give
@@ -171,9 +172,8 @@ ServerDriver::ServerDriver(Indexer& indexer, SlangLspClient& client, const Confi
             const auto frozen = config.frozenSources.value().value_or(
                 Config::FrozenSourcesConfig{});
             m_scopeBodies = std::make_shared<ScopeBodyCache>(
-                m_trustedScopes, config.semanticCacheUnlimited.value()
-                    ? std::numeric_limits<size_t>::max()
-                    : size_t(frozen.maxMiB.value()) * 1024 * 1024,
+                m_trustedScopes, semanticLimit ? size_t(*semanticLimit) * 1024 * 1024
+                                               : std::numeric_limits<size_t>::max(),
                 frozen.modules.value(), frozen.instances.value(), m_sourceRegistry);
         }
         m_scopeRoots = overlays->m_scopeRoots;
@@ -424,8 +424,8 @@ bool ServerDriver::parseAndLoadSources(const std::vector<std::string>& buildfile
     diagEngine.setIgnoreAllNotes(false);
 
     const auto frozen = m_config.frozenSources.value().value_or(Config::FrozenSourcesConfig{});
-    m_captureFrozenNativeSeed = isFrozenSourcesEnabled() && frozen.maxMiB.value() &&
-                                frozen.maxMiB.value() <= 512 &&
+    m_captureFrozenNativeSeed = isFrozenSourcesEnabled() && frozen.syntaxBudgetMiB() &&
+                                frozen.syntaxBudgetMiB() <= 512 &&
                                 (!frozen.packages.value().empty() ||
                                  !frozen.modules.value().empty() ||
                                  !frozen.instances.value().empty()) &&

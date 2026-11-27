@@ -691,7 +691,7 @@ TEST_CASE("Frozen certification reloads changed filelists and effective JSON con
 TEST_CASE("Frozen source configuration is opt in and zero budget preserves native analysis",
           "[frozen-source-integration]") {
     CHECK_FALSE(Config{}.experimentalFrozenSources.value());
-    CHECK(Config::FrozenSourcesConfig{}.maxMiB.value() == 256);
+    CHECK(Config::FrozenSourcesConfig{}.syntaxBudgetMiB() == 256);
     Config config;
     Config::FrozenSourcesConfig selection;
     selection.packages = std::vector<std::string>{"a", "b"};

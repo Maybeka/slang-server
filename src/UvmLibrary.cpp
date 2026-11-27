@@ -422,12 +422,11 @@ bool ServerDriver::prepareTrustedUvmLibrary() {
         m_trustedUvmReason = "isolated UVM semantic preparation has errors; using native analysis";
         return false;
     }
-    const auto maxMiB = m_config.uvm.value()->semanticMaxMiB.value();
+    const auto maxMiB = m_config.uvmSemanticBudgetMiB();
     const size_t charged = compilation->getTotalBytesAllocated() +
                            prefix->getRetainedSyntaxBytes() + prefix->getRetainedSourceBytes() +
                            sm.getSourceLocationTableBytes() + sm.getMemoryUsage();
-    if (!m_config.semanticCacheUnlimited.value() &&
-        (!maxMiB || maxMiB > 1024 || charged > size_t(maxMiB) * 1024 * 1024)) {
+    if (maxMiB && (!*maxMiB || *maxMiB > 1024 || charged > size_t(*maxMiB) * 1024 * 1024)) {
         m_trustedUvmReason = "UVM semantic owner exceeds semanticMaxMiB; using native analysis";
         return false;
     }
@@ -547,7 +546,7 @@ rfl::Generic ServerDriver::trustedUvmStatus() const {
         library ? library->files.size() : 0, bool(library), m_shippedUvmProfile.has_value(),
         m_shippedUvmProfile.value_or(""), m_uvmProjectCacheHit, m_uvmParseCachePath.string(),
         m_uvmParseMs, m_uvmArchiveWriteMs, m_uvmArchiveLoadMs,
-        m_config.semanticCacheUnlimited.value(),
+        !(sharedScope ? m_config.scopeSemanticBudgetMiB() : m_config.uvmSemanticBudgetMiB()),
         sharedScope ? "UVM shares the fixed scope semantic owner; charges cover its full closure"
                     : m_trustedUvmReason});
 }

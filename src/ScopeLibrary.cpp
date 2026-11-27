@@ -2412,11 +2412,10 @@ bool ServerDriver::prepareScopeLibrary() {
                           definitionIndependentNames.capacity() + localBindingProof.names.capacity() +
                           localBindingProof.packages.capacity()) *
                              sizeof(std::string_view);
-    const bool unlimited = m_config.semanticCacheUnlimited.value();
-    const auto semanticBudget = unlimited ? std::numeric_limits<size_t>::max()
-                                         : size_t(config.maxMiB.value()) * 1024 * 1024;
-    if (!unlimited && (!config.maxMiB.value() || config.maxMiB.value() > 512 ||
-                      charged > semanticBudget))
+    const auto limit = m_config.scopeSemanticBudgetMiB();
+    const auto semanticBudget = limit ? size_t(*limit) * 1024 * 1024
+                                      : std::numeric_limits<size_t>::max();
+    if (limit && (!*limit || *limit > 512 || charged > semanticBudget))
         return decline("fixed package owner exceeds frozenSources.maxMiB", "budget");
     auto library = std::make_shared<TrustedUvmLibrary>();
     library->sourceOwner = m_driverOwner->getSourceOwner();
@@ -2527,15 +2526,19 @@ std::shared_ptr<syntax::SyntaxTree> ServerDriver::resumeScopeLibrary(
     auto prefix = m_scopePrefix;
     auto rootCount = m_scopeRootCount;
     size_t captureCount = 0;
-    const auto syntaxBudget = uint64_t(m_config.syntaxPrefixCacheMaxMiB.value()) * 1024 * 1024;
+    const auto limit = m_config.syntaxPrefixBudgetMiB();
+    const auto syntaxBudget = uint64_t(limit.value_or(0)) * 1024 * 1024;
     const bool probeEnabled = m_config.experimentalSyntaxPrefixCache.value() &&
-                              isCooperativeAnalysisEnabled() && syntaxBudget != 0;
+                              isCooperativeAnalysisEnabled() && (!limit || syntaxBudget != 0);
     if (!prefix) {
         const auto pp = parseOptions.get<parsing::PreprocessorOptions>();
         if (!probeEnabled || (pp && (pp->bufferChangeCB || !pp->keywordMapping.empty())))
             return {};
     }
     const auto baseSyntaxBytes = prefix ? prefix->getRetainedSyntaxBytes() : 0;
+    auto fitsBudget = [&](size_t bytes) {
+        return bytes >= baseSyntaxBytes && (!limit || bytes - baseSyntaxBytes <= syntaxBudget);
+    };
     UvmPhaseTrace probe(probeEnabled);
     auto check = [&] {
         if (const auto* pp = parseOptions.get<parsing::PreprocessorOptions>();
@@ -2608,8 +2611,7 @@ std::shared_ptr<syntax::SyntaxTree> ServerDriver::resumeScopeLibrary(
             check();
             auto candidate = syntax::SyntaxTree::preparedSourcePrefix(m_pendingSyntaxPrefix);
             const auto bytes = candidate ? candidate->getRetainedSyntaxBytes() : 0;
-            if (candidate && candidate->isPrefixResumeSafe().value_or(false) &&
-                bytes >= baseSyntaxBytes && bytes - baseSyntaxBytes <= syntaxBudget) {
+            if (candidate && candidate->isPrefixResumeSafe().value_or(false) && fitsBudget(bytes)) {
                 ctx.checkpoint("before syntax prefix cache commit");
                 check();
                 m_syntaxPrefix = std::move(candidate);
@@ -2719,7 +2721,7 @@ std::shared_ptr<syntax::SyntaxTree> ServerDriver::resumeScopeLibrary(
         // This tree is already required by the current analysis. Retain the
         // capture without walking its prefix while the first query is waiting.
         const auto retained = tree->getRetainedSyntaxBytes();
-        if (retained >= baseSyntaxBytes && retained - baseSyntaxBytes <= syntaxBudget) {
+        if (fitsBudget(retained)) {
             m_pendingSyntaxPrefix = tree;
             m_pendingSyntaxRoots = rootCount + captureCount;
             m_syntaxPrefixBytes = retained - baseSyntaxBytes;
@@ -2753,7 +2755,7 @@ bool ServerDriver::isTrustedScopeSource(const std::filesystem::path& path) const
 
 rfl::Generic ServerDriver::scopeLibraryStatus() const {
     struct SyntaxReplay {
-        bool enabled;
+        bool enabled, budgetUnlimited;
         uint64_t budgetBytes;
         size_t chargedBytes, pendingRoots, cachedRoots;
         uint64_t captures, hits, refusals, witnessFailures;
@@ -2785,6 +2787,7 @@ rfl::Generic ServerDriver::scopeLibraryStatus() const {
     const auto& library = m_trustedScopes;
     const auto bodies = m_scopeBodies ? m_scopeBodies->status() : ScopeBodyCache::Stats{};
     const auto config = m_config.frozenSources.value().value_or(Config::FrozenSourcesConfig{});
+    const auto syntaxLimit = m_config.syntaxPrefixBudgetMiB();
     const auto& preparation = library && library->preparationReport
                                   ? library->preparationReport : m_scopePreparationReport;
     std::vector<std::string> nativeRemainders;
@@ -2795,7 +2798,7 @@ rfl::Generic ServerDriver::scopeLibraryStatus() const {
     }
     return rfl::to_generic(
         Status{m_config.experimentalScopeSemanticCache.value(), bool(library),
-               m_config.semanticCacheUnlimited.value(),
+               !m_config.scopeSemanticBudgetMiB(),
                library ? library->generation : 0, library ? library->consumers.load() : 0,
                m_scopeResumes, library ? library->namespaceDeclines.load() : 0,
                library ? std::max(library->semanticBytes, bodies.baseBytes) + bodies.ownerBytes + bodies.pinnedBytes +
@@ -2817,8 +2820,8 @@ rfl::Generic ServerDriver::scopeLibraryStatus() const {
                Coverage{config.packages.value(), config.modules.value(), config.instances.value(),
                    preparation ? preparation->preparedDeclarations : 0,
                    bodies.retainedRoots.size(), comp ? comp->lastModelSharedRoots().size() : 0},
-               SyntaxReplay{m_config.experimentalSyntaxPrefixCache.value(),
-                   uint64_t(m_config.syntaxPrefixCacheMaxMiB.value()) * 1024 * 1024,
+               SyntaxReplay{m_config.experimentalSyntaxPrefixCache.value(), !syntaxLimit,
+                   uint64_t(syntaxLimit.value_or(0)) * 1024 * 1024,
                    m_syntaxPrefixBytes, m_pendingSyntaxRoots, m_syntaxPrefixRoots,
                    m_syntaxPrefixCaptures, m_syntaxPrefixHits, m_syntaxPrefixRefusals,
                    m_syntaxPrefixWitnessFailures, hasStaleSyntaxPrefixInputs()}});

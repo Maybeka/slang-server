@@ -144,9 +144,16 @@
           "default": false
         },
         "semanticCacheUnlimited": {
-          "description": "Disable charged retention budgets for enabled fixed-scope and UVM semantic caches. Does not enable either experiment. Use for unconstrained workload evaluation; actual process memory must be measured separately.",
-          "type": "boolean",
-          "default": false
+          "description": "Override semantic cache budgets for fixed scopes and UVM. True ignores numeric limits. False uses the configured limits or 256 MiB. When omitted, each cache without a numeric limit is unlimited. Does not enable experiments.",
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "experimentalDiagnosticDeltaPublishing": {
           "description": "Experimental diagnostic delta publication. Default off. Repeated results are compared before serialization; changed document versions, errors, repairs and URI retirements are still published.",
@@ -169,9 +176,28 @@
           "default": false
         },
         "syntaxPrefixCacheMaxMiB": {
-          "type": "integer",
-          "description": "Retained mutable syntax-prefix cache budget in MiB, default 256. Zero disables this cache. Charges one pending or reusable CST owner, excluding the already charged fixed prefix. This budget is separate from frozenSources.maxMiB and sourceHistoryMaxMiB; it is not a process RSS limit.",
-          "default": 256
+          "description": "Optional syntax-prefix budget in MiB. Omit for unlimited retention; zero disables retention unless overridden. Charges one pending or reusable CST owner beyond the fixed prefix. Separate from process RSS.",
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "syntaxPrefixCacheUnlimited": {
+          "description": "Override the syntax-prefix budget. True ignores the numeric limit. False uses the configured limit or 256 MiB. Omission honors any numeric limit. Does not enable the experiment.",
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "frozenSources": {
           "description": "Frozen source selections and cache budget. Does not enable the experiment.",
@@ -358,8 +384,15 @@
           }
         },
         "maxMiB": {
-          "type": "integer",
-          "description": "Maximum charged retained cache size in MiB (0 to 512, default 256). Oversized entries use ordinary analysis. The syntax experiment reserves one quarter for certified hierarchy values with instance selectors; the semantic experiment shares the budget between library and body owners. This is not a process RSS limit."
+          "description": "Optional retention limit in MiB (0 to 512). Defaults to 256 for experimentalFrozenSources and to unlimited for semantic reuse. Oversized entries use ordinary analysis. This is not a process RSS limit.",
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": []
@@ -489,8 +522,15 @@
           "type": "boolean"
         },
         "semanticMaxMiB": {
-          "type": "integer",
-          "description": "Retention charge limit for the experimental trusted UVM semantic owner, in MiB (1..1024). Separate from frozenSources.maxMiB and process RSS. An oversized library uses native analysis."
+          "description": "Optional retention charge limit for the trusted UVM semantic owner, in MiB (1..1024). Without a limit, reuse is unlimited by default. An oversized library uses native analysis.",
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": []

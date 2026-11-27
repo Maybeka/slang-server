@@ -52,8 +52,8 @@ export interface Config {
   experimentalUvmSemanticCache?: boolean
   /** Experimental complete semantic reuse of explicitly fixed scopes. Default off. Dependencies are fixed until slang.rebuildScopeLibrary or configuration reload. Uses frozenSources selectors; unsupported boundaries use native analysis. */
   experimentalScopeSemanticCache?: boolean
-  /** Disable charged retention budgets for enabled fixed-scope and UVM semantic caches. Does not enable either experiment. Use for unconstrained workload evaluation; actual process memory must be measured separately. */
-  semanticCacheUnlimited?: boolean
+  /** Override semantic cache budgets for fixed scopes and UVM. True ignores numeric limits. False uses the configured limits or 256 MiB. When omitted, each cache without a numeric limit is unlimited. Does not enable experiments. */
+  semanticCacheUnlimited?: boolean | null
   /** Experimental diagnostic delta publication. Default off. Repeated results are compared before serialization; changed document versions, errors, repairs and URI retirements are still published. */
   experimentalDiagnosticDeltaPublishing?: boolean
   /** Experimental bounded parallel full-design flow diagnostics. Default off. Observers or order-sensitive driver reports retain serial analysis. */
@@ -62,8 +62,10 @@ export interface Config {
   parallelDiagnosticThreads?: number
   /** Experimental authenticated syntax-prefix reuse for configured single-unit inputs. Default off. Requires cooperative analysis and prepared fixed scope semantics. The server checks preceding mutable roots and includes before reusing their syntax. Semantic reuse follows the frozenSources selection. */
   experimentalSyntaxPrefixCache?: boolean
-  /** Retained mutable syntax-prefix cache budget in MiB, default 256. Zero disables this cache. Charges one pending or reusable CST owner, excluding the already charged fixed prefix. This budget is separate from frozenSources.maxMiB and sourceHistoryMaxMiB; it is not a process RSS limit. */
-  syntaxPrefixCacheMaxMiB?: number
+  /** Optional syntax-prefix budget in MiB. Omit for unlimited retention; zero disables retention unless overridden. Charges one pending or reusable CST owner beyond the fixed prefix. Separate from process RSS. */
+  syntaxPrefixCacheMaxMiB?: number | null
+  /** Override the syntax-prefix budget. True ignores the numeric limit. False uses the configured limit or 256 MiB. Omission honors any numeric limit. Does not enable the experiment. */
+  syntaxPrefixCacheUnlimited?: boolean | null
   /** Frozen source selections and cache budget. Does not enable the experiment. */
   frozenSources?: Config__FrozenSourcesConfig | null
   /** Experimental package/module syntax and instance hierarchy reuse. Default off. Exact source and include lookup certification can cost filesystem I/O; changed inputs rebuild the native context while preserving editor overlays. */
@@ -116,8 +118,8 @@ export interface Config__FrozenSourcesConfig {
   modules?: string[]
   /** Exact canonical RTL instance paths selecting that instance and its descendants. Behavior follows the enabled frozen-source or fixed-scope experiment. Requires configured hierarchy and does not itself enable caching. */
   instances?: string[]
-  /** Maximum charged retained cache size in MiB (0 to 512, default 256). Oversized entries use ordinary analysis. The syntax experiment reserves one quarter for certified hierarchy values with instance selectors; the semantic experiment shares the budget between library and body owners. This is not a process RSS limit. */
-  maxMiB?: number
+  /** Optional retention limit in MiB (0 to 512). Defaults to 256 for experimentalFrozenSources and to unlimited for semantic reuse. Oversized entries use ordinary analysis. This is not a process RSS limit. */
+  maxMiB?: number | null
 }
 
 export interface Config__HoverConfig {
@@ -158,6 +160,6 @@ export interface Config__UvmConfig {
   entryFile?: string | null
   /** Explicitly select the shipped UVM 1.2 sources. Default false. Mutually exclusive with sourceDirectory and entryFile. Conflicting project UVM inputs are rejected; no automatic injection or download. */
   useBundled?: boolean
-  /** Retention charge limit for the experimental trusted UVM semantic owner, in MiB (1..1024). Separate from frozenSources.maxMiB and process RSS. An oversized library uses native analysis. */
-  semanticMaxMiB?: number
+  /** Optional retention charge limit for the trusted UVM semantic owner, in MiB (1..1024). Without a limit, reuse is unlimited by default. An oversized library uses native analysis. */
+  semanticMaxMiB?: number | null
 }

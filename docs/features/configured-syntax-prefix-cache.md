@@ -12,9 +12,13 @@ during the required parse for an isolated fixed declaration view. The
 `frozenSources` selectors still control semantic reuse and its manual rebuild
 contract.
 
-`syntaxPrefixCacheMaxMiB` defaults to 256; zero disables retention. It limits the
-estimated retained CST owner beyond the already charged fixed prefix. One pending
-or reusable owner is retained. Oversized or unsupported entries are abandoned.
+Once enabled, this cache has no size limit by default. Set
+`syntaxPrefixCacheMaxMiB` to limit the estimated retained CST owner beyond the
+already charged fixed prefix. One pending or reusable owner is retained. Zero
+disables retention and oversized entries are abandoned. An explicit
+`syntaxPrefixCacheUnlimited: true` overrides the numeric limit, including zero.
+An explicit `false` with no numeric limit selects 256 MiB. All modes require
+the experiment and the same safety checks for the checkpoint and current inputs.
 This is a separate budget from `frozenSources.maxMiB` (fixed semantic and body
 owners) and `sourceHistoryMaxMiB` (source storage). These are cache budgets, not a
 process RSS limit.
@@ -34,14 +38,13 @@ reset and diagnostic pragma state are not admitted by this implementation.
 
 `slang.scopeLibraryStatus` reports a separate `syntaxReplay` object with the
 budget, retained charge, pending/cached root counts, captures, hits, refusals and
-failed input witnesses. This change adds no fixed debounce.
+failed input witnesses. In unlimited mode it reports `budgetUnlimited: true` and
+`budgetBytes: 0`.
 
 Controller regression tests cover both included files and directly opened root
 documents, cancellation before delayed extraction, earlier prefix edits, disabled
 mode, zero budget and oversized-entry refusal. SDK tests cover checkpoint
-ownership and source boundaries. The
-[qualification record](../development/semantic-reuse-completion-plan.md) gives
-the real-project latency, memory and reuse measurements.
+ownership and source boundaries.
 
 If the mutable input witness fails, this driver refuses further results through
 its old file/lookup cache. The server recovers with a fresh input context before

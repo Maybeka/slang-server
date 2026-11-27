@@ -23,6 +23,15 @@ static int CONFIG_READ_FLAGS = YYJSON_READ_ALLOW_COMMENTS | YYJSON_READ_ALLOW_TR
 namespace fs = std::filesystem;
 
 namespace {
+std::optional<uint32_t> resolveBudgetMiB(std::optional<bool> unlimited,
+                                         std::optional<uint32_t> limit) {
+    if (!unlimited)
+        return limit;
+    if (*unlimited)
+        return std::nullopt;
+    return limit.value_or(256);
+}
+
 rfl::Result<rfl::Nothing> expandProjectPaths(Config& config) {
     std::optional<std::string> missing;
     auto resolve = [&](const std::string& name) {
@@ -90,6 +99,22 @@ std::optional<std::string> Config::getEnvironmentVariable(const std::string& nam
     if (const char* value = std::getenv(name.c_str()))
         return std::string(value);
     return {};
+}
+
+std::optional<uint32_t> Config::syntaxPrefixBudgetMiB() const {
+    return resolveBudgetMiB(syntaxPrefixCacheUnlimited.value(), syntaxPrefixCacheMaxMiB.value());
+}
+
+std::optional<uint32_t> Config::scopeSemanticBudgetMiB() const {
+    const auto& scopes = frozenSources.value();
+    return resolveBudgetMiB(semanticCacheUnlimited.value(),
+                            scopes ? scopes->maxMiB.value() : std::nullopt);
+}
+
+std::optional<uint32_t> Config::uvmSemanticBudgetMiB() const {
+    const auto& library = uvm.value();
+    return resolveBudgetMiB(semanticCacheUnlimited.value(),
+                            library ? library->semanticMaxMiB.value() : std::nullopt);
 }
 
 rfl::Result<Config> Config::fromFiles(const std::optional<std::string>& workspaceConf,

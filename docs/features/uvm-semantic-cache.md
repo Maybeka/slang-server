@@ -11,8 +11,7 @@ the semantic experiment. Bound semantic objects are still process-local.
 {
   "uvm": {
     "sourceDirectory": "/path/to/uvm/src",
-    "entryFile": "uvm_pkg.sv",
-    "semanticMaxMiB": 256
+    "entryFile": "uvm_pkg.sv"
   },
   "experimentalUvmSemanticCache": true
 }
@@ -55,20 +54,18 @@ Disable the experiment to restore ordinary library freshness behavior.
 
 `slang.uvmLibraryStatus` reports preparation, generation, consumer imports,
 `astBytes`, `chargedBytes`, fixed source-file count and a reason when preparation
-is unavailable. The default is disabled. Unsupported package boundaries,
-preparation errors or a retention charge above `semanticMaxMiB` use ordinary
-analysis. The limit covers the prepared semantic arena and charged syntax/source
-storage; it is not a process RSS limit.
+is unavailable. The experiment is disabled by default. Once enabled, it has no
+size limit unless `uvm.semanticMaxMiB` is configured or
+`semanticCacheUnlimited: false` selects the 256 MiB bounded default. Unsupported
+package boundaries, preparation errors or a retention charge above the configured
+limit use ordinary analysis. The limit covers the prepared semantic arena and
+charged syntax/source storage. Process RSS is measured separately.
 
 Diagnostics use the shared semantic owner in the server process in this mode.
 This avoids rebuilding the library in a separate diagnostic worker, but diagnostic
 work can occupy the server request loop. User diagnostics must remain current.
 Library diagnostic filtering is configured independently; enabling reuse does not
 itself suppress warnings. Queries inside library sources use the prepared owner.
-
-See the [Mac validation report](../../validation/macos-uvm-semantic-reuse-2026-10-20.md)
-for measured latency and memory, including preparation and reconstruction costs. Syntax-only cache measurements
-do not establish a benefit for this semantic cache.
 
 ## Persistent UVM syntax data
 

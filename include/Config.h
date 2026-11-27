@@ -71,11 +71,11 @@ struct Config {
                          "project UVM inputs are rejected; no automatic injection or download.",
                          bool>
             useBundled = false;
-        rfl::Description<"Retention charge limit for the experimental trusted UVM semantic "
-                         "owner, in MiB (1..1024). Separate from frozenSources.maxMiB and "
-                         "process RSS. An oversized library uses native analysis.",
-                         uint32_t>
-            semanticMaxMiB = 256;
+        rfl::Description<"Optional retention charge limit for the trusted UVM semantic owner, "
+                         "in MiB (1..1024). Without a limit, reuse is unlimited by default. "
+                         "An oversized library uses native analysis.",
+                         std::optional<uint32_t>>
+            semanticMaxMiB;
     };
     rfl::Description<"Explicit UVM library inputs. No library is injected unless configured. "
                      "Source loading is independent of experimentalUvmPrefixCache.",
@@ -209,10 +209,11 @@ struct Config {
         bool>
         experimentalScopeSemanticCache = false;
 
-    rfl::Description<"Disable charged retention budgets for enabled fixed-scope and UVM semantic "
-                     "caches. Does not enable either experiment. Use for unconstrained workload "
-                     "evaluation; actual process memory must be measured separately.", bool>
-        semanticCacheUnlimited = false;
+    rfl::Description<"Override semantic cache budgets for fixed scopes and UVM. True ignores "
+                     "numeric limits. False uses the configured limits or 256 MiB. When omitted, "
+                     "each cache without a numeric limit is unlimited. Does not enable experiments.",
+                     std::optional<bool>>
+        semanticCacheUnlimited;
 
     rfl::Description<"Experimental diagnostic delta publication. Default off. Repeated results "
                      "are compared before serialization; changed document versions, errors, "
@@ -234,11 +235,15 @@ struct Config {
         "Semantic reuse follows the frozenSources selection.", bool>
         experimentalSyntaxPrefixCache = false;
     rfl::Description<
-        "Retained mutable syntax-prefix cache budget in MiB, default 256. Zero disables "
-        "this cache. Charges one pending or reusable CST owner, excluding the already "
-        "charged fixed prefix. This budget is separate from frozenSources.maxMiB and "
-        "sourceHistoryMaxMiB; it is not a process RSS limit.", uint32_t>
-        syntaxPrefixCacheMaxMiB = 256;
+        "Optional syntax-prefix budget in MiB. Omit for unlimited retention; zero disables "
+        "retention unless overridden. Charges one pending or reusable CST owner beyond the "
+        "fixed prefix. Separate from process RSS.", std::optional<uint32_t>>
+        syntaxPrefixCacheMaxMiB;
+    rfl::Description<
+        "Override the syntax-prefix budget. True ignores the numeric limit. False uses "
+        "the configured limit or 256 MiB. Omission honors any numeric limit. "
+        "Does not enable the experiment.", std::optional<bool>>
+        syntaxPrefixCacheUnlimited;
 
     struct FrozenSourcesConfig {
         rfl::Description<
@@ -258,13 +263,13 @@ struct Config {
                          "caching.",
                          std::vector<std::string>>
             instances;
-        rfl::Description<"Maximum charged retained cache size in MiB (0 to 512, default 256). "
-                         "Oversized entries use ordinary analysis. The syntax experiment "
-                         "reserves one quarter for certified hierarchy values with instance "
-                         "selectors; the semantic experiment shares the budget between library "
-                         "and body owners. This is not a process RSS limit.",
-                         uint32_t>
-            maxMiB = 256;
+        rfl::Description<"Optional retention limit in MiB (0 to 512). Defaults to 256 for "
+                         "experimentalFrozenSources and to unlimited for semantic reuse. "
+                         "Oversized entries use ordinary analysis. This is not a process RSS limit.",
+                         std::optional<uint32_t>>
+            maxMiB;
+
+        uint32_t syntaxBudgetMiB() const { return maxMiB.value().value_or(256); }
     };
     rfl::Description<"Frozen source selections and cache budget. Does not enable the experiment.",
                      std::optional<FrozenSourcesConfig>>
@@ -413,6 +418,11 @@ struct Config {
     rfl::Skip<std::vector<InputSource>> inputSources;
 
     std::optional<std::string> getEnvironmentVariable(const std::string& name) const;
+
+    // An absent effective limit means unlimited. An explicit zero remains a limit.
+    std::optional<uint32_t> syntaxPrefixBudgetMiB() const;
+    std::optional<uint32_t> scopeSemanticBudgetMiB() const;
+    std::optional<uint32_t> uvmSemanticBudgetMiB() const;
 };
 
 template<>

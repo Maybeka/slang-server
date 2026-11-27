@@ -27,8 +27,8 @@ void ServerDriver::configureFrozenSources(
     m_frozenDeclinedUnits.clear();
     const auto config = m_config.frozenSources.value().value_or(Config::FrozenSourcesConfig{});
     if (!m_frozenSources) {
-        const auto total = config.maxMiB.value() <= 512
-                               ? size_t(config.maxMiB.value()) * 1024 * 1024
+        const auto total = config.syntaxBudgetMiB() <= 512
+                               ? size_t(config.syntaxBudgetMiB()) * 1024 * 1024
                                : 0;
         const auto instanceBudget = config.instances.value().empty() ? 0 : total / 4;
         m_frozenSources = std::make_unique<FrozenSourceRegistry>(total - instanceBudget);
@@ -47,7 +47,7 @@ void ServerDriver::configureFrozenSources(
         auto error = OS::readFile(path, bytes);
         m_frozenCommandInputs.push_back({path, std::string(bytes.begin(), bytes.end()), error});
     }
-    if (config.maxMiB.value() > 512)
+    if (config.syntaxBudgetMiB() > 512)
         m_frozenSources->decline("maxMiB must be between 0 and 512; cache disabled");
     if (m_captureFrozenNativeSeed) {
         for (const auto& tree : trees) {
@@ -89,7 +89,7 @@ void ServerDriver::configureFrozenInstances(const lsp::RequestContext& ctx) {
     const auto config = *m_config.frozenSources.value();
     if (config.instances.value().empty())
         return;
-    const auto total = config.maxMiB.value() <= 512 ? size_t(config.maxMiB.value()) * 1024 * 1024
+    const auto total = config.syntaxBudgetMiB() <= 512 ? size_t(config.syntaxBudgetMiB()) * 1024 * 1024
                                                     : 0;
     comp->configureFrozenInstances(
         config.instances.value(), total / 4,
@@ -258,10 +258,10 @@ rfl::Generic ServerDriver::frozenSourcesStatus() const {
              .statistics = m_frozenSources ? m_frozenSources->statistics()
                                            : FrozenSourceRegistry::Statistics{},
              .configuredMaxMiB = m_config.frozenSources.value()
-                                     ? m_config.frozenSources.value()->maxMiB.value()
+                                     ? m_config.frozenSources.value()->syntaxBudgetMiB()
                                      : 64,
              .budgetValid = !m_config.frozenSources.value() ||
-                            m_config.frozenSources.value()->maxMiB.value() <= 512,
+                            m_config.frozenSources.value()->syntaxBudgetMiB() <= 512,
              .sourceContext = {sm.getMemoryUsage(), sm.getSourceLocationTableBytes(),
                                sm.getSourceLocationEntryCount()},
              .mode = !isFrozenSourcesEnabled()     ? "disabled"
